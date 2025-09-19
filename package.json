@@ -1,0 +1,34 @@
+{
+  "name": "lana-mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Apex Log Analysis",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lana-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "salesforce",
+    "apex",
+    "log-analysis",
+    "debugging"
+  ],
+  "author": "Certinia",
+  "license": "SEE LICENSE IN ../LICENSE.txt",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.3",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
