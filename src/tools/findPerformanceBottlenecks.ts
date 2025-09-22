@@ -1,10 +1,10 @@
-import { promises as fs } from 'fs';
-import { parse, ApexLog, LogLine } from '../ApexLogParser.js';
-import { SlowMethod, extractMethods } from './analyzeLogPerformance.js';
+import { promises as fs } from "fs";
+import { parse, ApexLog, LogLine } from "../ApexLogParser";
+import { SlowMethod, extractMethods } from "./analyzeLogPerformance";
 
 export interface BottleneckArgs {
   logFilePath: string;
-  analysisType?: 'cpu' | 'database' | 'methods' | 'all';
+  analysisType?: "cpu" | "database" | "methods" | "all";
 }
 
 interface BottleneckResult {
@@ -15,29 +15,29 @@ interface BottleneckResult {
 }
 
 export const findPerformanceBottlenecksTool = {
-  name: 'find_performance_bottlenecks',
+  name: "find_performance_bottlenecks",
   description:
-    'Identify performance bottlenecks in an Apex log by analyzing CPU time, database operations, and method execution patterns',
+    "Identify performance bottlenecks in an Apex log by analyzing CPU time, database operations, and method execution patterns",
   inputSchema: {
-    type: 'object',
+    type: "object",
     properties: {
       logFilePath: {
-        type: 'string',
-        description: 'Absolute path to the Apex debug log file (.log)',
+        type: "string",
+        description: "Absolute path to the Apex debug log file (.log)",
       },
       analysisType: {
-        type: 'string',
-        enum: ['cpu', 'database', 'methods', 'all'],
-        description: 'Type of bottleneck analysis to perform',
-        default: 'all',
+        type: "string",
+        enum: ["cpu", "database", "methods", "all"],
+        description: "Type of bottleneck analysis to perform",
+        default: "all",
       },
     },
-    required: ['logFilePath'],
+    required: ["logFilePath"],
   },
 };
 
 export async function findPerformanceBottlenecks(args: BottleneckArgs) {
-  const { logFilePath, analysisType = 'all' } = args;
+  const { logFilePath, analysisType = "all" } = args;
 
   try {
     await fs.access(logFilePath);
@@ -45,29 +45,29 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
     throw new Error(`Log file not found: ${logFilePath}`);
   }
 
-  const logContent = await fs.readFile(logFilePath, 'utf-8');
+  const logContent = await fs.readFile(logFilePath, "utf-8");
   const apexLog = parse(logContent);
 
   const bottlenecks: BottleneckResult = {
     governorLimitWarnings: analyzeGovernorLimits(apexLog),
   };
 
-  if (analysisType === 'cpu' || analysisType === 'all') {
+  if (analysisType === "cpu" || analysisType === "all") {
     bottlenecks.cpuBottlenecks = analyzeCPUBottlenecks(apexLog);
   }
 
-  if (analysisType === 'database' || analysisType === 'all') {
+  if (analysisType === "database" || analysisType === "all") {
     bottlenecks.databaseBottlenecks = analyzeDatabaseBottlenecks(apexLog);
   }
 
-  if (analysisType === 'methods' || analysisType === 'all') {
+  if (analysisType === "methods" || analysisType === "all") {
     bottlenecks.methodBottlenecks = analyzeMethodBottlenecks(apexLog);
   }
 
   return {
     content: [
       {
-        type: 'text',
+        type: "text",
         text: JSON.stringify(bottlenecks, null, 2),
       },
     ],
@@ -86,7 +86,9 @@ function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
     cpuTimeLimit: governorLimits.cpuTime.limit,
     cpuUsagePercentage: cpuUsagePercent,
     warning:
-      cpuUsagePercent > 80 ? 'High CPU usage detected - consider optimizing algorithms' : null,
+      cpuUsagePercent > 80
+        ? "High CPU usage detected - consider optimizing algorithms"
+        : null,
   };
 }
 
@@ -98,7 +100,9 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       limit: governorLimits.soqlQueries.limit,
       percentage:
         governorLimits.soqlQueries.limit > 0
-          ? (governorLimits.soqlQueries.used / governorLimits.soqlQueries.limit) * 100
+          ? (governorLimits.soqlQueries.used /
+              governorLimits.soqlQueries.limit) *
+            100
           : 0,
     },
     dmlStatements: {
@@ -106,7 +110,9 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       limit: governorLimits.dmlStatements.limit,
       percentage:
         governorLimits.dmlStatements.limit > 0
-          ? (governorLimits.dmlStatements.used / governorLimits.dmlStatements.limit) * 100
+          ? (governorLimits.dmlStatements.used /
+              governorLimits.dmlStatements.limit) *
+            100
           : 0,
     },
     queryRows: {
@@ -114,7 +120,8 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       limit: governorLimits.queryRows.limit,
       percentage:
         governorLimits.queryRows.limit > 0
-          ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) * 100
+          ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) *
+            100
           : 0,
     },
   };
@@ -122,13 +129,16 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
 
 function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
   const methods = extractMethods(apexLog, 0);
-  const methodsByNamespace = methods.reduce((acc: Record<string, SlowMethod[]>, method) => {
-    if (!acc[method.namespace]) {
-      acc[method.namespace] = [];
-    }
-    acc[method.namespace].push(method);
-    return acc;
-  }, {});
+  const methodsByNamespace = methods.reduce(
+    (acc: Record<string, SlowMethod[]>, method) => {
+      if (!acc[method.namespace]) {
+        acc[method.namespace] = [];
+      }
+      acc[method.namespace].push(method);
+      return acc;
+    },
+    {}
+  );
 
   return {
     totalMethods: methods.length,
@@ -137,7 +147,7 @@ function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       methodCount: methodsByNamespace[ns].length,
       totalDuration: methodsByNamespace[ns].reduce(
         (sum: number, m: SlowMethod) => sum + m.duration,
-        0,
+        0
       ),
     })),
   };
@@ -149,11 +159,13 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
-    if (key !== 'byNamespace' && value.limit > 0) {
+    if (key !== "byNamespace" && value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;
       if (percentage > 80) {
         warnings.push(
-          `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${value.limit})`,
+          `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${
+            value.limit
+          })`
         );
       }
     }

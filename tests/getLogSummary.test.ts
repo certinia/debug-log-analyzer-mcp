@@ -1,22 +1,30 @@
-import { promises as fs } from 'fs';
-import path from 'path';
-import { jest } from '@jest/globals';
-import { getLogSummary, LogSummaryArgs } from '../src/tools/getLogSummary.js';
-import { parse, ApexLog, LogLine, GovernorLimits, Limits, LogIssue, ApexLogParser } from '../src/ApexLogParser.js';
+import { promises as fs } from "fs";
+import path from "path";
+import { jest } from "@jest/globals";
+import { getLogSummary, LogSummaryArgs } from "../src/tools/getLogSummary";
+import {
+  parse,
+  ApexLog,
+  LogLine,
+  GovernorLimits,
+  Limits,
+  LogIssue,
+  ApexLogParser,
+} from "../src/ApexLogParser";
 
 // Mock the dependencies
-jest.mock('fs', () => ({
+jest.mock("fs", () => ({
   promises: {
     access: jest.fn(),
     readFile: jest.fn(),
   },
 }));
 
-jest.mock('path', () => ({
+jest.mock("path", () => ({
   basename: jest.fn(),
 }));
 
-jest.mock('../src/ApexLogParser.js', () => ({
+jest.mock("../src/ApexLogParser", () => ({
   parse: jest.fn(),
 }));
 
@@ -25,33 +33,38 @@ const mockPath = path as jest.Mocked<typeof path>;
 const mockParse = parse as jest.MockedFunction<typeof parse>;
 
 // Helper function to create a mock LogLine
-const createMockLogLine = (type: string, subCategory?: string, children: LogLine[] = []): LogLine => ({
-  type: type as any,
-  subCategory: subCategory as any,
-  children,
-  logParser: {} as ApexLogParser,
-  parent: null,
-  logLine: '',
-  text: '',
-  lineNumber: null,
-  logCategory: null,
-  acceptsText: false,
-  isExit: false,
-  textData: '',
-  timestamp: 0,
-  dmlRowCount: { total: 0, self: 0 },
-  soqlRowCount: { total: 0, self: 0 },
-  soqlCount: { total: 0, self: 0 },
-  dmlCount: { total: 0, self: 0 },
-  soslCount: { total: 0, self: 0 },
-  soslRowCount: { total: 0, self: 0 },
-  cpuSelfTime: 0,
-  cpuTotalTime: 0,
-  parseTimestamp: () => 0,
-  parseLineNumber: () => null,
-} as unknown as LogLine);
+const createMockLogLine = (
+  type: string,
+  subCategory?: string,
+  children: LogLine[] = []
+): LogLine =>
+  ({
+    type: type as any,
+    subCategory: subCategory as any,
+    children,
+    logParser: {} as ApexLogParser,
+    parent: null,
+    logLine: "",
+    text: "",
+    lineNumber: null,
+    logCategory: null,
+    acceptsText: false,
+    isExit: false,
+    textData: "",
+    timestamp: 0,
+    dmlRowCount: { total: 0, self: 0 },
+    soqlRowCount: { total: 0, self: 0 },
+    soqlCount: { total: 0, self: 0 },
+    dmlCount: { total: 0, self: 0 },
+    soslCount: { total: 0, self: 0 },
+    soslRowCount: { total: 0, self: 0 },
+    cpuSelfTime: 0,
+    cpuTotalTime: 0,
+    parseTimestamp: () => 0,
+    parseLineNumber: () => null,
+  } as unknown as LogLine);
 
-describe('getLogSummary', () => {
+describe("getLogSummary", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -79,24 +92,24 @@ describe('getLogSummary', () => {
 
     // Create mock log lines with METHOD_ENTRY types for counting
     const mockChildren: LogLine[] = [
-      createMockLogLine('METHOD_ENTRY', undefined, [
-        createMockLogLine('METHOD_ENTRY'),
-        createMockLogLine('STATEMENT_EXECUTE'),
+      createMockLogLine("METHOD_ENTRY", undefined, [
+        createMockLogLine("METHOD_ENTRY"),
+        createMockLogLine("STATEMENT_EXECUTE"),
       ]),
-      createMockLogLine('SOQL_EXECUTE_BEGIN', 'Method'),
-      createMockLogLine('DML_BEGIN'),
+      createMockLogLine("SOQL_EXECUTE_BEGIN", "Method"),
+      createMockLogLine("DML_BEGIN"),
     ];
 
     // Create a proper mock ApexLog by extending the base structure
     const baseMockApexLog = {
       // ApexLog specific properties
       type: null,
-      text: 'LOG_ROOT',
+      text: "LOG_ROOT",
       timestamp: 0,
       exitStamp: 12500,
       size: 15000,
       debugLevels: [],
-      namespaces: ['default', 'MyNamespace'],
+      namespaces: ["default", "MyNamespace"],
       logIssues: mockLogIssues,
       parsingErrors: mockParsingErrors,
       governorLimits: mockGovernorLimits,
@@ -104,22 +117,22 @@ describe('getLogSummary', () => {
 
       // Method properties (ApexLog extends Method)
       isTruncated: false,
-      exitTypes: ['EXECUTION_FINISHED'],
+      exitTypes: ["EXECUTION_FINISHED"],
 
       // TimedNode properties (Method extends TimedNode)
-      subCategory: 'Code Unit' as any,
-      cpuType: '' as any,
+      subCategory: "Code Unit" as any,
+      cpuType: "" as any,
 
       // LogLine properties (TimedNode extends LogLine)
       logParser: {} as ApexLogParser,
       parent: null,
       children: mockChildren,
-      logLine: '',
+      logLine: "",
       lineNumber: null,
       logCategory: null,
       acceptsText: false,
       isExit: false,
-      textData: '',
+      textData: "",
 
       // Counting properties
       duration: { total: 12500, self: 12500 },
@@ -140,102 +153,116 @@ describe('getLogSummary', () => {
       recalculateDurations: () => {},
     };
 
-    const defaultApexLog = { ...baseMockApexLog, ...overrides } as unknown as ApexLog;
+    const defaultApexLog = {
+      ...baseMockApexLog,
+      ...overrides,
+    } as unknown as ApexLog;
 
     return defaultApexLog;
   };
 
-  describe('successful log summary generation', () => {
-    it('should generate a complete log summary with valid log data', async () => {
-      const mockLogContent = 'mock log content';
+  describe("successful log summary generation", () => {
+    it("should generate a complete log summary with valid log data", async () => {
+      const mockLogContent = "mock log content";
       const mockApexLog = createMockApexLog();
 
       mockFs.access.mockResolvedValue(undefined);
       mockFs.readFile.mockResolvedValue(mockLogContent);
-      mockPath.basename.mockReturnValue('test-log.log');
+      mockPath.basename.mockReturnValue("test-log.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/test-log.log'
+        logFilePath: "/path/to/test-log.log",
       };
 
       const result = await getLogSummary(args);
 
-      expect(mockFs.access).toHaveBeenCalledWith('/path/to/test-log.log');
-      expect(mockFs.readFile).toHaveBeenCalledWith('/path/to/test-log.log', 'utf-8');
-      expect(mockPath.basename).toHaveBeenCalledWith('/path/to/test-log.log');
+      expect(mockFs.access).toHaveBeenCalledWith("/path/to/test-log.log");
+      expect(mockFs.readFile).toHaveBeenCalledWith(
+        "/path/to/test-log.log",
+        "utf-8"
+      );
+      expect(mockPath.basename).toHaveBeenCalledWith("/path/to/test-log.log");
       expect(mockParse).toHaveBeenCalledWith(mockLogContent);
 
       expect(result).toEqual({
         content: [
           {
-            type: 'text',
-            text: JSON.stringify({
-              file: 'test-log.log',
-              totalExecutionTime: 12500,
-              totalMethods: 3, // 2 METHOD_ENTRY + 1 with subCategory 'Method'
-              totalSOQLQueries: 5,
-              totalDMLOperations: 3,
-              totalSOQLRows: 150,
-              totalDMLRows: 25,
-              governorLimits: {
-                cpuTime: { used: 1500, limit: 10000 },
-                heapSize: { used: 2048, limit: 6000000 },
-                soqlQueries: { used: 5, limit: 100 },
-                dmlStatements: { used: 3, limit: 150 },
+            type: "text",
+            text: JSON.stringify(
+              {
+                file: "test-log.log",
+                totalExecutionTime: 12500,
+                totalMethods: 3, // 2 METHOD_ENTRY + 1 with subCategory 'Method'
+                totalSOQLQueries: 5,
+                totalDMLOperations: 3,
+                totalSOQLRows: 150,
+                totalDMLRows: 25,
+                governorLimits: {
+                  cpuTime: { used: 1500, limit: 10000 },
+                  heapSize: { used: 2048, limit: 6000000 },
+                  soqlQueries: { used: 5, limit: 100 },
+                  dmlStatements: { used: 3, limit: 150 },
+                },
+                namespaces: ["default", "MyNamespace"],
+                logIssues: 0,
+                parsingErrors: 0,
               },
-              namespaces: ['default', 'MyNamespace'],
-              logIssues: 0,
-              parsingErrors: 0,
-            }, null, 2),
+              null,
+              2
+            ),
           },
         ],
       });
     });
 
-    it('should handle logs with different namespaces', async () => {
+    it("should handle logs with different namespaces", async () => {
       const mockApexLog = createMockApexLog({
-        namespaces: ['default', 'CustomApp', 'ThirdParty']
+        namespaces: ["default", "CustomApp", "ThirdParty"],
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('namespace-test.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("namespace-test.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/namespace-test.log'
+        logFilePath: "/path/to/namespace-test.log",
       };
 
       const result = await getLogSummary(args);
       const parsedResult = JSON.parse(result.content[0].text);
 
-      expect(parsedResult.namespaces).toEqual(['default', 'CustomApp', 'ThirdParty']);
-      expect(parsedResult.file).toBe('namespace-test.log');
+      expect(parsedResult.namespaces).toEqual([
+        "default",
+        "CustomApp",
+        "ThirdParty",
+      ]);
+      expect(parsedResult.file).toBe("namespace-test.log");
     });
 
-    it('should handle logs with log issues and parsing errors', async () => {
+    it("should handle logs with log issues and parsing errors", async () => {
       const mockLogIssues: LogIssue[] = [
         {
-          summary: 'CPU time exceeded',
-          description: 'Maximum CPU time limit exceeded',
-          type: 'error',
-          startTime: 8000
-        }
+          summary: "CPU time exceeded",
+          description: "Maximum CPU time limit exceeded",
+          type: "error",
+          startTime: 8000,
+        },
       ];
 
       const mockApexLog = createMockApexLog({
         logIssues: mockLogIssues,
-        parsingErrors: ['Unknown log event type: CUSTOM_EVENT']
+        parsingErrors: ["Unknown log event type: CUSTOM_EVENT"],
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('error-log.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("error-log.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/error-log.log'
+        logFilePath: "/path/to/error-log.log",
       };
 
       const result = await getLogSummary(args);
@@ -245,30 +272,30 @@ describe('getLogSummary', () => {
       expect(parsedResult.parsingErrors).toBe(1);
     });
 
-    it('should count methods correctly with nested structures', async () => {
+    it("should count methods correctly with nested structures", async () => {
       const mockChildren: LogLine[] = [
-        createMockLogLine('METHOD_ENTRY', undefined, [
-          createMockLogLine('METHOD_ENTRY', undefined, [
-            createMockLogLine('METHOD_ENTRY'),
+        createMockLogLine("METHOD_ENTRY", undefined, [
+          createMockLogLine("METHOD_ENTRY", undefined, [
+            createMockLogLine("METHOD_ENTRY"),
           ]),
         ]),
-        createMockLogLine('SOQL_EXECUTE_BEGIN', 'Method', [
-          createMockLogLine('CONSTRUCTOR_ENTRY', 'Method'),
+        createMockLogLine("SOQL_EXECUTE_BEGIN", "Method", [
+          createMockLogLine("CONSTRUCTOR_ENTRY", "Method"),
         ]),
-        createMockLogLine('SOME_OTHER_EVENT'),
+        createMockLogLine("SOME_OTHER_EVENT"),
       ];
 
       const mockApexLog = createMockApexLog({
-        children: mockChildren
+        children: mockChildren,
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('nested-methods.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("nested-methods.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/nested-methods.log'
+        logFilePath: "/path/to/nested-methods.log",
       };
 
       const result = await getLogSummary(args);
@@ -278,7 +305,7 @@ describe('getLogSummary', () => {
       expect(parsedResult.totalMethods).toBe(5);
     });
 
-    it('should handle logs with zero values', async () => {
+    it("should handle logs with zero values", async () => {
       const emptyGovernorLimits: GovernorLimits = {
         soqlQueries: { used: 0, limit: 0 },
         soslQueries: { used: 0, limit: 0 },
@@ -303,17 +330,17 @@ describe('getLogSummary', () => {
         soqlRowCount: { total: 0, self: 0 },
         dmlRowCount: { total: 0, self: 0 },
         governorLimits: emptyGovernorLimits,
-        namespaces: ['default'],
-        children: []
+        namespaces: ["default"],
+        children: [],
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('empty-log.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("empty-log.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/empty-log.log'
+        logFilePath: "/path/to/empty-log.log",
       };
 
       const result = await getLogSummary(args);
@@ -325,28 +352,37 @@ describe('getLogSummary', () => {
       expect(parsedResult.totalDMLOperations).toBe(0);
       expect(parsedResult.totalSOQLRows).toBe(0);
       expect(parsedResult.totalDMLRows).toBe(0);
-      expect(parsedResult.governorLimits.cpuTime).toEqual({ used: 0, limit: 0 });
-      expect(parsedResult.governorLimits.heapSize).toEqual({ used: 0, limit: 0 });
+      expect(parsedResult.governorLimits.cpuTime).toEqual({
+        used: 0,
+        limit: 0,
+      });
+      expect(parsedResult.governorLimits.heapSize).toEqual({
+        used: 0,
+        limit: 0,
+      });
     });
 
-    it('should handle different file paths and extensions', async () => {
+    it("should handle different file paths and extensions", async () => {
       const testCases = [
-        { path: '/Users/test/apex-debug-123.log', expected: 'apex-debug-123.log' },
-        { path: 'C:\\Logs\\production.log', expected: 'production.log' },
-        { path: '/var/logs/debug-output.txt', expected: 'debug-output.txt' },
-        { path: 'simple.log', expected: 'simple.log' },
+        {
+          path: "/Users/test/apex-debug-123.log",
+          expected: "apex-debug-123.log",
+        },
+        { path: "C:\\Logs\\production.log", expected: "production.log" },
+        { path: "/var/logs/debug-output.txt", expected: "debug-output.txt" },
+        { path: "simple.log", expected: "simple.log" },
       ];
 
       for (const testCase of testCases) {
         const mockApexLog = createMockApexLog();
 
         mockFs.access.mockResolvedValue(undefined);
-        mockFs.readFile.mockResolvedValue('mock log content');
+        mockFs.readFile.mockResolvedValue("mock log content");
         mockPath.basename.mockReturnValue(testCase.expected);
         mockParse.mockReturnValue(mockApexLog);
 
         const args: LogSummaryArgs = {
-          logFilePath: testCase.path
+          logFilePath: testCase.path,
         };
 
         const result = await getLogSummary(args);
@@ -358,73 +394,79 @@ describe('getLogSummary', () => {
     });
   });
 
-  describe('error handling', () => {
-    it('should throw an error when log file does not exist', async () => {
-      const fileNotFoundError = new Error('ENOENT: no such file or directory');
+  describe("error handling", () => {
+    it("should throw an error when log file does not exist", async () => {
+      const fileNotFoundError = new Error("ENOENT: no such file or directory");
       mockFs.access.mockRejectedValue(fileNotFoundError);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/nonexistent.log'
+        logFilePath: "/path/to/nonexistent.log",
       };
 
       await expect(getLogSummary(args)).rejects.toThrow(
-        'Log file not found: /path/to/nonexistent.log'
+        "Log file not found: /path/to/nonexistent.log"
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith('/path/to/nonexistent.log');
+      expect(mockFs.access).toHaveBeenCalledWith("/path/to/nonexistent.log");
       expect(mockFs.readFile).not.toHaveBeenCalled();
       expect(mockParse).not.toHaveBeenCalled();
     });
 
-    it('should throw an error when file access check fails for other reasons', async () => {
-      const permissionError = new Error('EACCES: permission denied');
+    it("should throw an error when file access check fails for other reasons", async () => {
+      const permissionError = new Error("EACCES: permission denied");
       mockFs.access.mockRejectedValue(permissionError);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/restricted.log'
+        logFilePath: "/path/to/restricted.log",
       };
 
       await expect(getLogSummary(args)).rejects.toThrow(
-        'Log file not found: /path/to/restricted.log'
+        "Log file not found: /path/to/restricted.log"
       );
     });
 
-    it('should propagate file read errors', async () => {
+    it("should propagate file read errors", async () => {
       mockFs.access.mockResolvedValue(undefined);
-      const readError = new Error('Failed to read file');
+      const readError = new Error("Failed to read file");
       mockFs.readFile.mockRejectedValue(readError);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/unreadable.log'
+        logFilePath: "/path/to/unreadable.log",
       };
 
-      await expect(getLogSummary(args)).rejects.toThrow('Failed to read file');
+      await expect(getLogSummary(args)).rejects.toThrow("Failed to read file");
 
-      expect(mockFs.access).toHaveBeenCalledWith('/path/to/unreadable.log');
-      expect(mockFs.readFile).toHaveBeenCalledWith('/path/to/unreadable.log', 'utf-8');
+      expect(mockFs.access).toHaveBeenCalledWith("/path/to/unreadable.log");
+      expect(mockFs.readFile).toHaveBeenCalledWith(
+        "/path/to/unreadable.log",
+        "utf-8"
+      );
       expect(mockParse).not.toHaveBeenCalled();
     });
 
-    it('should propagate parsing errors', async () => {
+    it("should propagate parsing errors", async () => {
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('invalid log content');
-      const parseError = new Error('Failed to parse log');
+      mockFs.readFile.mockResolvedValue("invalid log content");
+      const parseError = new Error("Failed to parse log");
       mockParse.mockImplementation(() => {
         throw parseError;
       });
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/corrupted.log'
+        logFilePath: "/path/to/corrupted.log",
       };
 
-      await expect(getLogSummary(args)).rejects.toThrow('Failed to parse log');
+      await expect(getLogSummary(args)).rejects.toThrow("Failed to parse log");
 
-      expect(mockFs.access).toHaveBeenCalledWith('/path/to/corrupted.log');
-      expect(mockFs.readFile).toHaveBeenCalledWith('/path/to/corrupted.log', 'utf-8');
-      expect(mockParse).toHaveBeenCalledWith('invalid log content');
+      expect(mockFs.access).toHaveBeenCalledWith("/path/to/corrupted.log");
+      expect(mockFs.readFile).toHaveBeenCalledWith(
+        "/path/to/corrupted.log",
+        "utf-8"
+      );
+      expect(mockParse).toHaveBeenCalledWith("invalid log content");
     });
 
-    it('should handle undefined or null properties gracefully', async () => {
+    it("should handle undefined or null properties gracefully", async () => {
       // Create an ApexLog with some undefined/null properties to test resilience
       const mockApexLog = createMockApexLog({
         namespaces: [], // empty namespaces array
@@ -433,12 +475,12 @@ describe('getLogSummary', () => {
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('edge-case.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("edge-case.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/edge-case.log'
+        logFilePath: "/path/to/edge-case.log",
       };
 
       const result = await getLogSummary(args);
@@ -447,32 +489,32 @@ describe('getLogSummary', () => {
       expect(parsedResult.namespaces).toEqual([]);
       expect(parsedResult.logIssues).toBe(0);
       expect(parsedResult.parsingErrors).toBe(0);
-      expect(parsedResult.file).toBe('edge-case.log');
+      expect(parsedResult.file).toBe("edge-case.log");
     });
   });
 
-  describe('method counting functionality', () => {
-    it('should count only METHOD_ENTRY types and subCategory Method nodes', async () => {
+  describe("method counting functionality", () => {
+    it("should count only METHOD_ENTRY types and subCategory Method nodes", async () => {
       const mockChildren: LogLine[] = [
-        createMockLogLine('METHOD_ENTRY'),
-        createMockLogLine('CONSTRUCTOR_ENTRY'),
-        createMockLogLine('SYSTEM_METHOD_ENTRY', 'Method'),
-        createMockLogLine('SOQL_EXECUTE_BEGIN', 'SOQL'),
-        createMockLogLine('DML_BEGIN', 'DML'),
-        createMockLogLine('USER_DEBUG'),
+        createMockLogLine("METHOD_ENTRY"),
+        createMockLogLine("CONSTRUCTOR_ENTRY"),
+        createMockLogLine("SYSTEM_METHOD_ENTRY", "Method"),
+        createMockLogLine("SOQL_EXECUTE_BEGIN", "SOQL"),
+        createMockLogLine("DML_BEGIN", "DML"),
+        createMockLogLine("USER_DEBUG"),
       ];
 
       const mockApexLog = createMockApexLog({
-        children: mockChildren
+        children: mockChildren,
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('method-counting.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("method-counting.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/method-counting.log'
+        logFilePath: "/path/to/method-counting.log",
       };
 
       const result = await getLogSummary(args);
@@ -482,32 +524,34 @@ describe('getLogSummary', () => {
       expect(parsedResult.totalMethods).toBe(2);
     });
 
-    it('should handle deeply nested method structures', async () => {
+    it("should handle deeply nested method structures", async () => {
       const createNestedStructure = (depth: number): LogLine => {
         if (depth === 0) {
-          return createMockLogLine('METHOD_ENTRY');
+          return createMockLogLine("METHOD_ENTRY");
         }
-        return createMockLogLine('METHOD_ENTRY', undefined, [createNestedStructure(depth - 1)]);
+        return createMockLogLine("METHOD_ENTRY", undefined, [
+          createNestedStructure(depth - 1),
+        ]);
       };
 
       const mockChildren: LogLine[] = [
         createNestedStructure(5), // Creates a 6-level deep nested structure
-        createMockLogLine('SOME_OTHER_EVENT', 'Method', [
-          createMockLogLine('METHOD_ENTRY'),
+        createMockLogLine("SOME_OTHER_EVENT", "Method", [
+          createMockLogLine("METHOD_ENTRY"),
         ]),
       ];
 
       const mockApexLog = createMockApexLog({
-        children: mockChildren
+        children: mockChildren,
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('deep-nested.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("deep-nested.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/deep-nested.log'
+        logFilePath: "/path/to/deep-nested.log",
       };
 
       const result = await getLogSummary(args);
@@ -517,26 +561,26 @@ describe('getLogSummary', () => {
       expect(parsedResult.totalMethods).toBe(8);
     });
 
-    it('should not count non-method events', async () => {
+    it("should not count non-method events", async () => {
       const mockChildren: LogLine[] = [
-        createMockLogLine('EXECUTION_STARTED'),
-        createMockLogLine('EXECUTION_FINISHED'),
-        createMockLogLine('USER_DEBUG'),
-        createMockLogLine('HEAP_ALLOCATE'),
-        createMockLogLine('STATEMENT_EXECUTE'),
+        createMockLogLine("EXECUTION_STARTED"),
+        createMockLogLine("EXECUTION_FINISHED"),
+        createMockLogLine("USER_DEBUG"),
+        createMockLogLine("HEAP_ALLOCATE"),
+        createMockLogLine("STATEMENT_EXECUTE"),
       ];
 
       const mockApexLog = createMockApexLog({
-        children: mockChildren
+        children: mockChildren,
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('non-methods.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("non-methods.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/non-methods.log'
+        logFilePath: "/path/to/non-methods.log",
       };
 
       const result = await getLogSummary(args);
@@ -546,8 +590,8 @@ describe('getLogSummary', () => {
     });
   });
 
-  describe('governor limits handling', () => {
-    it('should handle various governor limit configurations', async () => {
+  describe("governor limits handling", () => {
+    it("should handle various governor limit configurations", async () => {
       const customGovernorLimits: GovernorLimits = {
         soqlQueries: { used: 50, limit: 100 },
         soslQueries: { used: 5, limit: 20 },
@@ -566,16 +610,16 @@ describe('getLogSummary', () => {
       };
 
       const mockApexLog = createMockApexLog({
-        governorLimits: customGovernorLimits
+        governorLimits: customGovernorLimits,
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('governor-limits.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("governor-limits.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/governor-limits.log'
+        logFilePath: "/path/to/governor-limits.log",
       };
 
       const result = await getLogSummary(args);
@@ -589,7 +633,7 @@ describe('getLogSummary', () => {
       });
     });
 
-    it('should handle maximum governor limit values', async () => {
+    it("should handle maximum governor limit values", async () => {
       const maxGovernorLimits: GovernorLimits = {
         soqlQueries: { used: 100, limit: 100 },
         soslQueries: { used: 20, limit: 20 },
@@ -608,16 +652,16 @@ describe('getLogSummary', () => {
       };
 
       const mockApexLog = createMockApexLog({
-        governorLimits: maxGovernorLimits
+        governorLimits: maxGovernorLimits,
       });
 
       mockFs.access.mockResolvedValue(undefined);
-      mockFs.readFile.mockResolvedValue('mock log content');
-      mockPath.basename.mockReturnValue('max-limits.log');
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("max-limits.log");
       mockParse.mockReturnValue(mockApexLog);
 
       const args: LogSummaryArgs = {
-        logFilePath: '/path/to/max-limits.log'
+        logFilePath: "/path/to/max-limits.log",
       };
 
       const result = await getLogSummary(args);

@@ -18,7 +18,7 @@ jest.mock("@modelcontextprotocol/sdk/server/index.js");
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
 
 // Mock the tool modules
-jest.mock("../src/tools/analyzeLogPerformance.js", () => ({
+jest.mock("../src/tools/analyzeLogPerformance", () => ({
   analyzeLogPerformance: jest.fn(),
   analyzeLogPerformanceTool: {
     name: "analyze_apex_log_performance",
@@ -40,7 +40,7 @@ jest.mock("../src/tools/analyzeLogPerformance.js", () => ({
   },
 }));
 
-jest.mock("../src/tools/getLogSummary.js", () => ({
+jest.mock("../src/tools/getLogSummary", () => ({
   getLogSummary: jest.fn(),
   getLogSummaryTool: {
     name: "get_apex_log_summary",
@@ -58,7 +58,7 @@ jest.mock("../src/tools/getLogSummary.js", () => ({
   },
 }));
 
-jest.mock("../src/tools/findPerformanceBottlenecks.js", () => ({
+jest.mock("../src/tools/findPerformanceBottlenecks", () => ({
   findPerformanceBottlenecks: jest.fn(),
   findPerformanceBottlenecksTool: {
     name: "find_performance_bottlenecks",
@@ -85,16 +85,14 @@ jest.mock("../src/tools/findPerformanceBottlenecks.js", () => ({
 import {
   analyzeLogPerformance,
   analyzeLogPerformanceTool,
-} from "../src/tools/analyzeLogPerformance.js";
-import {
-  getLogSummary,
-  getLogSummaryTool,
-} from "../src/tools/getLogSummary.js";
+} from "../src/tools/analyzeLogPerformance";
+import { getLogSummary, getLogSummaryTool } from "../src/tools/getLogSummary";
 import {
   findPerformanceBottlenecks,
   findPerformanceBottlenecksTool,
-} from "../src/tools/findPerformanceBottlenecks.js";
+} from "../src/tools/findPerformanceBottlenecks";
 import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import { connect } from "http2";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -128,11 +126,10 @@ class LanaServer {
   }
 
   private setupErrorHandling(): void {
-    this.server.onerror = (error) => {
+    this.server.onerror = (error: any) => {
       console.error("[MCP Error]", error);
     };
     process.on("SIGINT", async () => {
-      await this.server.close();
       process.exit(0);
     });
   }
@@ -146,38 +143,42 @@ class LanaServer {
       ],
     }));
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
+    this.server.setRequestHandler(
+      CallToolRequestSchema,
+      async (request: any) => {
+        const { name, arguments: args } = request.params;
 
-      try {
-        switch (name) {
-          case "analyze_apex_log_performance":
-            return await analyzeLogPerformance(args as any);
-          case "get_apex_log_summary":
-            return await getLogSummary(args as any);
-          case "find_performance_bottlenecks":
-            return await findPerformanceBottlenecks(args as any);
-          default:
-            throw new Error(`Unknown tool: ${name}`);
+        try {
+          switch (name) {
+            case "analyze_apex_log_performance":
+              return await analyzeLogPerformance(args as any);
+            case "get_apex_log_summary":
+              return await getLogSummary(args as any);
+            case "find_performance_bottlenecks":
+              return await findPerformanceBottlenecks(args as any);
+            default:
+              throw new Error(`Unknown tool: ${name}`);
+          }
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Error: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            isError: true,
+          };
         }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            },
-          ],
-          isError: true,
-        };
       }
-    });
+    );
   }
 
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
+    console.log(this.server);
     await this.server.connect(transport);
     console.error("LANA MCP Server running on stdio");
   }
@@ -243,6 +244,7 @@ describe("LanaServer", () => {
 
     mockServer = {
       setRequestHandler: mockSetRequestHandler,
+      connect: jest.fn(),
       onerror: undefined,
     } as any;
 
@@ -344,7 +346,7 @@ describe("LanaServer", () => {
 
       // Get the ListToolsRequest handler
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call) => call[0] === ListToolsRequestSchema
+        (call: any) => call[0] === ListToolsRequestSchema
       );
       expect(listToolsCall).toBeDefined();
 
@@ -369,7 +371,7 @@ describe("LanaServer", () => {
 
       // Get the CallToolRequest handler
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema
       );
       expect(callToolCall).toBeDefined();
       callToolHandler = callToolCall![1];
@@ -386,7 +388,7 @@ describe("LanaServer", () => {
         },
       };
 
-      const result = await callToolHandler(request, {} as RequestHandlerExtra);
+      const result = await callToolHandler(request, {} as any);
 
       expect(analyzeLogPerformance).toHaveBeenCalledWith({
         logFilePath: "/path/to/test.log",
@@ -405,7 +407,7 @@ describe("LanaServer", () => {
         },
       };
 
-      const result = await callToolHandler(request, {} as RequestHandlerExtra);
+      const result = await callToolHandler(request, {} as any);
 
       expect(getLogSummary).toHaveBeenCalledWith({
         logFilePath: "/path/to/test.log",
@@ -424,7 +426,7 @@ describe("LanaServer", () => {
         },
       };
 
-      const result = await callToolHandler(request, {} as RequestHandlerExtra);
+      const result = await callToolHandler(request, {} as any);
 
       expect(findPerformanceBottlenecks).toHaveBeenCalledWith({
         logFilePath: "/path/to/test.log",
@@ -441,7 +443,7 @@ describe("LanaServer", () => {
         },
       };
 
-      const result = await callToolHandler(request, {} as RequestHandlerExtra);
+      const result = await callToolHandler(request, {} as any);
 
       expect(result).toEqual({
         content: [
@@ -471,7 +473,7 @@ describe("LanaServer", () => {
         },
       };
 
-      const result = await callToolHandler(request, {} as RequestHandlerExtra);
+      const result = await callToolHandler(request, {} as any);
 
       expect(result).toEqual({
         content: [
@@ -500,7 +502,7 @@ describe("LanaServer", () => {
         },
       };
 
-      const result = await callToolHandler(request, {} as RequestHandlerExtra);
+      const result = await callToolHandler(request, {} as any);
 
       expect(result).toEqual({
         content: [
@@ -539,7 +541,9 @@ describe("LanaServer", () => {
 
       // Find the SIGINT handler
       const processOnCalls = jest.spyOn(process, "on").mock.calls;
-      const sigintCall = processOnCalls.find((call) => call[0] === "SIGINT");
+      const sigintCall = processOnCalls.find(
+        (call: any) => call[0] === "SIGINT"
+      );
       expect(sigintCall).toBeDefined();
 
       const sigintHandler = sigintCall![1] as Function;
@@ -563,20 +567,17 @@ describe("LanaServer", () => {
 
       // Get handlers
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call) => call[0] === ListToolsRequestSchema
+        (call: any) => call[0] === ListToolsRequestSchema
       );
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema
       );
 
       const listToolsHandler = listToolsCall![1];
       const callToolHandler = callToolCall![1];
 
       // Test tool listing
-      const toolsResult = await listToolsHandler(
-        {} as any,
-        {} as RequestHandlerExtra
-      );
+      const toolsResult = await listToolsHandler({} as any, {} as any);
       expect(toolsResult.tools).toHaveLength(3);
       expect(toolsResult.tools[0].name).toBe("analyze_apex_log_performance");
 
@@ -592,10 +593,7 @@ describe("LanaServer", () => {
         },
       };
 
-      const result = await callToolHandler(
-        request as any,
-        {} as RequestHandlerExtra
-      );
+      const result = await callToolHandler(request as any, {} as any);
       expect(result).toEqual(mockAnalysisResult);
       expect(analyzeLogPerformance).toHaveBeenCalledWith({
         logFilePath: "/path/to/test.log",
@@ -608,7 +606,7 @@ describe("LanaServer", () => {
       new LanaServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema
       );
       const callToolHandler = callToolCall![1];
 
@@ -626,10 +624,7 @@ describe("LanaServer", () => {
         >
       ).mockRejectedValueOnce(new Error("Invalid arguments"));
 
-      const result = await callToolHandler(
-        request as any,
-        {} as RequestHandlerExtra
-      );
+      const result = await callToolHandler(request as any, {} as any);
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("Error: Invalid arguments");
     });
@@ -640,7 +635,7 @@ describe("LanaServer", () => {
       new LanaServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema
       );
       const callToolHandler = callToolCall![1];
 
@@ -654,7 +649,7 @@ describe("LanaServer", () => {
         },
       };
 
-      await callToolHandler(request as any, {} as RequestHandlerExtra);
+      await callToolHandler(request as any, {} as any);
 
       expect(findPerformanceBottlenecks).toHaveBeenCalledWith({
         logFilePath: "/path/to/test.log",

@@ -7,13 +7,27 @@
  * specifically focused on identifying performance bottlenecks and slow methods.
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { analyzeLogPerformance, analyzeLogPerformanceTool, AnalyzeLogArgs } from './tools/analyzeLogPerformance.js';
-import { getLogSummary, getLogSummaryTool, LogSummaryArgs } from './tools/getLogSummary.js';
-import { findPerformanceBottlenecks, findPerformanceBottlenecksTool, BottleneckArgs } from './tools/findPerformanceBottlenecks.js';
-
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+import {
+  analyzeLogPerformance,
+  analyzeLogPerformanceTool,
+  AnalyzeLogArgs,
+} from "./tools/analyzeLogPerformance.js";
+import {
+  getLogSummary,
+  getLogSummaryTool,
+  LogSummaryArgs,
+} from "./tools/getLogSummary.js";
+import {
+  findPerformanceBottlenecks,
+  findPerformanceBottlenecksTool,
+  BottleneckArgs,
+} from "./tools/findPerformanceBottlenecks.js";
 
 class LanaServer {
   private server: Server;
@@ -21,14 +35,14 @@ class LanaServer {
   constructor() {
     this.server = new Server(
       {
-        name: 'lana-mcp-server',
-        version: '1.0.0',
+        name: "lana-mcp-server",
+        version: "1.0.0",
       },
       {
         capabilities: {
           tools: {},
         },
-      },
+      }
     );
 
     this.setupToolHandlers();
@@ -38,10 +52,9 @@ class LanaServer {
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
       // eslint-disable-next-line no-console
-      console.error('[MCP Error]', error);
+      console.error("[MCP Error]", error);
     };
-    process.on('SIGINT', async () => {
-      await this.server.close();
+    process.on("SIGINT", async () => {
       process.exit(0);
     });
   }
@@ -60,12 +73,16 @@ class LanaServer {
 
       try {
         switch (name) {
-          case 'analyze_apex_log_performance':
-            return await analyzeLogPerformance(args as unknown as AnalyzeLogArgs);
-          case 'get_apex_log_summary':
+          case "analyze_apex_log_performance":
+            return await analyzeLogPerformance(
+              args as unknown as AnalyzeLogArgs
+            );
+          case "get_apex_log_summary":
             return await getLogSummary(args as unknown as LogSummaryArgs);
-          case 'find_performance_bottlenecks':
-            return await findPerformanceBottlenecks(args as unknown as BottleneckArgs);
+          case "find_performance_bottlenecks":
+            return await findPerformanceBottlenecks(
+              args as unknown as BottleneckArgs
+            );
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
@@ -73,8 +90,10 @@ class LanaServer {
         return {
           content: [
             {
-              type: 'text',
-              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+              type: "text",
+              text: `Error: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
             },
           ],
           isError: true,
@@ -83,12 +102,13 @@ class LanaServer {
     });
   }
 
-
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
+    console.log("LANA MCP Server starting...");
+    console.log(this.server);
     await this.server.connect(transport);
     // eslint-disable-next-line no-console
-    console.error('LANA MCP Server running on stdio');
+    console.error("LANA MCP Server running on stdio");
   }
 }
 
