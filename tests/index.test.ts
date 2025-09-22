@@ -16,6 +16,7 @@ import {
 // Mock the MCP SDK components
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
+import { LanaServer } from "../src/index";
 
 // Mock the tool modules
 jest.mock("../src/tools/analyzeLogPerformance", () => ({
@@ -104,86 +105,6 @@ const mockConsoleError = jest
   .spyOn(console, "error")
   .mockImplementation(() => {});
 
-// Create the LanaServer class for testing
-class LanaServer {
-  private server: Server;
-
-  constructor() {
-    this.server = new Server(
-      {
-        name: "lana-mcp-server",
-        version: "1.0.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
-
-    this.setupToolHandlers();
-    this.setupErrorHandling();
-  }
-
-  private setupErrorHandling(): void {
-    this.server.onerror = (error: any) => {
-      console.error("[MCP Error]", error);
-    };
-    process.on("SIGINT", async () => {
-      process.exit(0);
-    });
-  }
-
-  private setupToolHandlers(): void {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        analyzeLogPerformanceTool,
-        getLogSummaryTool,
-        findPerformanceBottlenecksTool,
-      ],
-    }));
-
-    this.server.setRequestHandler(
-      CallToolRequestSchema,
-      async (request: any) => {
-        const { name, arguments: args } = request.params;
-
-        try {
-          switch (name) {
-            case "analyze_apex_log_performance":
-              return await analyzeLogPerformance(args as any);
-            case "get_apex_log_summary":
-              return await getLogSummary(args as any);
-            case "find_performance_bottlenecks":
-              return await findPerformanceBottlenecks(args as any);
-            default:
-              throw new Error(`Unknown tool: ${name}`);
-          }
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Error: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      }
-    );
-  }
-
-  async run(): Promise<void> {
-    const transport = new StdioServerTransport();
-    console.log(this.server);
-    await this.server.connect(transport);
-    console.error("LANA MCP Server running on stdio");
-  }
-}
-
 describe("LanaServer", () => {
   let mockServer: jest.Mocked<Server>;
   let mockTransport: jest.Mocked<StdioServerTransport>;
@@ -245,6 +166,7 @@ describe("LanaServer", () => {
     mockServer = {
       setRequestHandler: mockSetRequestHandler,
       connect: jest.fn(),
+      close: jest.fn(),
       onerror: undefined,
     } as any;
 

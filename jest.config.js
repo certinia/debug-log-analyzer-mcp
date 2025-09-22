@@ -1,15 +1,3 @@
-// import { createDefaultPreset } from "ts-jest";
-
-// const tsJestTransformCfg = createDefaultPreset().transform;
-
-// /** @type {import("jest").Config} **/
-// export default {
-//   testEnvironment: "node",
-//   transform: {
-//     ...tsJestTransformCfg,
-//   },
-// };
-
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
@@ -18,7 +6,12 @@ module.exports = {
   transform: {
     "^.+\\.ts$": "ts-jest",
   },
-  collectCoverageFrom: ["src/**/*.ts", "!src/**/*.d.ts", "!src/**/*.test.ts"],
+  collectCoverageFrom: [
+    "src/**/*.ts",
+    "!src/**/*.d.ts",
+    "!src/**/*.test.ts",
+    "!src/ApexLogParser.ts", // Exclude the log parser as it will be getting tested independently
+  ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html"],
   coverageThreshold: {

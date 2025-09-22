@@ -12,22 +12,22 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "@modelcontextprotocol/sdk/types";
 import {
   analyzeLogPerformance,
   analyzeLogPerformanceTool,
   AnalyzeLogArgs,
-} from "./tools/analyzeLogPerformance.js";
+} from "./tools/analyzeLogPerformance";
 import {
   getLogSummary,
   getLogSummaryTool,
   LogSummaryArgs,
-} from "./tools/getLogSummary.js";
+} from "./tools/getLogSummary";
 import {
   findPerformanceBottlenecks,
   findPerformanceBottlenecksTool,
   BottleneckArgs,
-} from "./tools/findPerformanceBottlenecks.js";
+} from "./tools/findPerformanceBottlenecks";
 
 class LanaServer {
   private server: Server;
@@ -55,6 +55,7 @@ class LanaServer {
       console.error("[MCP Error]", error);
     };
     process.on("SIGINT", async () => {
+      this.server.close();
       process.exit(0);
     });
   }
@@ -104,8 +105,6 @@ class LanaServer {
 
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
-    console.log("LANA MCP Server starting...");
-    console.log(this.server);
     await this.server.connect(transport);
     // eslint-disable-next-line no-console
     console.error("LANA MCP Server running on stdio");
@@ -115,3 +114,5 @@ class LanaServer {
 const server = new LanaServer();
 // eslint-disable-next-line no-console
 server.run().catch(console.error);
+
+export { LanaServer };

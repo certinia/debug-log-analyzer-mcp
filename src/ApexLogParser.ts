@@ -1,21 +1,23 @@
 /*
  * Copyright (c) 2020 Certinia Inc. All rights reserved.
+ * This is a copy of the ApexLogParser from the Lana project. In the future this will be moved to
+ * its own package and imported.
  */
 
 const typePattern = /^[A-Z_]*$/,
   settingsPattern = /^\d+\.\d+\sAPEX_CODE,\w+;APEX_PROFILING,.+$/m;
 
 type LineNumber = number | string | null; // an actual line-number or 'EXTERNAL'
-type IssueType = 'unexpected' | 'error' | 'skip';
+type IssueType = "unexpected" | "error" | "skip";
 
 export type LogSubCategory =
-  | 'Method'
-  | 'System Method'
-  | 'Code Unit'
-  | 'DML'
-  | 'SOQL'
-  | 'Flow'
-  | 'Workflow';
+  | "Method"
+  | "System Method"
+  | "Code Unit"
+  | "DML"
+  | "SOQL"
+  | "Flow"
+  | "Workflow";
 
 /**
  * Takes string input of a log and returns the ApexLog class, which represents a log tree
@@ -99,9 +101,9 @@ export class ApexLogParser {
   }
 
   private parseLine(line: string, lastEntry: LogLine | null): LogLine | null {
-    const parts = line.split('|');
+    const parts = line.split("|");
 
-    const type = parts[1] ?? '';
+    const type = parts[1] ?? "";
 
     const metaCtor = getLogEventClass(type as LogEventType);
     if (metaCtor) {
@@ -117,25 +119,28 @@ export class ApexLogParser {
     const hasType = !!(type && typePattern.test(type));
     if (!hasType && lastEntry?.acceptsText) {
       // wrapped text from the previous entry?
-      lastEntry.text += '\n' + line;
+      lastEntry.text += "\n" + line;
     } else if (hasType) {
       const message = `Unsupported log event name: ${type}`;
       if (!this.parsingErrors.includes(message)) {
         this.parsingErrors.push(message);
       }
-    } else if (lastEntry && line.startsWith('*** Skipped')) {
+    } else if (lastEntry && line.startsWith("*** Skipped")) {
       this.addLogIssue(
         lastEntry.timestamp,
-        'Skipped-Lines',
+        "Skipped-Lines",
         `${line}. A section of the log has been skipped and the log has been truncated. Full details of this section of log can not be provided.`,
-        'skip',
+        "skip"
       );
-    } else if (lastEntry && line.indexOf('MAXIMUM DEBUG LOG SIZE REACHED') !== -1) {
+    } else if (
+      lastEntry &&
+      line.indexOf("MAXIMUM DEBUG LOG SIZE REACHED") !== -1
+    ) {
       this.addLogIssue(
         lastEntry.timestamp,
-        'Max-Size-reached',
-        'The maximum log size has been reached. Part of the log has been truncated.',
-        'skip',
+        "Max-Size-reached",
+        "The maximum log size has been reached. Part of the log has been truncated.",
+        "skip"
       );
       this.maxSizeTimestamp = lastEntry.timestamp;
     } else if (!hasType && settingsPattern.test(line)) {
@@ -148,21 +153,23 @@ export class ApexLogParser {
   }
 
   private *generateLogLines(log: string): Generator<LogLine> {
-    const start = log.search(/^\d{2}:\d{2}:\d{2}.\d{1} \(\d+\)\|EXECUTION_STARTED$/m);
+    const start = log.search(
+      /^\d{2}:\d{2}:\d{2}.\d{1} \(\d+\)\|EXECUTION_STARTED$/m
+    );
     if (start > -1) {
       log = log.slice(start);
     }
 
-    const hascrlf = log.indexOf('\r\n') > -1;
+    const hascrlf = log.indexOf("\r\n") > -1;
     let lastEntry = null;
     let lfIndex = null;
-    let eolIndex = (lfIndex = log.indexOf('\n'));
+    let eolIndex = (lfIndex = log.indexOf("\n"));
     let startIndex = 0;
     let crlfIndex = -1;
 
     while (eolIndex !== -1) {
       if (hascrlf && eolIndex > crlfIndex) {
-        crlfIndex = log.indexOf('\r', eolIndex - 1);
+        crlfIndex = log.indexOf("\r", eolIndex - 1);
         eolIndex = crlfIndex + 1 === eolIndex ? crlfIndex : lfIndex;
       }
       const line = log.slice(startIndex, eolIndex);
@@ -175,7 +182,7 @@ export class ApexLogParser {
         }
       }
       startIndex = lfIndex + 1;
-      lfIndex = eolIndex = log.indexOf('\n', startIndex);
+      lfIndex = eolIndex = log.indexOf("\n", startIndex);
     }
 
     // Parse the last line
@@ -211,9 +218,13 @@ export class ApexLogParser {
     return rootMethod;
   }
 
-  private parseTree(currentLine: Method, lineIter: LineIterator, stack: Method[]) {
+  private parseTree(
+    currentLine: Method,
+    lineIter: LineIterator,
+    stack: Method[]
+  ) {
     this.lastTimestamp = currentLine.timestamp;
-    currentLine.namespace ||= 'default';
+    currentLine.namespace ||= "default";
 
     const isEntry = currentLine.exitTypes.length;
     if (isEntry) {
@@ -239,7 +250,9 @@ export class ApexLogParser {
           break;
         } else if (
           exitOnNextLine &&
-          (nextLine.nextLineIsExit || nextLine.isExit || nextLine.exitTypes.length > 0)
+          (nextLine.nextLineIsExit ||
+            nextLine.isExit ||
+            nextLine.exitTypes.length > 0)
         ) {
           currentLine.exitStamp = nextLine.timestamp;
           currentLine.onEnd?.(nextLine, stack);
@@ -256,7 +269,7 @@ export class ApexLogParser {
 
         lineIter.fetch(); // it's a child - consume the line
         this.lastTimestamp = nextLine.timestamp;
-        nextLine.namespace ||= currentLine.namespace || 'default';
+        nextLine.namespace ||= currentLine.namespace || "default";
         nextLine.parent = currentLine;
         currentLine.children.push(nextLine);
 
@@ -274,17 +287,17 @@ export class ApexLogParser {
         // we found an entry event on its own e.g a `METHOD_ENTRY` without a `METHOD_EXIT` and got to the end of the log
         this.addLogIssue(
           currentLine.exitStamp,
-          'Unexpected-End',
-          'An entry event was found without a corresponding exit event e.g a `METHOD_ENTRY` event without a `METHOD_EXIT`',
-          'unexpected',
+          "Unexpected-End",
+          "An entry event was found without a corresponding exit event e.g a `METHOD_ENTRY` event without a `METHOD_EXIT`",
+          "unexpected"
         );
 
         if (currentLine.isTruncated) {
           this.updateLogIssue(
             currentLine.exitStamp,
-            'Max-Size-reached',
-            'The maximum log size has been reached. Part of the log has been truncated.',
-            'skip',
+            "Max-Size-reached",
+            "The maximum log size has been reached. Part of the log has been truncated.",
+            "skip"
           );
           this.maxSizeTimestamp = currentLine.exitStamp;
         }
@@ -310,7 +323,7 @@ export class ApexLogParser {
     startMethod: Method,
     endLine: LogLine,
     lineIter: LineIterator,
-    stack: Method[],
+    stack: Method[]
   ) {
     startMethod.exitStamp = endLine.timestamp;
 
@@ -328,9 +341,9 @@ export class ApexLogParser {
       // we found an exit event on its own e.g a `METHOD_EXIT` without a `METHOD_ENTRY`
       this.addLogIssue(
         endLine.timestamp,
-        'Unexpected-Exit',
-        'An exit event was found without a corresponding entry event e.g a `METHOD_EXIT` event without a `METHOD_ENTRY`',
-        'unexpected',
+        "Unexpected-Exit",
+        "An exit event was found without a corresponding entry event e.g a `METHOD_EXIT` event without a `METHOD_ENTRY`",
+        "unexpected"
       );
       return false; // we have no matching method - ignore
     }
@@ -404,7 +417,7 @@ export class ApexLogParser {
     for (let i = 0; i < len; i++) {
       const child = children[i];
       if (child) {
-        const isPkgType = child.type === 'ENTERING_MANAGED_PKG';
+        const isPkgType = child.type === "ENTERING_MANAGED_PKG";
         if (lastPkg && child instanceof TimedNode) {
           if (isPkgType && child.namespace === lastPkg.namespace) {
             // combine adjacent (like) packages
@@ -435,7 +448,12 @@ export class ApexLogParser {
     node.children = newChildren;
   }
 
-  public addLogIssue(startTime: number, summary: string, description: string, type: IssueType) {
+  public addLogIssue(
+    startTime: number,
+    summary: string,
+    description: string,
+    type: IssueType
+  ) {
     if (!this.reasons.has(summary)) {
       this.reasons.add(summary);
       this.logIssues.push({
@@ -449,7 +467,12 @@ export class ApexLogParser {
     }
   }
 
-  private updateLogIssue(startTime: number, summary: string, description: string, type: IssueType) {
+  private updateLogIssue(
+    startTime: number,
+    summary: string,
+    description: string,
+    type: IssueType
+  ) {
     const elem = this.logIssues.findIndex((item) => {
       return item.summary === summary;
     });
@@ -468,11 +491,11 @@ export class ApexLogParser {
     }
 
     const settings = match[0],
-      settingList = settings.substring(settings.indexOf(' ') + 1).split(';');
+      settingList = settings.substring(settings.indexOf(" ") + 1).split(";");
 
     return settingList.map((entry) => {
-      const parts = entry.split(',');
-      return new DebugLevel(parts[0] || '', parts[1] || '');
+      const parts = entry.split(",");
+      return new DebugLevel(parts[0] || "", parts[1] || "");
     });
   }
 }
@@ -561,7 +584,7 @@ export abstract class LogLine {
   /**
    * The full raw text of this log line
    */
-  logLine = ''; // the raw text of this log line
+  logLine = ""; // the raw text of this log line
 
   /**
    * A parsed version of the log line text useful for display in UIs
@@ -598,7 +621,7 @@ export abstract class LogLine {
    * The package namespace associated with this log line
    * @default default
    */
-  namespace: string | 'default' = '';
+  namespace: string | "default" = "";
 
   /**
    * The variable value
@@ -732,7 +755,7 @@ export abstract class LogLine {
       this.timestamp = timeData ? this.parseTimestamp(timeData) : 0;
     } else {
       this.timestamp = 0;
-      this.text = '';
+      this.text = "";
     }
   }
 
@@ -743,7 +766,7 @@ export abstract class LogLine {
   onAfter?(parser: ApexLogParser, next?: LogLine): void;
 
   private parseTimestamp(text: string): number {
-    const start = text.indexOf('(');
+    const start = text.indexOf("(");
     if (start !== -1) {
       return Number(text.slice(start + 1, -1));
     }
@@ -752,8 +775,8 @@ export abstract class LogLine {
 
   protected parseLineNumber(text: string | null | undefined): string | number {
     switch (true) {
-      case text === '[EXTERNAL]':
-        return 'EXTERNAL';
+      case text === "[EXTERNAL]":
+        return "EXTERNAL";
       case !!text: {
         const lineNumberStr = text.slice(1, -1);
         if (lineNumberStr) {
@@ -772,7 +795,7 @@ class BasicExitLine extends LogLine {
   isExit = true;
 }
 
-type CPUType = 'loading' | 'custom' | 'method' | 'free' | 'system' | 'pkg' | '';
+type CPUType = "loading" | "custom" | "method" | "free" | "system" | "pkg" | "";
 
 /**
  * Log lines extend this class if they have a duration (and hence can be shown on the timeline).
@@ -798,7 +821,7 @@ export class TimedNode extends LogLine {
     parser: ApexLogParser,
     parts: string[] | null,
     timelineKey: LogSubCategory,
-    cpuType: CPUType,
+    cpuType: CPUType
   ) {
     super(parser, parts);
     this.subCategory = timelineKey;
@@ -811,7 +834,8 @@ export class TimedNode extends LogLine {
 
   recalculateDurations() {
     if (this.exitStamp) {
-      this.duration.total = this.duration.self = this.exitStamp - this.timestamp;
+      this.duration.total = this.duration.self =
+        this.exitStamp - this.timestamp;
     }
   }
 }
@@ -833,7 +857,7 @@ export class Method extends TimedNode {
     parts: string[] | null,
     exitTypes: string[],
     timelineKey: LogSubCategory,
-    cpuType: CPUType,
+    cpuType: CPUType
   ) {
     super(parser, parts, timelineKey, cpuType);
     this.exitTypes = exitTypes as LogEventType[];
@@ -847,7 +871,7 @@ export class Method extends TimedNode {
  */
 export class ApexLog extends Method {
   type = null;
-  text = 'LOG_ROOT';
+  text = "LOG_ROOT";
   timestamp = 0;
   exitStamp = 0;
   /**
@@ -898,7 +922,7 @@ export class ApexLog extends Method {
   executionEndTime = 0;
 
   constructor(parser: ApexLogParser) {
-    super(parser, null, [], 'Code Unit', '');
+    super(parser, null, [], "Code Unit", "");
   }
 
   setTimes() {
@@ -928,28 +952,28 @@ export class ApexLog extends Method {
 
 export function parseObjectNamespace(text: string | null | undefined): string {
   if (!text) {
-    return '';
+    return "";
   }
 
-  const sep = text.indexOf('__');
+  const sep = text.indexOf("__");
   if (sep === -1) {
-    return 'default';
+    return "default";
   }
   return text.slice(0, sep);
 }
 
 export function parseVfNamespace(text: string): string {
-  const sep = text.indexOf('__');
+  const sep = text.indexOf("__");
   if (sep === -1) {
-    return 'default';
+    return "default";
   }
-  const firstSlash = text.indexOf('/');
+  const firstSlash = text.indexOf("/");
   if (firstSlash === -1) {
-    return 'default';
+    return "default";
   }
-  const secondSlash = text.indexOf('/', firstSlash + 1);
+  const secondSlash = text.indexOf("/", firstSlash + 1);
   if (secondSlash < 0) {
-    return 'default';
+    return "default";
   }
   return text.substring(secondSlash + 1, sep);
 }
@@ -959,7 +983,7 @@ export function parseRows(text: string | null | undefined): number {
     return 0;
   }
 
-  const rowCount = text.slice(text.indexOf('Rows:') + 5);
+  const rowCount = text.slice(text.indexOf("Rows:") + 5);
   if (rowCount) {
     return Number(rowCount);
   }
@@ -969,11 +993,11 @@ export function parseRows(text: string | null | undefined): number {
 /* Log line entry Parsers */
 
 class BulkHeapAllocateLine extends LogLine {
-  logCategory: 'Apex Code';
+  logCategory: "Apex Code";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
-    this.logCategory = 'Apex Code';
+    this.text = parts[2] || "";
+    this.logCategory = "Apex Code";
   }
 }
 
@@ -1013,34 +1037,34 @@ class NamedCredentialResponseDetailLine extends LogLine {
 
 class ConstructorEntryLine extends Method {
   hasValidSymbols = true;
-  suffix = ' (constructor)';
+  suffix = " (constructor)";
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['CONSTRUCTOR_EXIT'], 'Method', 'method');
+    super(parser, parts, ["CONSTRUCTOR_EXIT"], "Method", "method");
     this.lineNumber = this.parseLineNumber(parts[2]);
     const [, , , , args, className] = parts;
 
-    this.text = className + (args ? args.substring(args.lastIndexOf('(')) : '');
-    const possibleNS = this._parseConstructorNamespace(className || '');
+    this.text = className + (args ? args.substring(args.lastIndexOf("(")) : "");
+    const possibleNS = this._parseConstructorNamespace(className || "");
     if (possibleNS) {
       this.namespace = possibleNS;
     }
   }
 
   _parseConstructorNamespace(className: string): string {
-    let possibleNs = className.slice(0, className.indexOf('.'));
+    let possibleNs = className.slice(0, className.indexOf("."));
     if (this.logParser.namespaces.has(possibleNs)) {
       return possibleNs;
     }
 
-    const constructorParts = (className ?? '').split('.');
-    possibleNs = constructorParts[0] || '';
+    const constructorParts = (className ?? "").split(".");
+    possibleNs = constructorParts[0] || "";
     // inmner class with a namespace
     if (constructorParts.length === 3) {
       return possibleNs;
     }
 
-    return '';
+    return "";
   }
 }
 
@@ -1065,12 +1089,12 @@ export class MethodEntryLine extends Method {
   hasValidSymbols = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['METHOD_EXIT'], 'Method', 'method');
+    super(parser, parts, ["METHOD_EXIT"], "Method", "method");
     this.lineNumber = this.parseLineNumber(parts[2]);
     this.text = parts[4] || this.type || this.text;
-    if (this.text.indexOf('System.Type.forName(') !== -1) {
+    if (this.text.indexOf("System.Type.forName(") !== -1) {
       // assume we are not charged for class loading (or at least not lengthy remote-loading / compiling)
-      this.cpuType = 'loading';
+      this.cpuType = "loading";
     } else {
       const possibleNs = this._parseMethodNamespace(parts[4]);
       if (possibleNs) {
@@ -1080,24 +1104,24 @@ export class MethodEntryLine extends Method {
   }
 
   onEnd(end: MethodExitLine, _stack: LogLine[]): void {
-    if (end.namespace && !end.text.endsWith(')')) {
+    if (end.namespace && !end.text.endsWith(")")) {
       this.namespace = end.namespace;
     }
   }
 
   _parseMethodNamespace(methodName: string | undefined): string {
     if (!methodName) {
-      return '';
+      return "";
     }
 
-    const methodBracketIndex = methodName.indexOf('(');
+    const methodBracketIndex = methodName.indexOf("(");
     if (methodBracketIndex === -1) {
-      return '';
+      return "";
     }
 
-    const nsSeparator = methodName.indexOf('.');
+    const nsSeparator = methodName.indexOf(".");
     if (nsSeparator === -1) {
-      return '';
+      return "";
     }
 
     const possibleNs = methodName.slice(0, nsSeparator);
@@ -1105,14 +1129,14 @@ export class MethodEntryLine extends Method {
       return possibleNs;
     }
 
-    const methodNameParts = methodName.slice(0, methodBracketIndex)?.split('.');
+    const methodNameParts = methodName.slice(0, methodBracketIndex)?.split(".");
     if (methodNameParts.length === 4) {
-      return methodNameParts[0] ?? '';
+      return methodNameParts[0] ?? "";
     } else if (methodNameParts.length === 2) {
-      return 'default';
+      return "default";
     }
 
-    return '';
+    return "";
   }
 }
 class MethodExitLine extends LogLine {
@@ -1125,9 +1149,9 @@ class MethodExitLine extends LogLine {
 
     /*A method will end with ')'. Without that this it represents the first reference to a class, outer or inner. One of the few reliable ways to determine valid namespaces. The first reference to a class (outer or inner) will always have an METHOD_EXIT containing the Outer class name with namespace if present. Other events will follow, CONSTRUCTOR_ENTRY etc. But this case will only ever have 2 parts ns.Outer even if the first reference was actually an inner class e.g new ns.Outer.Inner();*/
     // If does not end in ) then we have a reference to the class, either via outer or inner.
-    if (!this.text.endsWith(')')) {
+    if (!this.text.endsWith(")")) {
       // if there is a . the we have a namespace e.g ns.Outer
-      const index = this.text.indexOf('.');
+      const index = this.text.indexOf(".");
       if (index !== -1) {
         this.namespace = this.text.slice(0, index);
       }
@@ -1136,12 +1160,18 @@ class MethodExitLine extends LogLine {
 }
 
 class SystemConstructorEntryLine extends Method {
-  suffix = '(system constructor)';
+  suffix = "(system constructor)";
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['SYSTEM_CONSTRUCTOR_EXIT'], 'System Method', 'method');
+    super(
+      parser,
+      parts,
+      ["SYSTEM_CONSTRUCTOR_EXIT"],
+      "System Method",
+      "method"
+    );
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[3] || '';
+    this.text = parts[3] || "";
   }
 }
 
@@ -1155,9 +1185,9 @@ class SystemConstructorExitLine extends LogLine {
 }
 class SystemMethodEntryLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['SYSTEM_METHOD_EXIT'], 'System Method', 'method');
+    super(parser, parts, ["SYSTEM_METHOD_EXIT"], "System Method", "method");
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[3] || '';
+    this.text = parts[3] || "";
   }
 }
 
@@ -1171,78 +1201,84 @@ class SystemMethodExitLine extends LogLine {
 }
 
 export class CodeUnitStartedLine extends Method {
-  suffix = ' (entrypoint)';
-  codeUnitType = '';
+  suffix = " (entrypoint)";
+  codeUnitType = "";
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['CODE_UNIT_FINISHED'], 'Code Unit', 'custom');
+    super(parser, parts, ["CODE_UNIT_FINISHED"], "Code Unit", "custom");
 
-    const typeString = parts[5] || parts[4] || parts[3] || '';
-    let sepIndex = typeString.indexOf(':');
+    const typeString = parts[5] || parts[4] || parts[3] || "";
+    let sepIndex = typeString.indexOf(":");
     if (sepIndex === -1) {
-      sepIndex = typeString.indexOf('/');
+      sepIndex = typeString.indexOf("/");
     }
-    this.codeUnitType = sepIndex !== -1 ? typeString.slice(0, sepIndex) : '';
+    this.codeUnitType = sepIndex !== -1 ? typeString.slice(0, sepIndex) : "";
 
-    const name = parts[4] || parts[3] || this.codeUnitType || '';
+    const name = parts[4] || parts[3] || this.codeUnitType || "";
     switch (this.codeUnitType) {
-      case 'EventService':
-        this.cpuType = 'method';
+      case "EventService":
+        this.cpuType = "method";
         this.namespace = parseObjectNamespace(typeString.slice(sepIndex + 1));
         this.text = name;
         break;
-      case 'Validation':
-        this.cpuType = 'custom';
+      case "Validation":
+        this.cpuType = "custom";
         this.declarative = true;
 
         this.text = name;
         break;
-      case 'Workflow':
-        this.cpuType = 'custom';
+      case "Workflow":
+        this.cpuType = "custom";
         this.declarative = true;
         this.text = name;
         break;
-      case 'Flow':
-        this.cpuType = 'custom';
+      case "Flow":
+        this.cpuType = "custom";
         this.declarative = true;
         this.text = name;
         break;
-      case 'VF':
-        this.cpuType = 'method';
+      case "VF":
+        this.cpuType = "method";
         this.namespace = parseVfNamespace(name);
         this.text = name;
         break;
-      case 'apex': {
-        this.cpuType = 'method';
-        const namespaceIndex = name.indexOf('.');
+      case "apex": {
+        this.cpuType = "method";
+        const namespaceIndex = name.indexOf(".");
         this.namespace =
           namespaceIndex !== -1
-            ? name.slice(name.indexOf('apex://') + 7, namespaceIndex)
-            : 'default';
+            ? name.slice(name.indexOf("apex://") + 7, namespaceIndex)
+            : "default";
         this.text = name;
         break;
       }
-      case '__sfdc_trigger': {
-        this.cpuType = 'method';
-        this.text = name || parts[4] || '';
-        const triggerParts = parts[5]?.split('/') || '';
-        this.namespace = triggerParts.length === 3 ? triggerParts[1] || 'default' : 'default';
+      case "__sfdc_trigger": {
+        this.cpuType = "method";
+        this.text = name || parts[4] || "";
+        const triggerParts = parts[5]?.split("/") || "";
+        this.namespace =
+          triggerParts.length === 3 ? triggerParts[1] || "default" : "default";
         break;
       }
       default: {
-        this.cpuType = 'method';
+        this.cpuType = "method";
         this.text = name;
-        const openBracket = name.lastIndexOf('(');
+        const openBracket = name.lastIndexOf("(");
         const methodName =
-          openBracket !== -1 ? name.slice(0, openBracket + 1).split('.') : name.split('.');
-        if (methodName.length === 3 || (methodName.length === 2 && !methodName[1]?.endsWith('('))) {
-          this.namespace = methodName[0] || 'default';
+          openBracket !== -1
+            ? name.slice(0, openBracket + 1).split(".")
+            : name.split(".");
+        if (
+          methodName.length === 3 ||
+          (methodName.length === 2 && !methodName[1]?.endsWith("("))
+        ) {
+          this.namespace = methodName[0] || "default";
         }
         break;
       }
     }
 
-    this.namespace ||= 'default';
+    this.namespace ||= "default";
   }
 }
 export class CodeUnitFinishedLine extends LogLine {
@@ -1250,29 +1286,29 @@ export class CodeUnitFinishedLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 class VFApexCallStartLine extends Method {
-  suffix = ' (VF APEX)';
+  suffix = " (VF APEX)";
   invalidClasses = [
-    'pagemessagescomponentcontroller',
-    'pagemessagecomponentcontroller',
-    'severitymessages',
+    "pagemessagescomponentcontroller",
+    "pagemessagecomponentcontroller",
+    "severitymessages",
   ];
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['VF_APEX_CALL_END'], 'Method', 'method');
+    super(parser, parts, ["VF_APEX_CALL_END"], "Method", "method");
     this.lineNumber = this.parseLineNumber(parts[2]);
 
-    const classText = parts[5] || parts[3] || '';
-    let methodtext = parts[4] || '';
+    const classText = parts[5] || parts[3] || "";
+    let methodtext = parts[4] || "";
     if (
       !methodtext &&
-      (!classText.includes(' ') ||
+      (!classText.includes(" ") ||
         this.invalidClasses.some((invalidCls: string) =>
-          classText.toLowerCase().includes(invalidCls),
+          classText.toLowerCase().includes(invalidCls)
         ))
     ) {
       // we have a system entry and they do not have exits
@@ -1282,17 +1318,18 @@ class VFApexCallStartLine extends Method {
     } else if (methodtext) {
       this.hasValidSymbols = true;
       // method call
-      const methodIndex = methodtext.indexOf('(');
-      const constructorIndex = methodtext.indexOf('<init>');
+      const methodIndex = methodtext.indexOf("(");
+      const constructorIndex = methodtext.indexOf("<init>");
       if (methodIndex > -1) {
         // Method
-        methodtext = '.' + methodtext.substring(methodIndex).slice(1, -1) + '()';
+        methodtext =
+          "." + methodtext.substring(methodIndex).slice(1, -1) + "()";
       } else if (constructorIndex > -1) {
         // Constructor
-        methodtext = methodtext.substring(constructorIndex + 6) + '()';
+        methodtext = methodtext.substring(constructorIndex + 6) + "()";
       } else {
         // Property
-        methodtext = '.' + methodtext;
+        methodtext = "." + methodtext;
       }
     } else {
       this.hasValidSymbols = true;
@@ -1306,22 +1343,34 @@ class VFApexCallEndLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 class VFDeserializeViewstateBeginLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['VF_DESERIALIZE_VIEWSTATE_END'], 'System Method', 'method');
+    super(
+      parser,
+      parts,
+      ["VF_DESERIALIZE_VIEWSTATE_END"],
+      "System Method",
+      "method"
+    );
   }
 }
 
 class VFFormulaStartLine extends Method {
-  suffix = ' (VF FORMULA)';
+  suffix = " (VF FORMULA)";
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['VF_EVALUATE_FORMULA_END'], 'System Method', 'custom');
-    this.text = parts[3] || '';
+    super(
+      parser,
+      parts,
+      ["VF_EVALUATE_FORMULA_END"],
+      "System Method",
+      "custom"
+    );
+    this.text = parts[3] || "";
   }
 }
 
@@ -1330,13 +1379,19 @@ class VFFormulaEndLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 class VFSeralizeViewStateStartLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['VF_SERIALIZE_VIEWSTATE_END'], 'System Method', 'method');
+    super(
+      parser,
+      parts,
+      ["VF_SERIALIZE_VIEWSTATE_END"],
+      "System Method",
+      "method"
+    );
   }
 }
 
@@ -1344,7 +1399,7 @@ class VFPageMessageLine extends LogLine {
   acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -1354,14 +1409,16 @@ class DMLBeginLine extends Method {
     total: 1,
   };
 
-  namespace = 'default';
+  namespace = "default";
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['DML_END'], 'DML', 'free');
+    super(parser, parts, ["DML_END"], "DML", "free");
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = 'DML ' + parts[3] + ' ' + parts[4];
+    this.text = "DML " + parts[3] + " " + parts[4];
     const rowCountString = parts[5];
-    this.dmlRowCount.total = this.dmlRowCount.self = rowCountString ? parseRows(rowCountString) : 0;
+    this.dmlRowCount.total = this.dmlRowCount.self = rowCountString
+      ? parseRows(rowCountString)
+      : 0;
   }
 }
 
@@ -1389,17 +1446,17 @@ class SOQLExecuteBeginLine extends Method {
   };
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['SOQL_EXECUTE_END'], 'SOQL', 'free');
+    super(parser, parts, ["SOQL_EXECUTE_END"], "SOQL", "free");
     this.lineNumber = this.parseLineNumber(parts[2]);
 
     const [, , , aggregations, soqlString] = parts;
 
-    const aggregationText = aggregations || '';
+    const aggregationText = aggregations || "";
     if (aggregationText) {
-      const aggregationIndex = aggregationText.indexOf('Aggregations:');
+      const aggregationIndex = aggregationText.indexOf("Aggregations:");
       this.aggregations = Number(aggregationText.slice(aggregationIndex + 13));
     }
-    this.text = soqlString || '';
+    this.text = soqlString || "";
   }
 
   onEnd(end: SOQLExecuteEndLine, _stack: LogLine[]): void {
@@ -1413,7 +1470,9 @@ class SOQLExecuteEndLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.soqlRowCount.total = this.soqlRowCount.self = parseRows(parts[3] || '');
+    this.soqlRowCount.total = this.soqlRowCount.self = parseRows(
+      parts[3] || ""
+    );
   }
 }
 
@@ -1429,35 +1488,43 @@ class SOQLExecuteExplainLine extends LogLine {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
 
-    const queryPlanDetails = parts[3] || '';
+    const queryPlanDetails = parts[3] || "";
     this.text = queryPlanDetails;
 
-    const queryplanParts = queryPlanDetails.split('],');
+    const queryplanParts = queryPlanDetails.split("],");
     if (queryplanParts.length > 1) {
-      const planExplain = queryplanParts[0] || '';
-      const [cardinalityText, sobjCardinalityText, costText] = (queryplanParts[1] || '').split(',');
+      const planExplain = queryplanParts[0] || "";
+      const [cardinalityText, sobjCardinalityText, costText] = (
+        queryplanParts[1] || ""
+      ).split(",");
 
-      const onIndex = planExplain.indexOf(' on');
+      const onIndex = planExplain.indexOf(" on");
       this.leadingOperationType = planExplain.slice(0, onIndex);
 
-      const colonIndex = planExplain.indexOf(' :');
+      const colonIndex = planExplain.indexOf(" :");
       this.sObjectType = planExplain.slice(onIndex + 4, colonIndex);
 
       // remove whitespace if there is any. we could have [ field1__c, field2__c ]
       // I am not 100% sure of format when we have multiple fields so this is safer
-      const fieldsAsString = planExplain.slice(planExplain.indexOf('[') + 1).replace(/\s+/g, '');
-      this.fields = fieldsAsString === '' ? [] : fieldsAsString.split(',');
+      const fieldsAsString = planExplain
+        .slice(planExplain.indexOf("[") + 1)
+        .replace(/\s+/g, "");
+      this.fields = fieldsAsString === "" ? [] : fieldsAsString.split(",");
 
       this.cardinality = cardinalityText
-        ? Number(cardinalityText.slice(cardinalityText.indexOf('cardinality: ') + 13))
+        ? Number(
+            cardinalityText.slice(cardinalityText.indexOf("cardinality: ") + 13)
+          )
         : null;
       this.sObjectCardinality = sobjCardinalityText
         ? Number(
-            sobjCardinalityText.slice(sobjCardinalityText.indexOf('sobjectCardinality: ') + 20),
+            sobjCardinalityText.slice(
+              sobjCardinalityText.indexOf("sobjectCardinality: ") + 20
+            )
           )
         : null;
       this.relativeCost = costText
-        ? Number(costText.slice(costText.indexOf('relativeCost ') + 13))
+        ? Number(costText.slice(costText.indexOf("relativeCost ") + 13))
         : null;
     }
   }
@@ -1465,7 +1532,7 @@ class SOQLExecuteExplainLine extends LogLine {
 
 class SOSLExecuteBeginLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['SOSL_EXECUTE_END'], 'SOQL', 'free');
+    super(parser, parts, ["SOSL_EXECUTE_END"], "SOQL", "free");
     this.lineNumber = this.parseLineNumber(parts[2]);
     this.text = `SOSL: ${parts[3]}`;
 
@@ -1486,7 +1553,9 @@ class SOSLExecuteEndLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.soslRowCount.total = this.soslRowCount.self = parseRows(parts[3] || '');
+    this.soslRowCount.total = this.soslRowCount.self = parseRows(
+      parts[3] || ""
+    );
   }
 }
 
@@ -1494,7 +1563,7 @@ class HeapAllocateLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[3] || '';
+    this.text = parts[3] || "";
   }
 }
 
@@ -1516,7 +1585,7 @@ class VariableScopeBeginLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts.slice(3).join(' | ');
+    this.text = parts.slice(3).join(" | ");
   }
 }
 
@@ -1524,14 +1593,14 @@ class VariableAssignmentLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts.slice(3).join(' | ');
+    this.text = parts.slice(3).join(" | ");
   }
 }
 class UserInfoLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[3] + ' ' + parts[4];
+    this.text = parts[3] + " " + parts[4];
   }
 }
 
@@ -1541,80 +1610,97 @@ class UserDebugLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts.slice(3).join(' | ');
+    this.text = parts.slice(3).join(" | ");
   }
 }
 
 class CumulativeLimitUsageLine extends Method {
-  namespace = 'default';
+  namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['CUMULATIVE_LIMIT_USAGE_END'], 'System Method', 'system');
+    super(
+      parser,
+      parts,
+      ["CUMULATIVE_LIMIT_USAGE_END"],
+      "System Method",
+      "system"
+    );
   }
 }
 
 class CumulativeProfilingLine extends LogLine {
   acceptsText = true;
-  namespace = 'default';
+  namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] + ' ' + (parts[3] ?? '');
+    this.text = parts[2] + " " + (parts[3] ?? "");
   }
 }
 
 class CumulativeProfilingBeginLine extends Method {
-  namespace = 'default';
+  namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['CUMULATIVE_PROFILING_END'], 'System Method', 'custom');
+    super(
+      parser,
+      parts,
+      ["CUMULATIVE_PROFILING_END"],
+      "System Method",
+      "custom"
+    );
   }
 }
 
 class LimitUsageLine extends LogLine {
-  namespace = 'default';
+  namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[3] + ' ' + parts[4] + ' out of ' + parts[5];
+    this.text = parts[3] + " " + parts[4] + " out of " + parts[5];
   }
 }
 
 class LimitUsageForNSLine extends LogLine {
   static limitsKeys = new Map<string, string>([
-    ['Number of SOQL queries', 'soqlQueries'],
-    ['Number of query rows', 'queryRows'],
-    ['Number of SOSL queries', 'soslQueries'],
-    ['Number of DML statements', 'dmlStatements'],
-    ['Number of Publish Immediate DML', 'publishImmediateDml'],
-    ['Number of DML rows', 'dmlRows'],
-    ['Maximum CPU time', 'cpuTime'],
-    ['Maximum heap size', 'heapSize'],
-    ['Number of callouts', 'callouts'],
-    ['Number of Email Invocations', 'emailInvocations'],
-    ['Number of future calls', 'futureCalls'],
-    ['Number of queueable jobs added to the queue', 'queueableJobsAddedToQueue'],
-    ['Number of Mobile Apex push calls', 'mobileApexPushCalls'],
+    ["Number of SOQL queries", "soqlQueries"],
+    ["Number of query rows", "queryRows"],
+    ["Number of SOSL queries", "soslQueries"],
+    ["Number of DML statements", "dmlStatements"],
+    ["Number of Publish Immediate DML", "publishImmediateDml"],
+    ["Number of DML rows", "dmlRows"],
+    ["Maximum CPU time", "cpuTime"],
+    ["Maximum heap size", "heapSize"],
+    ["Number of callouts", "callouts"],
+    ["Number of Email Invocations", "emailInvocations"],
+    ["Number of future calls", "futureCalls"],
+    [
+      "Number of queueable jobs added to the queue",
+      "queueableJobsAddedToQueue",
+    ],
+    ["Number of Mobile Apex push calls", "mobileApexPushCalls"],
   ]);
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.acceptsText = true;
-    this.namespace = 'default';
+    this.namespace = "default";
 
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 
   onAfter(parser: ApexLogParser, _next?: LogLine): void {
     // Parse the namespace from the first line (before any newline)
-    this.namespace = this.text.slice(0, this.text.indexOf('\n')).replace(/\(|\)/g, '');
+    this.namespace = this.text
+      .slice(0, this.text.indexOf("\n"))
+      .replace(/\(|\)/g, "");
 
     // Clean up the text for easier parsing
     const cleanedText = this.text
-      .replace(/^\s+/gm, '')
-      .replaceAll('******* CLOSE TO LIMIT', '')
-      .replaceAll(' out of ', '/');
+      .replace(/^\s+/gm, "")
+      .replaceAll("******* CLOSE TO LIMIT", "")
+      .replaceAll(" out of ", "/");
     this.text = cleanedText;
 
     // Split into lines and parse each line for limits
-    const lines = cleanedText.split('\n');
+    const lines = cleanedText.split("\n");
     const limits: Limits = {
       soqlQueries: { used: 0, limit: 0 },
       soslQueries: { used: 0, limit: 0 },
@@ -1636,11 +1722,11 @@ class LimitUsageForNSLine extends LogLine {
       const match = line.match(/^(.+?):\s*([\d,]+)\/([\d,]+)/);
       if (match) {
         const key: keyof Limits = LimitUsageForNSLine.limitsKeys.get(
-          match[1]!.trim(),
+          match[1]!.trim()
         ) as keyof Limits;
         if (key) {
-          const used = parseInt(match[2]!.replace(/,/g, ''), 10);
-          const limit = parseInt(match[3]!.replace(/,/g, ''), 10);
+          const used = parseInt(match[2]!.replace(/,/g, ""), 10);
+          const limit = parseInt(match[3]!.replace(/,/g, ""), 10);
           if (key) {
             limits[key] = { used, limit };
           }
@@ -1654,53 +1740,53 @@ class LimitUsageForNSLine extends LogLine {
 
 class NBANodeBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['NBA_NODE_END'], 'System Method', 'method');
-    this.text = parts.slice(2).join(' | ');
+    super(parser, parts, ["NBA_NODE_END"], "System Method", "method");
+    this.text = parts.slice(2).join(" | ");
   }
 }
 
 class NBANodeDetail extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 class NBANodeEnd extends LogLine {
   isExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 class NBANodeError extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 class NBAOfferInvalid extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 class NBAStrategyBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['NBA_STRATEGY_END'], 'System Method', 'method');
-    this.text = parts.slice(2).join(' | ');
+    super(parser, parts, ["NBA_STRATEGY_END"], "System Method", "method");
+    this.text = parts.slice(2).join(" | ");
   }
 }
 class NBAStrategyEnd extends LogLine {
   isExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 class NBAStrategyError extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 
@@ -1708,7 +1794,7 @@ class PushTraceFlagsLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[4] + ', line:' + this.lineNumber + ' - ' + parts[5];
+    this.text = parts[4] + ", line:" + this.lineNumber + " - " + parts[5];
   }
 }
 
@@ -1716,13 +1802,13 @@ class PopTraceFlagsLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[4] + ', line:' + this.lineNumber + ' - ' + parts[5];
+    this.text = parts[4] + ", line:" + this.lineNumber + " - " + parts[5];
   }
 }
 
 class QueryMoreBeginLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['QUERY_MORE_END'], 'SOQL', 'custom');
+    super(parser, parts, ["QUERY_MORE_END"], "SOQL", "custom");
     this.lineNumber = this.parseLineNumber(parts[2]);
     this.text = `line: ${this.lineNumber}`;
   }
@@ -1764,7 +1850,7 @@ class SavePointSetLine extends LogLine {
 class TotalEmailRecipientsQueuedLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -1790,31 +1876,32 @@ class SystemModeEnterLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 class SystemModeExitLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 export class ExecutionStartedLine extends Method {
-  namespace = 'default';
+  namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['EXECUTION_FINISHED'], 'Method', 'method');
+    super(parser, parts, ["EXECUTION_FINISHED"], "Method", "method");
   }
 }
 
 class EnteringManagedPackageLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, [], 'Method', 'pkg');
-    const rawNs = parts[2] || '',
-      lastDot = rawNs.lastIndexOf('.');
+    super(parser, parts, [], "Method", "pkg");
+    const rawNs = parts[2] || "",
+      lastDot = rawNs.lastIndexOf(".");
 
-    this.text = this.namespace = lastDot < 0 ? rawNs : rawNs.substring(lastDot + 1);
+    this.text = this.namespace =
+      lastDot < 0 ? rawNs : rawNs.substring(lastDot + 1);
   }
 
   onAfter(parser: ApexLogParser, end?: LogLine): void {
@@ -1826,8 +1913,8 @@ class EnteringManagedPackageLine extends Method {
 
 class EventSericePubBeginLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['EVENT_SERVICE_PUB_END'], 'Flow', 'custom');
-    this.text = parts[2] || '';
+    super(parser, parts, ["EVENT_SERVICE_PUB_END"], "Flow", "custom");
+    this.text = parts[2] || "";
   }
 }
 
@@ -1836,20 +1923,20 @@ class EventSericePubEndLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 class EventSericePubDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] + ' ' + parts[3] + ' ' + parts[4];
+    this.text = parts[2] + " " + parts[3] + " " + parts[4];
   }
 }
 
 class EventSericeSubBeginLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['EVENT_SERVICE_SUB_END'], 'Flow', 'custom');
+    super(parser, parts, ["EVENT_SERVICE_SUB_END"], "Flow", "custom");
     this.text = `${parts[2]} ${parts[3]}`;
   }
 }
@@ -1872,10 +1959,10 @@ class EventSericeSubDetailLine extends LogLine {
 
 export class FlowStartInterviewsBeginLine extends Method {
   declarative = true;
-  text = 'FLOW_START_INTERVIEWS : ';
+  text = "FLOW_START_INTERVIEWS : ";
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['FLOW_START_INTERVIEWS_END'], 'Flow', 'custom');
+    super(parser, parts, ["FLOW_START_INTERVIEWS_END"], "Flow", "custom");
   }
 
   onEnd(end: LogLine, stack: LogLine[]) {
@@ -1893,21 +1980,21 @@ export class FlowStartInterviewsBeginLine extends Method {
       // type = "CODE_UNIT_STARTED" a flow or Processbuilder was started directly
       // type = "FLOW_START_INTERVIEWS_BEGIN" a flow was started from a process builder
       if (elem instanceof CodeUnitStartedLine) {
-        flowType = elem.codeUnitType === 'Flow' ? 'Flow' : 'Process Builder';
+        flowType = elem.codeUnitType === "Flow" ? "Flow" : "Process Builder";
         break;
-      } else if (elem && elem.type === 'FLOW_START_INTERVIEWS_BEGIN') {
-        flowType = 'Flow';
+      } else if (elem && elem.type === "FLOW_START_INTERVIEWS_BEGIN") {
+        flowType = "Flow";
         break;
       }
     }
-    return flowType || '';
+    return flowType || "";
   }
 
   getFlowName() {
     if (this.children.length) {
-      return this.children[0]?.text || '';
+      return this.children[0]?.text || "";
     }
-    return '';
+    return "";
   }
 }
 
@@ -1921,15 +2008,15 @@ class FlowStartInterviewsErrorLine extends LogLine {
 
 class FlowStartInterviewBeginLine extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['FLOW_START_INTERVIEW_END'], 'Flow', 'custom');
-    this.text = parts[3] || '';
+    super(parser, parts, ["FLOW_START_INTERVIEW_END"], "Flow", "custom");
+    this.text = parts[3] || "";
   }
 }
 
 class FlowStartInterviewLimitUsageLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -1951,8 +2038,8 @@ class FlowElementBeginLine extends Method {
   declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['FLOW_ELEMENT_END'], 'Flow', 'custom');
-    this.text = parts[3] + ' ' + parts[4];
+    super(parser, parts, ["FLOW_ELEMENT_END"], "Flow", "custom");
+    this.text = parts[3] + " " + parts[4];
   }
 }
 
@@ -1961,7 +2048,7 @@ class FlowElementDeferredLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] + ' ' + parts[3];
+    this.text = parts[2] + " " + parts[3];
   }
 }
 
@@ -1971,7 +2058,7 @@ class FlowElementAssignmentLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] + ' ' + parts[4];
+    this.text = parts[3] + " " + parts[4];
   }
 }
 
@@ -2006,7 +2093,7 @@ class FlowWaitWaitingDetailLine extends LogLine {
 class FlowInterviewFinishedLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] || '';
+    this.text = parts[3] || "";
   }
 }
 
@@ -2028,7 +2115,7 @@ class FlowElementErrorLine extends LogLine {
   acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[1] || '' + parts[2] + ' ' + parts[3] + ' ' + parts[4];
+    this.text = parts[1] || "" + parts[2] + " " + parts[3] + " " + parts[4];
   }
 }
 
@@ -2063,28 +2150,29 @@ class FlowSubflowDetailLine extends LogLine {
 class FlowActionCallDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] + ' : ' + parts[4] + ' : ' + parts[5] + ' : ' + parts[6];
+    this.text =
+      parts[3] + " : " + parts[4] + " : " + parts[5] + " : " + parts[6];
   }
 }
 
 class FlowAssignmentDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] + ' : ' + parts[4] + ' : ' + parts[5];
+    this.text = parts[3] + " : " + parts[4] + " : " + parts[5];
   }
 }
 
 class FlowLoopDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] + ' : ' + parts[4];
+    this.text = parts[3] + " : " + parts[4];
   }
 }
 
 class FlowRuleDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] + ' : ' + parts[4];
+    this.text = parts[3] + " : " + parts[4];
   }
 }
 
@@ -2092,7 +2180,7 @@ class FlowBulkElementBeginLine extends Method {
   declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['FLOW_BULK_ELEMENT_END'], 'Flow', 'custom');
+    super(parser, parts, ["FLOW_BULK_ELEMENT_END"], "Flow", "custom");
     this.text = `${parts[2]} - ${parts[3]}`;
   }
 }
@@ -2102,7 +2190,7 @@ class FlowBulkElementDetailLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] + ' : ' + parts[3] + ' : ' + parts[4];
+    this.text = parts[2] + " : " + parts[3] + " : " + parts[4];
   }
 }
 
@@ -2118,7 +2206,7 @@ class FlowBulkElementLimitUsageLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2187,7 +2275,7 @@ class TestingLimitsLine extends LogLine {
 class ValidationRuleLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] || '';
+    this.text = parts[3] || "";
   }
 }
 
@@ -2195,7 +2283,7 @@ class ValidationErrorLine extends LogLine {
   acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2204,7 +2292,7 @@ class ValidationFormulaLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    const extra = parts.length > 3 ? ' ' + parts[3] : '';
+    const extra = parts.length > 3 ? " " + parts[3] : "";
 
     this.text = parts[2] + extra;
   }
@@ -2213,7 +2301,7 @@ class ValidationFormulaLine extends LogLine {
 class ValidationPassLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[3] || '';
+    this.text = parts[3] || "";
   }
 }
 
@@ -2221,7 +2309,7 @@ class WFFlowActionErrorLine extends LogLine {
   acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[1] + ' ' + parts[4];
+    this.text = parts[1] + " " + parts[4];
   }
 }
 
@@ -2229,7 +2317,7 @@ class WFFlowActionErrorDetailLine extends LogLine {
   acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[1] + ' ' + parts[2];
+    this.text = parts[1] + " " + parts[2];
   }
 }
 
@@ -2237,8 +2325,18 @@ class WFFieldUpdateLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_FIELD_UPDATE'], 'Workflow', 'custom');
-    this.text = ' ' + parts[2] + ' ' + parts[3] + ' ' + parts[4] + ' ' + parts[5] + ' ' + parts[6];
+    super(parser, parts, ["WF_FIELD_UPDATE"], "Workflow", "custom");
+    this.text =
+      " " +
+      parts[2] +
+      " " +
+      parts[3] +
+      " " +
+      parts[4] +
+      " " +
+      parts[5] +
+      " " +
+      parts[6];
   }
 }
 
@@ -2246,15 +2344,15 @@ class WFRuleEvalBeginLine extends Method {
   declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_RULE_EVAL_END'], 'Workflow', 'custom');
-    this.text = parts[2] || '';
+    super(parser, parts, ["WF_RULE_EVAL_END"], "Workflow", "custom");
+    this.text = parts[2] || "";
   }
 }
 
 class WFRuleEvalValueLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2263,7 +2361,7 @@ class WFRuleFilterLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2271,8 +2369,14 @@ class WFCriteriaBeginLine extends Method {
   declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_CRITERIA_END', 'WF_RULE_NOT_EVALUATED'], 'Workflow', 'custom');
-    this.text = 'WF_CRITERIA : ' + parts[5] + ' : ' + parts[3];
+    super(
+      parser,
+      parts,
+      ["WF_CRITERIA_END", "WF_RULE_NOT_EVALUATED"],
+      "Workflow",
+      "custom"
+    );
+    this.text = "WF_CRITERIA : " + parts[5] + " : " + parts[3];
   }
 }
 
@@ -2282,22 +2386,22 @@ class WFFormulaLine extends Method {
   nextLineIsExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_FORMULA'], 'Workflow', 'custom');
-    this.text = parts[2] + ' : ' + parts[3];
+    super(parser, parts, ["WF_FORMULA"], "Workflow", "custom");
+    this.text = parts[2] + " : " + parts[3];
   }
 }
 
 class WFActionLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 class WFActionsEndLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2312,7 +2416,7 @@ class WFApprovalLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_APPROVAL'], 'Workflow', 'custom');
+    super(parser, parts, ["WF_APPROVAL"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
   }
 }
@@ -2328,7 +2432,7 @@ class WFApprovalSubmitLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_APPROVAL_SUBMIT'], 'Workflow', 'custom');
+    super(parser, parts, ["WF_APPROVAL_SUBMIT"], "Workflow", "custom");
     this.text = `${parts[2]}`;
   }
 }
@@ -2351,7 +2455,7 @@ class WFEmailAlertLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_EMAIL_ALERT'], 'Workflow', 'custom');
+    super(parser, parts, ["WF_EMAIL_ALERT"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
   }
 }
@@ -2360,7 +2464,7 @@ class WFEmailSentLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_EMAIL_SENT'], 'Workflow', 'custom');
+    super(parser, parts, ["WF_EMAIL_SENT"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
   }
 }
@@ -2368,7 +2472,7 @@ class WFEmailSentLine extends Method {
 class WFEnqueueActionsLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2383,7 +2487,7 @@ class WFEvalEntryCriteriaLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_EVAL_ENTRY_CRITERIA'], 'Workflow', 'custom');
+    super(parser, parts, ["WF_EVAL_ENTRY_CRITERIA"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
   }
 }
@@ -2391,7 +2495,7 @@ class WFEvalEntryCriteriaLine extends Method {
 class WFFlowActionDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    const optional = parts[4] ? ` : ${parts[4]} :${parts[5]}` : '';
+    const optional = parts[4] ? ` : ${parts[4]} :${parts[5]}` : "";
     this.text = `${parts[2]} : ${parts[3]}` + optional;
   }
 }
@@ -2400,7 +2504,7 @@ class WFNextApproverLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_NEXT_APPROVER'], 'Workflow', 'custom');
+    super(parser, parts, ["WF_NEXT_APPROVER"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
   }
 }
@@ -2416,7 +2520,7 @@ class WFProcessFoundLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_PROCESS_FOUND'], 'Workflow', 'custom');
+    super(parser, parts, ["WF_PROCESS_FOUND"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]}`;
   }
 }
@@ -2425,8 +2529,8 @@ class WFProcessNode extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_PROCESS_NODE'], 'Workflow', 'custom');
-    this.text = parts[2] || '';
+    super(parser, parts, ["WF_PROCESS_NODE"], "Workflow", "custom");
+    this.text = parts[2] || "";
   }
 }
 
@@ -2447,7 +2551,7 @@ class WFResponseNotifyLine extends LogLine {
 class WFRuleEntryOrderLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2455,15 +2559,15 @@ class WFRuleInvocationLine extends Method {
   isExit = true;
   nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['WF_RULE_INVOCATION'], 'Workflow', 'custom');
-    this.text = parts[2] || '';
+    super(parser, parts, ["WF_RULE_INVOCATION"], "Workflow", "custom");
+    this.text = parts[2] || "";
   }
 }
 
 class WFSoftRejectLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2477,7 +2581,7 @@ class WFTimeTriggerLine extends LogLine {
 class WFSpoolActionBeginLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2489,17 +2593,17 @@ class ExceptionThrownLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
-    this.text = parts[3] || '';
+    this.text = parts[3] || "";
   }
 
   onAfter(parser: ApexLogParser, _next?: LogLine): void {
-    if (this.text.indexOf('System.LimitException') >= 0) {
-      const isMultiLine = this.text.indexOf('\n');
+    if (this.text.indexOf("System.LimitException") >= 0) {
+      const isMultiLine = this.text.indexOf("\n");
       const len = isMultiLine < 0 ? 99 : isMultiLine;
       const truncateText = this.text.length > len;
-      const summary = this.text.slice(0, len + 1) + (truncateText ? '…' : '');
-      const message = truncateText ? this.text : '';
-      parser.addLogIssue(this.timestamp, summary, message, 'error');
+      const summary = this.text.slice(0, len + 1) + (truncateText ? "…" : "");
+      const message = truncateText ? this.text : "";
+      parser.addLogIssue(this.timestamp, summary, message, "error");
     }
   }
 }
@@ -2511,21 +2615,27 @@ class FatalErrorLine extends LogLine {
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 
   onAfter(parser: ApexLogParser, _next?: LogLine): void {
-    const newLineIndex = this.text.indexOf('\n');
-    const summary = newLineIndex > -1 ? this.text.slice(0, newLineIndex + 1) : this.text;
-    const detailText = summary.length !== this.text.length ? this.text : '';
-    parser.addLogIssue(this.timestamp, 'FATAL ERROR! cause=' + summary, detailText, 'error');
+    const newLineIndex = this.text.indexOf("\n");
+    const summary =
+      newLineIndex > -1 ? this.text.slice(0, newLineIndex + 1) : this.text;
+    const detailText = summary.length !== this.text.length ? this.text : "";
+    parser.addLogIssue(
+      this.timestamp,
+      "FATAL ERROR! cause=" + summary,
+      detailText,
+      "error"
+    );
   }
 }
 
 class XDSDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2538,14 +2648,14 @@ class XDSResponseLine extends LogLine {
 class XDSResponseDetailLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
 class XDSResponseErrorLine extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2554,7 +2664,7 @@ class DuplicateDetectionBegin extends Method {
   declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['DUPLICATE_DETECTION_END'], 'Workflow', 'custom');
+    super(parser, parts, ["DUPLICATE_DETECTION_END"], "Workflow", "custom");
   }
 }
 
@@ -2573,7 +2683,7 @@ class DuplicateDetectionRule extends LogLine {
 class BulkDMLEntry extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts[2] || '';
+    this.text = parts[2] || "";
   }
 }
 
@@ -2583,7 +2693,7 @@ class BulkDMLEntry extends LogLine {
 class DuplicateDetectionDetails extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 
@@ -2593,80 +2703,94 @@ class DuplicateDetectionDetails extends LogLine {
 class DuplicateDetectionSummary extends LogLine {
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
-    this.text = parts.slice(2).join(' | ');
+    this.text = parts.slice(2).join(" | ");
   }
 }
 
 class SessionCachePutBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['SESSION_CACHE_PUT_END'], 'Method', 'method');
+    super(parser, parts, ["SESSION_CACHE_PUT_END"], "Method", "method");
   }
 }
 class SessionCacheGetBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['SESSION_CACHE_GET_END'], 'Method', 'method');
+    super(parser, parts, ["SESSION_CACHE_GET_END"], "Method", "method");
   }
 }
 
 class SessionCacheRemoveBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['SESSION_CACHE_REMOVE_END'], 'Method', 'method');
+    super(parser, parts, ["SESSION_CACHE_REMOVE_END"], "Method", "method");
   }
 }
 
 class OrgCachePutBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['ORG_CACHE_PUT_END'], 'Method', 'method');
+    super(parser, parts, ["ORG_CACHE_PUT_END"], "Method", "method");
   }
 }
 
 class OrgCacheGetBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['ORG_CACHE_GET_END'], 'Method', 'method');
+    super(parser, parts, ["ORG_CACHE_GET_END"], "Method", "method");
   }
 }
 
 class OrgCacheRemoveBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['ORG_CACHE_REMOVE_END'], 'Method', 'method');
+    super(parser, parts, ["ORG_CACHE_REMOVE_END"], "Method", "method");
   }
 }
 
 class VFSerializeContinuationStateBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['VF_SERIALIZE_CONTINUATION_STATE_END'], 'Method', 'method');
+    super(
+      parser,
+      parts,
+      ["VF_SERIALIZE_CONTINUATION_STATE_END"],
+      "Method",
+      "method"
+    );
   }
 }
 
 class VFDeserializeContinuationStateBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['VF_SERIALIZE_CONTINUATION_STATE_END'], 'Method', 'method');
+    super(
+      parser,
+      parts,
+      ["VF_SERIALIZE_CONTINUATION_STATE_END"],
+      "Method",
+      "method"
+    );
   }
 }
 
 class MatchEngineBegin extends Method {
   constructor(parser: ApexLogParser, parts: string[]) {
-    super(parser, parts, ['MATCH_ENGINE_END'], 'Method', 'method');
+    super(parser, parts, ["MATCH_ENGINE_END"], "Method", "method");
   }
 }
 
-function getLogEventClass(eventName: LogEventType): LogLineConstructor | null | undefined {
+function getLogEventClass(
+  eventName: LogEventType
+): LogLineConstructor | null | undefined {
   if (!eventName) {
     return null;
   }
 
   // Fast path for the most commonly occuring types
   switch (eventName) {
-    case 'METHOD_ENTRY':
+    case "METHOD_ENTRY":
       return MethodEntryLine;
 
-    case 'METHOD_EXIT':
+    case "METHOD_EXIT":
       return MethodExitLine;
 
-    case 'CONSTRUCTOR_ENTRY':
+    case "CONSTRUCTOR_ENTRY":
       return ConstructorEntryLine;
 
-    case 'CONSTRUCTOR_EXIT':
+    case "CONSTRUCTOR_EXIT":
       return ConstructorExitLine;
 
     default:
@@ -2688,523 +2812,530 @@ function getLogEventClass(eventName: LogEventType): LogLineConstructor | null | 
 
 type LogLineConstructor<T extends LogLine = LogLine> = new (
   parser: ApexLogParser,
-  parts: string[],
+  parts: string[]
 ) => T;
-export const lineTypeMap: ReadonlyMap<LogEventType, LogLineConstructor> = new Map<
-  LogEventType,
-  LogLineConstructor
->([
-  ['BULK_DML_RETRY', BulkDMLEntry],
-  ['BULK_HEAP_ALLOCATE', BulkHeapAllocateLine],
-  ['CALLOUT_REQUEST', CalloutRequestLine],
-  ['CALLOUT_RESPONSE', CalloutResponseLine],
-  ['NAMED_CREDENTIAL_REQUEST', NamedCredentialRequestLine],
-  ['NAMED_CREDENTIAL_RESPONSE', NamedCredentialResponseLine],
-  ['NAMED_CREDENTIAL_RESPONSE_DETAIL', NamedCredentialResponseDetailLine],
-  ['CONSTRUCTOR_ENTRY', ConstructorEntryLine],
-  ['CONSTRUCTOR_EXIT', ConstructorExitLine],
-  ['EMAIL_QUEUE', EmailQueueLine],
-  ['METHOD_ENTRY', MethodEntryLine],
-  ['METHOD_EXIT', MethodExitLine],
-  ['SYSTEM_CONSTRUCTOR_ENTRY', SystemConstructorEntryLine],
-  ['SYSTEM_CONSTRUCTOR_EXIT', SystemConstructorExitLine],
-  ['SYSTEM_METHOD_ENTRY', SystemMethodEntryLine],
-  ['SYSTEM_METHOD_EXIT', SystemMethodExitLine],
-  ['CODE_UNIT_STARTED', CodeUnitStartedLine],
-  ['CODE_UNIT_FINISHED', CodeUnitFinishedLine],
-  ['VF_APEX_CALL_START', VFApexCallStartLine],
-  ['VF_APEX_CALL_END', VFApexCallEndLine],
-  ['VF_DESERIALIZE_VIEWSTATE_BEGIN', VFDeserializeViewstateBeginLine],
-  ['VF_EVALUATE_FORMULA_BEGIN', VFFormulaStartLine],
-  ['VF_EVALUATE_FORMULA_END', VFFormulaEndLine],
-  ['VF_SERIALIZE_CONTINUATION_STATE_BEGIN', VFSerializeContinuationStateBegin],
-  ['VF_DESERIALIZE_CONTINUATION_STATE_BEGIN', VFDeserializeContinuationStateBegin],
-  ['VF_SERIALIZE_VIEWSTATE_BEGIN', VFSeralizeViewStateStartLine],
-  ['VF_PAGE_MESSAGE', VFPageMessageLine],
-  ['DML_BEGIN', DMLBeginLine],
-  ['DML_END', DMLEndLine],
-  ['IDEAS_QUERY_EXECUTE', IdeasQueryExecuteLine],
-  ['SOQL_EXECUTE_BEGIN', SOQLExecuteBeginLine],
-  ['SOQL_EXECUTE_END', SOQLExecuteEndLine],
-  ['SOQL_EXECUTE_EXPLAIN', SOQLExecuteExplainLine],
-  ['SOSL_EXECUTE_BEGIN', SOSLExecuteBeginLine],
-  ['SOSL_EXECUTE_END', SOSLExecuteEndLine],
-  ['HEAP_ALLOCATE', HeapAllocateLine],
-  ['HEAP_DEALLOCATE', HeapDeallocateLine],
-  ['STATEMENT_EXECUTE', StatementExecuteLine],
-  ['VARIABLE_SCOPE_BEGIN', VariableScopeBeginLine],
-  ['VARIABLE_ASSIGNMENT', VariableAssignmentLine],
-  ['USER_INFO', UserInfoLine],
-  ['USER_DEBUG', UserDebugLine],
-  ['CUMULATIVE_LIMIT_USAGE', CumulativeLimitUsageLine],
-  ['CUMULATIVE_PROFILING', CumulativeProfilingLine],
-  ['CUMULATIVE_PROFILING_BEGIN', CumulativeProfilingBeginLine],
-  ['LIMIT_USAGE', LimitUsageLine],
-  ['LIMIT_USAGE_FOR_NS', LimitUsageForNSLine],
-  ['NBA_NODE_BEGIN', NBANodeBegin],
-  ['NBA_NODE_DETAIL', NBANodeDetail],
-  ['NBA_NODE_END', NBANodeEnd],
-  ['NBA_NODE_ERROR', NBANodeError],
-  ['NBA_OFFER_INVALID', NBAOfferInvalid],
-  ['NBA_STRATEGY_BEGIN', NBAStrategyBegin],
-  ['NBA_STRATEGY_END', NBAStrategyEnd],
-  ['NBA_STRATEGY_ERROR', NBAStrategyError],
-  ['POP_TRACE_FLAGS', PopTraceFlagsLine],
-  ['PUSH_TRACE_FLAGS', PushTraceFlagsLine],
-  ['QUERY_MORE_BEGIN', QueryMoreBeginLine],
-  ['QUERY_MORE_END', QueryMoreEndLine],
-  ['QUERY_MORE_ITERATIONS', QueryMoreIterationsLine],
-  ['TOTAL_EMAIL_RECIPIENTS_QUEUED', TotalEmailRecipientsQueuedLine],
-  ['SAVEPOINT_ROLLBACK', SavepointRollbackLine],
-  ['SAVEPOINT_SET', SavePointSetLine],
-  ['STACK_FRAME_VARIABLE_LIST', StackFrameVariableListLine],
-  ['STATIC_VARIABLE_LIST', StaticVariableListLine],
-  ['SYSTEM_MODE_ENTER', SystemModeEnterLine],
-  ['SYSTEM_MODE_EXIT', SystemModeExitLine],
-  ['EXECUTION_STARTED', ExecutionStartedLine],
-  ['ENTERING_MANAGED_PKG', EnteringManagedPackageLine],
-  ['EVENT_SERVICE_PUB_BEGIN', EventSericePubBeginLine],
-  ['EVENT_SERVICE_PUB_END', EventSericePubEndLine],
-  ['EVENT_SERVICE_PUB_DETAIL', EventSericePubDetailLine],
-  ['EVENT_SERVICE_SUB_BEGIN', EventSericeSubBeginLine],
-  ['EVENT_SERVICE_SUB_DETAIL', EventSericeSubDetailLine],
-  ['EVENT_SERVICE_SUB_END', EventSericeSubEndLine],
-  ['FLOW_START_INTERVIEWS_BEGIN', FlowStartInterviewsBeginLine],
-  ['FLOW_START_INTERVIEWS_ERROR', FlowStartInterviewsErrorLine],
-  ['FLOW_START_INTERVIEW_BEGIN', FlowStartInterviewBeginLine],
-  ['FLOW_START_INTERVIEW_LIMIT_USAGE', FlowStartInterviewLimitUsageLine],
-  ['FLOW_START_SCHEDULED_RECORDS', FlowStartScheduledRecordsLine],
-  ['FLOW_CREATE_INTERVIEW_ERROR', FlowCreateInterviewErrorLine],
-  ['FLOW_ELEMENT_BEGIN', FlowElementBeginLine],
-  ['FLOW_ELEMENT_DEFERRED', FlowElementDeferredLine],
-  ['FLOW_ELEMENT_ERROR', FlowElementErrorLine],
-  ['FLOW_ELEMENT_FAULT', FlowElementFaultLine],
-  ['FLOW_ELEMENT_LIMIT_USAGE', FlowElementLimitUsageLine],
-  ['FLOW_INTERVIEW_FINISHED_LIMIT_USAGE', FlowInterviewFinishedLimitUsageLine],
-  ['FLOW_SUBFLOW_DETAIL', FlowSubflowDetailLine],
-  ['FLOW_VALUE_ASSIGNMENT', FlowElementAssignmentLine],
-  ['FLOW_WAIT_EVENT_RESUMING_DETAIL', FlowWaitEventResumingDetailLine],
-  ['FLOW_WAIT_EVENT_WAITING_DETAIL', FlowWaitEventWaitingDetailLine],
-  ['FLOW_WAIT_RESUMING_DETAIL', FlowWaitResumingDetailLine],
-  ['FLOW_WAIT_WAITING_DETAIL', FlowWaitWaitingDetailLine],
-  ['FLOW_INTERVIEW_FINISHED', FlowInterviewFinishedLine],
-  ['FLOW_INTERVIEW_PAUSED', FlowInterviewPausedLine],
-  ['FLOW_INTERVIEW_RESUMED', FlowInterviewResumedLine],
-  ['FLOW_ACTIONCALL_DETAIL', FlowActionCallDetailLine],
-  ['FLOW_ASSIGNMENT_DETAIL', FlowAssignmentDetailLine],
-  ['FLOW_LOOP_DETAIL', FlowLoopDetailLine],
-  ['FLOW_RULE_DETAIL', FlowRuleDetailLine],
-  ['FLOW_BULK_ELEMENT_BEGIN', FlowBulkElementBeginLine],
-  ['FLOW_BULK_ELEMENT_DETAIL', FlowBulkElementDetailLine],
-  ['FLOW_BULK_ELEMENT_LIMIT_USAGE', FlowBulkElementLimitUsageLine],
-  ['FLOW_BULK_ELEMENT_NOT_SUPPORTED', FlowBulkElementNotSupportedLine],
-  ['MATCH_ENGINE_BEGIN', MatchEngineBegin],
-  ['ORG_CACHE_PUT_BEGIN', OrgCachePutBegin],
-  ['ORG_CACHE_GET_BEGIN', OrgCacheGetBegin],
-  ['ORG_CACHE_REMOVE_BEGIN', OrgCacheRemoveBegin],
-  ['PUSH_NOTIFICATION_INVALID_APP', PNInvalidAppLine],
-  ['PUSH_NOTIFICATION_INVALID_CERTIFICATE', PNInvalidCertificateLine],
-  ['PUSH_NOTIFICATION_INVALID_NOTIFICATION', PNInvalidNotificationLine],
-  ['PUSH_NOTIFICATION_NO_DEVICES', PNNoDevicesLine],
-  ['PUSH_NOTIFICATION_SENT', PNSentLine],
-  ['SESSION_CACHE_PUT_BEGIN', SessionCachePutBegin],
-  ['SESSION_CACHE_GET_BEGIN', SessionCacheGetBegin],
-  ['SESSION_CACHE_REMOVE_BEGIN', SessionCacheRemoveBegin],
-  ['SLA_END', SLAEndLine],
-  ['SLA_EVAL_MILESTONE', SLAEvalMilestoneLine],
-  ['SLA_PROCESS_CASE', SLAProcessCaseLine],
-  ['TESTING_LIMITS', TestingLimitsLine],
-  ['VALIDATION_ERROR', ValidationErrorLine],
-  ['VALIDATION_FORMULA', ValidationFormulaLine],
-  ['VALIDATION_PASS', ValidationPassLine],
-  ['VALIDATION_RULE', ValidationRuleLine],
-  ['WF_FLOW_ACTION_ERROR', WFFlowActionErrorLine],
-  ['WF_FLOW_ACTION_ERROR_DETAIL', WFFlowActionErrorDetailLine],
-  ['WF_FIELD_UPDATE', WFFieldUpdateLine],
-  ['WF_RULE_EVAL_BEGIN', WFRuleEvalBeginLine],
-  ['WF_RULE_EVAL_VALUE', WFRuleEvalValueLine],
-  ['WF_RULE_FILTER', WFRuleFilterLine],
-  ['WF_CRITERIA_BEGIN', WFCriteriaBeginLine],
-  ['WF_FORMULA', WFFormulaLine],
-  ['WF_ACTION', WFActionLine],
-  ['WF_ACTIONS_END', WFActionsEndLine],
-  ['WF_ACTION_TASK', WFActionTaskLine],
-  ['WF_APPROVAL', WFApprovalLine],
-  ['WF_APPROVAL_REMOVE', WFApprovalRemoveLine],
-  ['WF_APPROVAL_SUBMIT', WFApprovalSubmitLine],
-  ['WF_APPROVAL_SUBMITTER', WFApprovalSubmitterLine],
-  ['WF_ASSIGN', WFAssignLine],
-  ['WF_EMAIL_ALERT', WFEmailAlertLine],
-  ['WF_EMAIL_SENT', WFEmailSentLine],
-  ['WF_ENQUEUE_ACTIONS', WFEnqueueActionsLine],
-  ['WF_ESCALATION_ACTION', WFEscalationActionLine],
-  ['WF_EVAL_ENTRY_CRITERIA', WFEvalEntryCriteriaLine],
-  ['WF_FLOW_ACTION_DETAIL', WFFlowActionDetailLine],
-  ['WF_NEXT_APPROVER', WFNextApproverLine],
-  ['WF_OUTBOUND_MSG', WFOutboundMsgLine],
-  ['WF_PROCESS_FOUND', WFProcessFoundLine],
-  ['WF_PROCESS_NODE', WFProcessNode],
-  ['WF_REASSIGN_RECORD', WFReassignRecordLine],
-  ['WF_RESPONSE_NOTIFY', WFResponseNotifyLine],
-  ['WF_RULE_ENTRY_ORDER', WFRuleEntryOrderLine],
-  ['WF_RULE_INVOCATION', WFRuleInvocationLine],
-  ['WF_SOFT_REJECT', WFSoftRejectLine],
-  ['WF_SPOOL_ACTION_BEGIN', WFSpoolActionBeginLine],
-  ['WF_TIME_TRIGGER', WFTimeTriggerLine],
-  ['EXCEPTION_THROWN', ExceptionThrownLine],
-  ['FATAL_ERROR', FatalErrorLine],
-  ['XDS_DETAIL', XDSDetailLine],
-  ['XDS_RESPONSE', XDSResponseLine],
-  ['XDS_RESPONSE_DETAIL', XDSResponseDetailLine],
-  ['XDS_RESPONSE_ERROR', XDSResponseErrorLine],
-  ['DUPLICATE_DETECTION_BEGIN', DuplicateDetectionBegin],
-  ['DUPLICATE_DETECTION_RULE_INVOCATION', DuplicateDetectionRule],
-  ['DUPLICATE_DETECTION_MATCH_INVOCATION_DETAILS', DuplicateDetectionDetails],
-  ['DUPLICATE_DETECTION_MATCH_INVOCATION_SUMMARY', DuplicateDetectionSummary],
-]);
+export const lineTypeMap: ReadonlyMap<LogEventType, LogLineConstructor> =
+  new Map<LogEventType, LogLineConstructor>([
+    ["BULK_DML_RETRY", BulkDMLEntry],
+    ["BULK_HEAP_ALLOCATE", BulkHeapAllocateLine],
+    ["CALLOUT_REQUEST", CalloutRequestLine],
+    ["CALLOUT_RESPONSE", CalloutResponseLine],
+    ["NAMED_CREDENTIAL_REQUEST", NamedCredentialRequestLine],
+    ["NAMED_CREDENTIAL_RESPONSE", NamedCredentialResponseLine],
+    ["NAMED_CREDENTIAL_RESPONSE_DETAIL", NamedCredentialResponseDetailLine],
+    ["CONSTRUCTOR_ENTRY", ConstructorEntryLine],
+    ["CONSTRUCTOR_EXIT", ConstructorExitLine],
+    ["EMAIL_QUEUE", EmailQueueLine],
+    ["METHOD_ENTRY", MethodEntryLine],
+    ["METHOD_EXIT", MethodExitLine],
+    ["SYSTEM_CONSTRUCTOR_ENTRY", SystemConstructorEntryLine],
+    ["SYSTEM_CONSTRUCTOR_EXIT", SystemConstructorExitLine],
+    ["SYSTEM_METHOD_ENTRY", SystemMethodEntryLine],
+    ["SYSTEM_METHOD_EXIT", SystemMethodExitLine],
+    ["CODE_UNIT_STARTED", CodeUnitStartedLine],
+    ["CODE_UNIT_FINISHED", CodeUnitFinishedLine],
+    ["VF_APEX_CALL_START", VFApexCallStartLine],
+    ["VF_APEX_CALL_END", VFApexCallEndLine],
+    ["VF_DESERIALIZE_VIEWSTATE_BEGIN", VFDeserializeViewstateBeginLine],
+    ["VF_EVALUATE_FORMULA_BEGIN", VFFormulaStartLine],
+    ["VF_EVALUATE_FORMULA_END", VFFormulaEndLine],
+    [
+      "VF_SERIALIZE_CONTINUATION_STATE_BEGIN",
+      VFSerializeContinuationStateBegin,
+    ],
+    [
+      "VF_DESERIALIZE_CONTINUATION_STATE_BEGIN",
+      VFDeserializeContinuationStateBegin,
+    ],
+    ["VF_SERIALIZE_VIEWSTATE_BEGIN", VFSeralizeViewStateStartLine],
+    ["VF_PAGE_MESSAGE", VFPageMessageLine],
+    ["DML_BEGIN", DMLBeginLine],
+    ["DML_END", DMLEndLine],
+    ["IDEAS_QUERY_EXECUTE", IdeasQueryExecuteLine],
+    ["SOQL_EXECUTE_BEGIN", SOQLExecuteBeginLine],
+    ["SOQL_EXECUTE_END", SOQLExecuteEndLine],
+    ["SOQL_EXECUTE_EXPLAIN", SOQLExecuteExplainLine],
+    ["SOSL_EXECUTE_BEGIN", SOSLExecuteBeginLine],
+    ["SOSL_EXECUTE_END", SOSLExecuteEndLine],
+    ["HEAP_ALLOCATE", HeapAllocateLine],
+    ["HEAP_DEALLOCATE", HeapDeallocateLine],
+    ["STATEMENT_EXECUTE", StatementExecuteLine],
+    ["VARIABLE_SCOPE_BEGIN", VariableScopeBeginLine],
+    ["VARIABLE_ASSIGNMENT", VariableAssignmentLine],
+    ["USER_INFO", UserInfoLine],
+    ["USER_DEBUG", UserDebugLine],
+    ["CUMULATIVE_LIMIT_USAGE", CumulativeLimitUsageLine],
+    ["CUMULATIVE_PROFILING", CumulativeProfilingLine],
+    ["CUMULATIVE_PROFILING_BEGIN", CumulativeProfilingBeginLine],
+    ["LIMIT_USAGE", LimitUsageLine],
+    ["LIMIT_USAGE_FOR_NS", LimitUsageForNSLine],
+    ["NBA_NODE_BEGIN", NBANodeBegin],
+    ["NBA_NODE_DETAIL", NBANodeDetail],
+    ["NBA_NODE_END", NBANodeEnd],
+    ["NBA_NODE_ERROR", NBANodeError],
+    ["NBA_OFFER_INVALID", NBAOfferInvalid],
+    ["NBA_STRATEGY_BEGIN", NBAStrategyBegin],
+    ["NBA_STRATEGY_END", NBAStrategyEnd],
+    ["NBA_STRATEGY_ERROR", NBAStrategyError],
+    ["POP_TRACE_FLAGS", PopTraceFlagsLine],
+    ["PUSH_TRACE_FLAGS", PushTraceFlagsLine],
+    ["QUERY_MORE_BEGIN", QueryMoreBeginLine],
+    ["QUERY_MORE_END", QueryMoreEndLine],
+    ["QUERY_MORE_ITERATIONS", QueryMoreIterationsLine],
+    ["TOTAL_EMAIL_RECIPIENTS_QUEUED", TotalEmailRecipientsQueuedLine],
+    ["SAVEPOINT_ROLLBACK", SavepointRollbackLine],
+    ["SAVEPOINT_SET", SavePointSetLine],
+    ["STACK_FRAME_VARIABLE_LIST", StackFrameVariableListLine],
+    ["STATIC_VARIABLE_LIST", StaticVariableListLine],
+    ["SYSTEM_MODE_ENTER", SystemModeEnterLine],
+    ["SYSTEM_MODE_EXIT", SystemModeExitLine],
+    ["EXECUTION_STARTED", ExecutionStartedLine],
+    ["ENTERING_MANAGED_PKG", EnteringManagedPackageLine],
+    ["EVENT_SERVICE_PUB_BEGIN", EventSericePubBeginLine],
+    ["EVENT_SERVICE_PUB_END", EventSericePubEndLine],
+    ["EVENT_SERVICE_PUB_DETAIL", EventSericePubDetailLine],
+    ["EVENT_SERVICE_SUB_BEGIN", EventSericeSubBeginLine],
+    ["EVENT_SERVICE_SUB_DETAIL", EventSericeSubDetailLine],
+    ["EVENT_SERVICE_SUB_END", EventSericeSubEndLine],
+    ["FLOW_START_INTERVIEWS_BEGIN", FlowStartInterviewsBeginLine],
+    ["FLOW_START_INTERVIEWS_ERROR", FlowStartInterviewsErrorLine],
+    ["FLOW_START_INTERVIEW_BEGIN", FlowStartInterviewBeginLine],
+    ["FLOW_START_INTERVIEW_LIMIT_USAGE", FlowStartInterviewLimitUsageLine],
+    ["FLOW_START_SCHEDULED_RECORDS", FlowStartScheduledRecordsLine],
+    ["FLOW_CREATE_INTERVIEW_ERROR", FlowCreateInterviewErrorLine],
+    ["FLOW_ELEMENT_BEGIN", FlowElementBeginLine],
+    ["FLOW_ELEMENT_DEFERRED", FlowElementDeferredLine],
+    ["FLOW_ELEMENT_ERROR", FlowElementErrorLine],
+    ["FLOW_ELEMENT_FAULT", FlowElementFaultLine],
+    ["FLOW_ELEMENT_LIMIT_USAGE", FlowElementLimitUsageLine],
+    [
+      "FLOW_INTERVIEW_FINISHED_LIMIT_USAGE",
+      FlowInterviewFinishedLimitUsageLine,
+    ],
+    ["FLOW_SUBFLOW_DETAIL", FlowSubflowDetailLine],
+    ["FLOW_VALUE_ASSIGNMENT", FlowElementAssignmentLine],
+    ["FLOW_WAIT_EVENT_RESUMING_DETAIL", FlowWaitEventResumingDetailLine],
+    ["FLOW_WAIT_EVENT_WAITING_DETAIL", FlowWaitEventWaitingDetailLine],
+    ["FLOW_WAIT_RESUMING_DETAIL", FlowWaitResumingDetailLine],
+    ["FLOW_WAIT_WAITING_DETAIL", FlowWaitWaitingDetailLine],
+    ["FLOW_INTERVIEW_FINISHED", FlowInterviewFinishedLine],
+    ["FLOW_INTERVIEW_PAUSED", FlowInterviewPausedLine],
+    ["FLOW_INTERVIEW_RESUMED", FlowInterviewResumedLine],
+    ["FLOW_ACTIONCALL_DETAIL", FlowActionCallDetailLine],
+    ["FLOW_ASSIGNMENT_DETAIL", FlowAssignmentDetailLine],
+    ["FLOW_LOOP_DETAIL", FlowLoopDetailLine],
+    ["FLOW_RULE_DETAIL", FlowRuleDetailLine],
+    ["FLOW_BULK_ELEMENT_BEGIN", FlowBulkElementBeginLine],
+    ["FLOW_BULK_ELEMENT_DETAIL", FlowBulkElementDetailLine],
+    ["FLOW_BULK_ELEMENT_LIMIT_USAGE", FlowBulkElementLimitUsageLine],
+    ["FLOW_BULK_ELEMENT_NOT_SUPPORTED", FlowBulkElementNotSupportedLine],
+    ["MATCH_ENGINE_BEGIN", MatchEngineBegin],
+    ["ORG_CACHE_PUT_BEGIN", OrgCachePutBegin],
+    ["ORG_CACHE_GET_BEGIN", OrgCacheGetBegin],
+    ["ORG_CACHE_REMOVE_BEGIN", OrgCacheRemoveBegin],
+    ["PUSH_NOTIFICATION_INVALID_APP", PNInvalidAppLine],
+    ["PUSH_NOTIFICATION_INVALID_CERTIFICATE", PNInvalidCertificateLine],
+    ["PUSH_NOTIFICATION_INVALID_NOTIFICATION", PNInvalidNotificationLine],
+    ["PUSH_NOTIFICATION_NO_DEVICES", PNNoDevicesLine],
+    ["PUSH_NOTIFICATION_SENT", PNSentLine],
+    ["SESSION_CACHE_PUT_BEGIN", SessionCachePutBegin],
+    ["SESSION_CACHE_GET_BEGIN", SessionCacheGetBegin],
+    ["SESSION_CACHE_REMOVE_BEGIN", SessionCacheRemoveBegin],
+    ["SLA_END", SLAEndLine],
+    ["SLA_EVAL_MILESTONE", SLAEvalMilestoneLine],
+    ["SLA_PROCESS_CASE", SLAProcessCaseLine],
+    ["TESTING_LIMITS", TestingLimitsLine],
+    ["VALIDATION_ERROR", ValidationErrorLine],
+    ["VALIDATION_FORMULA", ValidationFormulaLine],
+    ["VALIDATION_PASS", ValidationPassLine],
+    ["VALIDATION_RULE", ValidationRuleLine],
+    ["WF_FLOW_ACTION_ERROR", WFFlowActionErrorLine],
+    ["WF_FLOW_ACTION_ERROR_DETAIL", WFFlowActionErrorDetailLine],
+    ["WF_FIELD_UPDATE", WFFieldUpdateLine],
+    ["WF_RULE_EVAL_BEGIN", WFRuleEvalBeginLine],
+    ["WF_RULE_EVAL_VALUE", WFRuleEvalValueLine],
+    ["WF_RULE_FILTER", WFRuleFilterLine],
+    ["WF_CRITERIA_BEGIN", WFCriteriaBeginLine],
+    ["WF_FORMULA", WFFormulaLine],
+    ["WF_ACTION", WFActionLine],
+    ["WF_ACTIONS_END", WFActionsEndLine],
+    ["WF_ACTION_TASK", WFActionTaskLine],
+    ["WF_APPROVAL", WFApprovalLine],
+    ["WF_APPROVAL_REMOVE", WFApprovalRemoveLine],
+    ["WF_APPROVAL_SUBMIT", WFApprovalSubmitLine],
+    ["WF_APPROVAL_SUBMITTER", WFApprovalSubmitterLine],
+    ["WF_ASSIGN", WFAssignLine],
+    ["WF_EMAIL_ALERT", WFEmailAlertLine],
+    ["WF_EMAIL_SENT", WFEmailSentLine],
+    ["WF_ENQUEUE_ACTIONS", WFEnqueueActionsLine],
+    ["WF_ESCALATION_ACTION", WFEscalationActionLine],
+    ["WF_EVAL_ENTRY_CRITERIA", WFEvalEntryCriteriaLine],
+    ["WF_FLOW_ACTION_DETAIL", WFFlowActionDetailLine],
+    ["WF_NEXT_APPROVER", WFNextApproverLine],
+    ["WF_OUTBOUND_MSG", WFOutboundMsgLine],
+    ["WF_PROCESS_FOUND", WFProcessFoundLine],
+    ["WF_PROCESS_NODE", WFProcessNode],
+    ["WF_REASSIGN_RECORD", WFReassignRecordLine],
+    ["WF_RESPONSE_NOTIFY", WFResponseNotifyLine],
+    ["WF_RULE_ENTRY_ORDER", WFRuleEntryOrderLine],
+    ["WF_RULE_INVOCATION", WFRuleInvocationLine],
+    ["WF_SOFT_REJECT", WFSoftRejectLine],
+    ["WF_SPOOL_ACTION_BEGIN", WFSpoolActionBeginLine],
+    ["WF_TIME_TRIGGER", WFTimeTriggerLine],
+    ["EXCEPTION_THROWN", ExceptionThrownLine],
+    ["FATAL_ERROR", FatalErrorLine],
+    ["XDS_DETAIL", XDSDetailLine],
+    ["XDS_RESPONSE", XDSResponseLine],
+    ["XDS_RESPONSE_DETAIL", XDSResponseDetailLine],
+    ["XDS_RESPONSE_ERROR", XDSResponseErrorLine],
+    ["DUPLICATE_DETECTION_BEGIN", DuplicateDetectionBegin],
+    ["DUPLICATE_DETECTION_RULE_INVOCATION", DuplicateDetectionRule],
+    ["DUPLICATE_DETECTION_MATCH_INVOCATION_DETAILS", DuplicateDetectionDetails],
+    ["DUPLICATE_DETECTION_MATCH_INVOCATION_SUMMARY", DuplicateDetectionSummary],
+  ]);
 
 const basicLogEvents: LogEventType[] = [
-  'BULK_COUNTABLE_STATEMENT_EXECUTE',
-  'TEMPLATE_PROCESSING_ERROR',
-  'EXTERNAL_SERVICE_REQUEST',
-  'FLOW_CREATE_INTERVIEW_BEGIN',
-  'FLOW_CREATE_INTERVIEW_END',
-  'VARIABLE_SCOPE_END',
-  'PUSH_NOTIFICATION_NOT_ENABLED',
-  'SLA_NULL_START_DATE',
-  'TEMPLATE_PROCESSING_ERROR',
-  'VALIDATION_FAIL',
+  "BULK_COUNTABLE_STATEMENT_EXECUTE",
+  "TEMPLATE_PROCESSING_ERROR",
+  "EXTERNAL_SERVICE_REQUEST",
+  "FLOW_CREATE_INTERVIEW_BEGIN",
+  "FLOW_CREATE_INTERVIEW_END",
+  "VARIABLE_SCOPE_END",
+  "PUSH_NOTIFICATION_NOT_ENABLED",
+  "SLA_NULL_START_DATE",
+  "TEMPLATE_PROCESSING_ERROR",
+  "VALIDATION_FAIL",
   `WF_FLOW_ACTION_BEGIN`,
-  'WF_FLOW_ACTION_END',
-  'WF_ESCALATION_RULE',
-  'WF_HARD_REJECT',
-  'WF_NO_PROCESS_FOUND',
-  'WF_TIME_TRIGGERS_BEGIN',
-  'WF_KNOWLEDGE_ACTION',
-  'WF_SEND_ACTION',
-  'WAVE_APP_LIFECYCLE',
-  'WF_QUICK_CREATE',
-  'WF_APEX_ACTION',
-  'INVOCABLE_ACTION_DETAIL',
-  'INVOCABLE_ACTION_ERROR',
-  'FLOW_COLLECTION_PROCESSOR_DETAIL',
-  'FLOW_SCHEDULED_PATH_QUEUED',
-  'ROUTE_WORK_ACTION',
-  'ADD_SKILL_REQUIREMENT_ACTION',
-  'ADD_SCREEN_POP_ACTION',
-  'CALLOUT_REQUEST_PREPARE',
-  'CALLOUT_REQUEST_FINALIZE',
-  'FUNCTION_INVOCATION_REQUEST',
-  'APP_CONTAINER_INITIATED',
-  'FUNCTION_INVOCATION_RESPONSE',
-  'XDS_REQUEST_DETAIL',
-  'EXTERNAL_SERVICE_RESPONSE',
-  'DATAWEAVE_USER_DEBUG',
-  'USER_DEBUG_FINER',
-  'USER_DEBUG_FINEST',
-  'USER_DEBUG_FINE',
-  'USER_DEBUG_DEBUG',
-  'USER_DEBUG_INFO',
-  'USER_DEBUG_WARN',
-  'USER_DEBUG_ERROR',
-  'VF_APEX_CALL',
-  'HEAP_DUMP',
-  'SCRIPT_EXECUTION',
-  'SESSION_CACHE_MEMORY_USAGE',
-  'ORG_CACHE_MEMORY_USAGE',
-  'AE_PERSIST_VALIDATION',
-  'REFERENCED_OBJECT_LIST',
-  'DUPLICATE_RULE_FILTER',
-  'DUPLICATE_RULE_FILTER_RESULT',
-  'DUPLICATE_RULE_FILTER_VALUE',
-  'TEMPLATED_ASSET',
-  'TRANSFORMATION_SUMMARY',
-  'RULES_EXECUTION_SUMMARY',
-  'ASSET_DIFF_SUMMARY',
-  'ASSET_DIFF_DETAIL',
-  'RULES_EXECUTION_DETAIL',
-  'JSON_DIFF_SUMMARY',
-  'JSON_DIFF_DETAIL',
-  'MATCH_ENGINE_INVOCATION',
+  "WF_FLOW_ACTION_END",
+  "WF_ESCALATION_RULE",
+  "WF_HARD_REJECT",
+  "WF_NO_PROCESS_FOUND",
+  "WF_TIME_TRIGGERS_BEGIN",
+  "WF_KNOWLEDGE_ACTION",
+  "WF_SEND_ACTION",
+  "WAVE_APP_LIFECYCLE",
+  "WF_QUICK_CREATE",
+  "WF_APEX_ACTION",
+  "INVOCABLE_ACTION_DETAIL",
+  "INVOCABLE_ACTION_ERROR",
+  "FLOW_COLLECTION_PROCESSOR_DETAIL",
+  "FLOW_SCHEDULED_PATH_QUEUED",
+  "ROUTE_WORK_ACTION",
+  "ADD_SKILL_REQUIREMENT_ACTION",
+  "ADD_SCREEN_POP_ACTION",
+  "CALLOUT_REQUEST_PREPARE",
+  "CALLOUT_REQUEST_FINALIZE",
+  "FUNCTION_INVOCATION_REQUEST",
+  "APP_CONTAINER_INITIATED",
+  "FUNCTION_INVOCATION_RESPONSE",
+  "XDS_REQUEST_DETAIL",
+  "EXTERNAL_SERVICE_RESPONSE",
+  "DATAWEAVE_USER_DEBUG",
+  "USER_DEBUG_FINER",
+  "USER_DEBUG_FINEST",
+  "USER_DEBUG_FINE",
+  "USER_DEBUG_DEBUG",
+  "USER_DEBUG_INFO",
+  "USER_DEBUG_WARN",
+  "USER_DEBUG_ERROR",
+  "VF_APEX_CALL",
+  "HEAP_DUMP",
+  "SCRIPT_EXECUTION",
+  "SESSION_CACHE_MEMORY_USAGE",
+  "ORG_CACHE_MEMORY_USAGE",
+  "AE_PERSIST_VALIDATION",
+  "REFERENCED_OBJECT_LIST",
+  "DUPLICATE_RULE_FILTER",
+  "DUPLICATE_RULE_FILTER_RESULT",
+  "DUPLICATE_RULE_FILTER_VALUE",
+  "TEMPLATED_ASSET",
+  "TRANSFORMATION_SUMMARY",
+  "RULES_EXECUTION_SUMMARY",
+  "ASSET_DIFF_SUMMARY",
+  "ASSET_DIFF_DETAIL",
+  "RULES_EXECUTION_DETAIL",
+  "JSON_DIFF_SUMMARY",
+  "JSON_DIFF_DETAIL",
+  "MATCH_ENGINE_INVOCATION",
 ];
 
 const basicExitLogEvents: LogEventType[] = [
-  'FLOW_START_INTERVIEW_END',
-  'VF_DESERIALIZE_VIEWSTATE_END',
-  'VF_SERIALIZE_VIEWSTATE_END',
-  'CUMULATIVE_LIMIT_USAGE_END',
-  'CUMULATIVE_PROFILING_END',
-  'EXECUTION_FINISHED',
-  'FLOW_START_INTERVIEWS_END',
-  'FLOW_ELEMENT_END',
-  'FLOW_BULK_ELEMENT_END',
-  'WF_RULE_EVAL_END',
-  'WF_RULE_NOT_EVALUATED',
-  'WF_CRITERIA_END',
-  'DUPLICATE_DETECTION_END',
-  'VF_SERIALIZE_CONTINUATION_STATE_END',
-  'VF_DESERIALIZE_CONTINUATION_STATE_END',
-  'MATCH_ENGINE_END',
-  'ORG_CACHE_PUT_END',
-  'ORG_CACHE_GET_END',
-  'ORG_CACHE_REMOVE_END',
-  'SESSION_CACHE_PUT_END',
-  'SESSION_CACHE_GET_END',
-  'SESSION_CACHE_REMOVE_END',
+  "FLOW_START_INTERVIEW_END",
+  "VF_DESERIALIZE_VIEWSTATE_END",
+  "VF_SERIALIZE_VIEWSTATE_END",
+  "CUMULATIVE_LIMIT_USAGE_END",
+  "CUMULATIVE_PROFILING_END",
+  "EXECUTION_FINISHED",
+  "FLOW_START_INTERVIEWS_END",
+  "FLOW_ELEMENT_END",
+  "FLOW_BULK_ELEMENT_END",
+  "WF_RULE_EVAL_END",
+  "WF_RULE_NOT_EVALUATED",
+  "WF_CRITERIA_END",
+  "DUPLICATE_DETECTION_END",
+  "VF_SERIALIZE_CONTINUATION_STATE_END",
+  "VF_DESERIALIZE_CONTINUATION_STATE_END",
+  "MATCH_ENGINE_END",
+  "ORG_CACHE_PUT_END",
+  "ORG_CACHE_GET_END",
+  "ORG_CACHE_REMOVE_END",
+  "SESSION_CACHE_PUT_END",
+  "SESSION_CACHE_GET_END",
+  "SESSION_CACHE_REMOVE_END",
 ];
 
 const _logEventNames = [
-  'BULK_DML_RETRY',
-  'BULK_HEAP_ALLOCATE',
-  'CALLOUT_REQUEST',
-  'CALLOUT_RESPONSE',
-  'NAMED_CREDENTIAL_REQUEST',
-  'NAMED_CREDENTIAL_RESPONSE',
-  'NAMED_CREDENTIAL_RESPONSE_DETAIL',
-  'CONSTRUCTOR_ENTRY',
-  'CONSTRUCTOR_EXIT',
-  'EMAIL_QUEUE',
-  'METHOD_ENTRY',
-  'METHOD_EXIT',
-  'SYSTEM_CONSTRUCTOR_ENTRY',
-  'SYSTEM_CONSTRUCTOR_EXIT',
-  'SYSTEM_METHOD_ENTRY',
-  'SYSTEM_METHOD_EXIT',
-  'CODE_UNIT_STARTED',
-  'CODE_UNIT_FINISHED',
-  'VF_APEX_CALL_START',
-  'VF_APEX_CALL_END',
-  'VF_DESERIALIZE_VIEWSTATE_BEGIN',
-  'VF_EVALUATE_FORMULA_BEGIN',
-  'VF_EVALUATE_FORMULA_END',
-  'VF_SERIALIZE_CONTINUATION_STATE_BEGIN',
-  'VF_DESERIALIZE_CONTINUATION_STATE_BEGIN',
-  'VF_SERIALIZE_VIEWSTATE_BEGIN',
-  'VF_PAGE_MESSAGE',
-  'DML_BEGIN',
-  'DML_END',
-  'IDEAS_QUERY_EXECUTE',
-  'SOQL_EXECUTE_BEGIN',
-  'SOQL_EXECUTE_END',
-  'SOQL_EXECUTE_EXPLAIN',
-  'SOSL_EXECUTE_BEGIN',
-  'SOSL_EXECUTE_END',
-  'HEAP_ALLOCATE',
-  'HEAP_DEALLOCATE',
-  'STATEMENT_EXECUTE',
-  'VARIABLE_SCOPE_BEGIN',
-  'VARIABLE_ASSIGNMENT',
-  'USER_INFO',
-  'USER_DEBUG',
-  'CUMULATIVE_LIMIT_USAGE',
-  'CUMULATIVE_PROFILING',
-  'CUMULATIVE_PROFILING_BEGIN',
-  'LIMIT_USAGE',
-  'LIMIT_USAGE_FOR_NS',
-  'NBA_NODE_BEGIN',
-  'NBA_NODE_DETAIL',
-  'NBA_NODE_END',
-  'NBA_NODE_ERROR',
-  'NBA_OFFER_INVALID',
-  'NBA_STRATEGY_BEGIN',
-  'NBA_STRATEGY_END',
-  'NBA_STRATEGY_ERROR',
-  'POP_TRACE_FLAGS',
-  'PUSH_TRACE_FLAGS',
-  'QUERY_MORE_BEGIN',
-  'QUERY_MORE_END',
-  'QUERY_MORE_ITERATIONS',
-  'TOTAL_EMAIL_RECIPIENTS_QUEUED',
-  'SAVEPOINT_ROLLBACK',
-  'SAVEPOINT_SET',
-  'STACK_FRAME_VARIABLE_LIST',
-  'STATIC_VARIABLE_LIST',
-  'SYSTEM_MODE_ENTER',
-  'SYSTEM_MODE_EXIT',
-  'EXECUTION_STARTED',
-  'ENTERING_MANAGED_PKG',
-  'EVENT_SERVICE_PUB_BEGIN',
-  'EVENT_SERVICE_PUB_END',
-  'EVENT_SERVICE_PUB_DETAIL',
-  'EVENT_SERVICE_SUB_BEGIN',
-  'EVENT_SERVICE_SUB_DETAIL',
-  'EVENT_SERVICE_SUB_END',
-  'FLOW_START_INTERVIEWS_BEGIN',
-  'FLOW_START_INTERVIEWS_ERROR',
-  'FLOW_START_INTERVIEW_BEGIN',
-  'FLOW_START_INTERVIEW_LIMIT_USAGE',
-  'FLOW_START_SCHEDULED_RECORDS',
-  'FLOW_CREATE_INTERVIEW_ERROR',
-  'FLOW_ELEMENT_BEGIN',
-  'FLOW_ELEMENT_DEFERRED',
-  'FLOW_ELEMENT_ERROR',
-  'FLOW_ELEMENT_FAULT',
-  'FLOW_ELEMENT_LIMIT_USAGE',
-  'FLOW_INTERVIEW_FINISHED_LIMIT_USAGE',
-  'FLOW_SUBFLOW_DETAIL',
-  'FLOW_VALUE_ASSIGNMENT',
-  'FLOW_WAIT_EVENT_RESUMING_DETAIL',
-  'FLOW_WAIT_EVENT_WAITING_DETAIL',
-  'FLOW_WAIT_RESUMING_DETAIL',
-  'FLOW_WAIT_WAITING_DETAIL',
-  'FLOW_INTERVIEW_FINISHED',
-  'FLOW_INTERVIEW_PAUSED',
-  'FLOW_INTERVIEW_RESUMED',
-  'FLOW_ACTIONCALL_DETAIL',
-  'FLOW_ASSIGNMENT_DETAIL',
-  'FLOW_LOOP_DETAIL',
-  'FLOW_RULE_DETAIL',
-  'FLOW_BULK_ELEMENT_BEGIN',
-  'FLOW_BULK_ELEMENT_DETAIL',
-  'FLOW_BULK_ELEMENT_LIMIT_USAGE',
-  'FLOW_BULK_ELEMENT_NOT_SUPPORTED',
-  'MATCH_ENGINE_BEGIN',
-  'ORG_CACHE_PUT_BEGIN',
-  'ORG_CACHE_GET_BEGIN',
-  'ORG_CACHE_REMOVE_BEGIN',
-  'PUSH_NOTIFICATION_INVALID_APP',
-  'PUSH_NOTIFICATION_INVALID_CERTIFICATE',
-  'PUSH_NOTIFICATION_INVALID_NOTIFICATION',
-  'PUSH_NOTIFICATION_NO_DEVICES',
-  'PUSH_NOTIFICATION_SENT',
-  'SESSION_CACHE_PUT_BEGIN',
-  'SESSION_CACHE_GET_BEGIN',
-  'SESSION_CACHE_REMOVE_BEGIN',
-  'SLA_END',
-  'SLA_EVAL_MILESTONE',
-  'SLA_PROCESS_CASE',
-  'TESTING_LIMITS',
-  'VALIDATION_ERROR',
-  'VALIDATION_FORMULA',
-  'VALIDATION_PASS',
-  'VALIDATION_RULE',
-  'WF_FLOW_ACTION_ERROR',
-  'WF_FLOW_ACTION_ERROR_DETAIL',
-  'WF_FIELD_UPDATE',
-  'WF_RULE_EVAL_BEGIN',
-  'WF_RULE_EVAL_VALUE',
-  'WF_RULE_FILTER',
-  'WF_CRITERIA_BEGIN',
-  'WF_FORMULA',
-  'WF_ACTION',
-  'WF_ACTIONS_END',
-  'WF_ACTION_TASK',
-  'WF_APPROVAL',
-  'WF_APPROVAL_REMOVE',
-  'WF_APPROVAL_SUBMIT',
-  'WF_APPROVAL_SUBMITTER',
-  'WF_ASSIGN',
-  'WF_EMAIL_ALERT',
-  'WF_EMAIL_SENT',
-  'WF_ENQUEUE_ACTIONS',
-  'WF_ESCALATION_ACTION',
-  'WF_EVAL_ENTRY_CRITERIA',
-  'WF_FLOW_ACTION_DETAIL',
-  'WF_NEXT_APPROVER',
-  'WF_OUTBOUND_MSG',
-  'WF_PROCESS_FOUND',
-  'WF_PROCESS_NODE',
-  'WF_REASSIGN_RECORD',
-  'WF_RESPONSE_NOTIFY',
-  'WF_RULE_ENTRY_ORDER',
-  'WF_RULE_INVOCATION',
-  'WF_SOFT_REJECT',
-  'WF_SPOOL_ACTION_BEGIN',
-  'WF_TIME_TRIGGER',
-  'EXCEPTION_THROWN',
-  'FATAL_ERROR',
-  'XDS_DETAIL',
-  'XDS_RESPONSE',
-  'XDS_RESPONSE_DETAIL',
-  'XDS_RESPONSE_ERROR',
-  'DUPLICATE_DETECTION_BEGIN',
-  'DUPLICATE_DETECTION_RULE_INVOCATION',
-  'DUPLICATE_DETECTION_MATCH_INVOCATION_DETAILS',
-  'DUPLICATE_DETECTION_MATCH_INVOCATION_SUMMARY',
-  'BULK_COUNTABLE_STATEMENT_EXECUTE',
-  'TEMPLATE_PROCESSING_ERROR',
-  'EXTERNAL_SERVICE_REQUEST',
-  'FLOW_START_INTERVIEW_END',
-  'FLOW_CREATE_INTERVIEW_BEGIN',
-  'FLOW_CREATE_INTERVIEW_END',
-  'VARIABLE_SCOPE_END',
-  'PUSH_NOTIFICATION_NOT_ENABLED',
-  'SLA_NULL_START_DATE',
-  'TEMPLATE_PROCESSING_ERROR',
-  'VALIDATION_FAIL',
+  "BULK_DML_RETRY",
+  "BULK_HEAP_ALLOCATE",
+  "CALLOUT_REQUEST",
+  "CALLOUT_RESPONSE",
+  "NAMED_CREDENTIAL_REQUEST",
+  "NAMED_CREDENTIAL_RESPONSE",
+  "NAMED_CREDENTIAL_RESPONSE_DETAIL",
+  "CONSTRUCTOR_ENTRY",
+  "CONSTRUCTOR_EXIT",
+  "EMAIL_QUEUE",
+  "METHOD_ENTRY",
+  "METHOD_EXIT",
+  "SYSTEM_CONSTRUCTOR_ENTRY",
+  "SYSTEM_CONSTRUCTOR_EXIT",
+  "SYSTEM_METHOD_ENTRY",
+  "SYSTEM_METHOD_EXIT",
+  "CODE_UNIT_STARTED",
+  "CODE_UNIT_FINISHED",
+  "VF_APEX_CALL_START",
+  "VF_APEX_CALL_END",
+  "VF_DESERIALIZE_VIEWSTATE_BEGIN",
+  "VF_EVALUATE_FORMULA_BEGIN",
+  "VF_EVALUATE_FORMULA_END",
+  "VF_SERIALIZE_CONTINUATION_STATE_BEGIN",
+  "VF_DESERIALIZE_CONTINUATION_STATE_BEGIN",
+  "VF_SERIALIZE_VIEWSTATE_BEGIN",
+  "VF_PAGE_MESSAGE",
+  "DML_BEGIN",
+  "DML_END",
+  "IDEAS_QUERY_EXECUTE",
+  "SOQL_EXECUTE_BEGIN",
+  "SOQL_EXECUTE_END",
+  "SOQL_EXECUTE_EXPLAIN",
+  "SOSL_EXECUTE_BEGIN",
+  "SOSL_EXECUTE_END",
+  "HEAP_ALLOCATE",
+  "HEAP_DEALLOCATE",
+  "STATEMENT_EXECUTE",
+  "VARIABLE_SCOPE_BEGIN",
+  "VARIABLE_ASSIGNMENT",
+  "USER_INFO",
+  "USER_DEBUG",
+  "CUMULATIVE_LIMIT_USAGE",
+  "CUMULATIVE_PROFILING",
+  "CUMULATIVE_PROFILING_BEGIN",
+  "LIMIT_USAGE",
+  "LIMIT_USAGE_FOR_NS",
+  "NBA_NODE_BEGIN",
+  "NBA_NODE_DETAIL",
+  "NBA_NODE_END",
+  "NBA_NODE_ERROR",
+  "NBA_OFFER_INVALID",
+  "NBA_STRATEGY_BEGIN",
+  "NBA_STRATEGY_END",
+  "NBA_STRATEGY_ERROR",
+  "POP_TRACE_FLAGS",
+  "PUSH_TRACE_FLAGS",
+  "QUERY_MORE_BEGIN",
+  "QUERY_MORE_END",
+  "QUERY_MORE_ITERATIONS",
+  "TOTAL_EMAIL_RECIPIENTS_QUEUED",
+  "SAVEPOINT_ROLLBACK",
+  "SAVEPOINT_SET",
+  "STACK_FRAME_VARIABLE_LIST",
+  "STATIC_VARIABLE_LIST",
+  "SYSTEM_MODE_ENTER",
+  "SYSTEM_MODE_EXIT",
+  "EXECUTION_STARTED",
+  "ENTERING_MANAGED_PKG",
+  "EVENT_SERVICE_PUB_BEGIN",
+  "EVENT_SERVICE_PUB_END",
+  "EVENT_SERVICE_PUB_DETAIL",
+  "EVENT_SERVICE_SUB_BEGIN",
+  "EVENT_SERVICE_SUB_DETAIL",
+  "EVENT_SERVICE_SUB_END",
+  "FLOW_START_INTERVIEWS_BEGIN",
+  "FLOW_START_INTERVIEWS_ERROR",
+  "FLOW_START_INTERVIEW_BEGIN",
+  "FLOW_START_INTERVIEW_LIMIT_USAGE",
+  "FLOW_START_SCHEDULED_RECORDS",
+  "FLOW_CREATE_INTERVIEW_ERROR",
+  "FLOW_ELEMENT_BEGIN",
+  "FLOW_ELEMENT_DEFERRED",
+  "FLOW_ELEMENT_ERROR",
+  "FLOW_ELEMENT_FAULT",
+  "FLOW_ELEMENT_LIMIT_USAGE",
+  "FLOW_INTERVIEW_FINISHED_LIMIT_USAGE",
+  "FLOW_SUBFLOW_DETAIL",
+  "FLOW_VALUE_ASSIGNMENT",
+  "FLOW_WAIT_EVENT_RESUMING_DETAIL",
+  "FLOW_WAIT_EVENT_WAITING_DETAIL",
+  "FLOW_WAIT_RESUMING_DETAIL",
+  "FLOW_WAIT_WAITING_DETAIL",
+  "FLOW_INTERVIEW_FINISHED",
+  "FLOW_INTERVIEW_PAUSED",
+  "FLOW_INTERVIEW_RESUMED",
+  "FLOW_ACTIONCALL_DETAIL",
+  "FLOW_ASSIGNMENT_DETAIL",
+  "FLOW_LOOP_DETAIL",
+  "FLOW_RULE_DETAIL",
+  "FLOW_BULK_ELEMENT_BEGIN",
+  "FLOW_BULK_ELEMENT_DETAIL",
+  "FLOW_BULK_ELEMENT_LIMIT_USAGE",
+  "FLOW_BULK_ELEMENT_NOT_SUPPORTED",
+  "MATCH_ENGINE_BEGIN",
+  "ORG_CACHE_PUT_BEGIN",
+  "ORG_CACHE_GET_BEGIN",
+  "ORG_CACHE_REMOVE_BEGIN",
+  "PUSH_NOTIFICATION_INVALID_APP",
+  "PUSH_NOTIFICATION_INVALID_CERTIFICATE",
+  "PUSH_NOTIFICATION_INVALID_NOTIFICATION",
+  "PUSH_NOTIFICATION_NO_DEVICES",
+  "PUSH_NOTIFICATION_SENT",
+  "SESSION_CACHE_PUT_BEGIN",
+  "SESSION_CACHE_GET_BEGIN",
+  "SESSION_CACHE_REMOVE_BEGIN",
+  "SLA_END",
+  "SLA_EVAL_MILESTONE",
+  "SLA_PROCESS_CASE",
+  "TESTING_LIMITS",
+  "VALIDATION_ERROR",
+  "VALIDATION_FORMULA",
+  "VALIDATION_PASS",
+  "VALIDATION_RULE",
+  "WF_FLOW_ACTION_ERROR",
+  "WF_FLOW_ACTION_ERROR_DETAIL",
+  "WF_FIELD_UPDATE",
+  "WF_RULE_EVAL_BEGIN",
+  "WF_RULE_EVAL_VALUE",
+  "WF_RULE_FILTER",
+  "WF_CRITERIA_BEGIN",
+  "WF_FORMULA",
+  "WF_ACTION",
+  "WF_ACTIONS_END",
+  "WF_ACTION_TASK",
+  "WF_APPROVAL",
+  "WF_APPROVAL_REMOVE",
+  "WF_APPROVAL_SUBMIT",
+  "WF_APPROVAL_SUBMITTER",
+  "WF_ASSIGN",
+  "WF_EMAIL_ALERT",
+  "WF_EMAIL_SENT",
+  "WF_ENQUEUE_ACTIONS",
+  "WF_ESCALATION_ACTION",
+  "WF_EVAL_ENTRY_CRITERIA",
+  "WF_FLOW_ACTION_DETAIL",
+  "WF_NEXT_APPROVER",
+  "WF_OUTBOUND_MSG",
+  "WF_PROCESS_FOUND",
+  "WF_PROCESS_NODE",
+  "WF_REASSIGN_RECORD",
+  "WF_RESPONSE_NOTIFY",
+  "WF_RULE_ENTRY_ORDER",
+  "WF_RULE_INVOCATION",
+  "WF_SOFT_REJECT",
+  "WF_SPOOL_ACTION_BEGIN",
+  "WF_TIME_TRIGGER",
+  "EXCEPTION_THROWN",
+  "FATAL_ERROR",
+  "XDS_DETAIL",
+  "XDS_RESPONSE",
+  "XDS_RESPONSE_DETAIL",
+  "XDS_RESPONSE_ERROR",
+  "DUPLICATE_DETECTION_BEGIN",
+  "DUPLICATE_DETECTION_RULE_INVOCATION",
+  "DUPLICATE_DETECTION_MATCH_INVOCATION_DETAILS",
+  "DUPLICATE_DETECTION_MATCH_INVOCATION_SUMMARY",
+  "BULK_COUNTABLE_STATEMENT_EXECUTE",
+  "TEMPLATE_PROCESSING_ERROR",
+  "EXTERNAL_SERVICE_REQUEST",
+  "FLOW_START_INTERVIEW_END",
+  "FLOW_CREATE_INTERVIEW_BEGIN",
+  "FLOW_CREATE_INTERVIEW_END",
+  "VARIABLE_SCOPE_END",
+  "PUSH_NOTIFICATION_NOT_ENABLED",
+  "SLA_NULL_START_DATE",
+  "TEMPLATE_PROCESSING_ERROR",
+  "VALIDATION_FAIL",
   `WF_FLOW_ACTION_BEGIN`,
-  'WF_FLOW_ACTION_END',
-  'WF_ESCALATION_RULE',
-  'WF_HARD_REJECT',
-  'WF_NO_PROCESS_FOUND',
-  'WF_TIME_TRIGGERS_BEGIN',
-  'WF_KNOWLEDGE_ACTION',
-  'WF_SEND_ACTION',
-  'WAVE_APP_LIFECYCLE',
-  'WF_QUICK_CREATE',
-  'WF_APEX_ACTION',
-  'INVOCABLE_ACTION_DETAIL',
-  'INVOCABLE_ACTION_ERROR',
-  'FLOW_COLLECTION_PROCESSOR_DETAIL',
-  'FLOW_SCHEDULED_PATH_QUEUED',
-  'ROUTE_WORK_ACTION',
-  'ADD_SKILL_REQUIREMENT_ACTION',
-  'ADD_SCREEN_POP_ACTION',
-  'CALLOUT_REQUEST_PREPARE',
-  'CALLOUT_REQUEST_FINALIZE',
-  'FUNCTION_INVOCATION_REQUEST',
-  'APP_CONTAINER_INITIATED',
-  'FUNCTION_INVOCATION_RESPONSE',
-  'XDS_REQUEST_DETAIL',
-  'EXTERNAL_SERVICE_RESPONSE',
-  'DATAWEAVE_USER_DEBUG',
-  'USER_DEBUG_FINER',
-  'USER_DEBUG_FINEST',
-  'USER_DEBUG_FINE',
-  'USER_DEBUG_DEBUG',
-  'USER_DEBUG_INFO',
-  'USER_DEBUG_WARN',
-  'USER_DEBUG_ERROR',
-  'VF_APEX_CALL',
-  'HEAP_DUMP',
-  'SCRIPT_EXECUTION',
-  'SESSION_CACHE_MEMORY_USAGE',
-  'ORG_CACHE_MEMORY_USAGE',
-  'AE_PERSIST_VALIDATION',
-  'REFERENCED_OBJECT_LIST',
-  'DUPLICATE_RULE_FILTER',
-  'DUPLICATE_RULE_FILTER_RESULT',
-  'DUPLICATE_RULE_FILTER_VALUE',
-  'TEMPLATED_ASSET',
-  'TRANSFORMATION_SUMMARY',
-  'RULES_EXECUTION_SUMMARY',
-  'ASSET_DIFF_SUMMARY',
-  'ASSET_DIFF_DETAIL',
-  'RULES_EXECUTION_DETAIL',
-  'JSON_DIFF_SUMMARY',
-  'JSON_DIFF_DETAIL',
-  'MATCH_ENGINE_INVOCATION',
-  'VF_DESERIALIZE_VIEWSTATE_END',
-  'VF_SERIALIZE_VIEWSTATE_END',
-  'CUMULATIVE_LIMIT_USAGE_END',
-  'CUMULATIVE_PROFILING_END',
-  'EXECUTION_FINISHED',
-  'FLOW_START_INTERVIEWS_END',
-  'FLOW_ELEMENT_END',
-  'FLOW_BULK_ELEMENT_END',
-  'WF_RULE_EVAL_END',
-  'WF_RULE_NOT_EVALUATED',
-  'WF_CRITERIA_END',
-  'DUPLICATE_DETECTION_END',
-  'VF_SERIALIZE_CONTINUATION_STATE_END',
-  'VF_DESERIALIZE_CONTINUATION_STATE_END',
-  'MATCH_ENGINE_END',
-  'ORG_CACHE_PUT_END',
-  'ORG_CACHE_GET_END',
-  'ORG_CACHE_REMOVE_END',
-  'SESSION_CACHE_PUT_END',
-  'SESSION_CACHE_GET_END',
-  'SESSION_CACHE_REMOVE_END',
+  "WF_FLOW_ACTION_END",
+  "WF_ESCALATION_RULE",
+  "WF_HARD_REJECT",
+  "WF_NO_PROCESS_FOUND",
+  "WF_TIME_TRIGGERS_BEGIN",
+  "WF_KNOWLEDGE_ACTION",
+  "WF_SEND_ACTION",
+  "WAVE_APP_LIFECYCLE",
+  "WF_QUICK_CREATE",
+  "WF_APEX_ACTION",
+  "INVOCABLE_ACTION_DETAIL",
+  "INVOCABLE_ACTION_ERROR",
+  "FLOW_COLLECTION_PROCESSOR_DETAIL",
+  "FLOW_SCHEDULED_PATH_QUEUED",
+  "ROUTE_WORK_ACTION",
+  "ADD_SKILL_REQUIREMENT_ACTION",
+  "ADD_SCREEN_POP_ACTION",
+  "CALLOUT_REQUEST_PREPARE",
+  "CALLOUT_REQUEST_FINALIZE",
+  "FUNCTION_INVOCATION_REQUEST",
+  "APP_CONTAINER_INITIATED",
+  "FUNCTION_INVOCATION_RESPONSE",
+  "XDS_REQUEST_DETAIL",
+  "EXTERNAL_SERVICE_RESPONSE",
+  "DATAWEAVE_USER_DEBUG",
+  "USER_DEBUG_FINER",
+  "USER_DEBUG_FINEST",
+  "USER_DEBUG_FINE",
+  "USER_DEBUG_DEBUG",
+  "USER_DEBUG_INFO",
+  "USER_DEBUG_WARN",
+  "USER_DEBUG_ERROR",
+  "VF_APEX_CALL",
+  "HEAP_DUMP",
+  "SCRIPT_EXECUTION",
+  "SESSION_CACHE_MEMORY_USAGE",
+  "ORG_CACHE_MEMORY_USAGE",
+  "AE_PERSIST_VALIDATION",
+  "REFERENCED_OBJECT_LIST",
+  "DUPLICATE_RULE_FILTER",
+  "DUPLICATE_RULE_FILTER_RESULT",
+  "DUPLICATE_RULE_FILTER_VALUE",
+  "TEMPLATED_ASSET",
+  "TRANSFORMATION_SUMMARY",
+  "RULES_EXECUTION_SUMMARY",
+  "ASSET_DIFF_SUMMARY",
+  "ASSET_DIFF_DETAIL",
+  "RULES_EXECUTION_DETAIL",
+  "JSON_DIFF_SUMMARY",
+  "JSON_DIFF_DETAIL",
+  "MATCH_ENGINE_INVOCATION",
+  "VF_DESERIALIZE_VIEWSTATE_END",
+  "VF_SERIALIZE_VIEWSTATE_END",
+  "CUMULATIVE_LIMIT_USAGE_END",
+  "CUMULATIVE_PROFILING_END",
+  "EXECUTION_FINISHED",
+  "FLOW_START_INTERVIEWS_END",
+  "FLOW_ELEMENT_END",
+  "FLOW_BULK_ELEMENT_END",
+  "WF_RULE_EVAL_END",
+  "WF_RULE_NOT_EVALUATED",
+  "WF_CRITERIA_END",
+  "DUPLICATE_DETECTION_END",
+  "VF_SERIALIZE_CONTINUATION_STATE_END",
+  "VF_DESERIALIZE_CONTINUATION_STATE_END",
+  "MATCH_ENGINE_END",
+  "ORG_CACHE_PUT_END",
+  "ORG_CACHE_GET_END",
+  "ORG_CACHE_REMOVE_END",
+  "SESSION_CACHE_PUT_END",
+  "SESSION_CACHE_GET_END",
+  "SESSION_CACHE_REMOVE_END",
 ] as const;
 
 export type LogEventType = (typeof _logEventNames)[number];
