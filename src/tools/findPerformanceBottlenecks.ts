@@ -3,8 +3,8 @@
  */
 
 import { promises as fs } from "fs";
-import { parse, ApexLog } from "../ApexLogParser";
-import { SlowMethod, extractMethods } from "./analyzeLogPerformance";
+import { parse, ApexLog } from "../ApexLogParser.js";
+import { SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
 
 export interface BottleneckArgs {
   logFilePath: string;

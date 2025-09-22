@@ -3,7 +3,7 @@
  */
 
 import { promises as fs } from "fs";
-import { parse, ApexLog, LogLine } from "../ApexLogParser";
+import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
 
 export interface AnalyzeLogArgs {
   logFilePath: string;

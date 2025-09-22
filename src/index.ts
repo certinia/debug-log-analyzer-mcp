@@ -9,22 +9,22 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types";
+} from "@modelcontextprotocol/sdk/types.js";
 import {
   analyzeLogPerformance,
   analyzeLogPerformanceTool,
   AnalyzeLogArgs,
-} from "./tools/analyzeLogPerformance";
+} from "./tools/analyzeLogPerformance.js";
 import {
   getLogSummary,
   getLogSummaryTool,
   LogSummaryArgs,
-} from "./tools/getLogSummary";
+} from "./tools/getLogSummary.js";
 import {
   findPerformanceBottlenecks,
   findPerformanceBottlenecksTool,
   BottleneckArgs,
-} from "./tools/findPerformanceBottlenecks";
+} from "./tools/findPerformanceBottlenecks.js";
 
 class LanaServer {
   private server: Server;
