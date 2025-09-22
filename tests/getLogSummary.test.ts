@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2025 Certinia Inc. All rights reserved.
+ */
+
 import { promises as fs } from "fs";
 import path from "path";
 import { jest } from "@jest/globals";

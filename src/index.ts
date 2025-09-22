@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 
-/**
- * LANA MCP Server - Model Context Protocol server for Apex Log Analysis
- *
- * This server provides tools for analyzing Salesforce Apex debug logs,
- * specifically focused on identifying performance bottlenecks and slow methods.
+/*
+ * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -51,7 +48,6 @@ class LanaServer {
 
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
-       
       console.error("[MCP Error]", error);
     };
     process.on("SIGINT", async () => {
@@ -106,13 +102,13 @@ class LanaServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-     
+
     console.error("LANA MCP Server running on stdio");
   }
 }
 
 const server = new LanaServer();
- 
+
 server.run().catch(console.error);
 
 export { LanaServer };

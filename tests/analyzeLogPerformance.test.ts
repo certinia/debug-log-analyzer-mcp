@@ -1,14 +1,17 @@
+/*
+ * Copyright (c) 2025 Certinia Inc. All rights reserved.
+ */
+
 import { jest } from "@jest/globals";
 import { promises as fs } from "fs";
 import {
   analyzeLogPerformance,
   extractMethods,
   AnalyzeLogArgs,
-  SlowMethod,
   LogAnalysisResult,
   analyzeLogPerformanceTool,
 } from "../src/tools/analyzeLogPerformance";
-import { parse, ApexLog, LogLine } from "../src/ApexLogParser";
+import { parse } from "../src/ApexLogParser";
 
 // Mock file system operations
 jest.mock("fs", () => ({

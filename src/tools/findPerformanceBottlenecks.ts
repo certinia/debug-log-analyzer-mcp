@@ -1,5 +1,9 @@
+/*
+ * Copyright (c) 2025 Certinia Inc. All rights reserved.
+ */
+
 import { promises as fs } from "fs";
-import { parse, ApexLog, LogLine } from "../ApexLogParser";
+import { parse, ApexLog } from "../ApexLogParser";
 import { SlowMethod, extractMethods } from "./analyzeLogPerformance";
 
 export interface BottleneckArgs {
@@ -157,7 +161,6 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
   const limits = apexLog.governorLimits;
   const warnings: string[] = [];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
     if (key !== "byNamespace" && value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;

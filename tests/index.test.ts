@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2025 Certinia Inc. All rights reserved.
+ */
+
 import {
   jest,
   describe,
@@ -92,8 +96,6 @@ import {
   findPerformanceBottlenecks,
   findPerformanceBottlenecksTool,
 } from "../src/tools/findPerformanceBottlenecks";
-import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
-import { connect } from "http2";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -162,11 +164,13 @@ describe("LanaServer", () => {
 
     // Setup server mock
     mockSetRequestHandler = jest.fn();
+    mockConnect = jest.fn();
+    mockClose = jest.fn();
 
     mockServer = {
       setRequestHandler: mockSetRequestHandler,
-      connect: jest.fn(),
-      close: jest.fn(),
+      connect: mockConnect,
+      close: mockClose,
       onerror: undefined,
     } as any;
 
@@ -444,7 +448,7 @@ describe("LanaServer", () => {
       await lanaServer.run();
 
       expect(StdioServerTransport).toHaveBeenCalled();
-      // expect(mockConnect).toHaveBeenCalledWith(mockTransport);
+      expect(mockConnect).toHaveBeenCalledWith(mockTransport);
       expect(mockConsoleError).toHaveBeenCalledWith(
         "LANA MCP Server running on stdio"
       );
@@ -455,7 +459,7 @@ describe("LanaServer", () => {
       await lanaServer.run();
 
       expect(StdioServerTransport).toHaveBeenCalled();
-      // expect(mockConnect).toHaveBeenCalledWith(mockTransport);
+      expect(mockConnect).toHaveBeenCalledWith(mockTransport);
     });
 
     it("should handle SIGINT and close server", async () => {
@@ -478,7 +482,7 @@ describe("LanaServer", () => {
         expect((error as Error).message).toBe("Process exit called");
       }
 
-      // expect(mockClose).toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalled();
       expect(mockExit).toHaveBeenCalledWith(0);
     });
   });

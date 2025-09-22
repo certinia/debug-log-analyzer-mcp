@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2025 Certinia Inc. All rights reserved.
+ */
+
 import { promises as fs } from "fs";
 import { parse, ApexLog, LogLine } from "../ApexLogParser";
 
@@ -110,7 +114,6 @@ export function extractMethods(
   const totalTime = apexLog.duration.total;
 
   const traverse = (node: LogLine) => {
-     
     if (
       node.type === "METHOD_ENTRY" ||
       (node as any).subCategory === "Method"
