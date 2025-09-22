@@ -110,7 +110,7 @@ export function extractMethods(
   const totalTime = apexLog.duration.total;
 
   const traverse = (node: LogLine) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     if (
       node.type === "METHOD_ENTRY" ||
       (node as any).subCategory === "Method"

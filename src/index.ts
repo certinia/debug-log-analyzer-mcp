@@ -51,7 +51,7 @@ class LanaServer {
 
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
-      // eslint-disable-next-line no-console
+       
       console.error("[MCP Error]", error);
     };
     process.on("SIGINT", async () => {
@@ -106,13 +106,13 @@ class LanaServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    // eslint-disable-next-line no-console
+     
     console.error("LANA MCP Server running on stdio");
   }
 }
 
 const server = new LanaServer();
-// eslint-disable-next-line no-console
+ 
 server.run().catch(console.error);
 
 export { LanaServer };

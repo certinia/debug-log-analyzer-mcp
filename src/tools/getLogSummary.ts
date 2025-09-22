@@ -66,7 +66,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
 function countMethods(apexLog: ApexLog): number {
   let count = 0;
   const traverse = (node: LogLine) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     if (
       node.type === "METHOD_ENTRY" ||
       (node as any).subCategory === "Method"
