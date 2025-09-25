@@ -22,7 +22,7 @@ export interface SlowMethod {
   soqlCount: number;
   dmlRows: number;
   soqlRows: number;
-  percentage: number;
+  selfPercentage: number;
 }
 
 export interface LogAnalysisResult {
@@ -81,8 +81,8 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   // Extract all methods with their performance data
   const methods = extractMethods(apexLog, minDuration, namespace);
 
-  // Sort by total duration (descending)
-  methods.sort((a, b) => b.duration - a.duration);
+  // Sort by self duration (descending)
+  methods.sort((a, b) => b.selfDuration - a.selfDuration);
 
   // Take top N methods
   const slowestMethods = methods.slice(0, topMethods);
@@ -115,7 +115,8 @@ export function extractMethods(
 
   const traverse = (node: LogLine) => {
     if (
-      node.type === "METHOD_ENTRY" ||
+      node.type === "CODE_UNIT_STARTED" || // Entry point
+      node.type === "METHOD_ENTRY" || // Methods
       (node as any).subCategory === "Method"
     ) {
       if (node.duration.total >= minDuration) {
@@ -130,8 +131,8 @@ export function extractMethods(
             soqlCount: node.soqlCount.total,
             dmlRows: node.dmlRowCount.total,
             soqlRows: node.soqlRowCount.total,
-            percentage:
-              totalTime > 0 ? (node.duration.total / totalTime) * 100 : 0,
+            selfPercentage:
+              totalTime > 0 ? (node.duration.self / totalTime) * 100 : 0,
           });
         }
       }
@@ -166,7 +167,7 @@ function generatePerformanceSummary(
     slowestMethod.name
   }" took ${(slowestMethod.duration / 1000000).toFixed(
     2
-  )}ms (${slowestMethod.percentage.toFixed(
+  )}ms (${slowestMethod.selfPercentage.toFixed(
     1
   )}% of total execution time). The top ${
     methods.length
@@ -196,11 +197,11 @@ function generateRecommendations(methods: SlowMethod[]): string[] {
           `Method "${method.name}" processes ${method.soqlRows} SOQL rows. Consider adding WHERE clauses or using pagination.`
         );
       }
-      if (method.percentage > 20) {
+      if (method.selfPercentage > 5) {
         recommendations.push(
-          `Method "${method.name}" consumes ${method.percentage.toFixed(
+          `Method "${method.name}" consumes ${method.selfPercentage.toFixed(
             1
-          )}% of total execution time. This should be a priority for optimization.`
+          )}% self execution time. Consider if it can be optimized to make it faster, check how many times it is called and if that can be reduced.`
         );
       }
     }
