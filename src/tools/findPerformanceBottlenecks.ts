@@ -164,7 +164,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
     if (key !== "byNamespace" && value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;
-      if (percentage > 80) {
+      if (percentage > 50) {
         warnings.push(
           `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${
             value.limit
@@ -174,8 +174,23 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
     }
   });
 
+  const reducedLimits = Object.entries(limits).reduce(
+    (acc: Record<string, unknown>, [key, value]: [string, any]) => {
+      if (value.used > 0) {
+        acc[key] = value;
+      }
+      return acc;
+    },
+    {}
+  );
+
   return {
     warnings,
-    details: limits,
+    // Only include limits with usage
+    details: reducedLimits,
+    note:
+      warnings.length === 0
+        ? "No governor limits approaching their thresholds detected."
+        : undefined,
   };
 }
