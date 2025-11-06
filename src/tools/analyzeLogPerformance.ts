@@ -22,7 +22,7 @@ export interface SlowMethod {
   soqlCount: number;
   dmlRows: number;
   soqlRows: number;
-  percentage: number;
+  selfPercentage: number;
 }
 
 export interface LogAnalysisResult {
@@ -81,8 +81,8 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   // Extract all methods with their performance data
   const methods = extractMethods(apexLog, minDuration, namespace);
 
-  // Sort by total duration (descending)
-  methods.sort((a, b) => b.duration - a.duration);
+  // Sort by self duration (descending)
+  methods.sort((a, b) => b.selfDuration - a.selfDuration);
 
   // Take top N methods
   const slowestMethods = methods.slice(0, topMethods);
@@ -115,7 +115,8 @@ export function extractMethods(
 
   const traverse = (node: LogLine) => {
     if (
-      node.type === "METHOD_ENTRY" ||
+      node.type === "CODE_UNIT_STARTED" || // Entry point
+      node.type === "METHOD_ENTRY" || // Methods
       (node as any).subCategory === "Method"
     ) {
       if (node.duration.total >= minDuration) {
@@ -130,8 +131,8 @@ export function extractMethods(
             soqlCount: node.soqlCount.total,
             dmlRows: node.dmlRowCount.total,
             soqlRows: node.soqlRowCount.total,
-            percentage:
-              totalTime > 0 ? (node.duration.total / totalTime) * 100 : 0,
+            selfPercentage:
+              totalTime > 0 ? (node.duration.self / totalTime) * 100 : 0,
           });
         }
       }
@@ -156,7 +157,7 @@ function generatePerformanceSummary(
 
   const slowestMethod = methods[0];
   const totalSlowMethodsTime = methods.reduce(
-    (sum, method) => sum + method.duration,
+    (sum, method) => sum + method.selfDuration,
     0
   );
   const percentageOfTotal =
@@ -164,9 +165,9 @@ function generatePerformanceSummary(
 
   return `Analysis found ${methods.length} methods. The slowest method "${
     slowestMethod.name
-  }" took ${(slowestMethod.duration / 1000000).toFixed(
+  }" took ${(slowestMethod.selfDuration / 1000000).toFixed(
     2
-  )}ms (${slowestMethod.percentage.toFixed(
+  )}ms (${slowestMethod.selfPercentage.toFixed(
     1
   )}% of total execution time). The top ${
     methods.length
@@ -181,27 +182,9 @@ function generateRecommendations(methods: SlowMethod[]): string[] {
   methods.forEach((method, index) => {
     if (index < 3) {
       // Focus on top 3 methods
-      if (method.soqlCount > 5) {
-        recommendations.push(
-          `Method "${method.name}" executes ${method.soqlCount} SOQL queries. Consider reducing query count through bulkification or caching.`
-        );
-      }
-      if (method.dmlCount > 3) {
-        recommendations.push(
-          `Method "${method.name}" performs ${method.dmlCount} DML operations. Consider bulkifying DML operations.`
-        );
-      }
-      if (method.soqlRows > 1000) {
-        recommendations.push(
-          `Method "${method.name}" processes ${method.soqlRows} SOQL rows. Consider adding WHERE clauses or using pagination.`
-        );
-      }
-      if (method.percentage > 20) {
-        recommendations.push(
-          `Method "${method.name}" consumes ${method.percentage.toFixed(
-            1
-          )}% of total execution time. This should be a priority for optimization.`
-        );
+      const recommendation = getRecommendations(method);
+      if (recommendation) {
+        recommendations.push(recommendation);
       }
     }
   });
@@ -213,4 +196,24 @@ function generateRecommendations(methods: SlowMethod[]): string[] {
   }
 
   return recommendations;
+}
+
+function getRecommendations(method: SlowMethod): string | null {
+  // High self time percentage, only include if self duration is significant
+  if (method.selfPercentage > 10 && method.selfDuration > 100) {
+    return `Method "${method.name}" consumes ${method.selfPercentage.toFixed(
+      1
+    )}% self execution time. Consider if it can be optimized to make it faster, check how many times it is called and if that can be reduced.`;
+  }
+  if (method.soqlRows > 1000) {
+    return `Method "${method.name}" processes ${method.soqlRows} SOQL rows. Consider adding WHERE clauses or using pagination.`;
+  }
+  if (method.soqlCount > 5) {
+    return `Method "${method.name}" executes ${method.soqlCount} SOQL queries. Consider reducing query count through bulkification or caching.`;
+  }
+  if (method.dmlCount > 3) {
+    return `Method "${method.name}" performs ${method.dmlCount} DML operations. Consider bulkifying DML operations.`;
+  }
+
+  return null;
 }
