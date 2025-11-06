@@ -1,0 +1,47 @@
+{
+  "name": "lana-mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Apex Log Analysis",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lana-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint ./src ./tests"
+  },
+  "keywords": [
+    "mcp",
+    "salesforce",
+    "apex",
+    "log-analysis",
+    "debugging"
+  ],
+  "author": "Certinia",
+  "license": "SEE LICENSE IN ../LICENSE.txt",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.17.3"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^22.16.3",
+    "@typescript-eslint/eslint-plugin": "^8.44.0",
+    "@typescript-eslint/parser": "^8.44.0",
+    "eslint": "^9.36.0",
+    "eslint-plugin-headers": "^1.3.3",
+    "jest": "^30.1.3",
+    "ts-jest": "^29.4.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.44.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

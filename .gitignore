@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+
+# Ignore test logs
+*.log
