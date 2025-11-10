@@ -180,7 +180,7 @@ describe("analyzeLogPerformance", () => {
       expect(methods).toHaveLength(3);
       expect(methods[0].name).toBe("SlowMethod");
       expect(methods[0].duration).toBe(500000000);
-      expect(methods[0].percentage).toBe(50);
+      expect(methods[0].selfPercentage).toBe(50);
       expect(methods[0].dmlCount).toBe(5);
       expect(methods[0].soqlCount).toBe(10);
     });
@@ -213,20 +213,20 @@ describe("analyzeLogPerformance", () => {
       expect(methods[0].lineNumber).toBeNull();
     });
 
-    it("should calculate percentages correctly", () => {
+    it("should calculate self percentages correctly", () => {
       const mockApexLog = createMockApexLog();
       const methods = extractMethods(mockApexLog, 0);
 
-      expect(methods[0].percentage).toBe(50); // 500000000 / 1000000000 * 100
-      expect(methods[1].percentage).toBe(40); // 400000000 / 1000000000 * 100
-      expect(methods[2].percentage).toBe(10); // 100000000 / 1000000000 * 100
+      expect(methods[0].selfPercentage).toBe(50); // 500000000 / 1000000000 * 100
+      expect(methods[1].selfPercentage).toBe(40); // 400000000 / 1000000000 * 100
+      expect(methods[2].selfPercentage).toBe(10); // 100000000 / 1000000000 * 100
     });
 
     it("should handle zero total time", () => {
       const mockApexLog = createMockApexLogWithZeroTotalTime();
       const methods = extractMethods(mockApexLog, 0);
 
-      expect(methods.every((method) => method.percentage === 0)).toBe(true);
+      expect(methods.every((method) => method.selfPercentage === 0)).toBe(true);
     });
   });
 
@@ -336,8 +336,8 @@ describe("analyzeLogPerformance", () => {
 
       const percentageRecommendation = parsedResult.recommendations.find(
         (rec) =>
-          rec.includes("% of total execution time") &&
-          rec.includes("priority for optimization")
+          rec.includes("% self execution time") &&
+          rec.includes("can be optimized")
       );
       expect(percentageRecommendation).toBeDefined();
     });
@@ -472,7 +472,7 @@ describe("analyzeLogPerformance", () => {
       expect(typeof method.soqlCount).toBe("number");
       expect(typeof method.dmlRows).toBe("number");
       expect(typeof method.soqlRows).toBe("number");
-      expect(typeof method.percentage).toBe("number");
+      expect(typeof method.selfPercentage).toBe("number");
       expect(["number", "string", "object"]).toContain(
         typeof method.lineNumber
       );
@@ -657,7 +657,7 @@ describe("analyzeLogPerformance", () => {
     const highSOQLMethod = createMockLogLine(
       "HighSOQLMethod",
       500000000,
-      500000000,
+      50000000, // Low self duration to get selfPercentage < 10%
       "default",
       1,
       2,
@@ -684,7 +684,7 @@ describe("analyzeLogPerformance", () => {
     const highDMLMethod = createMockLogLine(
       "HighDMLMethod",
       500000000,
-      500000000,
+      50000000, // Low self duration to get selfPercentage < 10%
       "default",
       1,
       6,
@@ -711,7 +711,7 @@ describe("analyzeLogPerformance", () => {
     const highRowsMethod = createMockLogLine(
       "HighRowsMethod",
       500000000,
-      500000000,
+      50000000, // Low self duration to get selfPercentage < 10%
       "default",
       1,
       1,

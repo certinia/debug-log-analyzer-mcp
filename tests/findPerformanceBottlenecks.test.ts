@@ -103,7 +103,7 @@ function createMockSlowMethods(): SlowMethod[] {
       soqlCount: 8,
       dmlRows: 100,
       soqlRows: 1500,
-      percentage: 50.0,
+      selfPercentage: 30.0,
     },
     {
       name: "MyClass.slowMethod2",
@@ -115,7 +115,7 @@ function createMockSlowMethods(): SlowMethod[] {
       soqlCount: 3,
       dmlRows: 50,
       soqlRows: 500,
-      percentage: 30.0,
+      selfPercentage: 25.0,
     },
     {
       name: "AnotherClass.method",
@@ -127,7 +127,7 @@ function createMockSlowMethods(): SlowMethod[] {
       soqlCount: 2,
       dmlRows: 25,
       soqlRows: 200,
-      percentage: 20.0,
+      selfPercentage: 15.0,
     },
   ];
 }
@@ -513,7 +513,7 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 1,
           dmlRows: 10,
           soqlRows: 100,
-          percentage: 10,
+          selfPercentage: 8,
         },
         {
           name: "Method2",
@@ -525,7 +525,7 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 2,
           dmlRows: 20,
           soqlRows: 200,
-          percentage: 20,
+          selfPercentage: 15,
         },
       ];
 
@@ -703,7 +703,7 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 20, // High SOQL
           dmlRows: 2000,
           soqlRows: 10000, // High rows
-          percentage: 80,
+          selfPercentage: 60,
         },
         {
           name: "DatabaseHeavyMethod",
@@ -715,7 +715,7 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 30, // Very high SOQL
           dmlRows: 5000,
           soqlRows: 25000, // Very high rows
-          percentage: 15,
+          selfPercentage: 12,
         },
       ];
 
@@ -780,7 +780,7 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 1,
           dmlRows: 10,
           soqlRows: 100,
-          percentage: 5,
+          selfPercentage: 4,
         },
       ];
 
