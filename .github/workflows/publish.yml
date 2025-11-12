@@ -28,7 +28,8 @@ jobs:
 
       - name: Publish
         run: |
-          echo "$NPM_AUTH" > .npmrc
+          npm publish --registry ${{ secrets.REGISTRY_URL }}
+          cat ../ci/.npmrc >> .npmrc
           echo $NPM_CERT | base64 --decode > client.cert
           echo $NPM_KEY | base64 --decode > client.key
         working-directory: dist
