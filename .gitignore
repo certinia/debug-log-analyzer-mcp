@@ -4,6 +4,3 @@ coverage
 
 # Ignore test logs
 *.log
-
-# Ignore pnpm lock files
-pnpm-lock.yaml
