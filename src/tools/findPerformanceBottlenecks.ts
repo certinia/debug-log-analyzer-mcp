@@ -85,50 +85,61 @@ function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       ? (governorLimits.cpuTime.used / governorLimits.cpuTime.limit) * 100
       : 0;
 
-  return {
-    cpuTimeUsed: governorLimits.cpuTime.used,
-    cpuTimeLimit: governorLimits.cpuTime.limit,
-    cpuUsagePercentage: cpuUsagePercent,
-    warning:
-      cpuUsagePercent > 80
-        ? "High CPU usage detected - consider optimizing algorithms"
-        : null,
-  };
+  return cpuUsagePercent > 80
+    ? {
+        cpuTimeUsed: governorLimits.cpuTime.used,
+        cpuTimeLimit: governorLimits.cpuTime.limit,
+        cpuUsagePercentage: cpuUsagePercent,
+        warning: "High CPU usage detected - consider optimizing algorithms",
+      }
+    : {};
+
 }
 
 function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
   const governorLimits = apexLog.governorLimits;
-  return {
-    soqlQueries: {
+  const bottlenecks: Record<string, unknown> = {};
+
+  const soqlPercentage =
+    governorLimits.soqlQueries.limit > 0
+      ? (governorLimits.soqlQueries.used / governorLimits.soqlQueries.limit) * 100
+      : 0;
+
+  if (soqlPercentage > 80) {
+    bottlenecks.soqlQueries = {
       used: governorLimits.soqlQueries.used,
       limit: governorLimits.soqlQueries.limit,
-      percentage:
-        governorLimits.soqlQueries.limit > 0
-          ? (governorLimits.soqlQueries.used /
-              governorLimits.soqlQueries.limit) *
-            100
-          : 0,
-    },
-    dmlStatements: {
+      percentage: soqlPercentage,
+    };
+  }
+
+  const dmlPercentage =
+    governorLimits.dmlStatements.limit > 0
+      ? (governorLimits.dmlStatements.used / governorLimits.dmlStatements.limit) * 100
+      : 0;
+
+  if (dmlPercentage > 80) {
+    bottlenecks.dmlStatements = {
       used: governorLimits.dmlStatements.used,
       limit: governorLimits.dmlStatements.limit,
-      percentage:
-        governorLimits.dmlStatements.limit > 0
-          ? (governorLimits.dmlStatements.used /
-              governorLimits.dmlStatements.limit) *
-            100
-          : 0,
-    },
-    queryRows: {
+      percentage: dmlPercentage,
+    };
+  }
+
+  const queryRowsPercentage =
+    governorLimits.queryRows.limit > 0
+      ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) * 100
+      : 0;
+
+  if (queryRowsPercentage > 80) {
+    bottlenecks.queryRows = {
       used: governorLimits.queryRows.used,
       limit: governorLimits.queryRows.limit,
-      percentage:
-        governorLimits.queryRows.limit > 0
-          ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) *
-            100
-          : 0,
-    },
-  };
+      percentage: queryRowsPercentage,
+    };
+  }
+
+  return bottlenecks;
 }
 
 function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
@@ -183,6 +194,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
     },
     {}
   );
+
 
   return {
     warnings,
