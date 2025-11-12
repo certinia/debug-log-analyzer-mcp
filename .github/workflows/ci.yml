@@ -42,5 +42,4 @@ jobs:
       - name: Install Packages
         run: HUSKY=0 pnpm install
       - name: Tests
-        run: |
-          pnpm run test
+        run: pnpm run test
