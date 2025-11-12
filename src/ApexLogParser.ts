@@ -1103,7 +1103,7 @@ export class MethodEntryLine extends Method {
     }
   }
 
-  onEnd(end: MethodExitLine): void {
+  onEnd(end: MethodExitLine, _stack: LogLine[]): void {
     if (end.namespace && !end.text.endsWith(")")) {
       this.namespace = end.namespace;
     }
@@ -1459,7 +1459,7 @@ class SOQLExecuteBeginLine extends Method {
     this.text = soqlString || "";
   }
 
-  onEnd(end: SOQLExecuteEndLine): void {
+  onEnd(end: SOQLExecuteEndLine, _stack: LogLine[]): void {
     this.soqlRowCount.total = this.soqlRowCount.self = end.soqlRowCount.total;
   }
 }
@@ -1542,7 +1542,7 @@ class SOSLExecuteBeginLine extends Method {
     };
   }
 
-  onEnd(end: SOSLExecuteEndLine): void {
+  onEnd(end: SOSLExecuteEndLine, _stack: LogLine[]): void {
     this.soslRowCount.total = this.soslRowCount.self = end.soslRowCount.total;
   }
 }
@@ -1686,7 +1686,7 @@ class LimitUsageForNSLine extends LogLine {
     this.text = parts[2] || "";
   }
 
-  onAfter(parser: ApexLogParser): void {
+  onAfter(parser: ApexLogParser, _next?: LogLine): void {
     // Parse the namespace from the first line (before any newline)
     this.namespace = this.text
       .slice(0, this.text.indexOf("\n"))
@@ -1904,7 +1904,7 @@ class EnteringManagedPackageLine extends Method {
       lastDot < 0 ? rawNs : rawNs.substring(lastDot + 1);
   }
 
-  onAfter(_parser: ApexLogParser, end?: LogLine): void {
+  onAfter(parser: ApexLogParser, end?: LogLine): void {
     if (end) {
       this.exitStamp = end.timestamp;
     }
@@ -1965,7 +1965,7 @@ export class FlowStartInterviewsBeginLine extends Method {
     super(parser, parts, ["FLOW_START_INTERVIEWS_END"], "Flow", "custom");
   }
 
-  onEnd(_end: LogLine, stack: LogLine[]) {
+  onEnd(end: LogLine, stack: LogLine[]) {
     const flowType = this.getFlowType(stack);
     this.suffix = ` (${flowType})`;
     this.text += this.getFlowName();
@@ -2596,7 +2596,7 @@ class ExceptionThrownLine extends LogLine {
     this.text = parts[3] || "";
   }
 
-  onAfter(parser: ApexLogParser): void {
+  onAfter(parser: ApexLogParser, _next?: LogLine): void {
     if (this.text.indexOf("System.LimitException") >= 0) {
       const isMultiLine = this.text.indexOf("\n");
       const len = isMultiLine < 0 ? 99 : isMultiLine;
@@ -2618,7 +2618,7 @@ class FatalErrorLine extends LogLine {
     this.text = parts[2] || "";
   }
 
-  onAfter(parser: ApexLogParser): void {
+  onAfter(parser: ApexLogParser, _next?: LogLine): void {
     const newLineIndex = this.text.indexOf("\n");
     const summary =
       newLineIndex > -1 ? this.text.slice(0, newLineIndex + 1) : this.text;
@@ -3084,7 +3084,7 @@ const basicExitLogEvents: LogEventType[] = [
   "SESSION_CACHE_REMOVE_END",
 ];
 
-export const logEventNames = [
+const _logEventNames = [
   "BULK_DML_RETRY",
   "BULK_HEAP_ALLOCATE",
   "CALLOUT_REQUEST",
@@ -3338,4 +3338,6 @@ export const logEventNames = [
   "SESSION_CACHE_REMOVE_END",
 ] as const;
 
-export type LogEventType = (typeof logEventNames)[number];
+export type LogEventType = (typeof _logEventNames)[number];
+
+export { DMLBeginLine, SOQLExecuteBeginLine, SOQLExecuteExplainLine };
