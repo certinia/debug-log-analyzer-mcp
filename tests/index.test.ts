@@ -290,7 +290,7 @@ describe("LanaServer", () => {
   });
 
   describe("Tool Request Handling", () => {
-    let callToolHandler: Function;
+    let callToolHandler: (request: any, extra: any) => Promise<any>;
 
     beforeEach(async () => {
       new LanaServer();
@@ -472,7 +472,7 @@ describe("LanaServer", () => {
       );
       expect(sigintCall).toBeDefined();
 
-      const sigintHandler = sigintCall![1] as Function;
+      const sigintHandler = sigintCall![1] as () => Promise<void>;
 
       // Test SIGINT handler
       try {
