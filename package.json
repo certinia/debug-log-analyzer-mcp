@@ -1,6 +1,6 @@
 {
   "name": "lana-mcp",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Model Context Protocol server for Apex Log Analysis",
   "type": "module",
   "main": "dist/index.js",
