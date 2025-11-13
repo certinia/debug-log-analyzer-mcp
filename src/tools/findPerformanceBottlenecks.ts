@@ -175,7 +175,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
     if (key !== "byNamespace" && value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;
-      if (percentage > 50) {
+      if (percentage > 80) {
         warnings.push(
           `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${
             value.limit
