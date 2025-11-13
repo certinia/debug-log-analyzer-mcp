@@ -267,9 +267,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = decode(
-        result.content[0].text
-      ) as unknown as LogAnalysisResult;
+      const parsedResult = toonDecode(result);
 
       const soqlRecommendation = parsedResult.recommendations.find(
         (rec) =>
