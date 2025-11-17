@@ -9,9 +9,9 @@ function getUserDetails() {
   const orgSecurityToken = process.env.ORG_SECURITY_TOKEN || "";
   const orgLoginUrl = process.env.ORG_LOGIN_URL || "";
 
-  if (!orgUsername || !orgPassword || !orgSecurityToken) {
+  if (!orgUsername || !orgPassword || !orgSecurityToken || !orgLoginUrl) {
     throw new Error(
-      "Please set valid ORG_USERNAME, ORG_PASSWORD and ORG_SECURITY_TOKEN environment variables in your .env file"
+      "Please set valid ORG_USERNAME, ORG_PASSWORD, ORG_SECURITY_TOKEN, and ORG_LOGIN_URL environment variables in your .env file"
     );
   }
 
