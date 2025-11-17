@@ -1,0 +1,39 @@
+name: Publish Stable
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build_and_publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Dependencies
+        run: HUSKY=0 pnpm install
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Publish
+        run: |
+          npm publish --registry ${{ secrets.REGISTRY_URL }}
+          cat ../ci/.npmrc >> .npmrc
+          echo $NPM_CERT | base64 --decode > client.cert
+          echo $NPM_KEY | base64 --decode > client.key
+        working-directory: dist
+        env:
+          NPM_AUTH: ${{ secrets.ARTIFACTORY_AUTH }}
+          NPM_CERT: ${{ secrets.ARTIFACTORY_MTLS_CERT_BASE64 }}
+          NPM_KEY: ${{ secrets.ARTIFACTORY_MTLS_KEY_BASE64 }}

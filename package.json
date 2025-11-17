@@ -1,6 +1,6 @@
 {
   "name": "lana-mcp",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Model Context Protocol server for Apex Log Analysis",
   "type": "module",
   "main": "dist/index.js",
@@ -27,6 +27,7 @@
   "license": "SEE LICENSE IN ../LICENSE.txt",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.17.3",
+    "@toon-format/toon": "^1.0.0"
     "dotenv": "^17.2.3",
     "jsforce": "^3.10.8"
   },

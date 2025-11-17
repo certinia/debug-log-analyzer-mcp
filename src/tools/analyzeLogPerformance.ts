@@ -4,6 +4,7 @@
 
 import { promises as fs } from "fs";
 import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
+import { encode } from "@toon-format/toon";
 
 export interface AnalyzeLogArgs {
   logFilePath: string;
@@ -99,7 +100,7 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
     content: [
       {
         type: "text",
-        text: JSON.stringify(result, null, 2),
+        text: encode(result)
       },
     ],
   };
