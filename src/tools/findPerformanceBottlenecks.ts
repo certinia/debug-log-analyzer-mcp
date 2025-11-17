@@ -5,13 +5,14 @@
 import { promises as fs } from "fs";
 import { parse, ApexLog } from "../ApexLogParser.js";
 import { SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
+import { encode } from "@toon-format/toon";
 
 export interface BottleneckArgs {
   logFilePath: string;
   analysisType?: "cpu" | "database" | "methods" | "all";
 }
 
-interface BottleneckResult {
+export interface BottleneckResult {
   cpuBottlenecks?: Record<string, unknown>;
   databaseBottlenecks?: Record<string, unknown>;
   methodBottlenecks?: Record<string, unknown>;
@@ -72,7 +73,7 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
     content: [
       {
         type: "text",
-        text: JSON.stringify(bottlenecks, null, 2),
+        text: encode(bottlenecks)
       },
     ],
   };

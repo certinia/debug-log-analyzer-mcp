@@ -7,9 +7,11 @@ import { jest } from "@jest/globals";
 import {
   findPerformanceBottlenecks,
   BottleneckArgs,
+  BottleneckResult
 } from "../src/tools/findPerformanceBottlenecks";
 import { parse, ApexLog, Limits, GovernorLimits } from "../src/ApexLogParser";
 import { extractMethods, SlowMethod } from "../src/tools/analyzeLogPerformance";
+import { decode } from "@toon-format/toon";
 
 // Mock dependencies
 jest.mock("fs", () => ({
@@ -206,7 +208,7 @@ describe("findPerformanceBottlenecks", () => {
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
 
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should contain all analysis types
       expect(parsedResult).toHaveProperty("cpuBottlenecks");
@@ -223,12 +225,12 @@ describe("findPerformanceBottlenecks", () => {
       });
 
       // Verify database analysis
-      expect(parsedResult.databaseBottlenecks.soqlQueries).toMatchObject({
+      expect(parsedResult.databaseBottlenecks!.soqlQueries).toMatchObject({
         used: 90,
         limit: 100,
         percentage: 90,
       });
-      expect(parsedResult.databaseBottlenecks.dmlStatements).toMatchObject({
+      expect(parsedResult.databaseBottlenecks!.dmlStatements).toMatchObject({
         used: 120,
         limit: 150,
         percentage: 80,
@@ -268,7 +270,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult).toHaveProperty("cpuBottlenecks");
       expect(parsedResult).toHaveProperty("databaseBottlenecks");
@@ -291,7 +293,7 @@ describe("findPerformanceBottlenecks", () => {
       mockParse.mockReturnValue(mockLog);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should only contain CPU analysis and governor limit warnings
       expect(parsedResult).toHaveProperty("cpuBottlenecks");
@@ -320,7 +322,7 @@ describe("findPerformanceBottlenecks", () => {
       mockParse.mockReturnValue(mockLog);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.cpuBottlenecks).toMatchObject({
         cpuTimeUsed: 5000,
@@ -343,7 +345,7 @@ describe("findPerformanceBottlenecks", () => {
       mockParse.mockReturnValue(mockLog);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.cpuBottlenecks).toMatchObject({
         cpuTimeUsed: 1000,
@@ -370,7 +372,7 @@ describe("findPerformanceBottlenecks", () => {
       mockParse.mockReturnValue(mockLog);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should only contain database analysis and governor limit warnings
       expect(parsedResult).not.toHaveProperty("cpuBottlenecks");
@@ -412,7 +414,7 @@ describe("findPerformanceBottlenecks", () => {
       mockParse.mockReturnValue(mockLog);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.databaseBottlenecks).toMatchObject({
         soqlQueries: {
@@ -448,7 +450,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue(mockMethods);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should only contain method analysis and governor limit warnings
       expect(parsedResult).not.toHaveProperty("cpuBottlenecks");
@@ -487,7 +489,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.methodBottlenecks).toMatchObject({
         totalMethods: 0,
@@ -533,11 +535,12 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue(methodsWithSingleNamespace);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
+      const methodBottlenecks = parsedResult.methodBottlenecks as any;
 
-      expect(parsedResult.methodBottlenecks.methodsByNamespace).toHaveLength(1);
+      expect(methodBottlenecks.methodsByNamespace).toHaveLength(1);
       expect(
-        parsedResult.methodBottlenecks.methodsByNamespace[0]
+        methodBottlenecks.methodsByNamespace[0]
       ).toMatchObject({
         namespace: "TestNamespace",
         methodCount: 2,
@@ -562,7 +565,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
         "cpuTime: 85.0% of limit used (8500/10000)"
@@ -595,7 +598,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.governorLimitWarnings.warnings).toHaveLength(0);
     });
@@ -613,7 +616,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.governorLimitWarnings.warnings).toHaveLength(0);
     });
@@ -632,7 +635,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.governorLimitWarnings.details).toMatchObject(
         expect.objectContaining(customLimits)
@@ -650,7 +653,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should not generate warning for exactly 80% (warning threshold is > 80%)
       expect(parsedResult.governorLimitWarnings.warnings).toHaveLength(0);
@@ -667,7 +670,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should generate warning for just over 80%
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
@@ -723,28 +726,31 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue(mockMethods);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
+      const databaseBottlenecks = parsedResult.databaseBottlenecks as any;
+      const methodBottlenecks = parsedResult.methodBottlenecks as any;
+      const governorLimitWarnings = parsedResult.governorLimitWarnings as any;
 
       // Should identify all bottleneck types
-      expect(parsedResult.cpuBottlenecks.warning).toBe(
+      expect(parsedResult.cpuBottlenecks!.warning).toBe(
         "High CPU usage detected - consider optimizing algorithms"
       );
-      expect(parsedResult.cpuBottlenecks.cpuUsagePercentage).toBe(95);
+      expect(parsedResult.cpuBottlenecks!.cpuUsagePercentage).toBe(95);
 
       // Database bottlenecks should show high usage
-      expect(parsedResult.databaseBottlenecks.soqlQueries.percentage).toBe(95);
+      expect(databaseBottlenecks.soqlQueries.percentage).toBe(95);
       expect(
-        parsedResult.databaseBottlenecks.dmlStatements.percentage
+        databaseBottlenecks.dmlStatements.percentage
       ).toBeCloseTo(93.33, 1);
-      expect(parsedResult.databaseBottlenecks.queryRows.percentage).toBe(96);
+      expect(databaseBottlenecks.queryRows.percentage).toBe(96);
 
       // Method analysis should show multiple namespaces
-      expect(parsedResult.methodBottlenecks.totalMethods).toBe(2);
-      expect(parsedResult.methodBottlenecks.methodsByNamespace).toHaveLength(2);
+      expect(methodBottlenecks.totalMethods).toBe(2);
+      expect(methodBottlenecks.methodsByNamespace).toHaveLength(2);
 
       // Multiple governor limit warnings
       expect(
-        parsedResult.governorLimitWarnings.warnings.length
+        governorLimitWarnings.warnings.length
       ).toBeGreaterThan(3);
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
         "cpuTime: 95.0% of limit used (9500/10000)"
@@ -788,21 +794,23 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue(mockMethods);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
+      const databaseBottlenecks = parsedResult.databaseBottlenecks as any;
+      const methodBottlenecks = parsedResult.methodBottlenecks as any;
 
       // No CPU warning
-      expect(parsedResult.cpuBottlenecks.warning).toBeNull();
-      expect(parsedResult.cpuBottlenecks.cpuUsagePercentage).toBe(10);
+      expect(parsedResult.cpuBottlenecks!.warning).toBeNull();
+      expect(parsedResult.cpuBottlenecks!.cpuUsagePercentage).toBe(10);
 
       // Low database usage
-      expect(parsedResult.databaseBottlenecks.soqlQueries.percentage).toBe(5);
+      expect(databaseBottlenecks.soqlQueries.percentage).toBe(5);
       expect(
-        parsedResult.databaseBottlenecks.dmlStatements.percentage
+        databaseBottlenecks.dmlStatements.percentage
       ).toBeCloseTo(6.67, 1);
-      expect(parsedResult.databaseBottlenecks.queryRows.percentage).toBe(2);
+      expect(databaseBottlenecks.queryRows.percentage).toBe(2);
 
       // Simple method analysis
-      expect(parsedResult.methodBottlenecks.totalMethods).toBe(1);
+      expect(methodBottlenecks.totalMethods).toBe(1);
 
       // No governor limit warnings
       expect(parsedResult.governorLimitWarnings.warnings).toHaveLength(0);
@@ -826,7 +834,7 @@ describe("findPerformanceBottlenecks", () => {
       expect(result.content[0]).toHaveProperty("text");
 
       // Validate JSON structure
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
       expect(parsedResult).toHaveProperty("governorLimitWarnings");
       expect(parsedResult.governorLimitWarnings).toHaveProperty("warnings");
       expect(parsedResult.governorLimitWarnings).toHaveProperty("details");
@@ -846,7 +854,7 @@ describe("findPerformanceBottlenecks", () => {
       mockExtractMethods.mockReturnValue([]);
 
       const result = await findPerformanceBottlenecks(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should still work without errors
       expect(parsedResult).toHaveProperty("governorLimitWarnings");
@@ -855,4 +863,11 @@ describe("findPerformanceBottlenecks", () => {
       );
     });
   });
+
+  // Helper function for decoding TOON-formatted data
+  function toonDecode(result: any): BottleneckResult {
+    return decode(
+      result.content[0].text
+    ) as unknown as BottleneckResult;
+  }
 });

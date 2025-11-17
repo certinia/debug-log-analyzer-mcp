@@ -12,6 +12,7 @@ import {
   analyzeLogPerformanceTool,
 } from "../src/tools/analyzeLogPerformance";
 import { parse } from "../src/ApexLogParser";
+import { decode } from "@toon-format/toon";
 
 // Mock file system operations
 jest.mock("fs", () => ({
@@ -98,9 +99,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(3);
       expect(parsedResult.totalExecutionTime).toBe(1000000000); // 1 second in ns
@@ -120,9 +119,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.slowestMethods).toHaveLength(2);
       expect(parsedResult.slowestMethods[0].name).toBe("SlowMethod");
@@ -139,9 +136,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(2); // Only SlowMethod and MediumMethod
       expect(parsedResult.slowestMethods).toHaveLength(2);
@@ -162,9 +157,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(1);
       expect(parsedResult.slowestMethods).toHaveLength(1);
@@ -238,9 +231,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.summary).toContain("Analysis found 3 methods");
       expect(parsedResult.summary).toContain("SlowMethod");
@@ -259,9 +250,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.summary).toBe(
         "No methods found matching the criteria."
@@ -278,9 +267,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       const soqlRecommendation = parsedResult.recommendations.find(
         (rec) =>
@@ -296,9 +283,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       const dmlRecommendation = parsedResult.recommendations.find(
         (rec) => rec.includes("DML operations") && rec.includes("bulkifying")
@@ -313,9 +298,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       const rowsRecommendation = parsedResult.recommendations.find(
         (rec) => rec.includes("SOQL rows") && rec.includes("WHERE clauses")
@@ -330,9 +313,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       const percentageRecommendation = parsedResult.recommendations.find(
         (rec) =>
@@ -349,9 +330,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.recommendations).toContain(
         "Performance looks good! No obvious bottlenecks detected in the analyzed methods."
@@ -368,9 +347,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       // Should only mention first 3 methods in recommendations
       const methodMentions = parsedResult.recommendations.filter(
@@ -396,9 +373,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(0);
       expect(parsedResult.slowestMethods).toHaveLength(0);
@@ -417,9 +392,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(0);
       expect(parsedResult.slowestMethods).toHaveLength(0);
@@ -459,9 +432,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       const method = parsedResult.slowestMethods[0];
       expect(typeof method.name).toBe("string");
@@ -485,9 +456,7 @@ describe("analyzeLogPerformance", () => {
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
-      const parsedResult: LogAnalysisResult = JSON.parse(
-        result.content[0].text
-      );
+      const parsedResult = toonDecode(result);
 
       expect(typeof parsedResult.totalMethods).toBe("number");
       expect(typeof parsedResult.totalExecutionTime).toBe("number");
@@ -496,6 +465,13 @@ describe("analyzeLogPerformance", () => {
       expect(Array.isArray(parsedResult.recommendations)).toBe(true);
     });
   });
+
+  // Helper function for decoding TOON-formatted data
+  function toonDecode(result: any): LogAnalysisResult {
+    return decode(
+      result.content[0].text
+    ) as unknown as LogAnalysisResult;
+  }
 
   // Helper functions for creating mock data
   function setupMocksForSuccess(mockApexLog: any): void {

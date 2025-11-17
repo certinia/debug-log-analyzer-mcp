@@ -8,6 +8,7 @@ export default {
   },
   moduleNameMapper: {
     "^(\\.{1,2}/.*)\\.js$": "$1",
+    "^@toon-format/toon$": "<rootDir>/tests/__mocks__/@toon-format/toon.ts",
   },
   collectCoverageFrom: [
     "src/**/*.ts",
