@@ -73,7 +73,7 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
     content: [
       {
         type: "text",
-        text: encode(bottlenecks)
+        text: encode(bottlenecks),
       },
     ],
   };
@@ -94,7 +94,6 @@ function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
         warning: "High CPU usage detected - consider optimizing algorithms",
       }
     : {};
-
 }
 
 function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
@@ -103,7 +102,8 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
 
   const soqlPercentage =
     governorLimits.soqlQueries.limit > 0
-      ? (governorLimits.soqlQueries.used / governorLimits.soqlQueries.limit) * 100
+      ? (governorLimits.soqlQueries.used / governorLimits.soqlQueries.limit) *
+        100
       : 0;
 
   if (soqlPercentage > 80) {
@@ -116,7 +116,9 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
 
   const dmlPercentage =
     governorLimits.dmlStatements.limit > 0
-      ? (governorLimits.dmlStatements.used / governorLimits.dmlStatements.limit) * 100
+      ? (governorLimits.dmlStatements.used /
+          governorLimits.dmlStatements.limit) *
+        100
       : 0;
 
   if (dmlPercentage > 80) {
@@ -188,22 +190,23 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
 
   const reducedLimits = Object.entries(limits).reduce(
     (acc: Record<string, unknown>, [key, value]: [string, any]) => {
-      if (value.used > 0) {
-        acc[key] = value;
+      if (key !== "byNamespace" && value.limit > 0) {
+        const percentage = (value.used / value.limit) * 100;
+        if (percentage > 80) {
+          acc[key] = value;
+        }
       }
       return acc;
     },
     {}
   );
 
-
-  return {
-    warnings,
-    // Only include limits with usage
-    details: reducedLimits,
-    note:
-      warnings.length === 0
-        ? "No governor limits approaching their thresholds detected."
-        : undefined,
-  };
+  return warnings.length === 0
+    ? { note: "No governor limits approaching their thresholds." }
+    : {
+        warnings,
+        // Only include limits with usage
+        details: reducedLimits,
+        note: undefined,
+      };
 }

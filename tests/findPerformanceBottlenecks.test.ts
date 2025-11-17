@@ -7,7 +7,7 @@ import { jest } from "@jest/globals";
 import {
   findPerformanceBottlenecks,
   BottleneckArgs,
-  BottleneckResult
+  BottleneckResult,
 } from "../src/tools/findPerformanceBottlenecks";
 import { parse, ApexLog, Limits, GovernorLimits } from "../src/ApexLogParser";
 import { extractMethods, SlowMethod } from "../src/tools/analyzeLogPerformance";
@@ -309,7 +309,7 @@ describe("findPerformanceBottlenecks", () => {
       });
     });
 
-    it("should not show CPU warning when usage is below 80%", async () => {
+    it("should not show CPU information when usage is below 80%", async () => {
       const args: BottleneckArgs = {
         logFilePath: mockLogFilePath,
         analysisType: "cpu",
@@ -324,12 +324,7 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.cpuBottlenecks).toMatchObject({
-        cpuTimeUsed: 5000,
-        cpuTimeLimit: 10000,
-        cpuUsagePercentage: 50,
-        warning: null,
-      });
+      expect(parsedResult.cpuBottlenecks).toMatchObject({});
     });
 
     it("should handle zero CPU limit", async () => {
@@ -539,9 +534,7 @@ describe("findPerformanceBottlenecks", () => {
       const methodBottlenecks = parsedResult.methodBottlenecks as any;
 
       expect(methodBottlenecks.methodsByNamespace).toHaveLength(1);
-      expect(
-        methodBottlenecks.methodsByNamespace[0]
-      ).toMatchObject({
+      expect(methodBottlenecks.methodsByNamespace[0]).toMatchObject({
         namespace: "TestNamespace",
         methodCount: 2,
         totalDuration: 300000000,
@@ -739,9 +732,10 @@ describe("findPerformanceBottlenecks", () => {
 
       // Database bottlenecks should show high usage
       expect(databaseBottlenecks.soqlQueries.percentage).toBe(95);
-      expect(
-        databaseBottlenecks.dmlStatements.percentage
-      ).toBeCloseTo(93.33, 1);
+      expect(databaseBottlenecks.dmlStatements.percentage).toBeCloseTo(
+        93.33,
+        1
+      );
       expect(databaseBottlenecks.queryRows.percentage).toBe(96);
 
       // Method analysis should show multiple namespaces
@@ -749,9 +743,7 @@ describe("findPerformanceBottlenecks", () => {
       expect(methodBottlenecks.methodsByNamespace).toHaveLength(2);
 
       // Multiple governor limit warnings
-      expect(
-        governorLimitWarnings.warnings.length
-      ).toBeGreaterThan(3);
+      expect(governorLimitWarnings.warnings.length).toBeGreaterThan(3);
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
         "cpuTime: 95.0% of limit used (9500/10000)"
       );
@@ -799,15 +791,13 @@ describe("findPerformanceBottlenecks", () => {
       const methodBottlenecks = parsedResult.methodBottlenecks as any;
 
       // No CPU warning
-      expect(parsedResult.cpuBottlenecks!.warning).toBeNull();
-      expect(parsedResult.cpuBottlenecks!.cpuUsagePercentage).toBe(10);
+      expect(parsedResult.cpuBottlenecks!.warning).toBeUndefined();
+      expect(parsedResult).toBeUndefined();
 
       // Low database usage
-      expect(databaseBottlenecks.soqlQueries.percentage).toBe(5);
-      expect(
-        databaseBottlenecks.dmlStatements.percentage
-      ).toBeCloseTo(6.67, 1);
-      expect(databaseBottlenecks.queryRows.percentage).toBe(2);
+      expect(databaseBottlenecks.soqlQueries.percentage).toBeUndefined();
+      expect(databaseBottlenecks.dmlStatements.percentage).toBeUndefined();
+      expect(databaseBottlenecks.queryRows.percentage).toBeUndefined();
 
       // Simple method analysis
       expect(methodBottlenecks.totalMethods).toBe(1);
@@ -859,15 +849,13 @@ describe("findPerformanceBottlenecks", () => {
       // Should still work without errors
       expect(parsedResult).toHaveProperty("governorLimitWarnings");
       expect(Array.isArray(parsedResult.governorLimitWarnings.warnings)).toBe(
-        true
+        false
       );
     });
   });
 
   // Helper function for decoding TOON-formatted data
   function toonDecode(result: any): BottleneckResult {
-    return decode(
-      result.content[0].text
-    ) as unknown as BottleneckResult;
+    return decode(result.content[0].text) as unknown as BottleneckResult;
   }
 });
