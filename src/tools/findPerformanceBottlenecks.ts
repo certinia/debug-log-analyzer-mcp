@@ -82,16 +82,13 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
 }
 
 function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
-  const governorLimits = apexLog.governorLimits;
-  const cpuUsagePercent =
-    governorLimits.cpuTime.limit > 0
-      ? (governorLimits.cpuTime.used / governorLimits.cpuTime.limit) * 100
-      : 0;
+  const { used, limit } = apexLog.governorLimits.cpuTime;
+  const cpuUsagePercent = limit > 0 ? (used / limit) * 100 : 0;
 
   return cpuUsagePercent > WARNING_THRESHOLD
     ? {
-        cpuTimeUsed: governorLimits.cpuTime.used,
-        cpuTimeLimit: governorLimits.cpuTime.limit,
+        cpuTimeUsed: used,
+        cpuTimeLimit: limit,
         cpuUsagePercentage: cpuUsagePercent,
         warning: "High CPU usage detected - consider optimizing algorithms",
       }
