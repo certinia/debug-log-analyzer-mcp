@@ -31,7 +31,7 @@ export async function connect(): Promise<Connection> {
     await connection.login(orgUsername, orgPassword);
     return connection;
   } catch (error) {
-    console.error("Failed to connect to Salesforce:", error);
+    console.error(`Failed to connect to Salesforce: ${error}`);
     throw error;
   }
 }
