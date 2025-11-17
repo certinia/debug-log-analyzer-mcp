@@ -7,11 +7,10 @@ export async function ensureTraceFlag(
   tracedEntityId: string,
   debugLevelId: string
 ): Promise<void> {
-  try {
-    await getActiveTraceFlag(connection, tracedEntityId);
+  const existingTraceFlag = await findActiveTraceFlag(connection, tracedEntityId);
+
+  if (existingTraceFlag) {
     return;
-  } catch {
-    // No active trace flag found, create one
   }
 
   const createResult = await createTraceFlag(
@@ -27,10 +26,10 @@ export async function ensureTraceFlag(
   }
 }
 
-async function getActiveTraceFlag(
+async function findActiveTraceFlag(
   connection: Connection,
   tracedEntityId: string
-): Promise<any> {
+): Promise<any | null> {
   const now = new Date().toISOString();
   const result = await connection.tooling.query(
     `SELECT Id, TracedEntityId, DebugLevelId, StartDate, ExpirationDate
@@ -41,15 +40,7 @@ async function getActiveTraceFlag(
      LIMIT 1`
   );
 
-  if (result.records.length === 0) {
-    throw new Error("No active TraceFlag found!");
-  }
-
-  if (!result.records[0]) {
-    throw new Error("Found an empty TraceFlag!");
-  }
-
-  return result.records[0];
+  return result.records.length > 0 ? result.records[0] : null;
 }
 
 async function createTraceFlag(

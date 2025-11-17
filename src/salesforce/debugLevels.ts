@@ -2,55 +2,44 @@ import { Connection } from "jsforce";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
 const DEVELOPER_NAME_FIELD = "DeveloperName";
+const MCP_DEBUG_LEVEL_NAME = "LANA_MCP_Debug_Level";
 
 export async function getOrCreateDebugLevelId(
   connection: Connection
 ): Promise<string> {
-  let debugLevelId: string;
+  const existingDebugLevelId = await findDebugLevelId(connection);
 
-  try {
-    debugLevelId = await getDebugLevelId(connection);
-  } catch {
-    debugLevelId = await createDebugLevel(connection, "LANA_Debug_Level");
+  if (existingDebugLevelId) {
+    return existingDebugLevelId;
   }
 
-  return debugLevelId;
+  return await createDebugLevel(connection);
 }
 
-async function getDebugLevelId(
-  connection: Connection,
-  developerName?: string
-): Promise<string> {
-  // If no name provided, get the first available debug level
-  const queryStr = developerName
-    ? `SELECT Id, ${DEVELOPER_NAME_FIELD} FROM ${DEBUG_LEVEL_SOBJECT} WHERE ${DEVELOPER_NAME_FIELD} = '${developerName}'`
-    : `SELECT Id, ${DEVELOPER_NAME_FIELD} FROM ${DEBUG_LEVEL_SOBJECT} LIMIT 1`;
-
-  const result = await connection.tooling.query(queryStr);
+async function findDebugLevelId(connection: Connection): Promise<string | null> {
+  const result = await connection.tooling.query(
+    `SELECT Id, ${DEVELOPER_NAME_FIELD}, ApexCode, ApexProfiling, Database
+     FROM ${DEBUG_LEVEL_SOBJECT}
+     WHERE ApexCode = 'FINEST'
+     AND ApexProfiling = 'FINEST'
+     AND Database = 'FINEST'
+     LIMIT 1`
+  );
 
   if (result.records.length === 0) {
-    throw new Error(
-      developerName
-        ? `DebugLevel not found with name ${developerName}`
-        : "No DebugLevel found in org"
-    );
+    return null;
   }
 
   const debugLevelId = result.records[0].Id;
-  if (!debugLevelId) {
-    throw new Error("DebugLevel Id is undefined");
-  }
-
-  return debugLevelId;
+  return debugLevelId || null;
 }
 
 async function createDebugLevel(
-  connection: Connection,
-  developerName: string = "LANA_MCP_Debug_Level"
+  connection: Connection
 ): Promise<string> {
   const result = await connection.tooling.sobject(DEBUG_LEVEL_SOBJECT).create({
-    DeveloperName: developerName,
-    MasterLabel: developerName,
+    DeveloperName: MCP_DEBUG_LEVEL_NAME,
+    MasterLabel: MCP_DEBUG_LEVEL_NAME,
     ApexCode: "FINEST",
     ApexProfiling: "FINEST",
     Callout: "FINEST",
