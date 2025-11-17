@@ -1,6 +1,7 @@
 import { Connection } from "jsforce";
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
+const USER_DEBUG = "USER_DEBUG";
 
 export async function ensureTraceFlag(
   connection: Connection,
@@ -36,7 +37,7 @@ async function findActiveTraceFlag(
      FROM ${TRACE_FLAG_SOBJECT}
      WHERE TracedEntityId = '${tracedEntityId}'
      AND ExpirationDate > ${now}
-     AND LogType = 'USER_DEBUG'
+     AND LogType = '${USER_DEBUG}'
      LIMIT 1`
   );
 
@@ -53,6 +54,6 @@ async function createTraceFlag(
     DebugLevelId: debugLevelId,
     StartDate: new Date().toISOString(),
     ExpirationDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    LogType: "USER_DEBUG",
+    LogType: USER_DEBUG,
   });
 }
