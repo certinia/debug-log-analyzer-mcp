@@ -40,6 +40,7 @@ describe("Trace Flags", () => {
     const debugLevelId = "200000000000000000";
     const now = "2025-01-15T09:00:00.000Z";
     const tomorrow = "2025-01-16T09:00:00.000Z";
+    const userDebug = "USER_DEBUG";
 
     beforeEach(() => {
       jest.useFakeTimers();
@@ -75,7 +76,7 @@ describe("Trace Flags", () => {
         expect.stringContaining(`WHERE TracedEntityId = '${tracedEntityId}'`)
       );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("AND LogType = 'USER_DEBUG'")
+        expect.stringContaining(`AND LogType = '${userDebug}'`)
       );
       expect(mockCreate).not.toHaveBeenCalled();
     });
@@ -99,7 +100,7 @@ describe("Trace Flags", () => {
         DebugLevelId: debugLevelId,
         StartDate: now,
         ExpirationDate: tomorrow,
-        LogType: "USER_DEBUG",
+        LogType: userDebug,
       });
     });
 
@@ -211,7 +212,7 @@ describe("Trace Flags", () => {
       await ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId);
 
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("AND LogType = 'USER_DEBUG'")
+        expect.stringContaining(`AND LogType = '${userDebug}'`)
       );
     });
 
@@ -229,7 +230,7 @@ describe("Trace Flags", () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          LogType: "USER_DEBUG",
+          LogType: userDebug,
         })
       );
     });
