@@ -41,6 +41,8 @@ export const findPerformanceBottlenecksTool = {
   },
 };
 
+export const WARNING_THRESHOLD = 80;
+
 export async function findPerformanceBottlenecks(args: BottleneckArgs) {
   const { logFilePath, analysisType = "all" } = args;
 
@@ -86,7 +88,7 @@ function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       ? (governorLimits.cpuTime.used / governorLimits.cpuTime.limit) * 100
       : 0;
 
-  return cpuUsagePercent > 80
+  return cpuUsagePercent > WARNING_THRESHOLD
     ? {
         cpuTimeUsed: governorLimits.cpuTime.used,
         cpuTimeLimit: governorLimits.cpuTime.limit,
@@ -106,7 +108,7 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
         100
       : 0;
 
-  if (soqlPercentage > 80) {
+  if (soqlPercentage > WARNING_THRESHOLD) {
     bottlenecks.soqlQueries = {
       used: governorLimits.soqlQueries.used,
       limit: governorLimits.soqlQueries.limit,
@@ -121,7 +123,7 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
         100
       : 0;
 
-  if (dmlPercentage > 80) {
+  if (dmlPercentage > WARNING_THRESHOLD) {
     bottlenecks.dmlStatements = {
       used: governorLimits.dmlStatements.used,
       limit: governorLimits.dmlStatements.limit,
@@ -134,7 +136,7 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) * 100
       : 0;
 
-  if (queryRowsPercentage > 80) {
+  if (queryRowsPercentage > WARNING_THRESHOLD) {
     bottlenecks.queryRows = {
       used: governorLimits.queryRows.used,
       limit: governorLimits.queryRows.limit,
@@ -178,7 +180,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
     if (key !== "byNamespace" && value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;
-      if (percentage > 80) {
+      if (percentage > WARNING_THRESHOLD) {
         warnings.push(
           `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${
             value.limit
@@ -192,7 +194,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
     (acc: Record<string, unknown>, [key, value]: [string, any]) => {
       if (key !== "byNamespace" && value.limit > 0) {
         const percentage = (value.used / value.limit) * 100;
-        if (percentage > 80) {
+        if (percentage > WARNING_THRESHOLD) {
           acc[key] = value;
         }
       }
