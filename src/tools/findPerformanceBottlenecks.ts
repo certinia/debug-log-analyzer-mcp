@@ -85,14 +85,16 @@ function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
   const { used, limit } = apexLog.governorLimits.cpuTime;
   const cpuUsagePercent = limit > 0 ? (used / limit) * 100 : 0;
 
-  return cpuUsagePercent > WARNING_THRESHOLD
-    ? {
-        cpuTimeUsed: used,
-        cpuTimeLimit: limit,
-        cpuUsagePercentage: cpuUsagePercent,
-        warning: "High CPU usage detected - consider optimizing algorithms",
-      }
-    : {};
+  if (cpuUsagePercent > WARNING_THRESHOLD) {
+    return {
+      cpuTimeUsed: used,
+      cpuTimeLimit: limit,
+      cpuUsagePercentage: cpuUsagePercent,
+      warning: "High CPU usage detected - consider optimizing algorithms",
+    };
+  }
+
+  return {};
 }
 
 function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
