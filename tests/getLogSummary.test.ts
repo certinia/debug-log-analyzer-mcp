@@ -15,6 +15,7 @@ import {
   LogIssue,
   ApexLogParser,
 } from "../src/ApexLogParser";
+import { decode, encode } from "@toon-format/toon";
 
 // Mock the dependencies
 jest.mock("fs", () => ({
@@ -193,7 +194,7 @@ describe("getLogSummary", () => {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
+            text: encode(
               {
                 file: "test-log.log",
                 totalExecutionTime: 12500,
@@ -211,9 +212,7 @@ describe("getLogSummary", () => {
                 namespaces: ["default", "MyNamespace"],
                 logIssues: 0,
                 parsingErrors: 0,
-              },
-              null,
-              2
+              }
             ),
           },
         ],
@@ -235,7 +234,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.namespaces).toEqual([
         "default",
@@ -270,7 +269,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.logIssues).toBe(1);
       expect(parsedResult.parsingErrors).toBe(1);
@@ -303,7 +302,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should count: 3 METHOD_ENTRY + 1 with subCategory 'Method' + 1 CONSTRUCTOR_ENTRY with subCategory 'Method' = 5
       expect(parsedResult.totalMethods).toBe(5);
@@ -348,7 +347,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalExecutionTime).toBe(0);
       expect(parsedResult.totalMethods).toBe(0);
@@ -390,7 +389,7 @@ describe("getLogSummary", () => {
         };
 
         const result = await getLogSummary(args);
-        const parsedResult = JSON.parse(result.content[0].text);
+        const parsedResult = toonDecode(result);
 
         expect(parsedResult.file).toBe(testCase.expected);
         expect(mockPath.basename).toHaveBeenCalledWith(testCase.path);
@@ -488,7 +487,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.namespaces).toEqual([]);
       expect(parsedResult.logIssues).toBe(0);
@@ -522,7 +521,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should count: 1 METHOD_ENTRY + 1 with subCategory 'Method' = 2
       expect(parsedResult.totalMethods).toBe(2);
@@ -559,7 +558,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       // Should count: 6 METHOD_ENTRY nodes + 1 with subCategory 'Method' + 1 nested METHOD_ENTRY = 8
       expect(parsedResult.totalMethods).toBe(8);
@@ -588,7 +587,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(0);
     });
@@ -627,7 +626,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.governorLimits).toEqual({
         cpuTime: { used: 8000, limit: 10000 },
@@ -669,7 +668,7 @@ describe("getLogSummary", () => {
       };
 
       const result = await getLogSummary(args);
-      const parsedResult = JSON.parse(result.content[0].text);
+      const parsedResult = toonDecode(result);
 
       expect(parsedResult.governorLimits.cpuTime.used).toBe(10000);
       expect(parsedResult.governorLimits.cpuTime.limit).toBe(10000);
@@ -681,4 +680,11 @@ describe("getLogSummary", () => {
       expect(parsedResult.governorLimits.dmlStatements.limit).toBe(150);
     });
   });
+
+  // Helper function for decoding TOON-formatted data
+  function toonDecode(result: any): any {
+    return decode(
+      result.content[0].text
+    ) as any;
+  }
 });

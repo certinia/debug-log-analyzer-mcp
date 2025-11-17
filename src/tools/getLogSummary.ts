@@ -5,6 +5,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
+import { encode } from "@toon-format/toon";
 
 export interface LogSummaryArgs {
   logFilePath: string;
@@ -61,7 +62,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
     content: [
       {
         type: "text",
-        text: JSON.stringify(summary, null, 2),
+        text: encode(summary)
       },
     ],
   };
