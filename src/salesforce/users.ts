@@ -1,4 +1,4 @@
-import { Connection } from "jsforce";
+import { Connection } from "@salesforce/core";
 
 export async function getUserIdByUsername(
   connection: Connection,

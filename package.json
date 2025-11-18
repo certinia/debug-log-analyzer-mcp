@@ -27,9 +27,9 @@
   "license": "SEE LICENSE IN ../LICENSE.txt",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.17.3",
+    "@salesforce/core": "^8.23.4",
     "@toon-format/toon": "^1.0.0",
-    "dotenv": "^17.2.3",
-    "jsforce": "^3.10.8"
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

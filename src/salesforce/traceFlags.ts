@@ -1,4 +1,4 @@
-import { Connection } from "jsforce";
+import { Connection } from "@salesforce/core";
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
 const USER_DEBUG = "USER_DEBUG";

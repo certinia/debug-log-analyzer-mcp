@@ -1,37 +1,25 @@
-import { Connection } from "jsforce";
+import { Connection, AuthInfo } from "@salesforce/core";
 import env from "dotenv";
 
 env.config();
 
 function getUserDetails() {
   const orgUsername = process.env.ORG_USERNAME;
-  const orgPassword = process.env.ORG_PASSWORD;
-  const orgSecurityToken = process.env.ORG_SECURITY_TOKEN || "";
-  const orgLoginUrl = process.env.ORG_LOGIN_URL || "";
 
-  if (!orgUsername || !orgPassword || !orgSecurityToken || !orgLoginUrl) {
+  if (!orgUsername) {
     throw new Error(
-      "Please set valid ORG_USERNAME, ORG_PASSWORD, ORG_SECURITY_TOKEN, and ORG_LOGIN_URL environment variables in your .env file"
+      "Please set a valid ORG_USERNAME environment variable in your .env file"
     );
   }
 
-  const passwordWithToken = orgPassword + orgSecurityToken;
-
-  return { orgUsername, orgPassword: passwordWithToken, orgLoginUrl };
+  return orgUsername;
 }
 
 export async function connect(): Promise<Connection> {
-  const { orgUsername, orgPassword, orgLoginUrl } = getUserDetails();
+  const orgUsername = getUserDetails();
 
-  try {
-    const connection = new Connection({
-      loginUrl: orgLoginUrl,
-    });
+  const authInfo = await AuthInfo.create({ username: orgUsername });
+  const connection = await Connection.create({ authInfo });
 
-    await connection.login(orgUsername, orgPassword);
-    return connection;
-  } catch (error) {
-    console.error(`Failed to connect to Salesforce: ${error}`);
-    throw error;
-  }
+  return connection;
 }

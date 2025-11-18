@@ -3,7 +3,7 @@
  */
 
 import { jest, describe, it, expect, beforeEach } from "@jest/globals";
-import { Connection } from "jsforce";
+import { Connection } from "@salesforce/core";
 import { getUserIdByUsername } from "../../src/salesforce/users";
 
 describe("Users", () => {

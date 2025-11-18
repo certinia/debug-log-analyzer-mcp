@@ -1,4 +1,4 @@
-import { Connection } from "jsforce";
+import { Connection } from "@salesforce/core";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
 const DEVELOPER_NAME_FIELD = "DeveloperName";
