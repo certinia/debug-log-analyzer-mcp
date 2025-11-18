@@ -41,6 +41,8 @@ export const findPerformanceBottlenecksTool = {
   },
 };
 
+export const WARNING_THRESHOLD = 80;
+
 export async function findPerformanceBottlenecks(args: BottleneckArgs) {
   const { logFilePath, analysisType = "all" } = args;
 
@@ -73,63 +75,75 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
     content: [
       {
         type: "text",
-        text: encode(bottlenecks)
+        text: encode(bottlenecks),
       },
     ],
   };
 }
 
 function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
-  const governorLimits = apexLog.governorLimits;
-  const cpuUsagePercent =
-    governorLimits.cpuTime.limit > 0
-      ? (governorLimits.cpuTime.used / governorLimits.cpuTime.limit) * 100
-      : 0;
+  const { used, limit } = apexLog.governorLimits.cpuTime;
+  const cpuUsagePercent = limit > 0 ? (used / limit) * 100 : 0;
 
-  return {
-    cpuTimeUsed: governorLimits.cpuTime.used,
-    cpuTimeLimit: governorLimits.cpuTime.limit,
-    cpuUsagePercentage: cpuUsagePercent,
-    warning:
-      cpuUsagePercent > 80
-        ? "High CPU usage detected - consider optimizing algorithms"
-        : null,
-  };
+  if (cpuUsagePercent > WARNING_THRESHOLD) {
+    return {
+      cpuTimeUsed: used,
+      cpuTimeLimit: limit,
+      cpuUsagePercentage: cpuUsagePercent,
+      warning: "High CPU usage detected - consider optimizing algorithms",
+    };
+  }
+
+  return {};
 }
 
 function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
   const governorLimits = apexLog.governorLimits;
-  return {
-    soqlQueries: {
+  const bottlenecks: Record<string, unknown> = {};
+
+  const soqlPercentage =
+    governorLimits.soqlQueries.limit > 0
+      ? (governorLimits.soqlQueries.used / governorLimits.soqlQueries.limit) *
+        100
+      : 0;
+
+  if (soqlPercentage > WARNING_THRESHOLD) {
+    bottlenecks.soqlQueries = {
       used: governorLimits.soqlQueries.used,
       limit: governorLimits.soqlQueries.limit,
-      percentage:
-        governorLimits.soqlQueries.limit > 0
-          ? (governorLimits.soqlQueries.used /
-              governorLimits.soqlQueries.limit) *
-            100
-          : 0,
-    },
-    dmlStatements: {
+      percentage: soqlPercentage,
+    };
+  }
+
+  const dmlPercentage =
+    governorLimits.dmlStatements.limit > 0
+      ? (governorLimits.dmlStatements.used /
+          governorLimits.dmlStatements.limit) *
+        100
+      : 0;
+
+  if (dmlPercentage > WARNING_THRESHOLD) {
+    bottlenecks.dmlStatements = {
       used: governorLimits.dmlStatements.used,
       limit: governorLimits.dmlStatements.limit,
-      percentage:
-        governorLimits.dmlStatements.limit > 0
-          ? (governorLimits.dmlStatements.used /
-              governorLimits.dmlStatements.limit) *
-            100
-          : 0,
-    },
-    queryRows: {
+      percentage: dmlPercentage,
+    };
+  }
+
+  const queryRowsPercentage =
+    governorLimits.queryRows.limit > 0
+      ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) * 100
+      : 0;
+
+  if (queryRowsPercentage > WARNING_THRESHOLD) {
+    bottlenecks.queryRows = {
       used: governorLimits.queryRows.used,
       limit: governorLimits.queryRows.limit,
-      percentage:
-        governorLimits.queryRows.limit > 0
-          ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) *
-            100
-          : 0,
-    },
-  };
+      percentage: queryRowsPercentage,
+    };
+  }
+
+  return bottlenecks;
 }
 
 function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
@@ -165,7 +179,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
     if (key !== "byNamespace" && value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;
-      if (percentage > 80) {
+      if (percentage > WARNING_THRESHOLD) {
         warnings.push(
           `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${
             value.limit
@@ -177,21 +191,23 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
 
   const reducedLimits = Object.entries(limits).reduce(
     (acc: Record<string, unknown>, [key, value]: [string, any]) => {
-      if (value.used > 0) {
-        acc[key] = value;
+      if (key !== "byNamespace" && value.limit > 0) {
+        const percentage = (value.used / value.limit) * 100;
+        if (percentage > WARNING_THRESHOLD) {
+          acc[key] = value;
+        }
       }
       return acc;
     },
     {}
   );
 
-  return {
-    warnings,
-    // Only include limits with usage
-    details: reducedLimits,
-    note:
-      warnings.length === 0
-        ? "No governor limits approaching their thresholds detected."
-        : undefined,
-  };
+  return warnings.length === 0
+    ? { note: "No governor limits approaching their thresholds." }
+    : {
+        warnings,
+        // Only include limits with usage
+        details: reducedLimits,
+        note: undefined,
+      };
 }
