@@ -21,6 +21,7 @@ import {
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
 
+// Mock the connection
 const mockConnection = {
   query: jest.fn(),
   tooling: {
