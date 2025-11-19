@@ -10,6 +10,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { Connection } from "@salesforce/core";
 import {
   analyzeLogPerformance,
   analyzeLogPerformanceTool,
@@ -25,9 +26,16 @@ import {
   findPerformanceBottlenecksTool,
   BottleneckArgs,
 } from "./tools/findPerformanceBottlenecks.js";
+import {
+  executeAnonymous,
+  executeAnonymousTool,
+  ExecuteAnonymousArgs,
+} from "./tools/executeAnonymous.js";
+import { connect } from "./salesforce/connection.js";
 
 class LanaServer {
   private server: Server;
+  private connection: Connection | null = null;
 
   constructor() {
     this.server = new Server(
@@ -62,6 +70,7 @@ class LanaServer {
         analyzeLogPerformanceTool,
         getLogSummaryTool,
         findPerformanceBottlenecksTool,
+        executeAnonymousTool,
       ],
     }));
 
@@ -79,6 +88,14 @@ class LanaServer {
           case "find_performance_bottlenecks":
             return await findPerformanceBottlenecks(
               args as unknown as BottleneckArgs
+            );
+          case "execute_anonymous":
+            if (!this.connection) {
+              throw new Error("Connection not initialised!");
+            }
+            return await executeAnonymous(
+              this.connection,
+              args as unknown as ExecuteAnonymousArgs
             );
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -99,9 +116,22 @@ class LanaServer {
     });
   }
 
+  private async initializeConnection(): Promise<void> {
+    const username = process.env.ORG_USERNAME;
+
+    if (!username) {
+      throw new Error(
+        "Please set a valid ORG_USERNAME environment variable in your .env file"
+      );
+    }
+
+    this.connection = await connect();
+  }
+
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
+    await this.initializeConnection();
 
     console.error("LANA MCP Server running on stdio");
   }
