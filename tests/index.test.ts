@@ -20,6 +20,22 @@ import {
 // Mock the MCP SDK components
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
+
+const mockConnection = {
+  query: jest.fn(),
+  tooling: {
+    query: jest.fn(),
+    executeAnonymous: jest.fn(),
+  },
+} as any;
+
+const mockConnect = jest.fn() as jest.MockedFunction<any>;
+mockConnect.mockResolvedValue(mockConnection);
+
+jest.mock("../src/salesforce/connection", () => ({
+  connect: mockConnect,
+}));
+
 import { LanaServer } from "../src/index";
 
 // Mock the tool modules
@@ -86,6 +102,24 @@ jest.mock("../src/tools/findPerformanceBottlenecks", () => ({
   },
 }));
 
+jest.mock("../src/tools/executeAnonymous", () => ({
+  executeAnonymous: jest.fn(),
+  executeAnonymousTool: {
+    name: "execute_anonymous",
+    description: "Execute a snippet of anonymous Apex and retrieve the resulting log",
+    inputSchema: {
+      type: "object",
+      properties: {
+        apex: {
+          type: "string",
+          description: "The anonymous Apex to be executed",
+        },
+      },
+      required: ["apex"],
+    },
+  },
+}));
+
 // Import the tools after mocking
 import {
   analyzeLogPerformance,
@@ -96,6 +130,10 @@ import {
   findPerformanceBottlenecks,
   findPerformanceBottlenecksTool,
 } from "../src/tools/findPerformanceBottlenecks";
+import {
+  executeAnonymous,
+  executeAnonymousTool,
+} from "../src/tools/executeAnonymous";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -159,8 +197,20 @@ describe("LanaServer", () => {
     ],
   };
 
+  const mockExecuteAnonymousResult = {
+    content: [
+      {
+        type: "text",
+        text: "APEX DEBUG LOG CONTENT",
+      },
+    ],
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Set required environment variable for connection
+    process.env.ORG_USERNAME = "test@example.com";
 
     // Setup server mock
     mockSetRequestHandler = jest.fn();
@@ -196,6 +246,9 @@ describe("LanaServer", () => {
         typeof findPerformanceBottlenecks
       >
     ).mockResolvedValue(mockBottleneckResult);
+    (
+      executeAnonymous as jest.MockedFunction<typeof executeAnonymous>
+    ).mockResolvedValue(mockExecuteAnonymousResult);
 
     // Clear the module cache and re-import
     jest.resetModules();
@@ -284,6 +337,7 @@ describe("LanaServer", () => {
           analyzeLogPerformanceTool,
           getLogSummaryTool,
           findPerformanceBottlenecksTool,
+          executeAnonymousTool,
         ],
       });
     });
@@ -504,7 +558,7 @@ describe("LanaServer", () => {
 
       // Test tool listing
       const toolsResult = await listToolsHandler({} as any, {} as any);
-      expect(toolsResult.tools).toHaveLength(3);
+      expect(toolsResult.tools).toHaveLength(4);
       expect(toolsResult.tools[0].name).toBe("analyze_apex_log_performance");
 
       // Test tool execution
