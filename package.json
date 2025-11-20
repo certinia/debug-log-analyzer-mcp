@@ -9,7 +9,8 @@
     "lana-mcp-server": "dist/index.js"
   },
   "files": [
-    "dist",
+    "dist/**/*.ts",
+    "dist/**/*.js",
     "README.md",
     "LICENSE.txt"
   ],
