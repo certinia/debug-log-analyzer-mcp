@@ -27,9 +27,15 @@ export async function executeAnonymous(
   connection: Connection,
   args: ExecuteAnonymousArgs
 ) {
-  await validateTraceFlag(connection);
-
   const { apex } = args;
+
+  const username = connection.getUsername();
+  if (!username) {
+    throw new Error("Could not determine username from connection");
+  }
+
+  await validateTraceFlag(connection, username);
+
   const apexResult = await connection.tooling.executeAnonymous(apex);
 
   if (!apexResult || !apexResult.compiled) {
@@ -38,13 +44,7 @@ export async function executeAnonymous(
     );
   }
 
-  // Get the user ID from the connection
-  const username = process.env.ORG_USERNAME;
-  if (!username) {
-    throw new Error("ORG_USERNAME environment variable is not set");
-  }
   const userId = await getUserIdByUsername(connection, username);
-
   const logResult = await connection.query(
     `SELECT Id FROM ApexLog
      WHERE LogUserId = '${userId}'
@@ -69,15 +69,7 @@ export async function executeAnonymous(
   };
 }
 
-async function validateTraceFlag(connection: Connection) {
-  const username = process.env.ORG_USERNAME;
-
-  if (!username) {
-    throw new Error(
-      "Please set a valid ORG_USERNAME environment variable in your .env file"
-    );
-  }
-
+async function validateTraceFlag(connection: Connection, username: string) {
   const userId = await getUserIdByUsername(connection, username);
   const debugLevelId = await getOrCreateDebugLevelId(connection);
 

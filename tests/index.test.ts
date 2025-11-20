@@ -210,9 +210,6 @@ describe("LanaServer", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Set required environment variable for connection
-    process.env.ORG_USERNAME = "test@example.com";
-
     // Setup server mock
     mockSetRequestHandler = jest.fn();
     mockConnect = jest.fn();

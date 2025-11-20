@@ -8,7 +8,6 @@ import {
   it,
   expect,
   beforeEach,
-  afterEach,
 } from "@jest/globals";
 import {
   executeAnonymous,
@@ -43,17 +42,15 @@ describe("Execute Anonymous", () => {
   let mockExecuteAnonymous: any;
   let mockQuery: any;
   let mockRequest: any;
-  let originalEnv: NodeJS.ProcessEnv;
+  let mockGetUsername: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    originalEnv = { ...process.env };
-    process.env.ORG_USERNAME = "test@example.com";
-
     mockExecuteAnonymous = jest.fn();
     mockQuery = jest.fn();
     mockRequest = jest.fn();
+    mockGetUsername = jest.fn().mockReturnValue("test@example.com");
 
     mockTooling = {
       executeAnonymous: mockExecuteAnonymous,
@@ -63,6 +60,7 @@ describe("Execute Anonymous", () => {
       tooling: mockTooling,
       query: mockQuery,
       request: mockRequest,
+      getUsername: mockGetUsername,
       userInfo: {
         id: testUserId,
       },
@@ -79,10 +77,6 @@ describe("Execute Anonymous", () => {
     (
       ensureTraceFlag as jest.MockedFunction<typeof ensureTraceFlag>
     ).mockResolvedValue();
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
   });
 
   describe("executeAnonymous", () => {
@@ -134,12 +128,12 @@ describe("Execute Anonymous", () => {
       });
     });
 
-    it("should throw error when ORG_USERNAME is not set", async () => {
-      delete process.env.ORG_USERNAME;
+    it("should throw error when connection username cannot be determined", async () => {
+      mockGetUsername.mockReturnValue(null);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
       await expect(executeAnonymous(mockConnection, args)).rejects.toThrow(
-        "Please set a valid ORG_USERNAME environment variable in your .env file"
+        "Could not determine username from connection"
       );
 
       expect(getUserIdByUsername).not.toHaveBeenCalled();

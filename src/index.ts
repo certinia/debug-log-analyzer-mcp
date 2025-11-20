@@ -117,14 +117,6 @@ class LanaServer {
   }
 
   private async initializeConnection(): Promise<void> {
-    const username = process.env.ORG_USERNAME;
-
-    if (!username) {
-      throw new Error(
-        "Please set a valid ORG_USERNAME environment variable in your .env file"
-      );
-    }
-
     this.connection = await connect();
   }
 
