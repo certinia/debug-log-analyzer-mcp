@@ -26,13 +26,17 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Publish
+      - name: Configure NPM
         run: |
-          npm publish --registry ${{ secrets.REGISTRY_URL }}
-          cat ../ci/.npmrc >> .npmrc
-          echo $NPM_CERT | base64 --decode > client.cert
-          echo $NPM_KEY | base64 --decode > client.key
+          cat ci/.npmrc >> .npmrc
+          echo $NPM_CERT | base64 --decode > ci/client.cert
+          echo $NPM_KEY | base64 --decode > ci/client.key
         env:
-          NPM_AUTH: ${{ secrets.ARTIFACTORY_AUTH }}
           NPM_CERT: ${{ secrets.ARTIFACTORY_MTLS_CERT_BASE64 }}
           NPM_KEY: ${{ secrets.ARTIFACTORY_MTLS_KEY_BASE64 }}
+
+      - name: Publish
+        run: npm publish --registry ${{ secrets.REGISTRY_URL }}
+        env:
+          REGISTRY_BASE_URL: ${{ secrets.REGISTRY_BASE_URL }}
+          REGISTRY_AUTH: ${{ secrets.ARTIFACTORY_AUTH }}
