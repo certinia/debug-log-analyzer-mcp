@@ -39,4 +39,4 @@ jobs:
         run: npm publish --registry ${{ secrets.REGISTRY_URL }}
         env:
           REGISTRY_BASE_URL: ${{ secrets.REGISTRY_BASE_URL }}
-          REGISTRY_AUTH: ${{ secrets.ARTIFACTORY_AUTH }}
+          REGISTRY_AUTH: ${{ secrets.REGISTRY_AUTH }}
