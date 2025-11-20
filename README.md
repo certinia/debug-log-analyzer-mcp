@@ -1,14 +1,23 @@
-# LANA MCP Server
+# 🛠️ LANA MCP Server
 
 This is the Model Context Protocol (MCP) server for the LANA (Apex Log Analyzer) VS Code extension. It provides AI agents like GitHub Copilot with tools to analyze Salesforce Apex debug logs.
 
-## Features
+<!-- TODO: Check the page nav -->
 
-The MCP server provides three main tools:
+[Usage](#%EF%B8%8F-installation "Install Apex Log Analyzer in VS Code") |
+[Features](#-features "Go to Features") |
+[Documentation](#-documentation "Go to Documentation") |
+[Contributors](#%EF%B8%8F-contributors "Go to Contributors") |
+[License](#-license "Go to License")
+
+## 🚀 Features
+
+The MCP server provides four main tools:
 
 1. **analyze_apex_log_performance** - Identifies the slowest running methods in a debug log
 2. **get_apex_log_summary** - Provides a high-level summary of log execution
 3. **find_performance_bottlenecks** - Detects CPU, database, and method performance issues
+4. **execute_anonymous** - Executes anonymous Apex code and retrieves the resulting debug log
 
 ## Usage
 
@@ -20,32 +29,6 @@ The MCP server is automatically registered by the LANA VS Code extension. When t
 - "What are the performance bottlenecks in this Apex execution?"
 - "Summarize the database operations in this debug log"
 - "Find methods taking more than 100ms"
-
-## Development
-
-### Prerequisites
-
-- Node.js 18+
-- pnpm package manager
-
-### Building
-
-```bash
-pnpm install
-pnpm run build
-```
-
-### Running Standalone
-
-```bash
-pnpm run start
-```
-
-### Development Mode
-
-```bash
-pnpm run dev  # Watch mode
-```
 
 ## Architecture
 
@@ -65,3 +48,32 @@ The MCP server is automatically registered by the VS Code extension through:
 ## API Reference
 
 See the [MCP Server Instructions](../.github/instructions/mcp-server.instructions.md) for detailed API documentation.
+
+## 📚 Documentation
+
+<!-- TODO: Update the 'User Guide & Docs' link to match the new mcp server page  -->
+
+- [User Guide & Docs](https://certinia.github.io/debug-log-analyzer/)
+- [Contribute](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CONTRIBUTING.md)
+- [Develop](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/DEVELOPING.md)
+
+## ❤️ Contributors
+
+Thanks to our amazing contributors!
+
+<p align="center">
+  <a href="https://github.com/certinia/debug-log-analyzer-mcp/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=certinia/debug-log-analyzer-mcp&max=25" />
+  </a>
+</p>
+
+## 📄 License
+
+<p align="center">
+Copyright &copy; Certinia Inc. All rights reserved.
+</p>
+<p align="center">
+  <a href="https://opensource.org/licenses/BSD-3-Clause">
+    <img src="https://img.shields.io/badge/License-BSD_3--Clause-blue.svg?style=flat-square"/>
+  </a>
+</p>
