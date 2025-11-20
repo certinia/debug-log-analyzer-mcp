@@ -1,5 +1,5 @@
 {
-  "name": "lana-mcp",
+  "name": "@apexdevtools/lana-mcp",
   "version": "0.1.0",
   "description": "Model Context Protocol server for Apex Log Analysis",
   "type": "module",
@@ -39,7 +39,7 @@
     "log-analysis",
     "debugging"
   ],
-  "author": "Certinia",
+  "author": "Apex Dev Tools Team <apexdevtools@gmail.com> (https://github.com/apex-dev-tools)",
   "license": "SEE LICENSE IN LICENSE.txt",
   "repository": {
     "type": "git",
