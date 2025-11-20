@@ -23,7 +23,7 @@ Before you start developing, make sure you have the following tools installed:
 
 Once you’ve got these ready, you’re all set to get started! 🚀
 
-## 👨‍💻 Setting Up the Development Environment
+## 💻 Setting Up the Development Environment
 
 To get started, clone this repository and install the necessary dependencies.
 
@@ -59,7 +59,7 @@ sf config set target-org <username-or-alias> --global
 npm install -g @modelcontextprotocol/inspector
 ```
 
-## ⚙️ Building
+## 📦 Building
 
 You can build the server and prepare it for local development, run the watcher to re build automatically or production use. Here's how:
 
