@@ -43,9 +43,6 @@ The MCP server is automatically registered by the VS Code extension through:
 2. `lana/src/mcp/LanaMcpProvider.ts` - Implements the provider
 3. `lana/src/Context.ts` - Registers the provider on extension activation
 
-## 📖 API Reference
-
-See the [MCP Server Instructions](../.github/instructions/mcp-server.instructions.md) for detailed API documentation.
 
 ## 📚 Documentation
 
