@@ -77,4 +77,4 @@ The server provides four main capabilities:
 4. **Execute Anonymous**: Executes anonymous Apex code snippets and retrieves the resulting debug log
 
 Log analysis tools (1-3) accept absolute file paths to `.log` files and return structured JSON for AI processing.
-Anonymous execution accepts multi-line strings containing Apex and returns the entire contents of the log.
+Anonymous execution (4) accepts multi-line strings containing Apex and returns the entire contents of the log.
