@@ -32,7 +32,6 @@ jobs:
           cat ../ci/.npmrc >> .npmrc
           echo $NPM_CERT | base64 --decode > client.cert
           echo $NPM_KEY | base64 --decode > client.key
-        working-directory: dist
         env:
           NPM_AUTH: ${{ secrets.ARTIFACTORY_AUTH }}
           NPM_CERT: ${{ secrets.ARTIFACTORY_MTLS_CERT_BASE64 }}
