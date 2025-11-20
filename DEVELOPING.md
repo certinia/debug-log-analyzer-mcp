@@ -30,34 +30,34 @@ To get started, clone this repository and install the necessary dependencies.
 1. **Create a fork of the repository first**
 2. **Clone the repository:**
 
-```zsh
-git clone https://github.com/your-username/debug-log-analyzer-mcp.git
-cd debug-log-analyzer-mcp
-```
+   ```zsh
+   git clone https://github.com/your-username/debug-log-analyzer-mcp.git
+   cd debug-log-analyzer-mcp
+   ```
 
 3. **Install dependencies:**
 
    Use [pnpm](https://pnpm.io/) to install project dependencies:
 
-```zsh
-pnpm i
-```
+   ```zsh
+   pnpm i
+   ```
 
 4. **Set a default org**
 
    The execute anonymous Apex tool requires a default org to be set using the Salesforce CLI. To do this in a repository that has no `sfdx-project.json` like this one, set your default org globally:
 
-```zsh
-sf config set target-org <username-or-alias> --global
-```
+   ```zsh
+   sf config set target-org <username-or-alias> --global
+   ```
 
 5. **Optional: Install MCP Inspector**
 
    This will allow you to view a UI to easily interact with the MCP server:
 
-```zsh
-npm install -g @modelcontextprotocol/inspector
-```
+   ```zsh
+   npm install -g @modelcontextprotocol/inspector
+   ```
 
 ## 📦 Building
 
@@ -67,17 +67,17 @@ You can build the server and prepare it for local development, run the watcher t
 
    To build the server and then watch for file changes for a fast dev experience, use:
 
-```bash
-pnpm run dev
-```
+   ```bash
+   pnpm run dev
+   ```
 
 2. **Production Build:**
 
    To build the server, use:
 
-```bash
-pnpm run build
-```
+   ```bash
+   pnpm run build
+   ```
 
 ## 🚀 Running the Server Locally
 
@@ -85,15 +85,15 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
 
 1. **Run in terminal:**
 
-```zsh
-pnpm run start
-```
+   ```zsh
+   pnpm run start
+   ```
 
 2. **Run in MCP Inspector:**
 
-```zsh
-mcp-inspector node dist/index.js
-```
+   ```zsh
+   mcp-inspector node dist/index.js
+   ```
 
 ## 🧪 Testing Your Changes
 
