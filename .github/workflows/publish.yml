@@ -28,7 +28,7 @@ jobs:
 
       - name: Configure NPM
         run: |
-          cat ci/.npmrc >> .npmrc
+          cat ci/.npmrc > .npmrc
           echo $NPM_CERT | base64 --decode > ci/client.cert
           echo $NPM_KEY | base64 --decode > ci/client.key
         env:
