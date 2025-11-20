@@ -2,9 +2,7 @@
 
 This is the Model Context Protocol (MCP) server for the LANA (Apex Log Analyzer) VS Code extension. It provides AI agents like GitHub Copilot with tools to analyze Salesforce Apex debug logs.
 
-<!-- TODO: Check the page nav -->
-
-[Usage](#%EF%B8%8F-installation "Install Apex Log Analyzer in VS Code") |
+[Usage](#-usage "Go to usage guidelines") |
 [Features](#-features "Go to Features") |
 [Documentation](#-documentation "Go to Documentation") |
 [Contributors](#%EF%B8%8F-contributors "Go to Contributors") |
@@ -19,7 +17,7 @@ The MCP server provides four main tools:
 3. **find_performance_bottlenecks** - Detects CPU, database, and method performance issues
 4. **execute_anonymous** - Executes anonymous Apex code and retrieves the resulting debug log
 
-## Usage
+## 💡 Usage
 
 The MCP server is automatically registered by the LANA VS Code extension. When the extension is installed, AI agents in VS Code can use these tools to analyze Apex logs.
 
@@ -30,14 +28,14 @@ The MCP server is automatically registered by the LANA VS Code extension. When t
 - "Summarize the database operations in this debug log"
 - "Find methods taking more than 100ms"
 
-## Architecture
+## 🏗️ Architecture
 
 - Built with TypeScript and the MCP SDK
 - Uses the same `ApexLogParser` as the main LANA extension
 - Runs as a standalone Node.js process
 - Communicates via stdio transport
 
-## Integration
+## 🔌 Integration
 
 The MCP server is automatically registered by the VS Code extension through:
 
@@ -45,7 +43,7 @@ The MCP server is automatically registered by the VS Code extension through:
 2. `lana/src/mcp/LanaMcpProvider.ts` - Implements the provider
 3. `lana/src/Context.ts` - Registers the provider on extension activation
 
-## API Reference
+## 📖 API Reference
 
 See the [MCP Server Instructions](../.github/instructions/mcp-server.instructions.md) for detailed API documentation.
 
