@@ -1,0 +1,54 @@
+# Source files
+src/
+tests/
+*.test.ts
+*.spec.ts
+
+# Development files
+.github/
+.vscode/
+.husky/
+tsconfig.json
+jest.config.js
+eslint.config.js
+.eslintrc*
+.prettierrc*
+.editorconfig
+*ts.map
+*js.map
+
+# Environment and local files
+.env
+.env.*
+*.local
+
+# Documentation (keep README.md)
+DEVELOPING.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+CLAUDE.md
+
+# CI/CD
+ci/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Package manager
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Build artifacts
+coverage/
+*.log
+*.tsbuildinfo
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+*~

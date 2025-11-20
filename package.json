@@ -4,13 +4,29 @@
   "description": "Model Context Protocol server for Apex Log Analysis",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "lana-mcp-server": "dist/index.js"
   },
+  "files": [
+    "dist/**/*.ts",
+    "dist/**/*.js",
+    "README.md",
+    "LICENSE.txt"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "prepublishOnly": "pnpm run build",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -24,7 +40,15 @@
     "debugging"
   ],
   "author": "Certinia",
-  "license": "SEE LICENSE IN ../LICENSE.txt",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/certinia/debug-log-analyzer-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/certinia/debug-log-analyzer-mcp/issues"
+  },
+  "homepage": "https://github.com/certinia/debug-log-analyzer-mcp#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.17.3",
     "@salesforce/core": "^8.23.4",
