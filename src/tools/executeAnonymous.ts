@@ -25,7 +25,7 @@ export const executeAnonymousTool = {
 
 export async function executeAnonymous(
   connection: Connection,
-  args: ExecuteAnonymousArgs
+  args: ExecuteAnonymousArgs,
 ) {
   const { apex } = args;
 
@@ -40,23 +40,25 @@ export async function executeAnonymous(
 
   if (!apexResult || !apexResult.compiled) {
     throw new Error(
-      `Apex could not be compiled at line ${apexResult.line}, column ${apexResult.column}: ${apexResult.compileProblem}`
+      `Apex could not be compiled at line ${apexResult.line}, column ${apexResult.column}: ${apexResult.compileProblem}`,
     );
   }
 
   const userId = await getUserIdByUsername(connection, username);
-  const logResult = await connection.query(
-    `SELECT Id FROM ApexLog
-     WHERE LogUserId = '${userId}'
-     ORDER BY StartTime DESC
-     LIMIT 1`
-  );
 
-  if (!logResult || !logResult.records || logResult.records.length <= 0) {
+  // Note: There's no way to get the specific log ID from executeAnonymous.
+  // We retrieve the most recent log for this user, which could be incorrect
+  // if another process creates a log between execution and this query.
+  // Future enhancement: present a list of recent logs for user selection.
+  const logRecord = await connection
+    .sobject("ApexLog")
+    .findOne({ LogUserId: userId }, ["Id"], { sort: { StartTime: -1 } });
+
+  if (!logRecord) {
     throw new Error(`Could not retrieve log from anonymous execution.`);
   }
 
-  const logId = logResult.records[0].Id;
+  const logId = logRecord.Id;
   const logBody = await connection.request(`/sobjects/ApexLog/${logId}/Body/`);
 
   return {
