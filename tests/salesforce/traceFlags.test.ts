@@ -9,25 +9,23 @@ import { ensureTraceFlag } from "../../src/salesforce/traceFlags";
 describe("Trace Flags", () => {
   let mockConnection: jest.Mocked<Connection>;
   let mockTooling: any;
-  let mockQuery: any;
   let mockSobject: any;
   let mockCreate: any;
+  let mockFindOne: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockQuery = jest.fn();
     mockCreate = jest.fn();
-    mockSobject = jest.fn();
+    mockFindOne = jest.fn();
+    mockSobject = jest.fn().mockReturnValue({
+      create: mockCreate,
+      findOne: mockFindOne,
+    });
 
     mockTooling = {
-      query: mockQuery,
       sobject: mockSobject,
     };
-
-    mockSobject.mockReturnValue({
-      create: mockCreate,
-    });
 
     mockConnection = {
       tooling: mockTooling,
@@ -60,31 +58,24 @@ describe("Trace Flags", () => {
         ExpirationDate: tomorrow,
       };
 
-      mockQuery.mockResolvedValue({
-        records: [existingTraceFlag],
-      });
+      mockFindOne.mockResolvedValue(existingTraceFlag);
 
       await ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId);
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("SELECT Id, TracedEntityId, DebugLevelId, StartDate, ExpirationDate")
-      );
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("FROM TraceFlag")
-      );
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining(`WHERE TracedEntityId = '${tracedEntityId}'`)
-      );
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining(`AND LogType = '${userDebug}'`)
+      expect(mockSobject).toHaveBeenCalledWith("TraceFlag");
+      expect(mockFindOne).toHaveBeenCalledWith(
+        {
+          TracedEntityId: tracedEntityId,
+          ExpirationDate: { $gt: now },
+          LogType: userDebug,
+        },
+        ["Id", "TracedEntityId", "DebugLevelId", "StartDate", "ExpirationDate"],
       );
       expect(mockCreate).not.toHaveBeenCalled();
     });
 
     it("should create new trace flag when none exists", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       mockCreate.mockResolvedValue({
         success: true,
@@ -93,7 +84,6 @@ describe("Trace Flags", () => {
 
       await ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId);
 
-      expect(mockQuery).toHaveBeenCalled();
       expect(mockSobject).toHaveBeenCalledWith("TraceFlag");
       expect(mockCreate).toHaveBeenCalledWith({
         TracedEntityId: tracedEntityId,
@@ -105,9 +95,7 @@ describe("Trace Flags", () => {
     });
 
     it("should set expiration date 24 hours from now", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       mockCreate.mockResolvedValue({
         success: true,
@@ -120,14 +108,12 @@ describe("Trace Flags", () => {
         expect.objectContaining({
           StartDate: now,
           ExpirationDate: tomorrow,
-        })
+        }),
       );
     });
 
     it("should include errors in error message when creation fails", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       mockCreate.mockResolvedValue({
         success: false,
@@ -146,30 +132,26 @@ describe("Trace Flags", () => {
 
     it("should handle query errors gracefully", async () => {
       const queryError = new Error("Query failed");
-      mockQuery.mockRejectedValue(queryError);
+      mockFindOne.mockRejectedValue(queryError);
 
       await expect(
-        ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId)
+        ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId),
       ).rejects.toThrow("Query failed");
     });
 
     it("should handle creation errors gracefully", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       const createError = new Error("Network error");
       mockCreate.mockRejectedValue(createError);
 
       await expect(
-        ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId)
+        ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId),
       ).rejects.toThrow("Network error");
     });
 
     it("should query for active trace flags only (ExpirationDate > now)", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       mockCreate.mockResolvedValue({
         success: true,
@@ -178,31 +160,16 @@ describe("Trace Flags", () => {
 
       await ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId);
 
-      const queryCall = mockQuery.mock.calls[0][0];
-      expect(queryCall).toContain(`ExpirationDate > ${now}`);
-    });
-
-    it("should query with LIMIT 1 for efficiency", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
-
-      mockCreate.mockResolvedValue({
-        success: true,
-        id: traceFlagId,
-      });
-
-      await ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId);
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("LIMIT 1")
+      expect(mockFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ExpirationDate: { $gt: now },
+        }),
+        expect.any(Array),
       );
     });
 
     it("should only query for USER_DEBUG log type", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       mockCreate.mockResolvedValue({
         success: true,
@@ -211,15 +178,16 @@ describe("Trace Flags", () => {
 
       await ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId);
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining(`AND LogType = '${userDebug}'`)
+      expect(mockFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          LogType: userDebug,
+        }),
+        expect.any(Array),
       );
     });
 
     it("should create trace flag with USER_DEBUG log type", async () => {
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       mockCreate.mockResolvedValue({
         success: true,
@@ -231,7 +199,7 @@ describe("Trace Flags", () => {
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           LogType: userDebug,
-        })
+        }),
       );
     });
 
@@ -239,9 +207,7 @@ describe("Trace Flags", () => {
       const customTracedEntityId = "customEntity";
       const customDebugLevelId = "customDebug";
 
-      mockQuery.mockResolvedValue({
-        records: [],
-      });
+      mockFindOne.mockResolvedValue(null);
 
       mockCreate.mockResolvedValue({
         success: true,
@@ -251,35 +217,34 @@ describe("Trace Flags", () => {
       await ensureTraceFlag(
         mockConnection,
         customTracedEntityId,
-        customDebugLevelId
+        customDebugLevelId,
       );
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining(`WHERE TracedEntityId = '${customTracedEntityId}'`)
+      expect(mockFindOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TracedEntityId: customTracedEntityId,
+        }),
+        expect.any(Array),
       );
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           TracedEntityId: customTracedEntityId,
           DebugLevelId: customDebugLevelId,
-        })
+        }),
       );
     });
 
     it("should not throw error when active trace flag exists", async () => {
-      mockQuery.mockResolvedValue({
-        records: [
-          {
-            Id: traceFlagId,
-            TracedEntityId: tracedEntityId,
-            DebugLevelId: debugLevelId,
-            StartDate: now,
-            ExpirationDate: tomorrow,
-          },
-        ],
+      mockFindOne.mockResolvedValue({
+        Id: traceFlagId,
+        TracedEntityId: tracedEntityId,
+        DebugLevelId: debugLevelId,
+        StartDate: now,
+        ExpirationDate: tomorrow,
       });
 
       await expect(
-        ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId)
+        ensureTraceFlag(mockConnection, tracedEntityId, debugLevelId),
       ).resolves.not.toThrow();
     });
   });

@@ -25,6 +25,11 @@ import {
   findPerformanceBottlenecksTool,
   BottleneckArgs,
 } from "./tools/findPerformanceBottlenecks.js";
+import {
+  executeAnonymous,
+  executeAnonymousTool,
+  ExecuteAnonymousArgs,
+} from "./tools/executeAnonymous.js";
 
 class LanaServer {
   private server: Server;
@@ -39,7 +44,7 @@ class LanaServer {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     this.setupToolHandlers();
@@ -62,6 +67,7 @@ class LanaServer {
         analyzeLogPerformanceTool,
         getLogSummaryTool,
         findPerformanceBottlenecksTool,
+        executeAnonymousTool,
       ],
     }));
 
@@ -72,13 +78,17 @@ class LanaServer {
         switch (name) {
           case "analyze_apex_log_performance":
             return await analyzeLogPerformance(
-              args as unknown as AnalyzeLogArgs
+              args as unknown as AnalyzeLogArgs,
             );
           case "get_apex_log_summary":
             return await getLogSummary(args as unknown as LogSummaryArgs);
           case "find_performance_bottlenecks":
             return await findPerformanceBottlenecks(
-              args as unknown as BottleneckArgs
+              args as unknown as BottleneckArgs,
+            );
+          case "execute_anonymous":
+            return await executeAnonymous(
+              args as unknown as ExecuteAnonymousArgs,
             );
           default:
             throw new Error(`Unknown tool: ${name}`);

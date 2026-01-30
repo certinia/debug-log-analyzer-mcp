@@ -27,9 +27,9 @@ npm start
 ### Core Components
 
 - **src/index.ts**: Main MCP server implementation (`LanaServer` class)
-  - Implements 3 MCP tools: `analyze_apex_log_performance`, `get_apex_log_summary`, `find_performance_bottlenecks`
+  - Implements 4 MCP tools: `analyze_apex_log_performance`, `get_apex_log_summary`, `find_performance_bottlenecks`, `execute_anonymous`
   - Uses stdio transport for communication
-  - Handles file validation, log parsing, and analysis
+  - Handles file validation, log parsing, analysis, and anonymous Apex execution
 
 - **src/ApexLogParser.ts**: Complex log parsing engine (33k+ tokens)
   - Exports `parse()` function and `ApexLogParser` class
@@ -67,12 +67,14 @@ src/
 dist/               # Compiled JavaScript output
 ```
 
-## Performance Analysis Tools
+## Tools
 
-The server provides three main analysis capabilities:
+The server provides four main capabilities:
 
 1. **Performance Analysis**: Identifies slowest methods with detailed metrics
 2. **Log Summary**: High-level execution statistics and governor limit usage
 3. **Bottleneck Detection**: Analyzes CPU, database, and method performance patterns
+4. **Execute Anonymous**: Executes anonymous Apex code snippets and retrieves the resulting debug log
 
-All tools accept absolute file paths to `.log` files and return structured JSON for AI processing.
+Log analysis tools (1-3) accept absolute file paths to `.log` files and return structured JSON for AI processing.
+Anonymous execution (4) accepts multi-line strings containing Apex and returns the entire contents of the log.

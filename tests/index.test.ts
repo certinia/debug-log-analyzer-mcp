@@ -20,6 +20,7 @@ import {
 // Mock the MCP SDK components
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
+
 import { LanaServer } from "../src/index";
 
 // Mock the tool modules
@@ -86,6 +87,25 @@ jest.mock("../src/tools/findPerformanceBottlenecks", () => ({
   },
 }));
 
+jest.mock("../src/tools/executeAnonymous", () => ({
+  executeAnonymous: jest.fn(),
+  executeAnonymousTool: {
+    name: "execute_anonymous",
+    description:
+      "Execute a snippet of anonymous Apex and retrieve the resulting log",
+    inputSchema: {
+      type: "object",
+      properties: {
+        apex: {
+          type: "string",
+          description: "The anonymous Apex to be executed",
+        },
+      },
+      required: ["apex"],
+    },
+  },
+}));
+
 // Import the tools after mocking
 import {
   analyzeLogPerformance,
@@ -96,6 +116,10 @@ import {
   findPerformanceBottlenecks,
   findPerformanceBottlenecksTool,
 } from "../src/tools/findPerformanceBottlenecks";
+import {
+  executeAnonymous,
+  executeAnonymousTool,
+} from "../src/tools/executeAnonymous";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -159,6 +183,15 @@ describe("LanaServer", () => {
     ],
   };
 
+  const mockExecuteAnonymousResult = {
+    content: [
+      {
+        type: "text",
+        text: "APEX DEBUG LOG CONTENT",
+      },
+    ],
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -178,7 +211,7 @@ describe("LanaServer", () => {
     mockTransport = {} as jest.Mocked<StdioServerTransport>;
 
     (Server as jest.MockedClass<typeof Server>).mockImplementation(
-      () => mockServer
+      () => mockServer,
     );
     (
       StdioServerTransport as jest.MockedClass<typeof StdioServerTransport>
@@ -196,6 +229,9 @@ describe("LanaServer", () => {
         typeof findPerformanceBottlenecks
       >
     ).mockResolvedValue(mockBottleneckResult);
+    (
+      executeAnonymous as jest.MockedFunction<typeof executeAnonymous>
+    ).mockResolvedValue(mockExecuteAnonymousResult);
 
     // Clear the module cache and re-import
     jest.resetModules();
@@ -218,7 +254,7 @@ describe("LanaServer", () => {
           capabilities: {
             tools: {},
           },
-        }
+        },
       );
     });
 
@@ -243,7 +279,7 @@ describe("LanaServer", () => {
 
       expect(mockProcessOn).toHaveBeenCalledWith(
         "SIGINT",
-        expect.any(Function)
+        expect.any(Function),
       );
     });
   });
@@ -254,7 +290,7 @@ describe("LanaServer", () => {
 
       expect(mockSetRequestHandler).toHaveBeenCalledWith(
         ListToolsRequestSchema,
-        expect.any(Function)
+        expect.any(Function),
       );
     });
 
@@ -263,7 +299,7 @@ describe("LanaServer", () => {
 
       expect(mockSetRequestHandler).toHaveBeenCalledWith(
         CallToolRequestSchema,
-        expect.any(Function)
+        expect.any(Function),
       );
     });
 
@@ -272,7 +308,7 @@ describe("LanaServer", () => {
 
       // Get the ListToolsRequest handler
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === ListToolsRequestSchema
+        (call: any) => call[0] === ListToolsRequestSchema,
       );
       expect(listToolsCall).toBeDefined();
 
@@ -284,6 +320,7 @@ describe("LanaServer", () => {
           analyzeLogPerformanceTool,
           getLogSummaryTool,
           findPerformanceBottlenecksTool,
+          executeAnonymousTool,
         ],
       });
     });
@@ -297,7 +334,7 @@ describe("LanaServer", () => {
 
       // Get the CallToolRequest handler
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
       expect(callToolCall).toBeDefined();
       callToolHandler = callToolCall![1];
@@ -450,7 +487,7 @@ describe("LanaServer", () => {
       expect(StdioServerTransport).toHaveBeenCalled();
       expect(mockConnect).toHaveBeenCalledWith(mockTransport);
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "LANA MCP Server running on stdio"
+        "LANA MCP Server running on stdio",
       );
     });
 
@@ -468,7 +505,7 @@ describe("LanaServer", () => {
       // Find the SIGINT handler
       const processOnCalls = jest.spyOn(process, "on").mock.calls;
       const sigintCall = processOnCalls.find(
-        (call: any) => call[0] === "SIGINT"
+        (call: any) => call[0] === "SIGINT",
       );
       expect(sigintCall).toBeDefined();
 
@@ -493,10 +530,10 @@ describe("LanaServer", () => {
 
       // Get handlers
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === ListToolsRequestSchema
+        (call: any) => call[0] === ListToolsRequestSchema,
       );
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
 
       const listToolsHandler = listToolsCall![1];
@@ -504,7 +541,7 @@ describe("LanaServer", () => {
 
       // Test tool listing
       const toolsResult = await listToolsHandler({} as any, {} as any);
-      expect(toolsResult.tools).toHaveLength(3);
+      expect(toolsResult.tools).toHaveLength(4);
       expect(toolsResult.tools[0].name).toBe("analyze_apex_log_performance");
 
       // Test tool execution
@@ -532,7 +569,7 @@ describe("LanaServer", () => {
       new LanaServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
       const callToolHandler = callToolCall![1];
 
@@ -561,7 +598,7 @@ describe("LanaServer", () => {
       new LanaServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
       const callToolHandler = callToolCall![1];
 

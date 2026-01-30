@@ -8,7 +8,6 @@ import {
   it,
   expect,
   beforeEach,
-  afterEach,
 } from "@jest/globals";
 
 const mockConnectionInstance = {
@@ -25,6 +24,12 @@ const mockAuthInfo = {
 
 const mockConnectionCreate = jest.fn() as jest.MockedFunction<any>;
 
+const mockConfigAggregator = {
+  getPropertyValue: jest.fn(),
+} as any;
+
+const mockConfigAggregatorCreate = jest.fn() as jest.MockedFunction<any>;
+
 jest.mock("@salesforce/core", () => ({
   Connection: {
     create: mockConnectionCreate,
@@ -32,42 +37,32 @@ jest.mock("@salesforce/core", () => ({
   AuthInfo: {
     create: mockAuthInfo.create,
   },
+  ConfigAggregator: {
+    create: mockConfigAggregatorCreate,
+  },
 }));
-
-jest.mock("dotenv", () => {
-  const mockConfig = jest.fn();
-  return {
-    default: mockConfig,
-    config: mockConfig,
-  };
-});
 
 import { connect } from "../../src/salesforce/connection";
 
 describe("Salesforce Connection", () => {
   const testUsername = "test@example.com";
-  const missingUsernameError =
-    "Please set a valid ORG_USERNAME environment variable in your .env file";
-
-  let originalEnv: NodeJS.ProcessEnv;
+  const noDefaultOrgError =
+    "No default org configured. Please set a default org using 'sf config set target-org <username>'.";
 
   beforeEach(() => {
     jest.clearAllMocks();
-    originalEnv = { ...process.env };
     mockAuthInfo.create.mockResolvedValue({ username: testUsername });
     mockConnectionCreate.mockResolvedValue(mockConnectionInstance);
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
+    mockConfigAggregatorCreate.mockResolvedValue(mockConfigAggregator);
+    mockConfigAggregator.getPropertyValue.mockReturnValue(testUsername);
   });
 
   describe("connect", () => {
-    it("should successfully connect with valid username", async () => {
-      process.env.ORG_USERNAME = testUsername;
-
+    it("should successfully connect with default org", async () => {
       const result = await connect();
 
+      expect(mockConfigAggregatorCreate).toHaveBeenCalled();
+      expect(mockConfigAggregator.getPropertyValue).toHaveBeenCalledWith("target-org");
       expect(mockAuthInfo.create).toHaveBeenCalledWith({
         username: testUsername,
       });
@@ -75,14 +70,13 @@ describe("Salesforce Connection", () => {
       expect(result).toBe(mockConnectionInstance);
     });
 
-    it("should throw error when ORG_USERNAME is missing", async () => {
-      delete process.env.ORG_USERNAME;
+    it("should throw error when no default org is configured", async () => {
+      mockConfigAggregator.getPropertyValue.mockReturnValue(undefined);
 
-      await expect(connect()).rejects.toThrow(missingUsernameError);
+      await expect(connect()).rejects.toThrow(noDefaultOrgError);
     });
 
     it("should propagate errors from AuthInfo.create", async () => {
-      process.env.ORG_USERNAME = testUsername;
       const authError = new Error("Org not found");
       mockAuthInfo.create.mockRejectedValue(authError);
 

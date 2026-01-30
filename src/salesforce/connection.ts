@@ -1,24 +1,17 @@
-import { Connection, AuthInfo } from "@salesforce/core";
-import env from "dotenv";
+import { Connection, AuthInfo, ConfigAggregator } from "@salesforce/core";
 
-env.config();
+export async function connect(): Promise<Connection> {
+  // Get default org from SF CLI configuration
+  const aggregator = await ConfigAggregator.create();
+  const defaultOrg = aggregator.getPropertyValue("target-org") as string | undefined;
 
-function getUserDetails() {
-  const orgUsername = process.env.ORG_USERNAME;
-
-  if (!orgUsername) {
+  if (!defaultOrg) {
     throw new Error(
-      "Please set a valid ORG_USERNAME environment variable in your .env file"
+      "No default org configured. Please set a default org using 'sf config set target-org <username>'."
     );
   }
 
-  return orgUsername;
-}
-
-export async function connect(): Promise<Connection> {
-  const orgUsername = getUserDetails();
-
-  const authInfo = await AuthInfo.create({ username: orgUsername });
+  const authInfo = await AuthInfo.create({ username: defaultOrg });
   const connection = await Connection.create({ authInfo });
 
   return connection;

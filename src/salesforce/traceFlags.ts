@@ -3,12 +3,23 @@ import { Connection } from "@salesforce/core";
 const TRACE_FLAG_SOBJECT = "TraceFlag";
 const USER_DEBUG = "USER_DEBUG";
 
+type TraceFlag = {
+  Id: string;
+  TracedEntityId: string;
+  DebugLevelId: string;
+  StartDate: string;
+  ExpirationDate: string;
+};
+
 export async function ensureTraceFlag(
   connection: Connection,
   tracedEntityId: string,
-  debugLevelId: string
+  debugLevelId: string,
 ): Promise<void> {
-  const existingTraceFlag = await findActiveTraceFlag(connection, tracedEntityId);
+  const existingTraceFlag = await findActiveTraceFlag(
+    connection,
+    tracedEntityId,
+  );
 
   if (existingTraceFlag) {
     return;
@@ -17,37 +28,35 @@ export async function ensureTraceFlag(
   const createResult = await createTraceFlag(
     connection,
     tracedEntityId,
-    debugLevelId
+    debugLevelId,
   );
 
   if (!createResult.success) {
     throw new Error(
-      `Failed to create TraceFlag: ${JSON.stringify(createResult.errors)}`
+      `Failed to create TraceFlag: ${JSON.stringify(createResult.errors)}`,
     );
   }
 }
 
 async function findActiveTraceFlag(
   connection: Connection,
-  tracedEntityId: string
-): Promise<any | null> {
+  tracedEntityId: string,
+): Promise<TraceFlag | null> {
   const now = new Date().toISOString();
-  const result = await connection.tooling.query(
-    `SELECT Id, TracedEntityId, DebugLevelId, StartDate, ExpirationDate
-     FROM ${TRACE_FLAG_SOBJECT}
-     WHERE TracedEntityId = '${tracedEntityId}'
-     AND ExpirationDate > ${now}
-     AND LogType = '${USER_DEBUG}'
-     LIMIT 1`
+  return await connection.tooling.sobject(TRACE_FLAG_SOBJECT).findOne(
+    {
+      TracedEntityId: tracedEntityId,
+      ExpirationDate: { $gt: now },
+      LogType: USER_DEBUG,
+    },
+    ["Id", "TracedEntityId", "DebugLevelId", "StartDate", "ExpirationDate"],
   );
-
-  return result.records.length > 0 ? result.records[0] : null;
 }
 
 async function createTraceFlag(
   connection: Connection,
   tracedEntityId: string,
-  debugLevelId: string
+  debugLevelId: string,
 ): Promise<any> {
   return await connection.tooling.sobject(TRACE_FLAG_SOBJECT).create({
     TracedEntityId: tracedEntityId,
