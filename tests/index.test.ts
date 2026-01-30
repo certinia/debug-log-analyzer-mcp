@@ -21,22 +21,6 @@ import {
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
 
-// Mock the connection
-const mockConnection = {
-  query: jest.fn(),
-  tooling: {
-    query: jest.fn(),
-    executeAnonymous: jest.fn(),
-  },
-} as any;
-
-const mockConnect = jest.fn() as jest.MockedFunction<any>;
-mockConnect.mockResolvedValue(mockConnection);
-
-jest.mock("../src/salesforce/connection", () => ({
-  connect: mockConnect,
-}));
-
 import { LanaServer } from "../src/index";
 
 // Mock the tool modules
@@ -107,7 +91,8 @@ jest.mock("../src/tools/executeAnonymous", () => ({
   executeAnonymous: jest.fn(),
   executeAnonymousTool: {
     name: "execute_anonymous",
-    description: "Execute a snippet of anonymous Apex and retrieve the resulting log",
+    description:
+      "Execute a snippet of anonymous Apex and retrieve the resulting log",
     inputSchema: {
       type: "object",
       properties: {
@@ -226,7 +211,7 @@ describe("LanaServer", () => {
     mockTransport = {} as jest.Mocked<StdioServerTransport>;
 
     (Server as jest.MockedClass<typeof Server>).mockImplementation(
-      () => mockServer
+      () => mockServer,
     );
     (
       StdioServerTransport as jest.MockedClass<typeof StdioServerTransport>
@@ -269,7 +254,7 @@ describe("LanaServer", () => {
           capabilities: {
             tools: {},
           },
-        }
+        },
       );
     });
 
@@ -294,7 +279,7 @@ describe("LanaServer", () => {
 
       expect(mockProcessOn).toHaveBeenCalledWith(
         "SIGINT",
-        expect.any(Function)
+        expect.any(Function),
       );
     });
   });
@@ -305,7 +290,7 @@ describe("LanaServer", () => {
 
       expect(mockSetRequestHandler).toHaveBeenCalledWith(
         ListToolsRequestSchema,
-        expect.any(Function)
+        expect.any(Function),
       );
     });
 
@@ -314,7 +299,7 @@ describe("LanaServer", () => {
 
       expect(mockSetRequestHandler).toHaveBeenCalledWith(
         CallToolRequestSchema,
-        expect.any(Function)
+        expect.any(Function),
       );
     });
 
@@ -323,7 +308,7 @@ describe("LanaServer", () => {
 
       // Get the ListToolsRequest handler
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === ListToolsRequestSchema
+        (call: any) => call[0] === ListToolsRequestSchema,
       );
       expect(listToolsCall).toBeDefined();
 
@@ -349,7 +334,7 @@ describe("LanaServer", () => {
 
       // Get the CallToolRequest handler
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
       expect(callToolCall).toBeDefined();
       callToolHandler = callToolCall![1];
@@ -502,7 +487,7 @@ describe("LanaServer", () => {
       expect(StdioServerTransport).toHaveBeenCalled();
       expect(mockConnect).toHaveBeenCalledWith(mockTransport);
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "LANA MCP Server running on stdio"
+        "LANA MCP Server running on stdio",
       );
     });
 
@@ -520,7 +505,7 @@ describe("LanaServer", () => {
       // Find the SIGINT handler
       const processOnCalls = jest.spyOn(process, "on").mock.calls;
       const sigintCall = processOnCalls.find(
-        (call: any) => call[0] === "SIGINT"
+        (call: any) => call[0] === "SIGINT",
       );
       expect(sigintCall).toBeDefined();
 
@@ -545,10 +530,10 @@ describe("LanaServer", () => {
 
       // Get handlers
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === ListToolsRequestSchema
+        (call: any) => call[0] === ListToolsRequestSchema,
       );
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
 
       const listToolsHandler = listToolsCall![1];
@@ -584,7 +569,7 @@ describe("LanaServer", () => {
       new LanaServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
       const callToolHandler = callToolCall![1];
 
@@ -613,7 +598,7 @@ describe("LanaServer", () => {
       new LanaServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema
+        (call: any) => call[0] === CallToolRequestSchema,
       );
       const callToolHandler = callToolCall![1];
 

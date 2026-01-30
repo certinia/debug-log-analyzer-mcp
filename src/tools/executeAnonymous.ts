@@ -2,6 +2,7 @@ import { Connection } from "@salesforce/core";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import { getOrCreateDebugLevelId } from "../salesforce/debugLevels.js";
 import { ensureTraceFlag } from "../salesforce/traceFlags.js";
+import { connect } from "../salesforce/connection.js";
 
 export interface ExecuteAnonymousArgs {
   apex: string;
@@ -27,11 +28,10 @@ export const executeAnonymousTool = {
   },
 };
 
-export async function executeAnonymous(
-  connection: Connection,
-  args: ExecuteAnonymousArgs,
-) {
+export async function executeAnonymous(args: ExecuteAnonymousArgs) {
   const { apex } = args;
+
+  const connection = await connect();
 
   const username = connection.getUsername();
   if (!username) {

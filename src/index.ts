@@ -10,7 +10,6 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Connection } from "@salesforce/core";
 import {
   analyzeLogPerformance,
   analyzeLogPerformanceTool,
@@ -31,11 +30,9 @@ import {
   executeAnonymousTool,
   ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
-import { connect } from "./salesforce/connection.js";
 
 class LanaServer {
   private server: Server;
-  private connection: Connection | null = null;
 
   constructor() {
     this.server = new Server(
@@ -47,7 +44,7 @@ class LanaServer {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     this.setupToolHandlers();
@@ -81,23 +78,17 @@ class LanaServer {
         switch (name) {
           case "analyze_apex_log_performance":
             return await analyzeLogPerformance(
-              args as unknown as AnalyzeLogArgs
+              args as unknown as AnalyzeLogArgs,
             );
           case "get_apex_log_summary":
             return await getLogSummary(args as unknown as LogSummaryArgs);
           case "find_performance_bottlenecks":
             return await findPerformanceBottlenecks(
-              args as unknown as BottleneckArgs
+              args as unknown as BottleneckArgs,
             );
           case "execute_anonymous":
-            if (!this.connection) {
-              throw new Error(
-                "Salesforce connection not initialized. Ensure a default org is configured with 'sf config set target-org <username>'.",
-              );
-            }
             return await executeAnonymous(
-              this.connection,
-              args as unknown as ExecuteAnonymousArgs
+              args as unknown as ExecuteAnonymousArgs,
             );
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -118,14 +109,9 @@ class LanaServer {
     });
   }
 
-  private async initializeConnection(): Promise<void> {
-    this.connection = await connect();
-  }
-
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    await this.initializeConnection();
 
     console.error("LANA MCP Server running on stdio");
   }
