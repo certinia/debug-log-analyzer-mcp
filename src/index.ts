@@ -91,7 +91,9 @@ class LanaServer {
             );
           case "execute_anonymous":
             if (!this.connection) {
-              throw new Error("Connection not initialised!");
+              throw new Error(
+                "Salesforce connection not initialized. Ensure a default org is configured with 'sf config set target-org <username>'.",
+              );
             }
             return await executeAnonymous(
               this.connection,
