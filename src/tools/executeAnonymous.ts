@@ -34,7 +34,8 @@ export async function executeAnonymous(
     throw new Error("Could not determine username from connection");
   }
 
-  await validateTraceFlag(connection, username);
+  const userId = await getUserIdByUsername(connection, username);
+  await validateTraceFlag(connection, userId);
 
   const apexResult = await connection.tooling.executeAnonymous(apex);
 
@@ -43,8 +44,6 @@ export async function executeAnonymous(
       `Apex could not be compiled at line ${apexResult.line}, column ${apexResult.column}: ${apexResult.compileProblem}`,
     );
   }
-
-  const userId = await getUserIdByUsername(connection, username);
 
   // Note: There's no way to get the specific log ID from executeAnonymous.
   // We retrieve the most recent log for this user, which could be incorrect
@@ -71,9 +70,7 @@ export async function executeAnonymous(
   };
 }
 
-async function validateTraceFlag(connection: Connection, username: string) {
-  const userId = await getUserIdByUsername(connection, username);
+async function validateTraceFlag(connection: Connection, userId: string) {
   const debugLevelId = await getOrCreateDebugLevelId(connection);
-
   await ensureTraceFlag(connection, userId, debugLevelId);
 }
