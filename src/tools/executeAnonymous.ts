@@ -7,6 +7,10 @@ export interface ExecuteAnonymousArgs {
   apex: string;
 }
 
+type ApexLogRecord = {
+  Id: string;
+};
+
 export const executeAnonymousTool = {
   name: "execute_anonymous",
   description:
@@ -49,9 +53,11 @@ export async function executeAnonymous(
   // We retrieve the most recent log for this user, which could be incorrect
   // if another process creates a log between execution and this query.
   // Future enhancement: present a list of recent logs for user selection.
-  const logRecord = await connection
+  const logRecord = (await connection
     .sobject("ApexLog")
-    .findOne({ LogUserId: userId }, ["Id"], { sort: { StartTime: -1 } });
+    .findOne({ LogUserId: userId }, ["Id"], {
+      sort: { StartTime: -1 },
+    })) as ApexLogRecord | null;
 
   if (!logRecord) {
     throw new Error(`Could not retrieve log from anonymous execution.`);
