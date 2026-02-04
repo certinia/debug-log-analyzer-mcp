@@ -9,8 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Apex Debug Log Analyzer MCP** - Initial release of MCP server for Apex Debug Log Analysis.
-- **analyze_apex_log_performance** - Identifies the slowest running methods in a debug log.
-- **get_apex_log_summary** - Provides a high-level summary of log execution.
-- **find_performance_bottlenecks** - Detects CPU, database, and method performance issues.
-- **execute_anonymous** - Executes anonymous Apex code and retrieves the resulting debug log.
+- **Performance Analysis** (`analyze_apex_log_performance`) - Feed in a debug log and instantly see which methods are the slowest. See execution times, SOQL/DML counts.
+- **Log Summaries** (`get_apex_log_summary`) - Get a debug log summary. Total execution time, method count, governor limit usage.
+- **Bottleneck Detection** (`find_performance_bottlenecks`) - Detects CPU, database and method performance issues by type so you know exactly what to focus on.
+- **Anonymous Apex Execution** (`execute_anonymous`) - Write Apex, run it, and get the debug log back for analysis.

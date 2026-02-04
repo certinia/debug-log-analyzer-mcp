@@ -18,7 +18,7 @@ Welcome to the development guide for the **LANA MCP Server**. This document will
 Before you start developing, make sure you have the following tools installed:
 
 - **Node.js** v22 or above: [Install Node.js](https://nodejs.org/en/)
-- **[pnpm](https://pnpm.io/)**: This package manager will be used for installing dependencies
+- **[pnpm](https://pnpm.io/)**: Preferred package manager
 - **[Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli)**: This is used to connect to a Salesforce org.
 
 Once you’ve got these ready, you’re all set to get started! 🚀
@@ -43,7 +43,7 @@ To get started, clone this repository and install the necessary dependencies.
    pnpm i
    ```
 
-4. **Set a default org**
+4. **Optional: Set a default org (execute_anonymous tool only)**
 
    The execute anonymous Apex tool requires a default org to be set using the Salesforce CLI. To do this in a repository that has no `sfdx-project.json` like this one, set your default org globally:
 
