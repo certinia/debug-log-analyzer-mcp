@@ -1,6 +1,6 @@
 {
   "name": "@apexdevtools/lana-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Apex debug log analyzer MCP tools for Salesforce.",
   "type": "module",
   "main": "dist/index.js",
