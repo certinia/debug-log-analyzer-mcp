@@ -108,7 +108,7 @@ Add to your `claude_desktop_config.json` or `mcp.json`:
   "mcpServers": {
     "lana-mcp": {
       "command": "npx",
-      "args": ["@apexdevtools/lana-mcp"]
+      "args": ["@certinia/lana-mcp"]
     }
   }
 }

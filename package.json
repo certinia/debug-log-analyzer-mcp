@@ -1,5 +1,5 @@
 {
-  "name": "@apexdevtools/lana-mcp",
+  "name": "@certinia/lana-mcp",
   "version": "0.2.0",
   "description": "Apex debug log analyzer MCP tools for Salesforce.",
   "type": "module",
@@ -44,7 +44,10 @@
     "developer-tools",
     "debug logs"
   ],
-  "author": "Apex Dev Tools Team <apexdevtools@gmail.com> (https://github.com/apex-dev-tools)",
+  "author": {
+    "name": "Certinia",
+    "url": "https://github.com/certinia"
+  },
   "license": "SEE LICENSE IN LICENSE.txt",
   "repository": {
     "type": "git",
