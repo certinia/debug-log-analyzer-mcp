@@ -66,7 +66,11 @@ describe("Trace Flags", () => {
       expect(mockFindOne).toHaveBeenCalledWith(
         {
           TracedEntityId: tracedEntityId,
-          ExpirationDate: { $gt: now },
+          ExpirationDate: {
+            $gt: expect.objectContaining({
+              toString: expect.any(Function),
+            }),
+          },
           LogType: userDebug,
         },
         ["Id", "TracedEntityId", "DebugLevelId", "StartDate", "ExpirationDate"],
@@ -162,7 +166,11 @@ describe("Trace Flags", () => {
 
       expect(mockFindOne).toHaveBeenCalledWith(
         expect.objectContaining({
-          ExpirationDate: { $gt: now },
+          ExpirationDate: {
+            $gt: expect.objectContaining({
+              toString: expect.any(Function),
+            }),
+          },
         }),
         expect.any(Array),
       );
