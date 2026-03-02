@@ -6,6 +6,8 @@ import { connect } from "../salesforce/connection.js";
 
 export interface ExecuteAnonymousArgs {
   apex: string;
+  targetOrg?: string;
+  projectPath?: string;
 }
 
 type ApexLogRecord = {
@@ -23,15 +25,20 @@ export const executeAnonymousTool = {
         type: "string",
         description: "The anonymous Apex to be executed",
       },
+      targetOrg: {
+        type: "string",
+        description:
+          "Alias or username of the target Salesforce org. Uses the project default if not specified.",
+      },
     },
     required: ["apex"],
   },
 };
 
 export async function executeAnonymous(args: ExecuteAnonymousArgs) {
-  const { apex } = args;
+  const { apex, projectPath, targetOrg } = args;
 
-  const connection = await connect();
+  const connection = await connect(projectPath, targetOrg);
 
   const username = connection.getUsername();
   if (!username) {

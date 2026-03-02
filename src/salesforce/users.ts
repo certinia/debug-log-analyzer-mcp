@@ -2,11 +2,11 @@ import { Connection } from "@salesforce/core";
 
 export async function getUserIdByUsername(
   connection: Connection,
-  username: string
+  username: string,
 ): Promise<string> {
   const sanitisedUsername = username.replace(/'/g, "\\'");
   const result = await connection.query(
-    `SELECT Id FROM User WHERE Username = '${sanitisedUsername}'`
+    `SELECT Id FROM User WHERE Username = '${sanitisedUsername}'`,
   );
 
   if (result.records.length === 0) {

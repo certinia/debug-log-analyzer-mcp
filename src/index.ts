@@ -61,6 +61,16 @@ class LanaServer {
     });
   }
 
+  private async getProjectPath(): Promise<string | undefined> {
+    try {
+      const { roots } = await this.server.listRoots();
+      const rootUri = roots[0]?.uri;
+      return rootUri ? new URL(rootUri).pathname : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private setupToolHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
@@ -73,6 +83,7 @@ class LanaServer {
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
+      const projectPath = await this.getProjectPath();
 
       try {
         switch (name) {
@@ -87,9 +98,10 @@ class LanaServer {
               args as unknown as BottleneckArgs,
             );
           case "execute_anonymous":
-            return await executeAnonymous(
-              args as unknown as ExecuteAnonymousArgs,
-            );
+            return await executeAnonymous({
+              ...(args as unknown as ExecuteAnonymousArgs),
+              projectPath,
+            });
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
