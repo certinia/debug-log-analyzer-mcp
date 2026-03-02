@@ -17,7 +17,7 @@ type ApexLogRecord = {
 export const executeAnonymousTool = {
   name: "execute_anonymous",
   description:
-    "Execute a snippet of anonymous Apex and retrieve the resulting log",
+    "Execute a snippet of anonymous Apex against any Salesforce org and retrieve the resulting debug log",
   inputSchema: {
     type: "object",
     properties: {
