@@ -58,10 +58,12 @@ class LanaServer {
     this.server.onerror = (error) => {
       console.error("[MCP Error]", error);
     };
-    process.on("SIGINT", async () => {
+
+    const shutdown = async () => {
       this.server.close();
       process.exit(0);
-    });
+    };
+    process.once("SIGINT", shutdown);
   }
 
   private setupToolHandlers(): void {
