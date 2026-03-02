@@ -1,3 +1,4 @@
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { Connection } from "@salesforce/core";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import { getOrCreateDebugLevelId } from "../salesforce/debugLevels.js";
@@ -7,7 +8,6 @@ import { connect } from "../salesforce/connection.js";
 export interface ExecuteAnonymousArgs {
   apex: string;
   targetOrg?: string;
-  projectPath?: string;
 }
 
 type ApexLogRecord = {
@@ -35,8 +35,22 @@ export const executeAnonymousTool = {
   },
 };
 
-export async function executeAnonymous(args: ExecuteAnonymousArgs) {
-  const { apex, projectPath, targetOrg } = args;
+async function getProjectPath(server: Server): Promise<string | undefined> {
+  try {
+    const { roots } = await server.listRoots();
+    const rootUri = roots[0]?.uri;
+    return rootUri ? new URL(rootUri).pathname : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function executeAnonymous(
+  server: Server,
+  args: ExecuteAnonymousArgs,
+) {
+  const { apex, targetOrg } = args;
+  const projectPath = await getProjectPath(server);
 
   const connection = await connect(projectPath, targetOrg);
 
