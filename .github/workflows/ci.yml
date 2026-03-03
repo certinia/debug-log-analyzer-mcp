@@ -8,23 +8,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  setup:
-    name: Setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-      - name: Install Packages
-        run: HUSKY=0 pnpm install
-
   ci:
     name: ${{ matrix.task }}
-    needs: setup
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -44,5 +29,6 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
-      - run: HUSKY=0 pnpm install
+      - name: Install Packages
+        run: HUSKY=0 pnpm install --frozen-lockfile
       - run: ${{ matrix.command }}
