@@ -4,6 +4,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
+import { parseArgs } from "node:util";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -31,14 +32,16 @@ import {
   ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
 
-function parseArgs<T>(args: Record<string, unknown> | undefined): T {
+function parseToolArgs<T>(args: Record<string, unknown> | undefined): T {
   return (args ?? {}) as T;
 }
 
 class ApexLogServer {
   private server: Server;
+  private allowedOrgs: string[];
 
-  constructor() {
+  constructor(allowedOrgs: string[] = []) {
+    this.allowedOrgs = allowedOrgs;
     this.server = new Server(
       {
         name: "apex-log-mcp",
@@ -77,7 +80,7 @@ class ApexLogServer {
         analyzeLogPerformanceTool,
         getLogSummaryTool,
         findPerformanceBottlenecksTool,
-        executeAnonymousTool,
+        ...(this.allowedOrgs.length > 0 ? [executeAnonymousTool] : []),
       ],
     }));
 
@@ -87,17 +90,25 @@ class ApexLogServer {
       try {
         switch (name) {
           case "analyze_apex_log_performance":
-            return await analyzeLogPerformance(parseArgs<AnalyzeLogArgs>(args));
+            return await analyzeLogPerformance(
+              parseToolArgs<AnalyzeLogArgs>(args),
+            );
           case "get_apex_log_summary":
-            return await getLogSummary(parseArgs<LogSummaryArgs>(args));
+            return await getLogSummary(parseToolArgs<LogSummaryArgs>(args));
           case "find_performance_bottlenecks":
             return await findPerformanceBottlenecks(
-              parseArgs<BottleneckArgs>(args),
+              parseToolArgs<BottleneckArgs>(args),
             );
           case "execute_anonymous":
+            if (this.allowedOrgs.length === 0) {
+              throw new Error(
+                "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
+              );
+            }
             return await executeAnonymous(
               this.server,
-              parseArgs<ExecuteAnonymousArgs>(args),
+              parseToolArgs<ExecuteAnonymousArgs>(args),
+              this.allowedOrgs,
             );
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -119,6 +130,17 @@ class ApexLogServer {
   }
 
   async run(): Promise<void> {
+    const { values } = parseArgs({
+      args: process.argv.slice(2),
+      options: {
+        "allowed-orgs": { type: "string" },
+      },
+    });
+
+    this.allowedOrgs = values["allowed-orgs"]
+      ? values["allowed-orgs"].split(",").map((org) => org.trim())
+      : [];
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
@@ -127,7 +149,6 @@ class ApexLogServer {
 }
 
 const server = new ApexLogServer();
-
 server.run().catch(console.error);
 
 export { ApexLogServer };

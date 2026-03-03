@@ -107,7 +107,7 @@ Each accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FIN
 - "Execute this Apex with all debug levels set to FINEST"
 - "Run this Apex against my QA org with database logging set to FINEST"
 
-**Note:** Requires Salesforce CLI. Uses the project's default org unless `targetOrg` is specified.
+**Note:** Requires Salesforce CLI and `--allowed-orgs` to be configured. Uses the project's default org unless `targetOrg` is specified. The response includes the org username and alias (if set).
 
 ## Configuration
 
@@ -122,6 +122,35 @@ Add to your `claude_desktop_config.json` or `mcp.json`:
     }
   }
 }
+```
+
+### Enabling `execute_anonymous`
+
+The `execute_anonymous` tool is **disabled by default**. To enable it, pass `--allowed-orgs` with a comma-separated list of allowed orgs:
+
+```json
+{
+  "mcpServers": {
+    "apex-log-mcp": {
+      "command": "npx",
+      "args": ["@certinia/apex-log-mcp", "--allowed-orgs", "ALLOW_ALL_ORGS"]
+    }
+  }
+}
+```
+
+#### Allowed org tokens
+
+| Token                    | Description                                                              |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `ALLOW_ALL_ORGS`         | Permits execution against any authenticated org                          |
+| `DEFAULT_TARGET_ORG`     | Resolves the project/global default `target-org` from Salesforce CLI     |
+| `DEFAULT_TARGET_DEV_HUB` | Resolves the project/global default `target-dev-hub` from Salesforce CLI |
+
+You can also pass org usernames or aliases directly:
+
+```json
+"args": ["@certinia/apex-log-mcp", "--allowed-orgs", "dev@example.com,my-scratch-org"]
 ```
 
 ## 📚 Documentation
