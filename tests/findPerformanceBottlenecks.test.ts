@@ -3,7 +3,7 @@
  */
 
 import { promises as fs } from "fs";
-import { jest } from "@jest/globals";
+
 import {
   findPerformanceBottlenecks,
   BottleneckArgs,
@@ -37,7 +37,7 @@ const mockExtractMethods = extractMethods as jest.MockedFunction<
 
 // Helper function to create mock governor limits
 function createMockGovernorLimits(
-  overrides: Partial<Limits> = {}
+  overrides: Partial<Limits> = {},
 ): GovernorLimits {
   const defaultLimits: Limits = {
     soqlQueries: { used: 0, limit: 100 },
@@ -150,7 +150,7 @@ describe("findPerformanceBottlenecks", () => {
       mockFs.access.mockRejectedValue(new Error("File not found"));
 
       await expect(findPerformanceBottlenecks(args)).rejects.toThrow(
-        "Log file not found: /nonexistent/file.log"
+        "Log file not found: /nonexistent/file.log",
       );
 
       expect(mockFs.access).toHaveBeenCalledWith("/nonexistent/file.log");
@@ -163,7 +163,7 @@ describe("findPerformanceBottlenecks", () => {
       mockFs.readFile.mockRejectedValue(new Error("Permission denied"));
 
       await expect(findPerformanceBottlenecks(args)).rejects.toThrow(
-        "Permission denied"
+        "Permission denied",
       );
 
       expect(mockFs.access).toHaveBeenCalledWith(mockLogFilePath);
@@ -178,7 +178,7 @@ describe("findPerformanceBottlenecks", () => {
       });
 
       await expect(findPerformanceBottlenecks(args)).rejects.toThrow(
-        "Invalid log format"
+        "Invalid log format",
       );
 
       expect(mockFs.access).toHaveBeenCalledWith(mockLogFilePath);
@@ -251,10 +251,10 @@ describe("findPerformanceBottlenecks", () => {
 
       // Verify governor limit warnings
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 85.0% of limit used (8500/10000)"
+        "cpuTime: 85.0% of limit used (8500/10000)",
       );
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "soqlQueries: 90.0% of limit used (90/100)"
+        "soqlQueries: 90.0% of limit used (90/100)",
       );
     });
 
@@ -522,19 +522,19 @@ describe("findPerformanceBottlenecks", () => {
       const parsedResult = toonDecode(result);
 
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 85.0% of limit used (8500/10000)"
+        "cpuTime: 85.0% of limit used (8500/10000)",
       );
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "soqlQueries: 90.0% of limit used (90/100)"
+        "soqlQueries: 90.0% of limit used (90/100)",
       );
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "dmlStatements: 90.0% of limit used (135/150)"
+        "dmlStatements: 90.0% of limit used (135/150)",
       );
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "queryRows: 90.0% of limit used (45000/50000)"
+        "queryRows: 90.0% of limit used (45000/50000)",
       );
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "heapSize: 85.0% of limit used (5100000/6000000)"
+        "heapSize: 85.0% of limit used (5100000/6000000)",
       );
     });
 
@@ -630,7 +630,7 @@ describe("findPerformanceBottlenecks", () => {
 
       // Should generate warning for just over 80%
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 80.0% of limit used (8001/10000)"
+        "cpuTime: 80.0% of limit used (8001/10000)",
       );
     });
   });
@@ -689,7 +689,7 @@ describe("findPerformanceBottlenecks", () => {
 
       // Should identify all bottleneck types
       expect(parsedResult.cpuBottlenecks!.warning).toBe(
-        "High CPU usage detected - consider optimizing algorithms"
+        "High CPU usage detected - consider optimizing algorithms",
       );
       expect(parsedResult.cpuBottlenecks!.cpuUsagePercentage).toBe(95);
 
@@ -697,7 +697,7 @@ describe("findPerformanceBottlenecks", () => {
       expect(databaseBottlenecks.soqlQueries.percentage).toBe(95);
       expect(databaseBottlenecks.dmlStatements.percentage).toBeCloseTo(
         93.33,
-        1
+        1,
       );
       expect(databaseBottlenecks.queryRows.percentage).toBe(96);
 
@@ -708,10 +708,10 @@ describe("findPerformanceBottlenecks", () => {
       // Multiple governor limit warnings
       expect(governorLimitWarnings.warnings.length).toBeGreaterThan(3);
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 95.0% of limit used (9500/10000)"
+        "cpuTime: 95.0% of limit used (9500/10000)",
       );
       expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "soqlQueries: 95.0% of limit used (95/100)"
+        "soqlQueries: 95.0% of limit used (95/100)",
       );
     });
 

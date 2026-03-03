@@ -2,13 +2,12 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 import { Connection } from "@salesforce/core";
 import { getOrCreateDebugLevelId } from "../../src/salesforce/debugLevels";
 
 describe("Debug Levels", () => {
   const testId = "000000000000000000";
-  
+
   let mockConnection: jest.Mocked<Connection>;
   let mockTooling: any;
   let mockQuery: any;
@@ -55,20 +54,20 @@ describe("Debug Levels", () => {
       expect(result).toBe(testId);
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining(
-          "SELECT Id, DeveloperName, ApexCode, ApexProfiling, Database"
-        )
+          "SELECT Id, DeveloperName, ApexCode, ApexProfiling, Database",
+        ),
       );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("FROM DebugLevel")
+        expect.stringContaining("FROM DebugLevel"),
       );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("WHERE ApexCode = 'FINEST'")
+        expect.stringContaining("WHERE ApexCode = 'FINEST'"),
       );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("AND ApexProfiling = 'FINEST'")
+        expect.stringContaining("AND ApexProfiling = 'FINEST'"),
       );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("AND Database = 'FINEST'")
+        expect.stringContaining("AND Database = 'FINEST'"),
       );
       expect(mockCreate).not.toHaveBeenCalled();
     });
@@ -134,7 +133,7 @@ describe("Debug Levels", () => {
       });
 
       await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
-        "Failed to create DebugLevel"
+        "Failed to create DebugLevel",
       );
     });
 
@@ -149,7 +148,7 @@ describe("Debug Levels", () => {
       });
 
       await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
-        "Failed to create DebugLevel"
+        "Failed to create DebugLevel",
       );
     });
 
@@ -158,7 +157,7 @@ describe("Debug Levels", () => {
       mockQuery.mockRejectedValue(queryError);
 
       await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
-        "Query failed"
+        "Query failed",
       );
     });
 
@@ -171,7 +170,7 @@ describe("Debug Levels", () => {
       mockCreate.mockRejectedValue(createError);
 
       await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
-        "Creation failed"
+        "Creation failed",
       );
     });
 
@@ -191,7 +190,7 @@ describe("Debug Levels", () => {
       await getOrCreateDebugLevelId(mockConnection);
 
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining("LIMIT 1")
+        expect.stringContaining("LIMIT 1"),
       );
     });
 
@@ -212,13 +211,13 @@ describe("Debug Levels", () => {
 
       expect(result).toBe(testId);
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringMatching(/ApexCode = 'FINEST'/)
+        expect.stringMatching(/ApexCode = 'FINEST'/),
       );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringMatching(/ApexProfiling = 'FINEST'/)
+        expect.stringMatching(/ApexProfiling = 'FINEST'/),
       );
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringMatching(/Database = 'FINEST'/)
+        expect.stringMatching(/Database = 'FINEST'/),
       );
     });
 

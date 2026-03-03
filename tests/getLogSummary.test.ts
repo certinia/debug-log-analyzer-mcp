@@ -4,7 +4,7 @@
 
 import { promises as fs } from "fs";
 import path from "path";
-import { jest } from "@jest/globals";
+
 import { getLogSummary, LogSummaryArgs } from "../src/tools/getLogSummary";
 import {
   parse,
@@ -41,7 +41,7 @@ const mockParse = parse as jest.MockedFunction<typeof parse>;
 const createMockLogLine = (
   type: string,
   subCategory?: string,
-  children: LogLine[] = []
+  children: LogLine[] = [],
 ): LogLine =>
   ({
     type: type as any,
@@ -67,7 +67,7 @@ const createMockLogLine = (
     cpuTotalTime: 0,
     parseTimestamp: () => 0,
     parseLineNumber: () => null,
-  } as unknown as LogLine);
+  }) as unknown as LogLine;
 
 describe("getLogSummary", () => {
   beforeEach(() => {
@@ -185,7 +185,7 @@ describe("getLogSummary", () => {
       expect(mockFs.access).toHaveBeenCalledWith("/path/to/test-log.log");
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/test-log.log",
-        "utf-8"
+        "utf-8",
       );
       expect(mockPath.basename).toHaveBeenCalledWith("/path/to/test-log.log");
       expect(mockParse).toHaveBeenCalledWith(mockLogContent);
@@ -194,26 +194,24 @@ describe("getLogSummary", () => {
         content: [
           {
             type: "text",
-            text: encode(
-              {
-                file: "test-log.log",
-                totalExecutionTime: 12500,
-                totalMethods: 3, // 2 METHOD_ENTRY + 1 with subCategory 'Method'
-                totalSOQLQueries: 5,
-                totalDMLOperations: 3,
-                totalSOQLRows: 150,
-                totalDMLRows: 25,
-                governorLimits: {
-                  cpuTime: { used: 1500, limit: 10000 },
-                  heapSize: { used: 2048, limit: 6000000 },
-                  soqlQueries: { used: 5, limit: 100 },
-                  dmlStatements: { used: 3, limit: 150 },
-                },
-                namespaces: ["default", "MyNamespace"],
-                logIssues: 0,
-                parsingErrors: 0,
-              }
-            ),
+            text: encode({
+              file: "test-log.log",
+              totalExecutionTime: 12500,
+              totalMethods: 3, // 2 METHOD_ENTRY + 1 with subCategory 'Method'
+              totalSOQLQueries: 5,
+              totalDMLOperations: 3,
+              totalSOQLRows: 150,
+              totalDMLRows: 25,
+              governorLimits: {
+                cpuTime: { used: 1500, limit: 10000 },
+                heapSize: { used: 2048, limit: 6000000 },
+                soqlQueries: { used: 5, limit: 100 },
+                dmlStatements: { used: 3, limit: 150 },
+              },
+              namespaces: ["default", "MyNamespace"],
+              logIssues: 0,
+              parsingErrors: 0,
+            }),
           },
         ],
       });
@@ -407,7 +405,7 @@ describe("getLogSummary", () => {
       };
 
       await expect(getLogSummary(args)).rejects.toThrow(
-        "Log file not found: /path/to/nonexistent.log"
+        "Log file not found: /path/to/nonexistent.log",
       );
 
       expect(mockFs.access).toHaveBeenCalledWith("/path/to/nonexistent.log");
@@ -424,7 +422,7 @@ describe("getLogSummary", () => {
       };
 
       await expect(getLogSummary(args)).rejects.toThrow(
-        "Log file not found: /path/to/restricted.log"
+        "Log file not found: /path/to/restricted.log",
       );
     });
 
@@ -442,7 +440,7 @@ describe("getLogSummary", () => {
       expect(mockFs.access).toHaveBeenCalledWith("/path/to/unreadable.log");
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/unreadable.log",
-        "utf-8"
+        "utf-8",
       );
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -464,7 +462,7 @@ describe("getLogSummary", () => {
       expect(mockFs.access).toHaveBeenCalledWith("/path/to/corrupted.log");
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/corrupted.log",
-        "utf-8"
+        "utf-8",
       );
       expect(mockParse).toHaveBeenCalledWith("invalid log content");
     });
@@ -683,8 +681,6 @@ describe("getLogSummary", () => {
 
   // Helper function for decoding TOON-formatted data
   function toonDecode(result: any): any {
-    return decode(
-      result.content[0].text
-    ) as any;
+    return decode(result.content[0].text) as any;
   }
 });
