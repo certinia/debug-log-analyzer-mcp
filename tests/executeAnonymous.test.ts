@@ -21,6 +21,9 @@ jest.mock("../src/salesforce/connection", () => ({
   connect: mockConnect,
 }));
 
+jest.mock("@modelcontextprotocol/sdk/server/index.js");
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   executeAnonymous,
   ExecuteAnonymousArgs,
@@ -36,6 +39,7 @@ describe("Execute Anonymous", () => {
   const testLogBody = "APEX DEBUG LOG CONTENT HERE";
   const testApexCode = "System.debug('Hello World');";
 
+  let mockServer: Server;
   let mockConnection: any;
   let mockTooling: any;
   let mockExecuteAnonymous: any;
@@ -46,6 +50,10 @@ describe("Execute Anonymous", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    mockServer = {
+      listRoots: jest.fn<any>().mockResolvedValue({ roots: [] }),
+    } as unknown as Server;
 
     mockExecuteAnonymous = jest.fn();
     mockRequest = jest.fn();
@@ -97,7 +105,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue({ Id: testLogId });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(args);
+      const result = await executeAnonymous(mockServer, args);
 
       expect(getUserIdByUsername).toHaveBeenCalledWith(
         mockConnection,
@@ -133,7 +141,7 @@ describe("Execute Anonymous", () => {
       mockGetUsername.mockReturnValue(null);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "Could not determine username from connection",
       );
 
@@ -154,7 +162,7 @@ describe("Execute Anonymous", () => {
         compileProblem: "Unexpected token 'Invalid'",
       });
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "Apex could not be compiled at line 1, column 5: Unexpected token 'Invalid'",
       );
 
@@ -167,7 +175,7 @@ describe("Execute Anonymous", () => {
 
       mockExecuteAnonymous.mockResolvedValue(null);
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "Cannot read properties of null",
       );
 
@@ -187,7 +195,7 @@ describe("Execute Anonymous", () => {
 
       mockFindOne.mockResolvedValue(null);
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "Could not retrieve log from anonymous execution",
       );
 
@@ -207,7 +215,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue({ Id: testLogId });
       mockRequest.mockResolvedValue(testLogBody);
 
-      await executeAnonymous(args);
+      await executeAnonymous(mockServer, args);
 
       expect(mockFindOne).toHaveBeenCalledWith(
         expect.any(Object),
@@ -234,7 +242,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue({ Id: testLogId });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(args);
+      const result = await executeAnonymous(mockServer, args);
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(multiLineApex);
       expect(result.content[0].text).toBe(testLogBody);
@@ -248,7 +256,9 @@ describe("Execute Anonymous", () => {
         getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>;
       mockGetUserIdByUsername.mockRejectedValue(userError);
 
-      await expect(executeAnonymous(args)).rejects.toThrow("User not found");
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
+        "User not found",
+      );
 
       expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
@@ -265,7 +275,7 @@ describe("Execute Anonymous", () => {
         >;
       mockGetOrCreateDebugLevelId.mockRejectedValue(debugLevelError);
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "Failed to create debug level",
       );
 
@@ -282,7 +292,7 @@ describe("Execute Anonymous", () => {
       >;
       mockEnsureTraceFlag.mockRejectedValue(traceFlagError);
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "Failed to create trace flag",
       );
 
@@ -295,7 +305,9 @@ describe("Execute Anonymous", () => {
 
       mockExecuteAnonymous.mockRejectedValue(executeError);
 
-      await expect(executeAnonymous(args)).rejects.toThrow("Tooling API error");
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
+        "Tooling API error",
+      );
 
       expect(mockSobject).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
@@ -314,7 +326,9 @@ describe("Execute Anonymous", () => {
 
       mockFindOne.mockRejectedValue(queryError);
 
-      await expect(executeAnonymous(args)).rejects.toThrow("Query failed");
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
+        "Query failed",
+      );
 
       expect(mockRequest).not.toHaveBeenCalled();
     });
@@ -333,7 +347,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue({ Id: testLogId });
       mockRequest.mockRejectedValue(requestError);
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "Failed to fetch log body",
       );
     });
@@ -357,7 +371,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue({ Id: testLogId });
       mockRequest.mockResolvedValue(testLogBody);
 
-      await executeAnonymous(args);
+      await executeAnonymous(mockServer, args);
 
       expect(mockFindOne).toHaveBeenCalledWith(
         { LogUserId: customUserId },
@@ -381,7 +395,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue({ Id: testLogId });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(args);
+      const result = await executeAnonymous(mockServer, args);
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(soqlApex);
       expect(result.content[0].text).toBe(testLogBody);
@@ -401,7 +415,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue({ Id: testLogId });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(args);
+      const result = await executeAnonymous(mockServer, args);
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(dmlApex);
       expect(result.content[0].text).toBe(testLogBody);
@@ -415,7 +429,7 @@ describe("Execute Anonymous", () => {
 
       mockConnect.mockRejectedValue(connectError);
 
-      await expect(executeAnonymous(args)).rejects.toThrow(
+      await expect(executeAnonymous(mockServer, args)).rejects.toThrow(
         "No default org configured",
       );
 

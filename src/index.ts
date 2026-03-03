@@ -28,8 +28,11 @@ import {
 import {
   executeAnonymous,
   executeAnonymousTool,
-  ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
+
+function parseArgs<T>(args: Record<string, unknown> | undefined): T {
+  return (args ?? {}) as T;
+}
 
 class LanaServer {
   private server: Server;
@@ -55,10 +58,12 @@ class LanaServer {
     this.server.onerror = (error) => {
       console.error("[MCP Error]", error);
     };
-    process.on("SIGINT", async () => {
+
+    const shutdown = async () => {
       this.server.close();
       process.exit(0);
-    });
+    };
+    process.once("SIGINT", shutdown);
   }
 
   private setupToolHandlers(): void {
@@ -77,18 +82,17 @@ class LanaServer {
       try {
         switch (name) {
           case "analyze_apex_log_performance":
-            return await analyzeLogPerformance(
-              args as unknown as AnalyzeLogArgs,
-            );
+            return await analyzeLogPerformance(parseArgs<AnalyzeLogArgs>(args));
           case "get_apex_log_summary":
-            return await getLogSummary(args as unknown as LogSummaryArgs);
+            return await getLogSummary(parseArgs<LogSummaryArgs>(args));
           case "find_performance_bottlenecks":
             return await findPerformanceBottlenecks(
-              args as unknown as BottleneckArgs,
+              parseArgs<BottleneckArgs>(args),
             );
           case "execute_anonymous":
             return await executeAnonymous(
-              args as unknown as ExecuteAnonymousArgs,
+              this.server,
+              parseArgs<{ apex: string; targetOrg?: string }>(args),
             );
           default:
             throw new Error(`Unknown tool: ${name}`);

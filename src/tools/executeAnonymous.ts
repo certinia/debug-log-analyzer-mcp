@@ -1,3 +1,4 @@
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { Connection } from "@salesforce/core";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import { getOrCreateDebugLevelId } from "../salesforce/debugLevels.js";
@@ -6,6 +7,7 @@ import { connect } from "../salesforce/connection.js";
 
 export interface ExecuteAnonymousArgs {
   apex: string;
+  targetOrg?: string;
 }
 
 type ApexLogRecord = {
@@ -15,7 +17,7 @@ type ApexLogRecord = {
 export const executeAnonymousTool = {
   name: "execute_anonymous",
   description:
-    "Execute a snippet of anonymous Apex and retrieve the resulting log",
+    "Execute a snippet of anonymous Apex against any Salesforce org and retrieve the resulting debug log",
   inputSchema: {
     type: "object",
     properties: {
@@ -23,15 +25,34 @@ export const executeAnonymousTool = {
         type: "string",
         description: "The anonymous Apex to be executed",
       },
+      targetOrg: {
+        type: "string",
+        description:
+          "Alias or username of the target Salesforce org. Uses the project default if not specified.",
+      },
     },
     required: ["apex"],
   },
 };
 
-export async function executeAnonymous(args: ExecuteAnonymousArgs) {
-  const { apex } = args;
+async function getProjectPath(server: Server): Promise<string | undefined> {
+  try {
+    const { roots } = await server.listRoots();
+    const rootUri = roots[0]?.uri;
+    return rootUri ? new URL(rootUri).pathname : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
-  const connection = await connect();
+export async function executeAnonymous(
+  server: Server,
+  args: ExecuteAnonymousArgs,
+) {
+  const { apex, targetOrg } = args;
+  const projectPath = await getProjectPath(server);
+
+  const connection = await connect(projectPath, targetOrg);
 
   const username = connection.getUsername();
   if (!username) {

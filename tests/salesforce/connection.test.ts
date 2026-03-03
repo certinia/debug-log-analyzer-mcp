@@ -2,13 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import {
-  jest,
-  describe,
-  it,
-  expect,
-  beforeEach,
-} from "@jest/globals";
+import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 
 const mockConnectionInstance = {
   query: jest.fn(),
@@ -18,11 +12,11 @@ const mockConnectionInstance = {
   },
 } as any;
 
-const mockAuthInfo = {
-  create: jest.fn(),
+const mockOrgInstance = {
+  getConnection: jest.fn().mockReturnValue(mockConnectionInstance),
 } as any;
 
-const mockConnectionCreate = jest.fn() as jest.MockedFunction<any>;
+const mockOrgCreate = jest.fn() as jest.MockedFunction<any>;
 
 const mockConfigAggregator = {
   getPropertyValue: jest.fn(),
@@ -31,14 +25,14 @@ const mockConfigAggregator = {
 const mockConfigAggregatorCreate = jest.fn() as jest.MockedFunction<any>;
 
 jest.mock("@salesforce/core", () => ({
-  Connection: {
-    create: mockConnectionCreate,
-  },
-  AuthInfo: {
-    create: mockAuthInfo.create,
+  Org: {
+    create: mockOrgCreate,
   },
   ConfigAggregator: {
     create: mockConfigAggregatorCreate,
+  },
+  OrgConfigProperties: {
+    TARGET_ORG: "target-org",
   },
 }));
 
@@ -47,12 +41,11 @@ import { connect } from "../../src/salesforce/connection";
 describe("Salesforce Connection", () => {
   const testUsername = "test@example.com";
   const noDefaultOrgError =
-    "No default org configured. Please set a default org using 'sf config set target-org <username>'.";
+    "No default org configured. Please set a default org using 'sf config set target-org <username>'";
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAuthInfo.create.mockResolvedValue({ username: testUsername });
-    mockConnectionCreate.mockResolvedValue(mockConnectionInstance);
+    mockOrgCreate.mockResolvedValue(mockOrgInstance);
     mockConfigAggregatorCreate.mockResolvedValue(mockConfigAggregator);
     mockConfigAggregator.getPropertyValue.mockReturnValue(testUsername);
   });
@@ -62,11 +55,12 @@ describe("Salesforce Connection", () => {
       const result = await connect();
 
       expect(mockConfigAggregatorCreate).toHaveBeenCalled();
-      expect(mockConfigAggregator.getPropertyValue).toHaveBeenCalledWith("target-org");
-      expect(mockAuthInfo.create).toHaveBeenCalledWith({
-        username: testUsername,
+      expect(mockConfigAggregator.getPropertyValue).toHaveBeenCalledWith(
+        "target-org",
+      );
+      expect(mockOrgCreate).toHaveBeenCalledWith({
+        aliasOrUsername: testUsername,
       });
-      expect(mockConnectionCreate).toHaveBeenCalled();
       expect(result).toBe(mockConnectionInstance);
     });
 
@@ -76,9 +70,20 @@ describe("Salesforce Connection", () => {
       await expect(connect()).rejects.toThrow(noDefaultOrgError);
     });
 
-    it("should propagate errors from AuthInfo.create", async () => {
-      const authError = new Error("Org not found");
-      mockAuthInfo.create.mockRejectedValue(authError);
+    it("should use targetOrg when provided", async () => {
+      const targetOrg = "my-scratch-org";
+      const result = await connect(undefined, targetOrg);
+
+      expect(mockConfigAggregatorCreate).not.toHaveBeenCalled();
+      expect(mockOrgCreate).toHaveBeenCalledWith({
+        aliasOrUsername: targetOrg,
+      });
+      expect(result).toBe(mockConnectionInstance);
+    });
+
+    it("should propagate errors from Org.create", async () => {
+      const orgError = new Error("Org not found");
+      mockOrgCreate.mockRejectedValue(orgError);
 
       await expect(connect()).rejects.toThrow("Org not found");
     });

@@ -239,6 +239,7 @@ describe("LanaServer", () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    process.removeAllListeners("SIGINT");
   });
 
   describe("Server Initialization", () => {
@@ -273,11 +274,11 @@ describe("LanaServer", () => {
     });
 
     it("should setup SIGINT handler", async () => {
-      const mockProcessOn = jest.spyOn(process, "on");
+      const mockProcessOnce = jest.spyOn(process, "once");
 
       new LanaServer();
 
-      expect(mockProcessOn).toHaveBeenCalledWith(
+      expect(mockProcessOnce).toHaveBeenCalledWith(
         "SIGINT",
         expect.any(Function),
       );
@@ -503,8 +504,8 @@ describe("LanaServer", () => {
       new LanaServer();
 
       // Find the SIGINT handler
-      const processOnCalls = jest.spyOn(process, "on").mock.calls;
-      const sigintCall = processOnCalls.find(
+      const processOnceCalls = jest.spyOn(process, "once").mock.calls;
+      const sigintCall = processOnceCalls.find(
         (call: any) => call[0] === "SIGINT",
       );
       expect(sigintCall).toBeDefined();

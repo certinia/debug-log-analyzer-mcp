@@ -3,6 +3,10 @@ import { Connection } from "@salesforce/core";
 const TRACE_FLAG_SOBJECT = "TraceFlag";
 const USER_DEBUG = "USER_DEBUG";
 
+function toDateTimeLiteral(date: Date): { toString(): string } {
+  return { toString: () => date.toISOString() };
+}
+
 type TraceFlag = {
   Id: string;
   TracedEntityId: string;
@@ -22,6 +26,9 @@ export async function ensureTraceFlag(
   );
 
   if (existingTraceFlag) {
+    if (existingTraceFlag.DebugLevelId !== debugLevelId) {
+      await updateTraceFlag(connection, existingTraceFlag.Id, debugLevelId);
+    }
     return;
   }
 
@@ -42,15 +49,30 @@ async function findActiveTraceFlag(
   connection: Connection,
   tracedEntityId: string,
 ): Promise<TraceFlag | null> {
-  const now = new Date().toISOString();
   return await connection.tooling.sobject(TRACE_FLAG_SOBJECT).findOne(
     {
       TracedEntityId: tracedEntityId,
-      ExpirationDate: { $gt: now },
+      ExpirationDate: { $gt: toDateTimeLiteral(new Date()) },
       LogType: USER_DEBUG,
     },
     ["Id", "TracedEntityId", "DebugLevelId", "StartDate", "ExpirationDate"],
   );
+}
+
+async function updateTraceFlag(
+  connection: Connection,
+  traceFlagId: string,
+  debugLevelId: string,
+): Promise<void> {
+  const result = await connection.tooling
+    .sobject(TRACE_FLAG_SOBJECT)
+    .update({ Id: traceFlagId, DebugLevelId: debugLevelId });
+
+  if (!result.success) {
+    throw new Error(
+      `Failed to update TraceFlag: ${JSON.stringify(result.errors)}`,
+    );
+  }
 }
 
 async function createTraceFlag(
