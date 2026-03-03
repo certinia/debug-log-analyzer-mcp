@@ -36,7 +36,14 @@ function logLevelProperty(description: string) {
 export const executeAnonymousTool = {
   name: "execute_anonymous",
   description:
-    "Execute a snippet of anonymous Apex against any Salesforce org and retrieve the resulting debug log",
+    "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI) and retrieve the resulting debug log",
+  annotations: {
+    title: "Execute Anonymous Apex",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
   inputSchema: {
     type: "object",
     properties: {
@@ -51,7 +58,7 @@ export const executeAnonymousTool = {
       },
       debugLevel: {
         description:
-          'Optional debug level configuration. Use "default" to reset all categories to defaults. Use a log level string (e.g. "FINEST") to set all categories to that level. Use an object to override specific categories. Omit entirely to keep the existing configuration.',
+          'Optional debug level configuration. Valid log levels: NONE, ERROR, WARN, INFO, DEBUG, FINE, FINER, FINEST. Pass "default" to reset, a single level string to set all categories, or an object with category overrides (apexCode, apexProfiling, callout, database, nba, system, validation, visualforce, wave, workflow).',
         oneOf: [
           {
             type: "string",
