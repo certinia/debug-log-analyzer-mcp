@@ -34,11 +34,7 @@ jest.mock("@salesforce/core", () => {
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import {
-  ConfigAggregator,
-  OrgConfigProperties,
-  StateAggregator,
-} from "@salesforce/core";
+import { ConfigAggregator, StateAggregator } from "@salesforce/core";
 import {
   executeAnonymous,
   ExecuteAnonymousArgs,
