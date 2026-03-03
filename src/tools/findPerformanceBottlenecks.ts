@@ -3,14 +3,26 @@
  */
 
 import { promises as fs } from "fs";
+import { z } from "zod";
 import { parse, ApexLog } from "../ApexLogParser.js";
 import { SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
 import { encode } from "@toon-format/toon";
 
-export interface BottleneckArgs {
-  logFilePath: string;
-  analysisType?: "cpu" | "database" | "methods" | "all";
-}
+export const findPerformanceBottlenecksInputSchema = {
+  logFilePath: z
+    .string()
+    .describe("Absolute path to the Apex debug log file (.log)"),
+  analysisType: z
+    .enum(["cpu", "database", "methods", "all"])
+    .optional()
+    .describe(
+      'Type of analysis: "cpu" checks CPU time governor limit, "database" checks SOQL query/DML statement/query row limits, "methods" groups methods by namespace with duration totals, "all" runs all three (default)',
+    ),
+};
+
+export type BottleneckArgs = z.infer<
+  z.ZodObject<typeof findPerformanceBottlenecksInputSchema>
+>;
 
 export interface BottleneckResult {
   cpuBottlenecks?: Record<string, unknown>;
@@ -19,33 +31,17 @@ export interface BottleneckResult {
   governorLimitWarnings: Record<string, unknown>;
 }
 
-export const findPerformanceBottlenecksTool = {
-  name: "find_performance_bottlenecks",
+export const findPerformanceBottlenecksToolConfig = {
+  title: "Find Performance Bottlenecks",
   description:
     "Check whether an Apex log transaction is approaching governor limits (flags usage above 80%). Analyzes CPU time, SOQL/DML limits, query rows, and method execution patterns by namespace. Best for checking if a transaction is at risk of hitting governor limits.",
+  inputSchema: findPerformanceBottlenecksInputSchema,
   annotations: {
     title: "Find Performance Bottlenecks",
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: false,
-  },
-  inputSchema: {
-    type: "object",
-    properties: {
-      logFilePath: {
-        type: "string",
-        description: "Absolute path to the Apex debug log file (.log)",
-      },
-      analysisType: {
-        type: "string",
-        enum: ["cpu", "database", "methods", "all"],
-        description:
-          'Type of analysis: "cpu" checks CPU time governor limit, "database" checks SOQL query/DML statement/query row limits, "methods" groups methods by namespace with duration totals, "all" runs all three (default)',
-        default: "all",
-      },
-    },
-    required: ["logFilePath"],
   },
 };
 
@@ -82,7 +78,7 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
   return {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: encode(bottlenecks),
       },
     ],

@@ -2,15 +2,25 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
 
 // Mock the MCP SDK components
-jest.mock("@modelcontextprotocol/sdk/server/index.js");
+jest.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
+  McpServer: jest.fn().mockImplementation(() => ({
+    registerTool: jest.fn(() => ({
+      enable: jest.fn(),
+      disable: jest.fn(),
+      remove: jest.fn(),
+      update: jest.fn(),
+      enabled: true,
+    })),
+    connect: jest.fn(),
+    close: jest.fn(),
+    sendToolListChanged: jest.fn(),
+    server: { onerror: undefined },
+  })),
+}));
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
 
 import { ApexLogServer } from "../src/index";
@@ -18,100 +28,51 @@ import { ApexLogServer } from "../src/index";
 // Mock the tool modules
 jest.mock("../src/tools/analyzeLogPerformance", () => ({
   analyzeLogPerformance: jest.fn(),
-  analyzeLogPerformanceTool: {
-    name: "analyze_apex_log_performance",
+  analyzeLogPerformanceToolConfig: {
+    title: "Analyze Apex Log Performance",
     description:
       "Analyze an Apex debug log file and identify the slowest running methods",
-    inputSchema: {
-      type: "object",
-      properties: {
-        logFilePath: {
-          type: "string",
-          description: "Absolute path to the log file",
-        },
-        topMethods: { type: "number", default: 10 },
-        minDuration: { type: "number", default: 0 },
-        namespace: { type: "string" },
-      },
-      required: ["logFilePath"],
-    },
+    inputSchema: {},
+    annotations: {},
   },
 }));
 
 jest.mock("../src/tools/getLogSummary", () => ({
   getLogSummary: jest.fn(),
-  getLogSummaryTool: {
-    name: "get_apex_log_summary",
+  getLogSummaryToolConfig: {
+    title: "Get Apex Log Summary",
     description: "Get a high-level summary of an Apex debug log",
-    inputSchema: {
-      type: "object",
-      properties: {
-        logFilePath: {
-          type: "string",
-          description: "Absolute path to the log file",
-        },
-      },
-      required: ["logFilePath"],
-    },
+    inputSchema: {},
+    annotations: {},
   },
 }));
 
 jest.mock("../src/tools/findPerformanceBottlenecks", () => ({
   findPerformanceBottlenecks: jest.fn(),
-  findPerformanceBottlenecksTool: {
-    name: "find_performance_bottlenecks",
+  findPerformanceBottlenecksToolConfig: {
+    title: "Find Performance Bottlenecks",
     description: "Identify performance bottlenecks in an Apex log",
-    inputSchema: {
-      type: "object",
-      properties: {
-        logFilePath: {
-          type: "string",
-          description: "Absolute path to the log file",
-        },
-        analysisType: {
-          type: "string",
-          enum: ["cpu", "database", "methods", "all"],
-          default: "all",
-        },
-      },
-      required: ["logFilePath"],
-    },
+    inputSchema: {},
+    annotations: {},
   },
 }));
 
 jest.mock("../src/tools/executeAnonymous", () => ({
   executeAnonymous: jest.fn(),
-  executeAnonymousTool: {
-    name: "execute_anonymous",
+  executeAnonymousToolConfig: {
+    title: "Execute Anonymous Apex",
     description:
       "Execute a snippet of anonymous Apex and retrieve the resulting log",
-    inputSchema: {
-      type: "object",
-      properties: {
-        apex: {
-          type: "string",
-          description: "The anonymous Apex to be executed",
-        },
-      },
-      required: ["apex"],
-    },
+    inputSchema: {},
+    annotations: {},
   },
 }));
 
 // Import the tools after mocking
-import {
-  analyzeLogPerformance,
-  analyzeLogPerformanceTool,
-} from "../src/tools/analyzeLogPerformance";
-import { getLogSummary, getLogSummaryTool } from "../src/tools/getLogSummary";
-import {
-  findPerformanceBottlenecks,
-  findPerformanceBottlenecksTool,
-} from "../src/tools/findPerformanceBottlenecks";
-import {
-  executeAnonymous,
-  executeAnonymousTool,
-} from "../src/tools/executeAnonymous";
+import { analyzeLogPerformance } from "../src/tools/analyzeLogPerformance";
+import { getLogSummary } from "../src/tools/getLogSummary";
+import { findPerformanceBottlenecks } from "../src/tools/findPerformanceBottlenecks";
+import { executeAnonymous } from "../src/tools/executeAnonymous";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -124,19 +85,20 @@ const mockConsoleError = jest
   .mockImplementation(() => {});
 
 describe("ApexLogServer", () => {
-  let mockServer: jest.Mocked<Server>;
+  let mockRegisterTool: jest.Mock;
+  let mockConnect: jest.Mock;
+  let mockClose: jest.Mock;
   let mockTransport: jest.Mocked<StdioServerTransport>;
-  let mockSetRequestHandler: jest.MockedFunction<
-    typeof Server.prototype.setRequestHandler
+  let registeredTools: Map<
+    string,
+    { config: any; callback: (...args: any[]) => any; enabled: boolean }
   >;
-  let mockConnect: jest.MockedFunction<typeof Server.prototype.connect>;
-  let mockClose: jest.MockedFunction<typeof Server.prototype.close>;
 
   // Mock data for testing
   const mockAnalysisResult = {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: JSON.stringify({
           totalMethods: 5,
           totalExecutionTime: 1000000,
@@ -151,7 +113,7 @@ describe("ApexLogServer", () => {
   const mockSummaryResult = {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: JSON.stringify({
           file: "test.log",
           totalExecutionTime: 1000000,
@@ -165,7 +127,7 @@ describe("ApexLogServer", () => {
   const mockBottleneckResult = {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: JSON.stringify({
           cpuBottlenecks: {},
           databaseBottlenecks: {},
@@ -178,7 +140,7 @@ describe("ApexLogServer", () => {
   const mockExecuteAnonymousResult = {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: "APEX DEBUG LOG CONTENT",
       },
     ],
@@ -187,23 +149,44 @@ describe("ApexLogServer", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Setup server mock
-    mockSetRequestHandler = jest.fn();
+    registeredTools = new Map();
+
+    mockRegisterTool = jest.fn((name, config, callback) => {
+      const tool = {
+        config,
+        callback,
+        enabled: true,
+        enable: jest.fn(() => {
+          tool.enabled = true;
+        }),
+        disable: jest.fn(() => {
+          tool.enabled = false;
+        }),
+        remove: jest.fn(),
+        update: jest.fn(),
+      };
+      registeredTools.set(name, tool);
+      return tool;
+    });
     mockConnect = jest.fn();
     mockClose = jest.fn();
 
-    mockServer = {
-      setRequestHandler: mockSetRequestHandler,
+    const mockServer = {
+      registerTool: mockRegisterTool,
       connect: mockConnect,
       close: mockClose,
-      onerror: undefined,
-    } as any;
+      sendToolListChanged: jest.fn(),
+      server: {
+        onerror: undefined as ((error: unknown) => void) | undefined,
+        listRoots: jest.fn(),
+      },
+    };
 
     // Setup transport mock
     mockTransport = {} as jest.Mocked<StdioServerTransport>;
 
-    (Server as jest.MockedClass<typeof Server>).mockImplementation(
-      () => mockServer,
+    (McpServer as jest.MockedClass<typeof McpServer>).mockImplementation(
+      () => mockServer as any,
     );
     (
       StdioServerTransport as jest.MockedClass<typeof StdioServerTransport>
@@ -238,7 +221,7 @@ describe("ApexLogServer", () => {
     it("should create server with correct configuration", async () => {
       new ApexLogServer();
 
-      expect(Server).toHaveBeenCalledWith(
+      expect(McpServer).toHaveBeenCalledWith(
         {
           name: "apex-log-mcp",
           version: "1.0.0",
@@ -256,13 +239,13 @@ describe("ApexLogServer", () => {
     it("should setup error handling", async () => {
       new ApexLogServer();
 
-      expect(mockServer.onerror).toBeDefined();
+      const mcpInstance = (McpServer as jest.MockedClass<typeof McpServer>).mock
+        .results[0].value;
+      expect(mcpInstance.server.onerror).toBeDefined();
 
       // Test error handler
       const testError = new Error("Test error");
-      if (mockServer.onerror) {
-        mockServer.onerror(testError);
-      }
+      mcpInstance.server.onerror(testError);
 
       expect(mockConsoleError).toHaveBeenCalledWith("[MCP Error]", testError);
     });
@@ -280,157 +263,88 @@ describe("ApexLogServer", () => {
   });
 
   describe("Tool Registration", () => {
-    it("should register ListToolsRequest handler", async () => {
+    it("should register all 4 tools via registerTool", async () => {
       new ApexLogServer();
 
-      expect(mockSetRequestHandler).toHaveBeenCalledWith(
-        ListToolsRequestSchema,
+      expect(mockRegisterTool).toHaveBeenCalledTimes(4);
+      expect(mockRegisterTool).toHaveBeenCalledWith(
+        "analyze_apex_log_performance",
+        expect.any(Object),
+        expect.any(Function),
+      );
+      expect(mockRegisterTool).toHaveBeenCalledWith(
+        "get_apex_log_summary",
+        expect.any(Object),
+        expect.any(Function),
+      );
+      expect(mockRegisterTool).toHaveBeenCalledWith(
+        "find_performance_bottlenecks",
+        expect.any(Object),
+        expect.any(Function),
+      );
+      expect(mockRegisterTool).toHaveBeenCalledWith(
+        "execute_anonymous",
+        expect.any(Object),
         expect.any(Function),
       );
     });
 
-    it("should register CallToolRequest handler", async () => {
-      new ApexLogServer();
-
-      expect(mockSetRequestHandler).toHaveBeenCalledWith(
-        CallToolRequestSchema,
-        expect.any(Function),
-      );
-    });
-
-    it("should return all 4 tools when allowedOrgs is provided", async () => {
+    it("should enable execute_anonymous when allowedOrgs is provided", async () => {
       new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
-      const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === ListToolsRequestSchema,
-      );
-      expect(listToolsCall).toBeDefined();
-
-      const listToolsHandler = listToolsCall![1];
-      const result = await listToolsHandler({} as any, {} as any);
-
-      expect(result).toEqual({
-        tools: [
-          analyzeLogPerformanceTool,
-          getLogSummaryTool,
-          findPerformanceBottlenecksTool,
-          executeAnonymousTool,
-        ],
-      });
+      const execAnonTool = registeredTools.get("execute_anonymous")!;
+      expect(execAnonTool.enabled).toBe(true);
     });
 
-    it("should return 3 tools when allowedOrgs is empty", async () => {
+    it("should disable execute_anonymous when allowedOrgs is empty", async () => {
       new ApexLogServer();
 
-      const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === ListToolsRequestSchema,
-      );
-      expect(listToolsCall).toBeDefined();
-
-      const listToolsHandler = listToolsCall![1];
-      const result = await listToolsHandler({} as any, {} as any);
-
-      expect(result).toEqual({
-        tools: [
-          analyzeLogPerformanceTool,
-          getLogSummaryTool,
-          findPerformanceBottlenecksTool,
-        ],
-      });
+      const execAnonTool = registeredTools.get("execute_anonymous")!;
+      expect(execAnonTool.enabled).toBe(false);
     });
   });
 
   describe("Tool Request Handling", () => {
-    let callToolHandler: (request: any, extra: any) => Promise<any>;
-
-    beforeEach(async () => {
+    it("should handle analyze_apex_log_performance tool correctly", async () => {
       new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
-      // Get the CallToolRequest handler
-      const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema,
-      );
-      expect(callToolCall).toBeDefined();
-      callToolHandler = callToolCall![1];
-    });
-
-    it("should handle analyze_apex_log_performance tool correctly", async () => {
-      const request = {
-        params: {
-          name: "analyze_apex_log_performance",
-          arguments: {
-            logFilePath: "/path/to/test.log",
-            topMethods: 5,
-          },
-        },
-      };
-
-      const result = await callToolHandler(request, {} as any);
-
-      expect(analyzeLogPerformance).toHaveBeenCalledWith({
+      const tool = registeredTools.get("analyze_apex_log_performance")!;
+      const args = {
         logFilePath: "/path/to/test.log",
         topMethods: 5,
-      });
+      };
+
+      const result = await tool.callback(args, {} as any);
+
+      expect(analyzeLogPerformance).toHaveBeenCalledWith(args);
       expect(result).toEqual(mockAnalysisResult);
     });
 
     it("should handle get_apex_log_summary tool correctly", async () => {
-      const request = {
-        params: {
-          name: "get_apex_log_summary",
-          arguments: {
-            logFilePath: "/path/to/test.log",
-          },
-        },
-      };
+      new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
-      const result = await callToolHandler(request, {} as any);
+      const tool = registeredTools.get("get_apex_log_summary")!;
+      const args = { logFilePath: "/path/to/test.log" };
 
-      expect(getLogSummary).toHaveBeenCalledWith({
-        logFilePath: "/path/to/test.log",
-      });
+      const result = await tool.callback(args, {} as any);
+
+      expect(getLogSummary).toHaveBeenCalledWith(args);
       expect(result).toEqual(mockSummaryResult);
     });
 
     it("should handle find_performance_bottlenecks tool correctly", async () => {
-      const request = {
-        params: {
-          name: "find_performance_bottlenecks",
-          arguments: {
-            logFilePath: "/path/to/test.log",
-            analysisType: "cpu",
-          },
-        },
-      };
+      new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
-      const result = await callToolHandler(request, {} as any);
-
-      expect(findPerformanceBottlenecks).toHaveBeenCalledWith({
+      const tool = registeredTools.get("find_performance_bottlenecks")!;
+      const args = {
         logFilePath: "/path/to/test.log",
         analysisType: "cpu",
-      });
-      expect(result).toEqual(mockBottleneckResult);
-    });
-
-    it("should return error for unknown tool", async () => {
-      const request = {
-        params: {
-          name: "unknown_tool",
-          arguments: {},
-        },
       };
 
-      const result = await callToolHandler(request, {} as any);
+      const result = await tool.callback(args, {} as any);
 
-      expect(result).toEqual({
-        content: [
-          {
-            type: "text",
-            text: "Error: Unknown tool: unknown_tool",
-          },
-        ],
-        isError: true,
-      });
+      expect(findPerformanceBottlenecks).toHaveBeenCalledWith(args);
+      expect(result).toEqual(mockBottleneckResult);
     });
 
     it("should handle tool execution errors gracefully", async () => {
@@ -441,98 +355,25 @@ describe("ApexLogServer", () => {
         >
       ).mockRejectedValueOnce(error);
 
-      const request = {
-        params: {
-          name: "analyze_apex_log_performance",
-          arguments: {
-            logFilePath: "/path/to/test.log",
-          },
-        },
-      };
+      new ApexLogServer();
 
-      const result = await callToolHandler(request, {} as any);
+      const tool = registeredTools.get("analyze_apex_log_performance")!;
 
-      expect(result).toEqual({
-        content: [
-          {
-            type: "text",
-            text: "Error: Tool execution failed",
-          },
-        ],
-        isError: true,
-      });
-    });
-
-    it("should handle non-Error exceptions", async () => {
-      (
-        analyzeLogPerformance as jest.MockedFunction<
-          typeof analyzeLogPerformance
-        >
-      ).mockRejectedValueOnce("String error");
-
-      const request = {
-        params: {
-          name: "analyze_apex_log_performance",
-          arguments: {
-            logFilePath: "/path/to/test.log",
-          },
-        },
-      };
-
-      const result = await callToolHandler(request, {} as any);
-
-      expect(result).toEqual({
-        content: [
-          {
-            type: "text",
-            text: "Error: String error",
-          },
-        ],
-        isError: true,
-      });
+      await expect(
+        tool.callback({ logFilePath: "/path/to/test.log" }, {} as any),
+      ).rejects.toThrow("Tool execution failed");
     });
 
     it("should return error when execute_anonymous called with empty allowedOrgs", async () => {
-      // Create server with no allowed orgs
-      jest.clearAllMocks();
-      mockSetRequestHandler = jest.fn();
-      mockConnect = jest.fn();
-      mockClose = jest.fn();
-      mockServer = {
-        setRequestHandler: mockSetRequestHandler,
-        connect: mockConnect,
-        close: mockClose,
-        onerror: undefined,
-      } as any;
-      (Server as jest.MockedClass<typeof Server>).mockImplementation(
-        () => mockServer,
-      );
-
       new ApexLogServer();
 
-      const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema,
+      const tool = registeredTools.get("execute_anonymous")!;
+
+      await expect(
+        tool.callback({ apex: "System.debug('test');" }, {} as any),
+      ).rejects.toThrow(
+        "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
       );
-      const handler = callToolCall![1];
-
-      const request = {
-        params: {
-          name: "execute_anonymous",
-          arguments: { apex: "System.debug('test');" },
-        },
-      };
-
-      const result = await handler(request, {} as any);
-
-      expect(result).toEqual({
-        content: [
-          {
-            type: "text",
-            text: "Error: execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
-          },
-        ],
-        isError: true,
-      });
     });
   });
 
@@ -585,58 +426,24 @@ describe("ApexLogServer", () => {
     it("should handle complete workflow for analyze_apex_log_performance", async () => {
       new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
-      // Get handlers
-      const listToolsCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === ListToolsRequestSchema,
-      );
-      const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema,
-      );
-
-      const listToolsHandler = listToolsCall![1];
-      const callToolHandler = callToolCall![1];
-
-      // Test tool listing
-      const toolsResult = await listToolsHandler({} as any, {} as any);
-      expect(toolsResult.tools).toHaveLength(4);
-      expect(toolsResult.tools[0].name).toBe("analyze_apex_log_performance");
+      // Verify all tools registered
+      expect(registeredTools.size).toBe(4);
 
       // Test tool execution
-      const request = {
-        params: {
-          name: "analyze_apex_log_performance",
-          arguments: {
-            logFilePath: "/path/to/test.log",
-            topMethods: 10,
-            minDuration: 1000,
-          },
-        },
-      };
-
-      const result = await callToolHandler(request as any, {} as any);
-      expect(result).toEqual(mockAnalysisResult);
-      expect(analyzeLogPerformance).toHaveBeenCalledWith({
+      const tool = registeredTools.get("analyze_apex_log_performance")!;
+      const args = {
         logFilePath: "/path/to/test.log",
         topMethods: 10,
         minDuration: 1000,
-      });
+      };
+
+      const result = await tool.callback(args, {} as any);
+      expect(result).toEqual(mockAnalysisResult);
+      expect(analyzeLogPerformance).toHaveBeenCalledWith(args);
     });
 
     it("should handle edge cases with malformed requests", async () => {
       new ApexLogServer();
-
-      const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema,
-      );
-      const callToolHandler = callToolCall![1];
-
-      // Test with missing arguments
-      const request = {
-        params: {
-          name: "analyze_apex_log_performance",
-          arguments: null,
-        },
-      };
 
       (
         analyzeLogPerformance as jest.MockedFunction<
@@ -644,9 +451,11 @@ describe("ApexLogServer", () => {
         >
       ).mockRejectedValueOnce(new Error("Invalid arguments"));
 
-      const result = await callToolHandler(request as any, {} as any);
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Error: Invalid arguments");
+      const tool = registeredTools.get("analyze_apex_log_performance")!;
+
+      await expect(tool.callback(null as any, {} as any)).rejects.toThrow(
+        "Invalid arguments",
+      );
     });
   });
 
@@ -654,27 +463,15 @@ describe("ApexLogServer", () => {
     it("should handle typed arguments correctly", async () => {
       new ApexLogServer();
 
-      const callToolCall = mockSetRequestHandler.mock.calls.find(
-        (call: any) => call[0] === CallToolRequestSchema,
-      );
-      const callToolHandler = callToolCall![1];
-
-      const request = {
-        params: {
-          name: "find_performance_bottlenecks",
-          arguments: {
-            logFilePath: "/path/to/test.log",
-            analysisType: "database" as const,
-          },
-        },
+      const tool = registeredTools.get("find_performance_bottlenecks")!;
+      const args = {
+        logFilePath: "/path/to/test.log",
+        analysisType: "database" as const,
       };
 
-      await callToolHandler(request as any, {} as any);
+      await tool.callback(args, {} as any);
 
-      expect(findPerformanceBottlenecks).toHaveBeenCalledWith({
-        logFilePath: "/path/to/test.log",
-        analysisType: "database",
-      });
+      expect(findPerformanceBottlenecks).toHaveBeenCalledWith(args);
     });
   });
 });

@@ -3,15 +3,44 @@
  */
 
 import { promises as fs } from "fs";
+import { z } from "zod";
 import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
 import { encode } from "@toon-format/toon";
 
-export interface AnalyzeLogArgs {
-  logFilePath: string;
-  topMethods?: number;
-  minDuration?: number;
-  namespace?: string;
-}
+export const analyzeLogPerformanceInputSchema = {
+  logFilePath: z
+    .string()
+    .describe("Absolute path to the Apex debug log file (.log)"),
+  topMethods: z
+    .number()
+    .optional()
+    .describe("Number of slowest methods to return (default: 10)"),
+  minDuration: z
+    .number()
+    .optional()
+    .describe(
+      "Minimum duration in nanoseconds to include a method. For reference: 1ms = 1,000,000ns, 1s = 1,000,000,000ns (default: 0)",
+    ),
+  namespace: z.string().optional().describe("Filter methods by namespace"),
+};
+
+export type AnalyzeLogArgs = z.infer<
+  z.ZodObject<typeof analyzeLogPerformanceInputSchema>
+>;
+
+export const analyzeLogPerformanceToolConfig = {
+  title: "Analyze Apex Log Performance",
+  description:
+    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations, SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.",
+  inputSchema: analyzeLogPerformanceInputSchema,
+  annotations: {
+    title: "Analyze Apex Log Performance",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
+};
 
 export interface SlowMethod {
   name: string;
@@ -33,44 +62,6 @@ export interface LogAnalysisResult {
   summary: string;
   recommendations: string[];
 }
-
-export const analyzeLogPerformanceTool = {
-  name: "analyze_apex_log_performance",
-  description:
-    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations, SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.",
-  annotations: {
-    title: "Analyze Apex Log Performance",
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-  inputSchema: {
-    type: "object",
-    properties: {
-      logFilePath: {
-        type: "string",
-        description: "Absolute path to the Apex debug log file (.log)",
-      },
-      topMethods: {
-        type: "number",
-        description: "Number of slowest methods to return (default: 10)",
-        default: 10,
-      },
-      minDuration: {
-        type: "number",
-        description:
-          "Minimum duration in nanoseconds to include a method. For reference: 1ms = 1,000,000ns, 1s = 1,000,000,000ns (default: 0)",
-        default: 0,
-      },
-      namespace: {
-        type: "string",
-        description: "Filter methods by namespace",
-      },
-    },
-    required: ["logFilePath"],
-  },
-};
 
 export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   const { logFilePath, topMethods = 10, minDuration = 0, namespace } = args;
@@ -106,7 +97,7 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   return {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: encode(result),
       },
     ],

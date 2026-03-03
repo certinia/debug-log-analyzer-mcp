@@ -8,7 +8,8 @@ import {
   extractMethods,
   AnalyzeLogArgs,
   LogAnalysisResult,
-  analyzeLogPerformanceTool,
+  analyzeLogPerformanceToolConfig,
+  analyzeLogPerformanceInputSchema,
 } from "../src/tools/analyzeLogPerformance";
 import { parse } from "../src/ApexLogParser";
 import { decode } from "@toon-format/toon";
@@ -35,24 +36,13 @@ describe("analyzeLogPerformance", () => {
 
   describe("Tool Configuration", () => {
     it("should have correct tool configuration", () => {
-      expect(analyzeLogPerformanceTool.name).toBe(
-        "analyze_apex_log_performance",
-      );
-      expect(analyzeLogPerformanceTool.description).toContain(
+      expect(analyzeLogPerformanceToolConfig.description).toContain(
         "Rank methods in an Apex debug log by self-execution time",
       );
-      expect(analyzeLogPerformanceTool.inputSchema.required).toEqual([
-        "logFilePath",
-      ]);
-      expect(
-        analyzeLogPerformanceTool.inputSchema.properties.logFilePath.type,
-      ).toBe("string");
-      expect(
-        analyzeLogPerformanceTool.inputSchema.properties.topMethods.default,
-      ).toBe(10);
-      expect(
-        analyzeLogPerformanceTool.inputSchema.properties.minDuration.default,
-      ).toBe(0);
+      expect(analyzeLogPerformanceInputSchema.logFilePath).toBeDefined();
+      expect(analyzeLogPerformanceInputSchema.topMethods).toBeDefined();
+      expect(analyzeLogPerformanceInputSchema.minDuration).toBeDefined();
+      expect(analyzeLogPerformanceInputSchema.namespace).toBeDefined();
     });
   });
 

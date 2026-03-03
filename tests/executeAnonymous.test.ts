@@ -31,9 +31,9 @@ jest.mock("@salesforce/core", () => {
   };
 });
 
-jest.mock("@modelcontextprotocol/sdk/server/index.js");
+jest.mock("@modelcontextprotocol/sdk/server/mcp.js");
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ConfigAggregator, StateAggregator } from "@salesforce/core";
 import {
   executeAnonymous,
@@ -55,7 +55,7 @@ describe("Execute Anonymous", () => {
   const testLogBody = "APEX DEBUG LOG CONTENT HERE";
   const testApexCode = "System.debug('Hello World');";
 
-  let mockServer: Server;
+  let mockServer: McpServer;
   let mockConnection: any;
   let mockTooling: any;
   let mockExecuteAnonymous: any;
@@ -68,8 +68,10 @@ describe("Execute Anonymous", () => {
     jest.clearAllMocks();
 
     mockServer = {
-      listRoots: jest.fn().mockResolvedValue({ roots: [] }),
-    } as unknown as Server;
+      server: {
+        listRoots: jest.fn().mockResolvedValue({ roots: [] }),
+      },
+    } as unknown as McpServer;
 
     mockExecuteAnonymous = jest.fn();
     mockRequest = jest.fn();
@@ -643,21 +645,17 @@ describe("Execute Anonymous", () => {
     });
   });
 
-  describe("executeAnonymousTool", () => {
+  describe("executeAnonymousToolConfig", () => {
     it("should have correct tool definition", async () => {
-      const { executeAnonymousTool } =
+      const { executeAnonymousToolConfig, executeAnonymousInputSchema } =
         await import("../src/tools/executeAnonymous");
 
-      expect(executeAnonymousTool.name).toBe("execute_anonymous");
-      expect(executeAnonymousTool.description).toContain(
+      expect(executeAnonymousToolConfig.description).toContain(
         "Execute a snippet of anonymous Apex",
       );
-      expect(executeAnonymousTool.inputSchema.type).toBe("object");
-      expect(executeAnonymousTool.inputSchema.properties.apex).toBeDefined();
-      expect(executeAnonymousTool.inputSchema.properties.apex.type).toBe(
-        "string",
-      );
-      expect(executeAnonymousTool.inputSchema.required).toContain("apex");
+      expect(executeAnonymousInputSchema.apex).toBeDefined();
+      expect(executeAnonymousInputSchema.targetOrg).toBeDefined();
+      expect(executeAnonymousInputSchema.debugLevel).toBeDefined();
     });
   });
 });
