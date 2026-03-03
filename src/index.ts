@@ -76,7 +76,7 @@ class ApexLogServer {
         analyzeLogPerformanceTool,
         getLogSummaryTool,
         findPerformanceBottlenecksTool,
-        executeAnonymousTool,
+        ...(this.allowedOrgs.length > 0 ? [executeAnonymousTool] : []),
       ],
     }));
 
@@ -96,6 +96,11 @@ class ApexLogServer {
               parseToolArgs<BottleneckArgs>(args),
             );
           case "execute_anonymous":
+            if (this.allowedOrgs.length === 0) {
+              throw new Error(
+                "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
+              );
+            }
             return await executeAnonymous(
               this.server,
               parseToolArgs<ExecuteAnonymousArgs>(args),

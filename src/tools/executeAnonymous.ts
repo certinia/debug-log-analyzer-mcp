@@ -1,5 +1,10 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { Connection } from "@salesforce/core";
+import {
+  Connection,
+  ConfigAggregator,
+  OrgConfigProperties,
+  StateAggregator,
+} from "@salesforce/core";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   getOrCreateDebugLevelId,
@@ -106,16 +111,66 @@ async function getProjectPath(server: Server): Promise<string | undefined> {
   }
 }
 
-function validateOrgAllowlist(
+async function resolveConfigProperty(
+  projectPath: string | undefined,
+  property: OrgConfigProperties,
+): Promise<string | undefined> {
+  const aggregator = await ConfigAggregator.create({ projectPath });
+  return aggregator.getPropertyValue<string>(property) ?? undefined;
+}
+
+async function resolveToUsername(aliasOrUsername: string): Promise<string> {
+  const stateAggregator = await StateAggregator.getInstance();
+  return stateAggregator.aliases.resolveUsername(aliasOrUsername);
+}
+
+async function getAliasForUsername(
+  username: string,
+): Promise<string | undefined> {
+  const stateAggregator = await StateAggregator.getInstance();
+  return stateAggregator.aliases.get(username) ?? undefined;
+}
+
+async function validateOrgAllowlist(
   allowedOrgs: string[],
   username: string,
-  targetOrg?: string,
-): void {
+  targetOrg: string | undefined,
+  projectPath: string | undefined,
+): Promise<void> {
   if (allowedOrgs.length === 0) {
+    throw new Error(
+      "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
+    );
+  }
+
+  if (allowedOrgs.includes("ALLOW_ALL_ORGS")) {
     return;
   }
 
-  const allowed = allowedOrgs.map((org) => org.toLowerCase());
+  const resolvedAllowed: string[] = [];
+  for (const entry of allowedOrgs) {
+    if (entry === "DEFAULT_TARGET_ORG") {
+      const resolved = await resolveConfigProperty(
+        projectPath,
+        OrgConfigProperties.TARGET_ORG,
+      );
+      if (resolved) {
+        resolvedAllowed.push(await resolveToUsername(resolved));
+      }
+    } else if (entry === "DEFAULT_TARGET_DEV_HUB") {
+      const resolved = await resolveConfigProperty(
+        projectPath,
+        OrgConfigProperties.TARGET_DEV_HUB,
+      );
+      if (resolved) {
+        resolvedAllowed.push(await resolveToUsername(resolved));
+      }
+    } else {
+      resolvedAllowed.push(await resolveToUsername(entry));
+    }
+  }
+
+  const allowed = resolvedAllowed.map((org) => org.toLowerCase());
   const isAllowed =
     allowed.includes(username.toLowerCase()) ||
     (targetOrg !== undefined && allowed.includes(targetOrg.toLowerCase()));
@@ -142,7 +197,10 @@ export async function executeAnonymous(
     throw new Error("Could not determine username from connection");
   }
 
-  validateOrgAllowlist(allowedOrgs, username, targetOrg);
+  await validateOrgAllowlist(allowedOrgs, username, targetOrg, projectPath);
+
+  const alias = await getAliasForUsername(username);
+  const orgLabel = alias ? `${username} (${alias})` : username;
 
   const userId = await getUserIdByUsername(connection, username);
   await validateTraceFlag(connection, userId, debugLevel);
@@ -176,7 +234,7 @@ export async function executeAnonymous(
     content: [
       {
         type: "text",
-        text: `Org: ${username}\n\n${logBody}`,
+        text: `Org: ${orgLabel}\n\n${logBody}`,
       },
     ],
   };

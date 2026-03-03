@@ -296,10 +296,9 @@ describe("ApexLogServer", () => {
       );
     });
 
-    it("should return correct tools list when ListToolsRequest is called", async () => {
-      new ApexLogServer();
+    it("should return all 4 tools when allowedOrgs is provided", async () => {
+      new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
-      // Get the ListToolsRequest handler
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
         (call: any) => call[0] === ListToolsRequestSchema,
       );
@@ -317,13 +316,33 @@ describe("ApexLogServer", () => {
         ],
       });
     });
+
+    it("should return 3 tools when allowedOrgs is empty", async () => {
+      new ApexLogServer();
+
+      const listToolsCall = mockSetRequestHandler.mock.calls.find(
+        (call: any) => call[0] === ListToolsRequestSchema,
+      );
+      expect(listToolsCall).toBeDefined();
+
+      const listToolsHandler = listToolsCall![1];
+      const result = await listToolsHandler({} as any, {} as any);
+
+      expect(result).toEqual({
+        tools: [
+          analyzeLogPerformanceTool,
+          getLogSummaryTool,
+          findPerformanceBottlenecksTool,
+        ],
+      });
+    });
   });
 
   describe("Tool Request Handling", () => {
     let callToolHandler: (request: any, extra: any) => Promise<any>;
 
     beforeEach(async () => {
-      new ApexLogServer();
+      new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
       // Get the CallToolRequest handler
       const callToolCall = mockSetRequestHandler.mock.calls.find(
@@ -470,6 +489,49 @@ describe("ApexLogServer", () => {
         isError: true,
       });
     });
+
+    it("should return error when execute_anonymous called with empty allowedOrgs", async () => {
+      // Create server with no allowed orgs
+      jest.clearAllMocks();
+      mockSetRequestHandler = jest.fn();
+      mockConnect = jest.fn();
+      mockClose = jest.fn();
+      mockServer = {
+        setRequestHandler: mockSetRequestHandler,
+        connect: mockConnect,
+        close: mockClose,
+        onerror: undefined,
+      } as any;
+      (Server as jest.MockedClass<typeof Server>).mockImplementation(
+        () => mockServer,
+      );
+
+      new ApexLogServer();
+
+      const callToolCall = mockSetRequestHandler.mock.calls.find(
+        (call: any) => call[0] === CallToolRequestSchema,
+      );
+      const handler = callToolCall![1];
+
+      const request = {
+        params: {
+          name: "execute_anonymous",
+          arguments: { apex: "System.debug('test');" },
+        },
+      };
+
+      const result = await handler(request, {} as any);
+
+      expect(result).toEqual({
+        content: [
+          {
+            type: "text",
+            text: "Error: execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
+          },
+        ],
+        isError: true,
+      });
+    });
   });
 
   describe("Server Lifecycle", () => {
@@ -519,7 +581,7 @@ describe("ApexLogServer", () => {
 
   describe("Integration Tests", () => {
     it("should handle complete workflow for analyze_apex_log_performance", async () => {
-      new ApexLogServer();
+      new ApexLogServer(["ALLOW_ALL_ORGS"]);
 
       // Get handlers
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
