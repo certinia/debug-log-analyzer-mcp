@@ -126,6 +126,17 @@ class ApexLogServer {
   }
 
   async run(): Promise<void> {
+    const { values } = parseArgs({
+      args: process.argv.slice(2),
+      options: {
+        "allowed-orgs": { type: "string" },
+      },
+    });
+
+    this.allowedOrgs = values["allowed-orgs"]
+      ? values["allowed-orgs"].split(",").map((org) => org.trim())
+      : [];
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
@@ -133,19 +144,7 @@ class ApexLogServer {
   }
 }
 
-const { values } = parseArgs({
-  args: process.argv.slice(2),
-  options: {
-    "allowed-orgs": { type: "string" },
-  },
-});
-
-const allowedOrgs = values["allowed-orgs"]
-  ? values["allowed-orgs"].split(",").map((org) => org.trim())
-  : [];
-
-const server = new ApexLogServer(allowedOrgs);
-
+const server = new ApexLogServer();
 server.run().catch(console.error);
 
 export { ApexLogServer };
