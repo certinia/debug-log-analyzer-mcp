@@ -9,8 +9,18 @@ on:
 
 jobs:
   ci:
-    name: Lint, Test & Build
+    name: ${{ matrix.task }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: Lint
+            command: pnpm run lint
+          - task: Build
+            command: pnpm run build
+          - task: Test
+            command: pnpm run test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -20,10 +30,5 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
       - name: Install Packages
-        run: HUSKY=0 pnpm install
-      - name: Lint Files
-        run: pnpm run lint
-      - name: Build
-        run: pnpm run build
-      - name: Tests
-        run: pnpm run test
+        run: HUSKY=0 pnpm install --frozen-lockfile
+      - run: ${{ matrix.command }}
