@@ -62,6 +62,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
 
   const summary = {
     file: path.basename(logFilePath),
+    size: apexLog.size,
     totalExecutionTime: apexLog.duration.total / NS_TO_MS,
     totalMethods: countMethods(apexLog),
     totalSOQLQueries: apexLog.soqlCount.total,
@@ -70,6 +71,10 @@ export async function getLogSummary(args: LogSummaryArgs) {
     totalDMLRows: apexLog.dmlRowCount.total,
     governorLimits,
     namespaces: apexLog.namespaces,
+    debugLevels: apexLog.debugLevels.map((d) => ({
+      category: d.logCategory,
+      level: d.logLevel,
+    })),
     logIssues,
     parsingErrors: apexLog.parsingErrors.length,
   };

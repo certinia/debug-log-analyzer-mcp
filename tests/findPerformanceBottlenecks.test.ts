@@ -105,6 +105,9 @@ function createMockSlowMethods(): SlowMethod[] {
       soqlCount: 8,
       dmlRows: 100,
       soqlRows: 1500,
+      thrownCount: 0,
+      soslCount: 0,
+      soslRows: 0,
       selfPercentage: 50.0,
     },
     {
@@ -117,6 +120,9 @@ function createMockSlowMethods(): SlowMethod[] {
       soqlCount: 3,
       dmlRows: 50,
       soqlRows: 500,
+      thrownCount: 0,
+      soslCount: 0,
+      soslRows: 0,
       selfPercentage: 30.0,
     },
     {
@@ -129,6 +135,9 @@ function createMockSlowMethods(): SlowMethod[] {
       soqlCount: 2,
       dmlRows: 25,
       soqlRows: 200,
+      thrownCount: 0,
+      soslCount: 0,
+      soslRows: 0,
       selfPercentage: 20.0,
     },
   ];
@@ -465,6 +474,9 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 1,
           dmlRows: 10,
           soqlRows: 100,
+          thrownCount: 0,
+          soslCount: 0,
+          soslRows: 0,
           selfPercentage: 10,
         },
         {
@@ -477,6 +489,9 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 2,
           dmlRows: 20,
           soqlRows: 200,
+          thrownCount: 0,
+          soslCount: 0,
+          soslRows: 0,
           selfPercentage: 20,
         },
       ];
@@ -659,6 +674,9 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 20, // High SOQL
           dmlRows: 2000,
           soqlRows: 10000, // High rows
+          thrownCount: 0,
+          soslCount: 0,
+          soslRows: 0,
           selfPercentage: 80,
         },
         {
@@ -671,6 +689,9 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 30, // Very high SOQL
           dmlRows: 5000,
           soqlRows: 25000, // Very high rows
+          thrownCount: 0,
+          soslCount: 0,
+          soslRows: 0,
           selfPercentage: 15,
         },
       ];
@@ -737,6 +758,9 @@ describe("findPerformanceBottlenecks", () => {
           soqlCount: 1,
           dmlRows: 10,
           soqlRows: 100,
+          thrownCount: 0,
+          soslCount: 0,
+          soslRows: 0,
           selfPercentage: 5,
         },
       ];
