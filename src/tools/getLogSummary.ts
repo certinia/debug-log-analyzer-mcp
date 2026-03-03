@@ -14,7 +14,14 @@ export interface LogSummaryArgs {
 export const getLogSummaryTool = {
   name: "get_apex_log_summary",
   description:
-    "Get a high-level summary of an Apex debug log including total execution time, method count, and governor limits",
+    "Get a high-level summary of an Apex debug log including total execution time, method count, SOQL/DML totals, governor limits, and active namespaces. Best for a quick overview before deeper analysis.",
+  annotations: {
+    title: "Get Apex Log Summary",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {
@@ -62,7 +69,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
     content: [
       {
         type: "text",
-        text: encode(summary)
+        text: encode(summary),
       },
     ],
   };

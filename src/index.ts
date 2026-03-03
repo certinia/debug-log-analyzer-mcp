@@ -46,11 +46,15 @@ class ApexLogServer {
       {
         name: "apex-log-mcp",
         version: "1.0.0",
+        description:
+          "Analyzes Salesforce Apex debug logs for performance bottlenecks, governor limit usage, and optimization opportunities.",
       },
       {
         capabilities: {
           tools: {},
         },
+        instructions:
+          "Use this server when you have an Apex debug log file to analyze, or when you need to execute anonymous Apex and inspect the resulting log. The log analysis tools accept absolute file paths and return structured JSON. Start with get_apex_log_summary for a quick overview, then use analyze_apex_log_performance or find_performance_bottlenecks for deeper analysis.",
       },
     );
 

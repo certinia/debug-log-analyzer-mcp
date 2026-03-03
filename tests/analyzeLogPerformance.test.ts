@@ -39,7 +39,7 @@ describe("analyzeLogPerformance", () => {
         "analyze_apex_log_performance",
       );
       expect(analyzeLogPerformanceTool.description).toContain(
-        "Analyze an Apex debug log file",
+        "Rank methods in an Apex debug log by self-execution time",
       );
       expect(analyzeLogPerformanceTool.inputSchema.required).toEqual([
         "logFilePath",

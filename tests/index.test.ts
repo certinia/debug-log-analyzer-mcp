@@ -242,11 +242,13 @@ describe("ApexLogServer", () => {
         {
           name: "apex-log-mcp",
           version: "1.0.0",
+          description: expect.any(String),
         },
         {
           capabilities: {
             tools: {},
           },
+          instructions: expect.any(String),
         },
       );
     });
