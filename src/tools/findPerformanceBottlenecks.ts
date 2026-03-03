@@ -23,6 +23,13 @@ export const findPerformanceBottlenecksTool = {
   name: "find_performance_bottlenecks",
   description:
     "Check whether an Apex log transaction is approaching governor limits (flags usage above 80%). Analyzes CPU time, SOQL/DML limits, query rows, and method execution patterns by namespace. Best for checking if a transaction is at risk of hitting governor limits.",
+  annotations: {
+    title: "Find Performance Bottlenecks",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {

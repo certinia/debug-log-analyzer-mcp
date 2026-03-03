@@ -38,6 +38,13 @@ export const analyzeLogPerformanceTool = {
   name: "analyze_apex_log_performance",
   description:
     "Rank methods in an Apex debug log by self-execution time. Returns method names, durations, SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.",
+  annotations: {
+    title: "Analyze Apex Log Performance",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {
@@ -53,7 +60,7 @@ export const analyzeLogPerformanceTool = {
       minDuration: {
         type: "number",
         description:
-          "Minimum duration in nanoseconds to include a method (default: 0)",
+          "Minimum duration in nanoseconds to include a method. For reference: 1ms = 1,000,000ns, 1s = 1,000,000,000ns (default: 0)",
         default: 0,
       },
       namespace: {
