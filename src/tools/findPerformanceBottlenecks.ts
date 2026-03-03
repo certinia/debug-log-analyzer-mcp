@@ -28,7 +28,8 @@ export interface BottleneckResult {
   cpuBottlenecks?: Record<string, unknown>;
   databaseBottlenecks?: Record<string, unknown>;
   methodBottlenecks?: Record<string, unknown>;
-  governorLimitWarnings: Record<string, unknown>;
+  governorLimitWarnings?: Record<string, unknown>;
+  note?: string;
 }
 
 export const findPerformanceBottlenecksToolConfig = {
@@ -47,6 +48,8 @@ export const findPerformanceBottlenecksToolConfig = {
 
 export const WARNING_THRESHOLD = 80;
 
+const NS_TO_MS = 1_000_000;
+
 export async function findPerformanceBottlenecks(args: BottleneckArgs) {
   const { logFilePath, analysisType = "all" } = args;
 
@@ -59,20 +62,42 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
   const logContent = await fs.readFile(logFilePath, "utf-8");
   const apexLog = parse(logContent);
 
-  const bottlenecks: BottleneckResult = {
-    governorLimitWarnings: analyzeGovernorLimits(apexLog),
-  };
+  const hasCpuSection = analysisType === "cpu" || analysisType === "all";
 
-  if (analysisType === "cpu" || analysisType === "all") {
-    bottlenecks.cpuBottlenecks = analyzeCPUBottlenecks(apexLog);
+  const bottlenecks: BottleneckResult = {};
+
+  if (hasCpuSection) {
+    const cpu = analyzeCPUBottlenecks(apexLog);
+    if (Object.keys(cpu).length > 0) {
+      bottlenecks.cpuBottlenecks = cpu;
+    }
   }
 
   if (analysisType === "database" || analysisType === "all") {
-    bottlenecks.databaseBottlenecks = analyzeDatabaseBottlenecks(apexLog);
+    const db = analyzeDatabaseBottlenecks(apexLog);
+    if (Object.keys(db).length > 0) {
+      bottlenecks.databaseBottlenecks = db;
+    }
   }
 
   if (analysisType === "methods" || analysisType === "all") {
-    bottlenecks.methodBottlenecks = analyzeMethodBottlenecks(apexLog);
+    const methods = analyzeMethodBottlenecks(apexLog);
+    if (Object.keys(methods).length > 0) {
+      bottlenecks.methodBottlenecks = methods;
+    }
+  }
+
+  const governorWarnings = analyzeGovernorLimits(
+    apexLog,
+    hasCpuSection && bottlenecks.cpuBottlenecks !== undefined,
+  );
+  if (Object.keys(governorWarnings).length > 0) {
+    bottlenecks.governorLimitWarnings = governorWarnings;
+  }
+
+  if (Object.keys(bottlenecks).length === 0) {
+    bottlenecks.note =
+      "No performance bottlenecks or governor limit warnings found.";
   }
 
   return {
@@ -168,50 +193,33 @@ function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
     methodsByNamespace: Object.keys(methodsByNamespace).map((ns) => ({
       namespace: ns,
       methodCount: methodsByNamespace[ns].length,
-      totalDuration: methodsByNamespace[ns].reduce(
-        (sum: number, m: SlowMethod) => sum + m.duration,
-        0,
-      ),
+      totalDuration:
+        methodsByNamespace[ns].reduce(
+          (sum: number, m: SlowMethod) => sum + m.duration,
+          0,
+        ) / NS_TO_MS,
     })),
   };
 }
 
-function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
+function analyzeGovernorLimits(
+  apexLog: ApexLog,
+  excludeCpuTime: boolean,
+): Record<string, unknown> {
   const limits = apexLog.governorLimits;
-  const warnings: string[] = [];
+
+  const result: Record<string, unknown> = {};
 
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
-    if (key !== "byNamespace" && value.limit > 0) {
+    if (key === "byNamespace") return;
+    if (excludeCpuTime && key === "cpuTime") return;
+    if (value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;
       if (percentage > WARNING_THRESHOLD) {
-        warnings.push(
-          `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${
-            value.limit
-          })`,
-        );
+        result[key] = value;
       }
     }
   });
 
-  const reducedLimits = Object.entries(limits).reduce(
-    (acc: Record<string, unknown>, [key, value]: [string, any]) => {
-      if (key !== "byNamespace" && value.limit > 0) {
-        const percentage = (value.used / value.limit) * 100;
-        if (percentage > WARNING_THRESHOLD) {
-          acc[key] = value;
-        }
-      }
-      return acc;
-    },
-    {},
-  );
-
-  return warnings.length === 0
-    ? { note: "No governor limits approaching their thresholds." }
-    : {
-        warnings,
-        // Only include limits with usage
-        details: reducedLimits,
-        note: undefined,
-      };
+  return result;
 }

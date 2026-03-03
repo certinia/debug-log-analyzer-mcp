@@ -21,7 +21,7 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log including total execution time, method count, SOQL/DML totals, governor limits, and active namespaces. Best for a quick overview before deeper analysis.",
+    "Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, and active namespaces. Best for a quick overview before deeper analysis.",
   inputSchema: getLogSummaryInputSchema,
   annotations: {
     title: "Get Apex Log Summary",
@@ -31,6 +31,8 @@ export const getLogSummaryToolConfig = {
     openWorldHint: false,
   },
 };
+
+const NS_TO_MS = 1_000_000;
 
 export async function getLogSummary(args: LogSummaryArgs) {
   const { logFilePath } = args;
@@ -44,22 +46,31 @@ export async function getLogSummary(args: LogSummaryArgs) {
   const logContent = await fs.readFile(logFilePath, "utf-8");
   const apexLog = parse(logContent);
 
+  const governorLimits: Record<string, { used: number; limit: number }> = {};
+  Object.entries(apexLog.governorLimits).forEach(
+    ([key, value]: [string, any]) => {
+      if (key !== "byNamespace" && (value.used > 0 || value.limit > 0)) {
+        governorLimits[key] = { used: value.used, limit: value.limit };
+      }
+    },
+  );
+
+  const logIssues = apexLog.logIssues.map((issue) => ({
+    type: issue.type,
+    summary: issue.summary,
+  }));
+
   const summary = {
     file: path.basename(logFilePath),
-    totalExecutionTime: apexLog.duration.total,
+    totalExecutionTime: apexLog.duration.total / NS_TO_MS,
     totalMethods: countMethods(apexLog),
     totalSOQLQueries: apexLog.soqlCount.total,
     totalDMLOperations: apexLog.dmlCount.total,
     totalSOQLRows: apexLog.soqlRowCount.total,
     totalDMLRows: apexLog.dmlRowCount.total,
-    governorLimits: {
-      cpuTime: apexLog.governorLimits.cpuTime,
-      heapSize: apexLog.governorLimits.heapSize,
-      soqlQueries: apexLog.governorLimits.soqlQueries,
-      dmlStatements: apexLog.governorLimits.dmlStatements,
-    },
+    governorLimits,
     namespaces: apexLog.namespaces,
-    logIssues: apexLog.logIssues.length,
+    logIssues,
     parsingErrors: apexLog.parsingErrors.length,
   };
 

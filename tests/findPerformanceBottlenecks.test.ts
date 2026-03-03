@@ -214,7 +214,6 @@ describe("findPerformanceBottlenecks", () => {
       expect(parsedResult).toHaveProperty("cpuBottlenecks");
       expect(parsedResult).toHaveProperty("databaseBottlenecks");
       expect(parsedResult).toHaveProperty("methodBottlenecks");
-      expect(parsedResult).toHaveProperty("governorLimitWarnings");
 
       // Verify CPU analysis
       expect(parsedResult.cpuBottlenecks).toMatchObject({
@@ -232,30 +231,27 @@ describe("findPerformanceBottlenecks", () => {
       });
       expect(parsedResult.databaseBottlenecks!.dmlStatements).toBeUndefined();
 
-      // Verify method analysis
+      // Verify method analysis with ms durations
       expect(parsedResult.methodBottlenecks).toMatchObject({
         totalMethods: 3,
         methodsByNamespace: expect.arrayContaining([
           expect.objectContaining({
             namespace: "MyNamespace",
             methodCount: 2,
-            totalDuration: 700000000, // 500ms + 200ms
+            totalDuration: 700, // 700ms
           }),
           expect.objectContaining({
             namespace: "default",
             methodCount: 1,
-            totalDuration: 300000000,
+            totalDuration: 300, // 300ms
           }),
         ]),
       });
 
-      // Verify governor limit warnings
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 85.0% of limit used (8500/10000)",
-      );
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "soqlQueries: 90.0% of limit used (90/100)",
-      );
+      // Verify governor limit warnings exclude cpuTime (deduplicated with cpuBottlenecks)
+      expect(parsedResult.governorLimitWarnings).toBeDefined();
+      expect(parsedResult.governorLimitWarnings!.cpuTime).toBeUndefined();
+      expect(parsedResult.governorLimitWarnings!.soqlQueries).toBeDefined();
     });
 
     it('should use "all" as default when analysisType is not specified', async () => {
@@ -268,10 +264,10 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult).toHaveProperty("cpuBottlenecks");
-      expect(parsedResult).toHaveProperty("databaseBottlenecks");
+      // Methods section is always present when analysisType includes it
       expect(parsedResult).toHaveProperty("methodBottlenecks");
-      expect(parsedResult).toHaveProperty("governorLimitWarnings");
+      // No governor limit warnings when usage is low
+      expect(parsedResult).not.toHaveProperty("governorLimitWarnings");
     });
   });
 
@@ -291,11 +287,10 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      // Should only contain CPU analysis and governor limit warnings
+      // Should only contain CPU analysis (no database or methods)
       expect(parsedResult).toHaveProperty("cpuBottlenecks");
       expect(parsedResult).not.toHaveProperty("databaseBottlenecks");
       expect(parsedResult).not.toHaveProperty("methodBottlenecks");
-      expect(parsedResult).toHaveProperty("governorLimitWarnings");
 
       expect(parsedResult.cpuBottlenecks).toMatchObject({
         cpuTimeUsed: 9000,
@@ -320,7 +315,9 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.cpuBottlenecks).toMatchObject({});
+      // Empty section omitted
+      expect(parsedResult).not.toHaveProperty("cpuBottlenecks");
+      expect(parsedResult).toHaveProperty("note");
     });
 
     it("should handle zero CPU limit", async () => {
@@ -338,8 +335,8 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      // When limit is 0, percentage is 0, which is not > 80%, so no bottleneck info
-      expect(parsedResult.cpuBottlenecks).toMatchObject({});
+      expect(parsedResult).not.toHaveProperty("cpuBottlenecks");
+      expect(parsedResult).toHaveProperty("note");
     });
   });
 
@@ -361,14 +358,12 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      // Should only contain database analysis and governor limit warnings
+      // Should not contain CPU or method analysis
       expect(parsedResult).not.toHaveProperty("cpuBottlenecks");
-      expect(parsedResult).toHaveProperty("databaseBottlenecks");
       expect(parsedResult).not.toHaveProperty("methodBottlenecks");
-      expect(parsedResult).toHaveProperty("governorLimitWarnings");
 
-      // None of these exceed 80%, so should return empty object
-      expect(parsedResult.databaseBottlenecks).toMatchObject({});
+      // None of these exceed 80%, so databaseBottlenecks omitted
+      expect(parsedResult).not.toHaveProperty("databaseBottlenecks");
     });
 
     it("should handle zero database limits", async () => {
@@ -388,7 +383,7 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.databaseBottlenecks).toMatchObject({});
+      expect(parsedResult).not.toHaveProperty("databaseBottlenecks");
     });
   });
 
@@ -408,11 +403,10 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      // Should only contain method analysis and governor limit warnings
+      // Should not contain CPU or database analysis
       expect(parsedResult).not.toHaveProperty("cpuBottlenecks");
       expect(parsedResult).not.toHaveProperty("databaseBottlenecks");
       expect(parsedResult).toHaveProperty("methodBottlenecks");
-      expect(parsedResult).toHaveProperty("governorLimitWarnings");
 
       expect(parsedResult.methodBottlenecks).toMatchObject({
         totalMethods: 3,
@@ -420,12 +414,12 @@ describe("findPerformanceBottlenecks", () => {
           expect.objectContaining({
             namespace: "MyNamespace",
             methodCount: 2,
-            totalDuration: 700000000,
+            totalDuration: 700, // 700ms
           }),
           expect.objectContaining({
             namespace: "default",
             methodCount: 1,
-            totalDuration: 300000000,
+            totalDuration: 300, // 300ms
           }),
         ]),
       });
@@ -498,13 +492,13 @@ describe("findPerformanceBottlenecks", () => {
       expect(methodBottlenecks.methodsByNamespace[0]).toMatchObject({
         namespace: "TestNamespace",
         methodCount: 2,
-        totalDuration: 300000000,
+        totalDuration: 300, // 300ms
       });
     });
   });
 
   describe("Governor limit warnings", () => {
-    it("should generate warnings for high governor limit usage (>80%)", async () => {
+    it("should return structured limit data for high governor limit usage (>80%)", async () => {
       const args: BottleneckArgs = { logFilePath: mockLogFilePath };
 
       const mockLog = createMockApexLog({
@@ -521,24 +515,28 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 85.0% of limit used (8500/10000)",
-      );
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "soqlQueries: 90.0% of limit used (90/100)",
-      );
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "dmlStatements: 90.0% of limit used (135/150)",
-      );
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "queryRows: 90.0% of limit used (45000/50000)",
-      );
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "heapSize: 85.0% of limit used (5100000/6000000)",
-      );
+      // cpuTime excluded from governorLimitWarnings (deduplicated with cpuBottlenecks)
+      expect(parsedResult.governorLimitWarnings!.cpuTime).toBeUndefined();
+      // Other limits should be present as structured data
+      expect(parsedResult.governorLimitWarnings!.soqlQueries).toMatchObject({
+        used: 90,
+        limit: 100,
+      });
+      expect(parsedResult.governorLimitWarnings!.dmlStatements).toMatchObject({
+        used: 135,
+        limit: 150,
+      });
+      expect(parsedResult.governorLimitWarnings!.queryRows).toMatchObject({
+        used: 45000,
+        limit: 50000,
+      });
+      expect(parsedResult.governorLimitWarnings!.heapSize).toMatchObject({
+        used: 5100000,
+        limit: 6000000,
+      });
     });
 
-    it("should not generate warnings for low governor limit usage (<=80%)", async () => {
+    it("should not include governorLimitWarnings when usage is low (<=80%)", async () => {
       const args: BottleneckArgs = { logFilePath: mockLogFilePath };
 
       const mockLog = createMockApexLog({
@@ -554,12 +552,11 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      // When usage is low, governorLimitWarnings should have a note instead of warnings
-      expect(parsedResult.governorLimitWarnings).toHaveProperty("note");
-      expect(parsedResult.governorLimitWarnings).not.toHaveProperty("warnings");
+      // No governor warnings when usage is low
+      expect(parsedResult).not.toHaveProperty("governorLimitWarnings");
     });
 
-    it("should not generate warnings for zero limits", async () => {
+    it("should not include governorLimitWarnings for zero limits", async () => {
       const args: BottleneckArgs = { logFilePath: mockLogFilePath };
 
       const mockLog = createMockApexLog({
@@ -574,11 +571,10 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.governorLimitWarnings).toHaveProperty("note");
-      expect(parsedResult.governorLimitWarnings).not.toHaveProperty("warnings");
+      expect(parsedResult).not.toHaveProperty("governorLimitWarnings");
     });
 
-    it("should include governor limit details in the response", async () => {
+    it("should not include governorLimitWarnings when usage is low", async () => {
       const args: BottleneckArgs = { logFilePath: mockLogFilePath };
 
       const customLimits = {
@@ -594,8 +590,7 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.governorLimitWarnings).toHaveProperty("note");
-      expect(parsedResult.governorLimitWarnings).not.toHaveProperty("details");
+      expect(parsedResult).not.toHaveProperty("governorLimitWarnings");
     });
 
     it("should handle edge case of exactly 80% usage", async () => {
@@ -611,8 +606,8 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.governorLimitWarnings).toHaveProperty("note");
-      expect(parsedResult.governorLimitWarnings).not.toHaveProperty("warnings");
+      // Exactly 80% is not > 80%
+      expect(parsedResult).not.toHaveProperty("governorLimitWarnings");
     });
 
     it("should handle edge case of just over 80% usage", async () => {
@@ -628,10 +623,12 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      // Should generate warning for just over 80%
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 80.0% of limit used (8001/10000)",
-      );
+      // cpuTime should be in cpuBottlenecks, not in governorLimitWarnings (deduplicated)
+      expect(parsedResult).toHaveProperty("cpuBottlenecks");
+      // governorLimitWarnings should not have cpuTime since it's deduplicated
+      if (parsedResult.governorLimitWarnings) {
+        expect(parsedResult.governorLimitWarnings.cpuTime).toBeUndefined();
+      }
     });
   });
 
@@ -685,7 +682,6 @@ describe("findPerformanceBottlenecks", () => {
       const parsedResult = toonDecode(result);
       const databaseBottlenecks = parsedResult.databaseBottlenecks as any;
       const methodBottlenecks = parsedResult.methodBottlenecks as any;
-      const governorLimitWarnings = parsedResult.governorLimitWarnings as any;
 
       // Should identify all bottleneck types
       expect(parsedResult.cpuBottlenecks!.warning).toBe(
@@ -705,14 +701,14 @@ describe("findPerformanceBottlenecks", () => {
       expect(methodBottlenecks.totalMethods).toBe(2);
       expect(methodBottlenecks.methodsByNamespace).toHaveLength(2);
 
-      // Multiple governor limit warnings
-      expect(governorLimitWarnings.warnings.length).toBeGreaterThan(3);
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "cpuTime: 95.0% of limit used (9500/10000)",
-      );
-      expect(parsedResult.governorLimitWarnings.warnings).toContain(
-        "soqlQueries: 95.0% of limit used (95/100)",
-      );
+      // Governor warnings should have non-CPU limits as structured data
+      expect(parsedResult.governorLimitWarnings).toBeDefined();
+      expect(parsedResult.governorLimitWarnings!.soqlQueries).toMatchObject({
+        used: 95,
+        limit: 100,
+      });
+      // cpuTime excluded from governorLimitWarnings (deduplicated)
+      expect(parsedResult.governorLimitWarnings!.cpuTime).toBeUndefined();
     });
 
     it("should handle optimal performance scenario", async () => {
@@ -750,21 +746,19 @@ describe("findPerformanceBottlenecks", () => {
 
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
-      const databaseBottlenecks = parsedResult.databaseBottlenecks as any;
+
+      // No CPU bottleneck (below 80%) — section omitted
+      expect(parsedResult).not.toHaveProperty("cpuBottlenecks");
+
+      // Low database usage - section omitted
+      expect(parsedResult).not.toHaveProperty("databaseBottlenecks");
+
+      // Method analysis still present
       const methodBottlenecks = parsedResult.methodBottlenecks as any;
-
-      // No CPU bottleneck (below 80%)
-      expect(parsedResult.cpuBottlenecks).toMatchObject({});
-
-      // Low database usage - no bottlenecks
-      expect(databaseBottlenecks).toMatchObject({});
-
-      // Simple method analysis
       expect(methodBottlenecks.totalMethods).toBe(1);
 
       // No governor limit warnings
-      expect(parsedResult.governorLimitWarnings).toHaveProperty("note");
-      expect(parsedResult.governorLimitWarnings).not.toHaveProperty("warnings");
+      expect(parsedResult).not.toHaveProperty("governorLimitWarnings");
     });
   });
 
@@ -784,10 +778,9 @@ describe("findPerformanceBottlenecks", () => {
       expect(result.content[0]).toHaveProperty("type", "text");
       expect(result.content[0]).toHaveProperty("text");
 
-      // Validate JSON structure
+      // Validate structure — methodBottlenecks always present for "all"
       const parsedResult = toonDecode(result);
-      expect(parsedResult).toHaveProperty("governorLimitWarnings");
-      expect(parsedResult.governorLimitWarnings).toHaveProperty("note");
+      expect(parsedResult).toHaveProperty("methodBottlenecks");
     });
 
     it("should handle undefined values gracefully", async () => {
@@ -804,7 +797,7 @@ describe("findPerformanceBottlenecks", () => {
       const parsedResult = toonDecode(result);
 
       // Should still work without errors
-      expect(parsedResult).toHaveProperty("governorLimitWarnings");
+      expect(parsedResult).toBeDefined();
     });
   });
 

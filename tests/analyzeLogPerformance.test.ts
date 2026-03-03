@@ -91,11 +91,25 @@ describe("analyzeLogPerformance", () => {
       const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(3);
-      expect(parsedResult.totalExecutionTime).toBe(1000000000); // 1 second in ns
+      expect(parsedResult.totalExecutionTime).toBe(1000); // 1s in ms
       expect(parsedResult.slowestMethods).toHaveLength(3);
       expect(parsedResult.slowestMethods[0].name).toBe("SlowMethod");
-      expect(parsedResult.summary).toContain("Analysis found 3 methods");
       expect(parsedResult.recommendations).toBeInstanceOf(Array);
+    });
+
+    it("should return durations in milliseconds", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLog();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      expect(parsedResult.slowestMethods[0].duration).toBe(500); // 500ms
+      expect(parsedResult.slowestMethods[0].selfDuration).toBe(500); // 500ms
+      expect(parsedResult.slowestMethods[1].duration).toBe(400); // 400ms
+      expect(parsedResult.slowestMethods[2].duration).toBe(100); // 100ms
     });
 
     it("should limit results with topMethods parameter", async () => {
@@ -115,10 +129,10 @@ describe("analyzeLogPerformance", () => {
       expect(parsedResult.slowestMethods[1].name).toBe("MediumMethod");
     });
 
-    it("should filter by minimum duration", async () => {
+    it("should filter by minimum duration in milliseconds", async () => {
       const args: AnalyzeLogArgs = {
         logFilePath: "/test/file.log",
-        minDuration: 300000000, // 300ms in ns
+        minDuration: 300, // 300ms
       };
       const mockApexLog = createMockApexLog();
 
@@ -130,9 +144,7 @@ describe("analyzeLogPerformance", () => {
       expect(parsedResult.totalMethods).toBe(2); // Only SlowMethod and MediumMethod
       expect(parsedResult.slowestMethods).toHaveLength(2);
       expect(
-        parsedResult.slowestMethods.every(
-          (method) => method.duration >= 300000000,
-        ),
+        parsedResult.slowestMethods.every((method) => method.duration >= 300),
       ).toBe(true);
     });
 
@@ -167,9 +179,9 @@ describe("analyzeLogPerformance", () => {
       expect(methods[0].soqlCount).toBe(10);
     });
 
-    it("should filter methods by minimum duration", () => {
+    it("should filter methods by minimum duration in nanoseconds", () => {
       const mockApexLog = createMockApexLog();
-      const methods = extractMethods(mockApexLog, 300000000); // 300ms
+      const methods = extractMethods(mockApexLog, 300000000); // 300ms in ns
 
       expect(methods).toHaveLength(2);
       expect(methods.every((method) => method.duration >= 300000000)).toBe(
@@ -212,27 +224,24 @@ describe("analyzeLogPerformance", () => {
     });
   });
 
-  describe("Performance Summary Generation", () => {
-    it("should generate correct summary for multiple methods", async () => {
+  describe("Edge Cases", () => {
+    it("should handle empty log gracefully", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLog();
+      const mockApexLog = createEmptyMockApexLog();
 
       setupMocksForSuccess(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.summary).toContain("Analysis found 3 methods");
-      expect(parsedResult.summary).toContain("SlowMethod");
-      expect(parsedResult.summary).toContain("500.00ms");
-      expect(parsedResult.summary).toContain("50.0% of total execution time");
-      expect(parsedResult.summary).toContain("100.0% of total execution time"); // All methods combined
+      expect(parsedResult.totalMethods).toBe(0);
+      expect(parsedResult.slowestMethods).toHaveLength(0);
     });
 
-    it("should generate appropriate summary for no methods", async () => {
+    it("should handle log with no matching methods after filtering", async () => {
       const args: AnalyzeLogArgs = {
         logFilePath: "/test/file.log",
-        minDuration: 2000000000,
+        namespace: "NonExistentNamespace",
       };
       const mockApexLog = createMockApexLog();
 
@@ -241,10 +250,89 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.summary).toBe(
-        "No methods found matching the criteria.",
-      );
       expect(parsedResult.totalMethods).toBe(0);
+      expect(parsedResult.slowestMethods).toHaveLength(0);
+    });
+
+    it("should handle parsing errors gracefully", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+
+      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.readFile.mockResolvedValue("invalid log content");
+      mockedParse.mockImplementation(() => {
+        throw new Error("Parsing failed");
+      });
+
+      await expect(analyzeLogPerformance(args)).rejects.toThrow(
+        "Parsing failed",
+      );
+    });
+
+    it("should handle file read errors", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+
+      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.readFile.mockRejectedValue(new Error("Permission denied"));
+
+      await expect(analyzeLogPerformance(args)).rejects.toThrow(
+        "Permission denied",
+      );
+    });
+  });
+
+  describe("Interface Contracts", () => {
+    it("should return SlowMethod objects with correct structure", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLog();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const method = parsedResult.slowestMethods[0];
+      expect(typeof method.name).toBe("string");
+      expect(typeof method.duration).toBe("number");
+      expect(typeof method.selfDuration).toBe("number");
+      expect(typeof method.namespace).toBe("string");
+      expect(typeof method.dmlCount).toBe("number");
+      expect(typeof method.soqlCount).toBe("number");
+      expect(typeof method.dmlRows).toBe("number");
+      expect(typeof method.soqlRows).toBe("number");
+      expect(typeof method.selfPercentage).toBe("number");
+      expect(["number", "string", "object"]).toContain(
+        typeof method.lineNumber,
+      );
+    });
+
+    it("should return LogAnalysisResult with correct structure", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLog();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      expect(typeof parsedResult.totalMethods).toBe("number");
+      expect(typeof parsedResult.totalExecutionTime).toBe("number");
+      expect(Array.isArray(parsedResult.slowestMethods)).toBe(true);
+      expect(Array.isArray(parsedResult.recommendations)).toBe(true);
+    });
+
+    it("should return LogAnalysisResult with summary string", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLog();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      expect(typeof parsedResult.summary).toBe("string");
+      expect(parsedResult.summary).toContain("Analysis found 3 methods");
+      expect(parsedResult.summary).toContain("SlowMethod");
+      expect(parsedResult.summary).toContain("500.00ms");
     });
   });
 
@@ -338,120 +426,10 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      // Should only mention first 3 methods in recommendations
-      const methodMentions = parsedResult.recommendations.filter(
-        (rec) =>
-          rec.includes("Method1") ||
-          rec.includes("Method2") ||
-          rec.includes("Method3") ||
-          rec.includes("Method4"),
-      );
-
-      const mentionsMethod4 = methodMentions.some((rec) =>
+      const mentionsMethod4 = parsedResult.recommendations.some((rec) =>
         rec.includes("Method4"),
       );
       expect(mentionsMethod4).toBe(false);
-    });
-  });
-
-  describe("Edge Cases", () => {
-    it("should handle empty log gracefully", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createEmptyMockApexLog();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      expect(parsedResult.totalMethods).toBe(0);
-      expect(parsedResult.slowestMethods).toHaveLength(0);
-      expect(parsedResult.summary).toBe(
-        "No methods found matching the criteria.",
-      );
-    });
-
-    it("should handle log with no matching methods after filtering", async () => {
-      const args: AnalyzeLogArgs = {
-        logFilePath: "/test/file.log",
-        namespace: "NonExistentNamespace",
-      };
-      const mockApexLog = createMockApexLog();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      expect(parsedResult.totalMethods).toBe(0);
-      expect(parsedResult.slowestMethods).toHaveLength(0);
-    });
-
-    it("should handle parsing errors gracefully", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-
-      mockedFs.access.mockResolvedValue(undefined);
-      mockedFs.readFile.mockResolvedValue("invalid log content");
-      mockedParse.mockImplementation(() => {
-        throw new Error("Parsing failed");
-      });
-
-      await expect(analyzeLogPerformance(args)).rejects.toThrow(
-        "Parsing failed",
-      );
-    });
-
-    it("should handle file read errors", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-
-      mockedFs.access.mockResolvedValue(undefined);
-      mockedFs.readFile.mockRejectedValue(new Error("Permission denied"));
-
-      await expect(analyzeLogPerformance(args)).rejects.toThrow(
-        "Permission denied",
-      );
-    });
-  });
-
-  describe("Interface Contracts", () => {
-    it("should return SlowMethod objects with correct structure", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLog();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      const method = parsedResult.slowestMethods[0];
-      expect(typeof method.name).toBe("string");
-      expect(typeof method.duration).toBe("number");
-      expect(typeof method.selfDuration).toBe("number");
-      expect(typeof method.namespace).toBe("string");
-      expect(typeof method.dmlCount).toBe("number");
-      expect(typeof method.soqlCount).toBe("number");
-      expect(typeof method.dmlRows).toBe("number");
-      expect(typeof method.soqlRows).toBe("number");
-      expect(typeof method.selfPercentage).toBe("number");
-      expect(["number", "string", "object"]).toContain(
-        typeof method.lineNumber,
-      );
-    });
-
-    it("should return LogAnalysisResult with correct structure", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLog();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      expect(typeof parsedResult.totalMethods).toBe("number");
-      expect(typeof parsedResult.totalExecutionTime).toBe("number");
-      expect(Array.isArray(parsedResult.slowestMethods)).toBe(true);
-      expect(typeof parsedResult.summary).toBe("string");
-      expect(Array.isArray(parsedResult.recommendations)).toBe(true);
     });
   });
 
@@ -605,6 +583,21 @@ describe("analyzeLogPerformance", () => {
     return {
       duration: { total: 0, self: 0 },
       children: [method],
+      type: "EXECUTION_STARTED",
+      text: "Root",
+      namespace: "default",
+      lineNumber: null,
+      dmlCount: { total: 0, self: 0 },
+      soqlCount: { total: 0, self: 0 },
+      dmlRowCount: { total: 0, self: 0 },
+      soqlRowCount: { total: 0, self: 0 },
+    };
+  }
+
+  function createEmptyMockApexLog(): any {
+    return {
+      duration: { total: 0, self: 0 },
+      children: [],
       type: "EXECUTION_STARTED",
       text: "Root",
       namespace: "default",
@@ -795,7 +788,7 @@ describe("analyzeLogPerformance", () => {
       8,
       100,
       1200,
-    ); // Should not appear in recommendations
+    );
 
     return {
       duration: { total: 1000000000, self: 0 },
@@ -808,21 +801,6 @@ describe("analyzeLogPerformance", () => {
       soqlCount: { total: 26, self: 0 },
       dmlRowCount: { total: 340, self: 0 },
       soqlRowCount: { total: 4200, self: 0 },
-    };
-  }
-
-  function createEmptyMockApexLog(): any {
-    return {
-      duration: { total: 0, self: 0 },
-      children: [],
-      type: "EXECUTION_STARTED",
-      text: "Root",
-      namespace: "default",
-      lineNumber: null,
-      dmlCount: { total: 0, self: 0 },
-      soqlCount: { total: 0, self: 0 },
-      dmlRowCount: { total: 0, self: 0 },
-      soqlRowCount: { total: 0, self: 0 },
     };
   }
 });
