@@ -95,6 +95,16 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
    mcp-inspector node dist/index.js
    ```
 
+3. **Run with `execute_anonymous` enabled:**
+
+   The `execute_anonymous` tool is disabled by default. Pass `--allowed-orgs` to enable it:
+
+   ```zsh
+   node dist/index.js --allowed-orgs ALLOW_ALL_ORGS
+   ```
+
+   See the [README](README.md#enabling-execute_anonymous) for all supported tokens.
+
 ## 🧪 Testing Your Changes
 
 Make sure your changes don’t break anything. If you’re working on a feature or bug fix that requires tests, be sure to add or update the relevant tests.

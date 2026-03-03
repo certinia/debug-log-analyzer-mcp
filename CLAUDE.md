@@ -78,4 +78,4 @@ The server provides four main capabilities:
 4. **Execute Anonymous**: Executes anonymous Apex code snippets and retrieves the resulting debug log
 
 Log analysis tools (1-3) accept absolute file paths to `.log` files and return structured JSON for AI processing.
-Anonymous execution (4) accepts multi-line strings containing Apex and returns the entire contents of the log. It supports an optional `debugLevel` parameter to configure trace flag log levels per category or set all categories at once.
+Anonymous execution (4) accepts multi-line strings containing Apex and returns the entire contents of the log. It supports an optional `debugLevel` parameter to configure trace flag log levels per category or set all categories at once. The `execute_anonymous` tool is disabled by default and only registered when `--allowed-orgs` is configured. The allowlist supports special tokens (`ALLOW_ALL_ORGS`, `DEFAULT_TARGET_ORG`, `DEFAULT_TARGET_DEV_HUB`) as well as org usernames/aliases. Aliases are resolved to usernames for matching. The response includes the org alias alongside the username when available.
