@@ -36,7 +36,7 @@ function logLevelProperty(description: string) {
 export const executeAnonymousTool = {
   name: "execute_anonymous",
   description:
-    "Execute a snippet of anonymous Apex against any Salesforce org and retrieve the resulting debug log",
+    "Execute a snippet of anonymous Apex against any Salesforce org and retrieve the resulting debug log. The response includes the target org username.",
   inputSchema: {
     type: "object",
     properties: {
@@ -106,9 +106,31 @@ async function getProjectPath(server: Server): Promise<string | undefined> {
   }
 }
 
+function validateOrgAllowlist(
+  allowedOrgs: string[],
+  username: string,
+  targetOrg?: string,
+): void {
+  if (allowedOrgs.length === 0) {
+    return;
+  }
+
+  const allowed = allowedOrgs.map((org) => org.toLowerCase());
+  const isAllowed =
+    allowed.includes(username.toLowerCase()) ||
+    (targetOrg !== undefined && allowed.includes(targetOrg.toLowerCase()));
+
+  if (!isAllowed) {
+    throw new Error(
+      `Org "${targetOrg ?? username}" is not in the allowed orgs list. Allowed orgs: ${allowedOrgs.join(", ")}`,
+    );
+  }
+}
+
 export async function executeAnonymous(
   server: Server,
   args: ExecuteAnonymousArgs,
+  allowedOrgs: string[] = [],
 ) {
   const { apex, targetOrg, debugLevel } = args;
   const projectPath = await getProjectPath(server);
@@ -119,6 +141,8 @@ export async function executeAnonymous(
   if (!username) {
     throw new Error("Could not determine username from connection");
   }
+
+  validateOrgAllowlist(allowedOrgs, username, targetOrg);
 
   const userId = await getUserIdByUsername(connection, username);
   await validateTraceFlag(connection, userId, debugLevel);
@@ -152,7 +176,7 @@ export async function executeAnonymous(
     content: [
       {
         type: "text",
-        text: logBody,
+        text: `Org: ${username}\n\n${logBody}`,
       },
     ],
   };

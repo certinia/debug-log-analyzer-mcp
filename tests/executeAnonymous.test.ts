@@ -130,14 +130,7 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).toHaveBeenCalledWith(
         `/sobjects/ApexLog/${testLogId}/Body/`,
       );
-      expect(result).toEqual({
-        content: [
-          {
-            type: "text",
-            text: testLogBody,
-          },
-        ],
-      });
+      expect(result.content[0].text).toContain(testLogBody);
     });
 
     it("should throw error when connection username cannot be determined", async () => {
@@ -248,7 +241,7 @@ describe("Execute Anonymous", () => {
       const result = await executeAnonymous(mockServer, args);
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(multiLineApex);
-      expect(result.content[0].text).toBe(testLogBody);
+      expect(result.content[0].text).toContain(testLogBody);
     });
 
     it("should propagate errors from getUserIdByUsername", async () => {
@@ -401,7 +394,7 @@ describe("Execute Anonymous", () => {
       const result = await executeAnonymous(mockServer, args);
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(soqlApex);
-      expect(result.content[0].text).toBe(testLogBody);
+      expect(result.content[0].text).toContain(testLogBody);
     });
 
     it("should handle DML operations in Apex", async () => {
@@ -421,7 +414,7 @@ describe("Execute Anonymous", () => {
       const result = await executeAnonymous(mockServer, args);
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(dmlApex);
-      expect(result.content[0].text).toBe(testLogBody);
+      expect(result.content[0].text).toContain(testLogBody);
     });
 
     it("should throw error when connect() fails (no default org)", async () => {
@@ -440,6 +433,106 @@ describe("Execute Anonymous", () => {
       expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
       expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("org allowlist", () => {
+    beforeEach(() => {
+      mockExecuteAnonymous.mockResolvedValue({
+        compiled: true,
+        success: true,
+        line: -1,
+        column: -1,
+      });
+      mockFindOne.mockResolvedValue({ Id: testLogId });
+      mockRequest.mockResolvedValue(testLogBody);
+    });
+
+    it("should allow all orgs when allowlist is empty", async () => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result = await executeAnonymous(mockServer, args, []);
+
+      expect(result.content[0].text).toContain(testLogBody);
+    });
+
+    it("should allow org when username matches allowlist", async () => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result = await executeAnonymous(mockServer, args, [
+        "test@example.com",
+      ]);
+
+      expect(result.content[0].text).toContain(testLogBody);
+    });
+
+    it("should allow org when targetOrg alias matches allowlist", async () => {
+      const args: ExecuteAnonymousArgs = {
+        apex: testApexCode,
+        targetOrg: "myalias",
+      };
+
+      const result = await executeAnonymous(mockServer, args, ["myalias"]);
+
+      expect(result.content[0].text).toContain(testLogBody);
+    });
+
+    it("should reject org not in allowlist with clear error", async () => {
+      const args: ExecuteAnonymousArgs = {
+        apex: testApexCode,
+        targetOrg: "production",
+      };
+
+      await expect(
+        executeAnonymous(mockServer, args, ["dev", "staging"]),
+      ).rejects.toThrow(
+        'Org "production" is not in the allowed orgs list. Allowed orgs: dev, staging',
+      );
+
+      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+    });
+
+    it("should validate default org against allowlist", async () => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      await expect(
+        executeAnonymous(mockServer, args, ["other@example.com"]),
+      ).rejects.toThrow(
+        'Org "test@example.com" is not in the allowed orgs list. Allowed orgs: other@example.com',
+      );
+
+      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+    });
+
+    it("should match allowlist case-insensitively", async () => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result = await executeAnonymous(mockServer, args, [
+        "TEST@EXAMPLE.COM",
+      ]);
+
+      expect(result.content[0].text).toContain(testLogBody);
+    });
+  });
+
+  describe("org username in response", () => {
+    it("should include org username in response", async () => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      mockExecuteAnonymous.mockResolvedValue({
+        compiled: true,
+        success: true,
+        line: -1,
+        column: -1,
+      });
+      mockFindOne.mockResolvedValue({ Id: testLogId });
+      mockRequest.mockResolvedValue(testLogBody);
+
+      const result = await executeAnonymous(mockServer, args);
+
+      expect(result.content[0].text).toBe(
+        `Org: test@example.com\n\n${testLogBody}`,
+      );
     });
   });
 
