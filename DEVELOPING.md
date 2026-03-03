@@ -1,6 +1,6 @@
-# 🛠️ Developing the LANA MCP Server
+# 🛠️ Developing the Apex Log MCP Server
 
-Welcome to the development guide for the **LANA MCP Server**. This document will walk you through the steps required to get started with the development environment, run the server locally, and contribute to the project.
+Welcome to the development guide for the **Apex Log MCP Server**. This document will walk you through the steps required to get started with the development environment, run the server locally, and contribute to the project.
 
 - The source code is written in [TypeScript](https://www.typescriptlang.org/).
 - The tools directory contains the source code for the functionality available on the server.

@@ -21,7 +21,7 @@ import {
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
 
-import { LanaServer } from "../src/index";
+import { ApexLogServer } from "../src/index";
 
 // Mock the tool modules
 jest.mock("../src/tools/analyzeLogPerformance", () => ({
@@ -131,7 +131,7 @@ const mockConsoleError = jest
   .spyOn(console, "error")
   .mockImplementation(() => {});
 
-describe("LanaServer", () => {
+describe("ApexLogServer", () => {
   let mockServer: jest.Mocked<Server>;
   let mockTransport: jest.Mocked<StdioServerTransport>;
   let mockSetRequestHandler: jest.MockedFunction<
@@ -244,11 +244,11 @@ describe("LanaServer", () => {
 
   describe("Server Initialization", () => {
     it("should create server with correct configuration", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       expect(Server).toHaveBeenCalledWith(
         {
-          name: "lana-mcp-server",
+          name: "apex-log-mcp",
           version: "1.0.0",
         },
         {
@@ -260,7 +260,7 @@ describe("LanaServer", () => {
     });
 
     it("should setup error handling", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       expect(mockServer.onerror).toBeDefined();
 
@@ -276,7 +276,7 @@ describe("LanaServer", () => {
     it("should setup SIGINT handler", async () => {
       const mockProcessOnce = jest.spyOn(process, "once");
 
-      new LanaServer();
+      new ApexLogServer();
 
       expect(mockProcessOnce).toHaveBeenCalledWith(
         "SIGINT",
@@ -287,7 +287,7 @@ describe("LanaServer", () => {
 
   describe("Tool Registration", () => {
     it("should register ListToolsRequest handler", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       expect(mockSetRequestHandler).toHaveBeenCalledWith(
         ListToolsRequestSchema,
@@ -296,7 +296,7 @@ describe("LanaServer", () => {
     });
 
     it("should register CallToolRequest handler", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       expect(mockSetRequestHandler).toHaveBeenCalledWith(
         CallToolRequestSchema,
@@ -305,7 +305,7 @@ describe("LanaServer", () => {
     });
 
     it("should return correct tools list when ListToolsRequest is called", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       // Get the ListToolsRequest handler
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
@@ -331,7 +331,7 @@ describe("LanaServer", () => {
     let callToolHandler: (request: any, extra: any) => Promise<any>;
 
     beforeEach(async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       // Get the CallToolRequest handler
       const callToolCall = mockSetRequestHandler.mock.calls.find(
@@ -482,18 +482,18 @@ describe("LanaServer", () => {
 
   describe("Server Lifecycle", () => {
     it("should start server correctly", async () => {
-      const lanaServer = new LanaServer();
+      const lanaServer = new ApexLogServer();
       await lanaServer.run();
 
       expect(StdioServerTransport).toHaveBeenCalled();
       expect(mockConnect).toHaveBeenCalledWith(mockTransport);
       expect(mockConsoleError).toHaveBeenCalledWith(
-        "LANA MCP Server running on stdio",
+        "Apex Log MCP Server running on stdio",
       );
     });
 
     it("should connect to stdio transport", async () => {
-      const lanaServer = new LanaServer();
+      const lanaServer = new ApexLogServer();
       await lanaServer.run();
 
       expect(StdioServerTransport).toHaveBeenCalled();
@@ -501,7 +501,7 @@ describe("LanaServer", () => {
     });
 
     it("should handle SIGINT and close server", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       // Find the SIGINT handler
       const processOnceCalls = jest.spyOn(process, "once").mock.calls;
@@ -527,7 +527,7 @@ describe("LanaServer", () => {
 
   describe("Integration Tests", () => {
     it("should handle complete workflow for analyze_apex_log_performance", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       // Get handlers
       const listToolsCall = mockSetRequestHandler.mock.calls.find(
@@ -567,7 +567,7 @@ describe("LanaServer", () => {
     });
 
     it("should handle edge cases with malformed requests", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
         (call: any) => call[0] === CallToolRequestSchema,
@@ -596,7 +596,7 @@ describe("LanaServer", () => {
 
   describe("Type Safety", () => {
     it("should handle typed arguments correctly", async () => {
-      new LanaServer();
+      new ApexLogServer();
 
       const callToolCall = mockSetRequestHandler.mock.calls.find(
         (call: any) => call[0] === CallToolRequestSchema,

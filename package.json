@@ -1,12 +1,12 @@
 {
-  "name": "@certinia/lana-mcp",
-  "version": "0.2.0",
-  "description": "Apex debug log analyzer MCP tools for Salesforce.",
+  "name": "@certinia/apex-log-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for analyzing Salesforce Apex debug logs.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "lana-mcp-server": "dist/index.js"
+    "apex-log-mcp": "dist/index.js"
   },
   "files": [
     "dist/**/*.ts",
