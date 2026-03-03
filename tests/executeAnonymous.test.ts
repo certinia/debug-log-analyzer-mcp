@@ -111,7 +111,10 @@ describe("Execute Anonymous", () => {
         mockConnection,
         "test@example.com",
       );
-      expect(getOrCreateDebugLevelId).toHaveBeenCalledWith(mockConnection);
+      expect(getOrCreateDebugLevelId).toHaveBeenCalledWith(
+        mockConnection,
+        undefined,
+      );
       expect(ensureTraceFlag).toHaveBeenCalledWith(
         mockConnection,
         testUserId,

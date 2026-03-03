@@ -28,6 +28,7 @@ import {
 import {
   executeAnonymous,
   executeAnonymousTool,
+  ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
 
 function parseArgs<T>(args: Record<string, unknown> | undefined): T {
@@ -92,7 +93,7 @@ class ApexLogServer {
           case "execute_anonymous":
             return await executeAnonymous(
               this.server,
-              parseArgs<{ apex: string; targetOrg?: string }>(args),
+              parseArgs<ExecuteAnonymousArgs>(args),
             );
           default:
             throw new Error(`Unknown tool: ${name}`);

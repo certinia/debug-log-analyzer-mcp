@@ -88,16 +88,24 @@ Detects and categorizes performance issues by type (CPU, database, or method pat
 
 Executes anonymous Apex code against any Salesforce org and retrieves the resulting debug log for analysis.
 
-| Parameter   | Type   | Required | Description                                                                                |
-| ----------- | ------ | -------- | ------------------------------------------------------------------------------------------ |
-| `apex`      | string | Yes      | Anonymous Apex code to execute                                                             |
-| `targetOrg` | string | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
+| ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apex`       | string           | Yes      | Anonymous Apex code to execute                                                                                                                                                                                                                   |
+| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                       |
+| `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
+
+**Supported `debugLevel` categories** (when using an object):
+
+`apexCode`, `apexProfiling`, `callout`, `database`, `nba`, `system`, `validation`, `visualforce`, `wave`, `workflow`
+
+Each accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
 
 **Example prompts:**
 
 - "Execute this Apex and show me the log: `System.debug('Hello');`"
 - "Run a query for all Accounts and analyze the performance"
-- "Run this Apex against my QA org"
+- "Execute this Apex with all debug levels set to FINEST"
+- "Run this Apex against my QA org with database logging set to FINEST"
 
 **Note:** Requires Salesforce CLI. Uses the project's default org unless `targetOrg` is specified.
 
