@@ -4,33 +4,31 @@
 
 import { promises as fs } from "fs";
 import path from "path";
+import { z } from "zod";
 import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
 import { encode } from "@toon-format/toon";
 
-export interface LogSummaryArgs {
-  logFilePath: string;
-}
+export const getLogSummaryInputSchema = {
+  logFilePath: z
+    .string()
+    .describe("Absolute path to the Apex debug log file (.log)"),
+};
 
-export const getLogSummaryTool = {
-  name: "get_apex_log_summary",
+export type LogSummaryArgs = z.infer<
+  z.ZodObject<typeof getLogSummaryInputSchema>
+>;
+
+export const getLogSummaryToolConfig = {
+  title: "Get Apex Log Summary",
   description:
     "Get a high-level summary of an Apex debug log including total execution time, method count, SOQL/DML totals, governor limits, and active namespaces. Best for a quick overview before deeper analysis.",
+  inputSchema: getLogSummaryInputSchema,
   annotations: {
     title: "Get Apex Log Summary",
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,
     openWorldHint: false,
-  },
-  inputSchema: {
-    type: "object",
-    properties: {
-      logFilePath: {
-        type: "string",
-        description: "Absolute path to the Apex debug log file (.log)",
-      },
-    },
-    required: ["logFilePath"],
   },
 };
 
@@ -68,7 +66,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
   return {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: encode(summary),
       },
     ],

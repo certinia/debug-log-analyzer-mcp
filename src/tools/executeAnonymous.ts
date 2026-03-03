@@ -1,4 +1,5 @@
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { z } from "zod";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   Connection,
   ConfigAggregator,
@@ -13,12 +14,6 @@ import {
 import { ensureTraceFlag } from "../salesforce/traceFlags.js";
 import { connect } from "../salesforce/connection.js";
 
-export interface ExecuteAnonymousArgs {
-  apex: string;
-  targetOrg?: string;
-  debugLevel?: DebugLevelInput;
-}
-
 type ApexLogRecord = {
   Id: string;
 };
@@ -32,16 +27,67 @@ const LOG_LEVEL_ENUM = [
   "FINE",
   "FINER",
   "FINEST",
-];
+] as const;
+
+const logLevelSchema = z.enum(LOG_LEVEL_ENUM);
 
 function logLevelProperty(description: string) {
-  return { type: "string", enum: LOG_LEVEL_ENUM, description };
+  return logLevelSchema.optional().describe(description);
 }
 
-export const executeAnonymousTool = {
-  name: "execute_anonymous",
+export const executeAnonymousInputSchema = {
+  apex: z.string().describe("The anonymous Apex to be executed"),
+  targetOrg: z
+    .string()
+    .optional()
+    .describe(
+      "Alias or username of the target Salesforce org. Uses the project default if not specified.",
+    ),
+  debugLevel: z
+    .union([
+      z
+        .enum(["default", ...LOG_LEVEL_ENUM])
+        .describe(
+          'Use "default" to reset to defaults, or a log level (e.g. "FINEST") to set all categories to that level.',
+        ),
+      z
+        .object({
+          apexCode: logLevelProperty("Apex code log level (default: FINE)"),
+          apexProfiling: logLevelProperty(
+            "Apex profiling log level (default: FINE)",
+          ),
+          callout: logLevelProperty("Callout log level (default: DEBUG)"),
+          database: logLevelProperty("Database log level (default: FINEST)"),
+          nba: logLevelProperty(
+            "NBA (Next Best Action) log level (default: INFO)",
+          ),
+          system: logLevelProperty("System log level (default: DEBUG)"),
+          validation: logLevelProperty("Validation log level (default: DEBUG)"),
+          visualforce: logLevelProperty(
+            "Visualforce log level (default: FINE)",
+          ),
+          wave: logLevelProperty("Wave/Analytics log level (default: INFO)"),
+          workflow: logLevelProperty("Workflow log level (default: FINE)"),
+        })
+        .describe(
+          "Override specific log categories. Only specified categories are updated; others remain unchanged.",
+        ),
+    ])
+    .optional()
+    .describe(
+      'Optional debug level configuration. Valid log levels: NONE, ERROR, WARN, INFO, DEBUG, FINE, FINER, FINEST. Pass "default" to reset, a single level string to set all categories, or an object with category overrides (apexCode, apexProfiling, callout, database, nba, system, validation, visualforce, wave, workflow).',
+    ),
+};
+
+export type ExecuteAnonymousArgs = z.infer<
+  z.ZodObject<typeof executeAnonymousInputSchema>
+>;
+
+export const executeAnonymousToolConfig = {
+  title: "Execute Anonymous Apex",
   description:
     "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI) and retrieve the resulting debug log. The response includes the target org username.",
+  inputSchema: executeAnonymousInputSchema,
   annotations: {
     title: "Execute Anonymous Apex",
     readOnlyHint: false,
@@ -49,68 +95,11 @@ export const executeAnonymousTool = {
     idempotentHint: false,
     openWorldHint: true,
   },
-  inputSchema: {
-    type: "object",
-    properties: {
-      apex: {
-        type: "string",
-        description: "The anonymous Apex to be executed",
-      },
-      targetOrg: {
-        type: "string",
-        description:
-          "Alias or username of the target Salesforce org. Uses the project default if not specified.",
-      },
-      debugLevel: {
-        description:
-          'Optional debug level configuration. Valid log levels: NONE, ERROR, WARN, INFO, DEBUG, FINE, FINER, FINEST. Pass "default" to reset, a single level string to set all categories, or an object with category overrides (apexCode, apexProfiling, callout, database, nba, system, validation, visualforce, wave, workflow).',
-        oneOf: [
-          {
-            type: "string",
-            enum: ["default", ...LOG_LEVEL_ENUM],
-            description:
-              'Use "default" to reset to defaults, or a log level (e.g. "FINEST") to set all categories to that level.',
-          },
-          {
-            type: "object",
-            description:
-              "Override specific log categories. Only specified categories are updated; others remain unchanged.",
-            properties: {
-              apexCode: logLevelProperty("Apex code log level (default: FINE)"),
-              apexProfiling: logLevelProperty(
-                "Apex profiling log level (default: FINE)",
-              ),
-              callout: logLevelProperty("Callout log level (default: DEBUG)"),
-              database: logLevelProperty(
-                "Database log level (default: FINEST)",
-              ),
-              nba: logLevelProperty(
-                "NBA (Next Best Action) log level (default: INFO)",
-              ),
-              system: logLevelProperty("System log level (default: DEBUG)"),
-              validation: logLevelProperty(
-                "Validation log level (default: DEBUG)",
-              ),
-              visualforce: logLevelProperty(
-                "Visualforce log level (default: FINE)",
-              ),
-              wave: logLevelProperty(
-                "Wave/Analytics log level (default: INFO)",
-              ),
-              workflow: logLevelProperty("Workflow log level (default: FINE)"),
-            },
-            additionalProperties: false,
-          },
-        ],
-      },
-    },
-    required: ["apex"],
-  },
 };
 
-async function getProjectPath(server: Server): Promise<string | undefined> {
+async function getProjectPath(server: McpServer): Promise<string | undefined> {
   try {
-    const { roots } = await server.listRoots();
+    const { roots } = await server.server.listRoots();
     const rootUri = roots[0]?.uri;
     return rootUri ? new URL(rootUri).pathname : undefined;
   } catch {
@@ -190,7 +179,7 @@ async function validateOrgAllowlist(
 }
 
 export async function executeAnonymous(
-  server: Server,
+  server: McpServer,
   args: ExecuteAnonymousArgs,
   allowedOrgs: string[] = [],
 ) {
@@ -240,7 +229,7 @@ export async function executeAnonymous(
   return {
     content: [
       {
-        type: "text",
+        type: "text" as const,
         text: `Org: ${orgLabel}\n\n${logBody}`,
       },
     ],

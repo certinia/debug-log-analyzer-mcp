@@ -5,44 +5,35 @@
  */
 
 import { parseArgs } from "node:util";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import type { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   analyzeLogPerformance,
-  analyzeLogPerformanceTool,
-  AnalyzeLogArgs,
+  analyzeLogPerformanceToolConfig,
 } from "./tools/analyzeLogPerformance.js";
 import {
   getLogSummary,
-  getLogSummaryTool,
-  LogSummaryArgs,
+  getLogSummaryToolConfig,
 } from "./tools/getLogSummary.js";
 import {
   findPerformanceBottlenecks,
-  findPerformanceBottlenecksTool,
-  BottleneckArgs,
+  findPerformanceBottlenecksToolConfig,
 } from "./tools/findPerformanceBottlenecks.js";
 import {
   executeAnonymous,
-  executeAnonymousTool,
+  executeAnonymousToolConfig,
   ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
 
-function parseToolArgs<T>(args: Record<string, unknown> | undefined): T {
-  return (args ?? {}) as T;
-}
-
 class ApexLogServer {
-  private server: Server;
+  private server: McpServer;
   private allowedOrgs: string[];
+  private execAnonTool: RegisteredTool;
 
   constructor(allowedOrgs: string[] = []) {
     this.allowedOrgs = allowedOrgs;
-    this.server = new Server(
+    this.server = new McpServer(
       {
         name: "apex-log-mcp",
         version: "1.0.0",
@@ -58,12 +49,12 @@ class ApexLogServer {
       },
     );
 
-    this.setupToolHandlers();
+    this.execAnonTool = this.registerTools();
     this.setupErrorHandling();
   }
 
   private setupErrorHandling(): void {
-    this.server.onerror = (error) => {
+    this.server.server.onerror = (error) => {
       console.error("[MCP Error]", error);
     };
 
@@ -74,59 +65,47 @@ class ApexLogServer {
     process.once("SIGINT", shutdown);
   }
 
-  private setupToolHandlers(): void {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        analyzeLogPerformanceTool,
-        getLogSummaryTool,
-        findPerformanceBottlenecksTool,
-        ...(this.allowedOrgs.length > 0 ? [executeAnonymousTool] : []),
-      ],
-    }));
+  private registerTools(): RegisteredTool {
+    this.server.registerTool(
+      "analyze_apex_log_performance",
+      analyzeLogPerformanceToolConfig,
+      async (args) => analyzeLogPerformance(args),
+    );
 
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
+    this.server.registerTool(
+      "get_apex_log_summary",
+      getLogSummaryToolConfig,
+      async (args) => getLogSummary(args),
+    );
 
-      try {
-        switch (name) {
-          case "analyze_apex_log_performance":
-            return await analyzeLogPerformance(
-              parseToolArgs<AnalyzeLogArgs>(args),
-            );
-          case "get_apex_log_summary":
-            return await getLogSummary(parseToolArgs<LogSummaryArgs>(args));
-          case "find_performance_bottlenecks":
-            return await findPerformanceBottlenecks(
-              parseToolArgs<BottleneckArgs>(args),
-            );
-          case "execute_anonymous":
-            if (this.allowedOrgs.length === 0) {
-              throw new Error(
-                "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
-              );
-            }
-            return await executeAnonymous(
-              this.server,
-              parseToolArgs<ExecuteAnonymousArgs>(args),
-              this.allowedOrgs,
-            );
-          default:
-            throw new Error(`Unknown tool: ${name}`);
+    this.server.registerTool(
+      "find_performance_bottlenecks",
+      findPerformanceBottlenecksToolConfig,
+      async (args) => findPerformanceBottlenecks(args),
+    );
+
+    const execAnon = this.server.registerTool(
+      "execute_anonymous",
+      executeAnonymousToolConfig,
+      async (args) => {
+        if (this.allowedOrgs.length === 0) {
+          throw new Error(
+            "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
+          );
         }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    });
+        return executeAnonymous(
+          this.server,
+          args as ExecuteAnonymousArgs,
+          this.allowedOrgs,
+        );
+      },
+    );
+
+    if (this.allowedOrgs.length === 0) {
+      execAnon.disable();
+    }
+
+    return execAnon;
   }
 
   async run(): Promise<void> {
@@ -140,6 +119,10 @@ class ApexLogServer {
     this.allowedOrgs = values["allowed-orgs"]
       ? values["allowed-orgs"].split(",").map((org) => org.trim())
       : [];
+
+    if (this.allowedOrgs.length > 0) {
+      this.execAnonTool.enable();
+    }
 
     const transport = new StdioServerTransport();
     await this.server.connect(transport);

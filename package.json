@@ -60,7 +60,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.26.0",
     "@salesforce/core": "^8.23.4",
-    "@toon-format/toon": "^1.0.0"
+    "@toon-format/toon": "^1.0.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
