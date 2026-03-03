@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { jest } from "@jest/globals";
 import { promises as fs } from "fs";
 import {
   analyzeLogPerformance,
@@ -37,22 +36,22 @@ describe("analyzeLogPerformance", () => {
   describe("Tool Configuration", () => {
     it("should have correct tool configuration", () => {
       expect(analyzeLogPerformanceTool.name).toBe(
-        "analyze_apex_log_performance"
+        "analyze_apex_log_performance",
       );
       expect(analyzeLogPerformanceTool.description).toContain(
-        "Analyze an Apex debug log file"
+        "Analyze an Apex debug log file",
       );
       expect(analyzeLogPerformanceTool.inputSchema.required).toEqual([
         "logFilePath",
       ]);
       expect(
-        analyzeLogPerformanceTool.inputSchema.properties.logFilePath.type
+        analyzeLogPerformanceTool.inputSchema.properties.logFilePath.type,
       ).toBe("string");
       expect(
-        analyzeLogPerformanceTool.inputSchema.properties.topMethods.default
+        analyzeLogPerformanceTool.inputSchema.properties.topMethods.default,
       ).toBe(10);
       expect(
-        analyzeLogPerformanceTool.inputSchema.properties.minDuration.default
+        analyzeLogPerformanceTool.inputSchema.properties.minDuration.default,
       ).toBe(0);
     });
   });
@@ -63,7 +62,7 @@ describe("analyzeLogPerformance", () => {
       mockedFs.access.mockRejectedValue(new Error("File not found"));
 
       await expect(analyzeLogPerformance(args)).rejects.toThrow(
-        "Log file not found: /nonexistent/file.log"
+        "Log file not found: /nonexistent/file.log",
       );
 
       expect(mockedFs.access).toHaveBeenCalledWith("/nonexistent/file.log");
@@ -83,7 +82,7 @@ describe("analyzeLogPerformance", () => {
       expect(mockedFs.access).toHaveBeenCalledWith("/valid/file.log");
       expect(mockedFs.readFile).toHaveBeenCalledWith(
         "/valid/file.log",
-        "utf-8"
+        "utf-8",
       );
       expect(mockedParse).toHaveBeenCalledWith(mockLogContent);
       expect(result.content).toHaveLength(1);
@@ -142,8 +141,8 @@ describe("analyzeLogPerformance", () => {
       expect(parsedResult.slowestMethods).toHaveLength(2);
       expect(
         parsedResult.slowestMethods.every(
-          (method) => method.duration >= 300000000
-        )
+          (method) => method.duration >= 300000000,
+        ),
       ).toBe(true);
     });
 
@@ -184,7 +183,7 @@ describe("analyzeLogPerformance", () => {
 
       expect(methods).toHaveLength(2);
       expect(methods.every((method) => method.duration >= 300000000)).toBe(
-        true
+        true,
       );
     });
 
@@ -253,7 +252,7 @@ describe("analyzeLogPerformance", () => {
       const parsedResult = toonDecode(result);
 
       expect(parsedResult.summary).toBe(
-        "No methods found matching the criteria."
+        "No methods found matching the criteria.",
       );
       expect(parsedResult.totalMethods).toBe(0);
     });
@@ -271,7 +270,7 @@ describe("analyzeLogPerformance", () => {
 
       const soqlRecommendation = parsedResult.recommendations.find(
         (rec) =>
-          rec.includes("SOQL queries") && rec.includes("reducing query count")
+          rec.includes("SOQL queries") && rec.includes("reducing query count"),
       );
       expect(soqlRecommendation).toBeDefined();
     });
@@ -286,7 +285,7 @@ describe("analyzeLogPerformance", () => {
       const parsedResult = toonDecode(result);
 
       const dmlRecommendation = parsedResult.recommendations.find(
-        (rec) => rec.includes("DML operations") && rec.includes("bulkifying")
+        (rec) => rec.includes("DML operations") && rec.includes("bulkifying"),
       );
       expect(dmlRecommendation).toBeDefined();
     });
@@ -301,7 +300,7 @@ describe("analyzeLogPerformance", () => {
       const parsedResult = toonDecode(result);
 
       const rowsRecommendation = parsedResult.recommendations.find(
-        (rec) => rec.includes("SOQL rows") && rec.includes("WHERE clauses")
+        (rec) => rec.includes("SOQL rows") && rec.includes("WHERE clauses"),
       );
       expect(rowsRecommendation).toBeDefined();
     });
@@ -318,7 +317,7 @@ describe("analyzeLogPerformance", () => {
       const percentageRecommendation = parsedResult.recommendations.find(
         (rec) =>
           rec.includes("% self execution time") &&
-          rec.includes("can be optimized")
+          rec.includes("can be optimized"),
       );
       expect(percentageRecommendation).toBeDefined();
     });
@@ -333,7 +332,7 @@ describe("analyzeLogPerformance", () => {
       const parsedResult = toonDecode(result);
 
       expect(parsedResult.recommendations).toContain(
-        "Performance looks good! No obvious bottlenecks detected in the analyzed methods."
+        "Performance looks good! No obvious bottlenecks detected in the analyzed methods.",
       );
     });
 
@@ -355,11 +354,11 @@ describe("analyzeLogPerformance", () => {
           rec.includes("Method1") ||
           rec.includes("Method2") ||
           rec.includes("Method3") ||
-          rec.includes("Method4")
+          rec.includes("Method4"),
       );
 
       const mentionsMethod4 = methodMentions.some((rec) =>
-        rec.includes("Method4")
+        rec.includes("Method4"),
       );
       expect(mentionsMethod4).toBe(false);
     });
@@ -378,7 +377,7 @@ describe("analyzeLogPerformance", () => {
       expect(parsedResult.totalMethods).toBe(0);
       expect(parsedResult.slowestMethods).toHaveLength(0);
       expect(parsedResult.summary).toBe(
-        "No methods found matching the criteria."
+        "No methods found matching the criteria.",
       );
     });
 
@@ -408,7 +407,7 @@ describe("analyzeLogPerformance", () => {
       });
 
       await expect(analyzeLogPerformance(args)).rejects.toThrow(
-        "Parsing failed"
+        "Parsing failed",
       );
     });
 
@@ -419,7 +418,7 @@ describe("analyzeLogPerformance", () => {
       mockedFs.readFile.mockRejectedValue(new Error("Permission denied"));
 
       await expect(analyzeLogPerformance(args)).rejects.toThrow(
-        "Permission denied"
+        "Permission denied",
       );
     });
   });
@@ -445,7 +444,7 @@ describe("analyzeLogPerformance", () => {
       expect(typeof method.soqlRows).toBe("number");
       expect(typeof method.selfPercentage).toBe("number");
       expect(["number", "string", "object"]).toContain(
-        typeof method.lineNumber
+        typeof method.lineNumber,
       );
     });
 
@@ -468,9 +467,7 @@ describe("analyzeLogPerformance", () => {
 
   // Helper function for decoding TOON-formatted data
   function toonDecode(result: any): LogAnalysisResult {
-    return decode(
-      result.content[0].text
-    ) as unknown as LogAnalysisResult;
+    return decode(result.content[0].text) as unknown as LogAnalysisResult;
   }
 
   // Helper functions for creating mock data
@@ -489,7 +486,7 @@ describe("analyzeLogPerformance", () => {
     dmlCount: number = 0,
     soqlCount: number = 0,
     dmlRows: number = 0,
-    soqlRows: number = 0
+    soqlRows: number = 0,
   ): any {
     return {
       type: "METHOD_ENTRY",
@@ -515,7 +512,7 @@ describe("analyzeLogPerformance", () => {
       5,
       10,
       100,
-      1000
+      1000,
     );
     const mediumMethod = createMockLogLine(
       "MediumMethod",
@@ -526,7 +523,7 @@ describe("analyzeLogPerformance", () => {
       2,
       3,
       50,
-      200
+      200,
     );
     const fastMethod = createMockLogLine(
       "FastMethod",
@@ -537,7 +534,7 @@ describe("analyzeLogPerformance", () => {
       1,
       1,
       10,
-      50
+      50,
     );
 
     return {
@@ -560,14 +557,14 @@ describe("analyzeLogPerformance", () => {
       500000000,
       500000000,
       "default",
-      1
+      1,
     );
     const customMethod = createMockLogLine(
       "CustomMethod",
       400000000,
       400000000,
       "CustomNamespace",
-      2
+      2,
     );
 
     return {
@@ -639,7 +636,7 @@ describe("analyzeLogPerformance", () => {
       2,
       8,
       50,
-      500
+      500,
     );
 
     return {
@@ -666,7 +663,7 @@ describe("analyzeLogPerformance", () => {
       6,
       2,
       100,
-      50
+      50,
     );
 
     return {
@@ -693,7 +690,7 @@ describe("analyzeLogPerformance", () => {
       1,
       2,
       10,
-      1500
+      1500,
     );
 
     return {
@@ -720,7 +717,7 @@ describe("analyzeLogPerformance", () => {
       1,
       1,
       10,
-      50
+      50,
     );
 
     return {
@@ -747,7 +744,7 @@ describe("analyzeLogPerformance", () => {
       1,
       2,
       50,
-      100
+      100,
     );
 
     return {
@@ -774,7 +771,7 @@ describe("analyzeLogPerformance", () => {
       8,
       8,
       100,
-      1200
+      1200,
     );
     const method2 = createMockLogLine(
       "Method2",
@@ -785,7 +782,7 @@ describe("analyzeLogPerformance", () => {
       6,
       6,
       80,
-      1000
+      1000,
     );
     const method3 = createMockLogLine(
       "Method3",
@@ -796,7 +793,7 @@ describe("analyzeLogPerformance", () => {
       4,
       4,
       60,
-      800
+      800,
     );
     const method4 = createMockLogLine(
       "Method4",
@@ -807,7 +804,7 @@ describe("analyzeLogPerformance", () => {
       8,
       8,
       100,
-      1200
+      1200,
     ); // Should not appear in recommendations
 
     return {

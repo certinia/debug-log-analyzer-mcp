@@ -2,7 +2,26 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { jest, describe, it, expect, beforeEach } from "@jest/globals";
+jest.mock("@salesforce/core", () => ({
+  Org: {
+    create: jest.fn(),
+  },
+  ConfigAggregator: {
+    create: jest.fn(),
+  },
+  OrgConfigProperties: {
+    TARGET_ORG: "target-org",
+  },
+}));
+
+import { Org, ConfigAggregator } from "@salesforce/core";
+import { connect } from "../../src/salesforce/connection";
+
+const mockOrgCreate = Org.create as jest.MockedFunction<typeof Org.create>;
+const mockConfigAggregatorCreate =
+  ConfigAggregator.create as jest.MockedFunction<
+    typeof ConfigAggregator.create
+  >;
 
 const mockConnectionInstance = {
   query: jest.fn(),
@@ -16,27 +35,9 @@ const mockOrgInstance = {
   getConnection: jest.fn().mockReturnValue(mockConnectionInstance),
 } as any;
 
-const mockOrgCreate = jest.fn() as jest.MockedFunction<any>;
-
 const mockConfigAggregator = {
   getPropertyValue: jest.fn(),
 } as any;
-
-const mockConfigAggregatorCreate = jest.fn() as jest.MockedFunction<any>;
-
-jest.mock("@salesforce/core", () => ({
-  Org: {
-    create: mockOrgCreate,
-  },
-  ConfigAggregator: {
-    create: mockConfigAggregatorCreate,
-  },
-  OrgConfigProperties: {
-    TARGET_ORG: "target-org",
-  },
-}));
-
-import { connect } from "../../src/salesforce/connection";
 
 describe("Salesforce Connection", () => {
   const testUsername = "test@example.com";

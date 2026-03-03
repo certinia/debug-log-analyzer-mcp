@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 import { Connection } from "@salesforce/core";
 import { getUserIdByUsername } from "../../src/salesforce/users";
 
@@ -37,7 +36,7 @@ describe("Users", () => {
 
       expect(result).toBe(testUserId);
       expect(mockQuery).toHaveBeenCalledWith(
-        `SELECT Id FROM User WHERE Username = '${testUsername}'`
+        `SELECT Id FROM User WHERE Username = '${testUsername}'`,
       );
     });
 
@@ -49,7 +48,7 @@ describe("Users", () => {
       });
 
       await expect(
-        getUserIdByUsername(mockConnection, username)
+        getUserIdByUsername(mockConnection, username),
       ).rejects.toThrow(`User not found with username: ${username}`);
     });
 
@@ -63,7 +62,7 @@ describe("Users", () => {
       });
 
       await expect(
-        getUserIdByUsername(mockConnection, testUsername)
+        getUserIdByUsername(mockConnection, testUsername),
       ).rejects.toThrow("User Id is undefined");
     });
 
@@ -77,7 +76,7 @@ describe("Users", () => {
       });
 
       await expect(
-        getUserIdByUsername(mockConnection, testUsername)
+        getUserIdByUsername(mockConnection, testUsername),
       ).rejects.toThrow("User Id is undefined");
     });
 
@@ -96,7 +95,7 @@ describe("Users", () => {
 
       expect(result).toBe(testUserId);
       expect(mockQuery).toHaveBeenCalledWith(
-        `SELECT Id FROM User WHERE Username = '${username}'`
+        `SELECT Id FROM User WHERE Username = '${username}'`,
       );
     });
 
@@ -115,7 +114,7 @@ describe("Users", () => {
 
       expect(result).toBe(testUserId);
       expect(mockQuery).toHaveBeenCalledWith(
-        `SELECT Id FROM User WHERE Username = '${username}'`
+        `SELECT Id FROM User WHERE Username = '${username}'`,
       );
     });
 
@@ -127,7 +126,7 @@ describe("Users", () => {
       });
 
       await expect(
-        getUserIdByUsername(mockConnection, username)
+        getUserIdByUsername(mockConnection, username),
       ).rejects.toThrow(`User not found with username: ${username}`);
     });
 
@@ -145,9 +144,7 @@ describe("Users", () => {
       const result = await getUserIdByUsername(mockConnection, username);
 
       expect(result).toBe(testUserId);
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining(username)
-      );
+      expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining(username));
     });
 
     it("should return first user when multiple users match", async () => {
@@ -173,7 +170,7 @@ describe("Users", () => {
       mockQuery.mockRejectedValue(queryError);
 
       await expect(
-        getUserIdByUsername(mockConnection, testUsername)
+        getUserIdByUsername(mockConnection, testUsername),
       ).rejects.toThrow("Query failed");
     });
 
