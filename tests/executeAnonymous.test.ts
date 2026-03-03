@@ -2,8 +2,6 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { jest, describe, it, expect, beforeEach } from "@jest/globals";
-
 jest.mock("../src/salesforce/users", () => ({
   getUserIdByUsername: jest.fn(),
 }));
@@ -16,9 +14,8 @@ jest.mock("../src/salesforce/traceFlags", () => ({
   ensureTraceFlag: jest.fn(),
 }));
 
-const mockConnect = jest.fn() as jest.MockedFunction<() => Promise<any>>;
 jest.mock("../src/salesforce/connection", () => ({
-  connect: mockConnect,
+  connect: jest.fn(),
 }));
 
 jest.mock("@modelcontextprotocol/sdk/server/index.js");
@@ -31,6 +28,9 @@ import {
 import { getUserIdByUsername } from "../src/salesforce/users";
 import { getOrCreateDebugLevelId } from "../src/salesforce/debugLevels";
 import { ensureTraceFlag } from "../src/salesforce/traceFlags";
+import { connect } from "../src/salesforce/connection";
+
+const mockConnect = connect as jest.MockedFunction<typeof connect>;
 
 describe("Execute Anonymous", () => {
   const testUserId = "005000000000001";
@@ -52,7 +52,7 @@ describe("Execute Anonymous", () => {
     jest.clearAllMocks();
 
     mockServer = {
-      listRoots: jest.fn<any>().mockResolvedValue({ roots: [] }),
+      listRoots: jest.fn().mockResolvedValue({ roots: [] }),
     } as unknown as Server;
 
     mockExecuteAnonymous = jest.fn();

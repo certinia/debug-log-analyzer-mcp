@@ -35,13 +35,13 @@ function parseArgs<T>(args: Record<string, unknown> | undefined): T {
   return (args ?? {}) as T;
 }
 
-class LanaServer {
+class ApexLogServer {
   private server: Server;
 
   constructor() {
     this.server = new Server(
       {
-        name: "lana-mcp-server",
+        name: "apex-log-mcp",
         version: "1.0.0",
       },
       {
@@ -118,12 +118,12 @@ class LanaServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
-    console.error("LANA MCP Server running on stdio");
+    console.error("Apex Log MCP Server running on stdio");
   }
 }
 
-const server = new LanaServer();
+const server = new ApexLogServer();
 
 server.run().catch(console.error);
 
-export { LanaServer };
+export { ApexLogServer };

@@ -1,10 +1,10 @@
-# 🛠️ LANA MCP Server
+# 🛠️ Apex Log MCP Server
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-Supercharge Salesforce Apex debugging with AI-powered log analysis. LANA MCP Server gives AI assistants like Claude and Copilot the ability to identify performance bottlenecks, slow methods, and optimization opportunities in your debug logs - insights that would take hours to find manually.
+Supercharge Salesforce Apex debugging with AI-powered log analysis. Apex Log MCP Server gives AI assistants like Claude and Copilot the ability to identify performance bottlenecks, slow methods, and optimization opportunities in your debug logs - insights that would take hours to find manually.
 
 [Features](#-features "Go to Features") |
 [Usage](#-usage "Go to usage guidelines") |
@@ -20,7 +20,7 @@ Supercharge Salesforce Apex debugging with AI-powered log analysis. LANA MCP Ser
 - **analyze_apex_log_performance** - Identify the slowest methods in your Apex execution with detailed timing metrics
 - **get_apex_log_summary** - Get high-level statistics on execution time, method counts, and governor limits
 - **find_performance_bottlenecks** - Find CPU, database, and method performance issues categorized by type
-- **execute_anonymous** - Run Apex code and immediately analyze the resulting debug log
+- **execute_anonymous** - Run Apex code against any Salesforce org and immediately analyze the resulting debug log
 
 ## 💡 Usage
 
@@ -86,7 +86,7 @@ Detects and categorizes performance issues by type (CPU, database, or method pat
 
 ### execute_anonymous
 
-Executes anonymous Apex code and retrieves the resulting debug log for analysis.
+Executes anonymous Apex code against any Salesforce org and retrieves the resulting debug log for analysis.
 
 | Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
 | ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -105,9 +105,9 @@ Each accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FIN
 - "Execute this Apex and show me the log: `System.debug('Hello');`"
 - "Run a query for all Accounts and analyze the performance"
 - "Execute this Apex with all debug levels set to FINEST"
-- "Run this Apex with database logging set to FINEST"
+- "Run this Apex against my QA org with database logging set to FINEST"
 
-**Note:** Requires a default Salesforce org configured via Salesforce CLI.
+**Note:** Requires Salesforce CLI. Uses the project's default org unless `targetOrg` is specified.
 
 ## Configuration
 
@@ -116,9 +116,9 @@ Add to your `claude_desktop_config.json` or `mcp.json`:
 ```json
 {
   "mcpServers": {
-    "lana-mcp": {
+    "apex-log-mcp": {
       "command": "npx",
-      "args": ["@certinia/lana-mcp"]
+      "args": ["@certinia/apex-log-mcp"]
     }
   }
 }
@@ -144,7 +144,7 @@ We welcome contributions! Please see our [Contributing Guide](https://github.com
 ### 🏗️ Architecture
 
 - Built with TypeScript and the MCP SDK
-- Uses the same `ApexLogParser` as the main LANA extension
+- Uses the same `ApexLogParser` as the Apex Log Analyzer VS Code extension
 - Runs as a standalone Node.js process
 - Communicates via stdio transport
 

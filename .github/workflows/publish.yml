@@ -11,8 +11,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -23,8 +21,14 @@ jobs:
       - name: Dependencies
         run: HUSKY=0 pnpm install
 
+      - name: Lint Files
+        run: pnpm run lint
+
       - name: Build
         run: pnpm run build
+
+      - name: Tests
+        run: pnpm run test
 
       - name: Configure NPM
         run: |
@@ -36,7 +40,7 @@ jobs:
           NPM_KEY: ${{ secrets.ARTIFACTORY_MTLS_KEY_BASE64 }}
 
       - name: Publish
-        run: npm publish --registry ${{ secrets.REGISTRY_URL }}
+        run: pnpm publish --registry ${{ secrets.REGISTRY_URL }} --no-git-checks
         env:
           REGISTRY_BASE_URL: ${{ secrets.REGISTRY_BASE_URL }}
           REGISTRY_AUTH: ${{ secrets.REGISTRY_AUTH }}

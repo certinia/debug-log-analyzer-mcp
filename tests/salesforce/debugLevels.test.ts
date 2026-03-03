@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 import { Connection } from "@salesforce/core";
 import { getOrCreateDebugLevelId } from "../../src/salesforce/debugLevels";
 
