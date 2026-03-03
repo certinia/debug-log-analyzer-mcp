@@ -64,8 +64,8 @@ describe("Debug Levels", () => {
 
         expect(result).toBe(testId);
         expect(mockCreate).toHaveBeenCalledWith({
-          DeveloperName: "LANA_MCP_Debug_Level",
-          MasterLabel: "LANA_MCP_Debug_Level",
+          DeveloperName: "Apex_Log_MCP_Debug_Level",
+          MasterLabel: "Apex_Log_MCP_Debug_Level",
           ...allDefaults,
         });
       });
@@ -75,8 +75,8 @@ describe("Debug Levels", () => {
 
         expect(result).toBe(testId);
         expect(mockCreate).toHaveBeenCalledWith({
-          DeveloperName: "LANA_MCP_Debug_Level",
-          MasterLabel: "LANA_MCP_Debug_Level",
+          DeveloperName: "Apex_Log_MCP_Debug_Level",
+          MasterLabel: "Apex_Log_MCP_Debug_Level",
           ...allDefaults,
         });
       });
@@ -89,8 +89,8 @@ describe("Debug Levels", () => {
 
         expect(result).toBe(testId);
         expect(mockCreate).toHaveBeenCalledWith({
-          DeveloperName: "LANA_MCP_Debug_Level",
-          MasterLabel: "LANA_MCP_Debug_Level",
+          DeveloperName: "Apex_Log_MCP_Debug_Level",
+          MasterLabel: "Apex_Log_MCP_Debug_Level",
           ...allDefaults,
           ApexCode: "FINEST",
           Nba: "FINEST",
@@ -202,7 +202,9 @@ describe("Debug Levels", () => {
         await getOrCreateDebugLevelId(mockConnection);
 
         const query = mockQuery.mock.calls[0][0] as string;
-        expect(query).toContain("WHERE DeveloperName = 'LANA_MCP_Debug_Level'");
+        expect(query).toContain(
+          "WHERE DeveloperName = 'Apex_Log_MCP_Debug_Level'",
+        );
         expect(query).toContain("LIMIT 1");
       });
     });

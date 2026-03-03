@@ -1,7 +1,7 @@
 import { Connection } from "@salesforce/core";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
-const MCP_DEBUG_LEVEL_NAME = "LANA_MCP_Debug_Level";
+const DEBUG_LEVEL_NAME = "Apex_Log_MCP_Debug_Level";
 
 export type LogLevel =
   | "NONE"
@@ -131,7 +131,7 @@ async function findDebugLevel(
   const result = await connection.tooling.query(
     `SELECT Id
      FROM ${DEBUG_LEVEL_SOBJECT}
-     WHERE DeveloperName = '${MCP_DEBUG_LEVEL_NAME}'
+     WHERE DeveloperName = '${DEBUG_LEVEL_NAME}'
      LIMIT 1`,
   );
 
@@ -168,8 +168,8 @@ async function createDebugLevel(
   levels: Record<string, string>,
 ): Promise<string> {
   const result = await connection.tooling.sobject(DEBUG_LEVEL_SOBJECT).create({
-    DeveloperName: MCP_DEBUG_LEVEL_NAME,
-    MasterLabel: MCP_DEBUG_LEVEL_NAME,
+    DeveloperName: DEBUG_LEVEL_NAME,
+    MasterLabel: DEBUG_LEVEL_NAME,
     ...levels,
   });
 
