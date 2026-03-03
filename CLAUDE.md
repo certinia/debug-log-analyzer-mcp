@@ -9,17 +9,17 @@ This is the LANA MCP Server - a Model Context Protocol (MCP) server for Apex Log
 ## Development Commands
 
 ```bash
-# Install dependencies (use npm, not pnpm despite README mention)
-npm install
+# Install dependencies
+pnpm install
 
 # Build the TypeScript project
-npm run build
+pnpm run build
 
 # Development with watch mode
-npm run dev
+pnpm run dev
 
 # Run the server standalone
-npm start
+pnpm start
 ```
 
 ## Architecture
@@ -46,6 +46,7 @@ npm start
 ### MCP Integration
 
 This server is designed to integrate with the LANA VS Code extension:
+
 - Registered automatically by the extension
 - Communicates via MCP protocol over stdio
 - Provides structured JSON responses for AI analysis
@@ -77,4 +78,4 @@ The server provides four main capabilities:
 4. **Execute Anonymous**: Executes anonymous Apex code snippets and retrieves the resulting debug log
 
 Log analysis tools (1-3) accept absolute file paths to `.log` files and return structured JSON for AI processing.
-Anonymous execution (4) accepts multi-line strings containing Apex and returns the entire contents of the log.
+Anonymous execution (4) accepts multi-line strings containing Apex and returns the entire contents of the log. It supports an optional `debugLevel` parameter to configure trace flag log levels per category or set all categories at once.
