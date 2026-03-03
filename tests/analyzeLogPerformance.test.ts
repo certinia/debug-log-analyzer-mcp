@@ -216,6 +216,43 @@ describe("analyzeLogPerformance", () => {
       expect(methods[2].selfPercentage).toBe(10); // 100000000 / 1000000000 * 100
     });
 
+    it("should extract thrownCount and SOSL metrics from log lines", () => {
+      const methodWithSOSL = createMockLogLine(
+        "SOSLMethod",
+        500000000,
+        500000000,
+        "default",
+        1,
+        0, // dmlCount
+        0, // soqlCount
+        0, // dmlRows
+        0, // soqlRows
+        5, // soslCount
+        250, // soslRows
+        3, // totalThrownCount
+      );
+
+      const mockApexLog = {
+        duration: { total: 1000000000, self: 0 },
+        children: [methodWithSOSL],
+        type: "EXECUTION_STARTED",
+        text: "Root",
+        namespace: "default",
+        lineNumber: null,
+        dmlCount: { total: 0, self: 0 },
+        soqlCount: { total: 0, self: 0 },
+        dmlRowCount: { total: 0, self: 0 },
+        soqlRowCount: { total: 0, self: 0 },
+      };
+
+      const methods = extractMethods(mockApexLog as any, 0);
+
+      expect(methods).toHaveLength(1);
+      expect(methods[0].thrownCount).toBe(3);
+      expect(methods[0].soslCount).toBe(5);
+      expect(methods[0].soslRows).toBe(250);
+    });
+
     it("should handle zero total time", () => {
       const mockApexLog = createMockApexLogWithZeroTotalTime();
       const methods = extractMethods(mockApexLog, 0);
@@ -400,6 +437,23 @@ describe("analyzeLogPerformance", () => {
       expect(percentageRecommendation).toBeDefined();
     });
 
+    it("should generate SOSL search recommendations", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLogWithHighSOSL();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const soslRecommendation = parsedResult.recommendations.find(
+        (rec) =>
+          rec.includes("SOSL searches") &&
+          rec.includes("reducing search count"),
+      );
+      expect(soslRecommendation).toBeDefined();
+    });
+
     it("should generate positive message when no issues found", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
       const mockApexLog = createMockApexLogWithGoodPerformance();
@@ -455,6 +509,9 @@ describe("analyzeLogPerformance", () => {
     soqlCount: number = 0,
     dmlRows: number = 0,
     soqlRows: number = 0,
+    soslCount: number = 0,
+    soslRows: number = 0,
+    totalThrownCount: number = 0,
   ): any {
     return {
       type: "METHOD_ENTRY",
@@ -466,6 +523,9 @@ describe("analyzeLogPerformance", () => {
       soqlCount: { total: soqlCount, self: soqlCount },
       dmlRowCount: { total: dmlRows, self: dmlRows },
       soqlRowCount: { total: soqlRows, self: soqlRows },
+      soslCount: { total: soslCount, self: soslCount },
+      soslRowCount: { total: soslRows, self: soslRows },
+      totalThrownCount,
       children: [],
     };
   }
@@ -560,6 +620,9 @@ describe("analyzeLogPerformance", () => {
       soqlCount: { total: 0, self: 0 },
       dmlRowCount: { total: 0, self: 0 },
       soqlRowCount: { total: 0, self: 0 },
+      soslCount: { total: 0, self: 0 },
+      soslRowCount: { total: 0, self: 0 },
+      totalThrownCount: 0,
       children: [],
     };
 
@@ -659,6 +722,35 @@ describe("analyzeLogPerformance", () => {
       dmlCount: { total: 6, self: 0 },
       soqlCount: { total: 2, self: 0 },
       dmlRowCount: { total: 100, self: 0 },
+      soqlRowCount: { total: 50, self: 0 },
+    };
+  }
+
+  function createMockApexLogWithHighSOSL(): any {
+    const highSOSLMethod = createMockLogLine(
+      "HighSOSLMethod",
+      500000000,
+      50000000, // Low self duration to get selfPercentage < 10%
+      "default",
+      1,
+      1, // dmlCount
+      2, // soqlCount
+      10, // dmlRows
+      50, // soqlRows
+      5, // soslCount (> 3 triggers recommendation)
+      200, // soslRows
+    );
+
+    return {
+      duration: { total: 1000000000, self: 500000000 },
+      children: [highSOSLMethod],
+      type: "EXECUTION_STARTED",
+      text: "Root",
+      namespace: "default",
+      lineNumber: null,
+      dmlCount: { total: 1, self: 0 },
+      soqlCount: { total: 2, self: 0 },
+      dmlRowCount: { total: 10, self: 0 },
       soqlRowCount: { total: 50, self: 0 },
     };
   }

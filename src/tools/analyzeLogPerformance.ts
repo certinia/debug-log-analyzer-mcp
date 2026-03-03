@@ -52,6 +52,9 @@ export interface SlowMethod {
   soqlCount: number;
   dmlRows: number;
   soqlRows: number;
+  thrownCount: number;
+  soslCount: number;
+  soslRows: number;
   selfPercentage: number;
 }
 
@@ -144,6 +147,9 @@ export function extractMethods(
             soqlCount: node.soqlCount.total,
             dmlRows: node.dmlRowCount.total,
             soqlRows: node.soqlRowCount.total,
+            thrownCount: node.totalThrownCount,
+            soslCount: node.soslCount.total,
+            soslRows: node.soslRowCount.total,
             selfPercentage:
               totalTime > 0 ? (node.duration.self / totalTime) * 100 : 0,
           });
@@ -212,6 +218,9 @@ function getRecommendation(method: SlowMethod): string | null {
   }
   if (method.dmlCount > 3) {
     return `Method "${method.name}" performs ${method.dmlCount} DML operations. Consider bulkifying DML operations.`;
+  }
+  if (method.soslCount > 3) {
+    return `Method "${method.name}" executes ${method.soslCount} SOSL searches. Consider reducing search count or caching results.`;
   }
 
   return null;

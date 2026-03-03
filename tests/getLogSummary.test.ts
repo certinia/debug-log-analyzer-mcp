@@ -193,6 +193,8 @@ describe("getLogSummary", () => {
       const parsedResult = toonDecode(result);
 
       expect(parsedResult.file).toBe("test-log.log");
+      expect(parsedResult.size).toBe(15000);
+      expect(parsedResult.debugLevels).toEqual([]);
       expect(parsedResult.totalExecutionTime).toBe(12500); // ms
       expect(parsedResult.totalMethods).toBe(3); // 2 METHOD_ENTRY + 1 with subCategory 'Method'
       expect(parsedResult.totalSOQLQueries).toBe(5);
@@ -216,6 +218,32 @@ describe("getLogSummary", () => {
         used: 3,
         limit: 150,
       });
+    });
+
+    it("should map debugLevels to compact category/level objects", async () => {
+      const mockApexLog = createMockApexLog({
+        debugLevels: [
+          { logCategory: "Apex_code", logLevel: "DEBUG" },
+          { logCategory: "System", logLevel: "INFO" },
+        ] as any,
+      });
+
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("debug-levels.log");
+      mockParse.mockReturnValue(mockApexLog);
+
+      const args: LogSummaryArgs = {
+        logFilePath: "/path/to/debug-levels.log",
+      };
+
+      const result = await getLogSummary(args);
+      const parsedResult = toonDecode(result);
+
+      expect(parsedResult.debugLevels).toEqual([
+        { category: "Apex_code", level: "DEBUG" },
+        { category: "System", level: "INFO" },
+      ]);
     });
 
     it("should handle logs with different namespaces", async () => {
