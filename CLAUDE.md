@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the LANA MCP Server - a Model Context Protocol (MCP) server for Apex Log Analysis. It provides AI agents with tools to analyze Salesforce Apex debug logs for performance bottlenecks and optimization opportunities.
+This is the Apex Log MCP Server - a Model Context Protocol (MCP) server for Apex Log Analysis. It provides AI agents with tools to analyze Salesforce Apex debug logs for performance bottlenecks and optimization opportunities.
 
 ## Development Commands
 
@@ -26,7 +26,7 @@ npm start
 
 ### Core Components
 
-- **src/index.ts**: Main MCP server implementation (`LanaServer` class)
+- **src/index.ts**: Main MCP server implementation (`ApexLogServer` class)
   - Implements 4 MCP tools: `analyze_apex_log_performance`, `get_apex_log_summary`, `find_performance_bottlenecks`, `execute_anonymous`
   - Uses stdio transport for communication
   - Handles file validation, log parsing, analysis, and anonymous Apex execution
@@ -45,7 +45,8 @@ npm start
 
 ### MCP Integration
 
-This server is designed to integrate with the LANA VS Code extension:
+This server is designed to integrate with the Apex Log Analyzer VS Code extension:
+
 - Registered automatically by the extension
 - Communicates via MCP protocol over stdio
 - Provides structured JSON responses for AI analysis

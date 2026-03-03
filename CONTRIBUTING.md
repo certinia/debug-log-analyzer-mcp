@@ -1,8 +1,8 @@
-# 🤝 Contributing to LANA MCP Server
+# 🤝 Contributing to Apex Log MCP Server
 
 🎉🥳 Thank you for contributing! 🥳🎉
 
-We truly appreciate your help in making LANA MCP Server better. Whether you're fixing a bug, adding a feature, or improving documentation, your contributions are invaluable to us!
+We truly appreciate your help in making Apex Log MCP Server better. Whether you're fixing a bug, adding a feature, or improving documentation, your contributions are invaluable to us!
 
 Before you dive in, please make sure to review our [code of conduct](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CODE_OF_CONDUCT.md) to ensure a welcoming environment for everyone.
 
@@ -56,4 +56,4 @@ Please verify the following before opening a PR:
 
 If you get stuck at any point, feel free to open an issue or reach out to us in the discussions tab. We’re here to help and we want to make your contribution experience as smooth as possible. 🤗
 
-Thank you again for contributing to **LANA MCP Server**! Your input helps make this tool even better for Salesforce developers. 🙌
+Thank you again for contributing to **Apex Log MCP Server**! Your input helps make this tool even better for Salesforce developers. 🙌
