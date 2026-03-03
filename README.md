@@ -46,7 +46,7 @@ Identifies the slowest running methods in a debug log with detailed performance 
 | ------------- | ------ | -------- | ------------------------------------------------- |
 | `logFilePath` | string | Yes      | Absolute path to the .log file                    |
 | `topMethods`  | number | No       | Number of slowest methods to return (default: 10) |
-| `minDuration` | number | No       | Minimum duration in nanoseconds (default: 0)      |
+| `minDuration` | number | No       | Minimum duration in milliseconds (default: 0)     |
 | `namespace`   | string | No       | Filter by namespace                               |
 
 **Example prompts:**

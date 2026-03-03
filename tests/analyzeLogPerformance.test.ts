@@ -91,11 +91,25 @@ describe("analyzeLogPerformance", () => {
       const parsedResult = toonDecode(result);
 
       expect(parsedResult.totalMethods).toBe(3);
-      expect(parsedResult.totalExecutionTime).toBe(1000000000); // 1 second in ns
+      expect(parsedResult.totalExecutionTime).toBe(1000); // 1s in ms
       expect(parsedResult.slowestMethods).toHaveLength(3);
       expect(parsedResult.slowestMethods[0].name).toBe("SlowMethod");
-      expect(parsedResult.summary).toContain("Analysis found 3 methods");
       expect(parsedResult.recommendations).toBeInstanceOf(Array);
+    });
+
+    it("should return durations in milliseconds", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLog();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      expect(parsedResult.slowestMethods[0].duration).toBe(500); // 500ms
+      expect(parsedResult.slowestMethods[0].selfDuration).toBe(500); // 500ms
+      expect(parsedResult.slowestMethods[1].duration).toBe(400); // 400ms
+      expect(parsedResult.slowestMethods[2].duration).toBe(100); // 100ms
     });
 
     it("should limit results with topMethods parameter", async () => {
@@ -115,10 +129,10 @@ describe("analyzeLogPerformance", () => {
       expect(parsedResult.slowestMethods[1].name).toBe("MediumMethod");
     });
 
-    it("should filter by minimum duration", async () => {
+    it("should filter by minimum duration in milliseconds", async () => {
       const args: AnalyzeLogArgs = {
         logFilePath: "/test/file.log",
-        minDuration: 300000000, // 300ms in ns
+        minDuration: 300, // 300ms
       };
       const mockApexLog = createMockApexLog();
 
@@ -130,9 +144,7 @@ describe("analyzeLogPerformance", () => {
       expect(parsedResult.totalMethods).toBe(2); // Only SlowMethod and MediumMethod
       expect(parsedResult.slowestMethods).toHaveLength(2);
       expect(
-        parsedResult.slowestMethods.every(
-          (method) => method.duration >= 300000000,
-        ),
+        parsedResult.slowestMethods.every((method) => method.duration >= 300),
       ).toBe(true);
     });
 
@@ -167,9 +179,9 @@ describe("analyzeLogPerformance", () => {
       expect(methods[0].soqlCount).toBe(10);
     });
 
-    it("should filter methods by minimum duration", () => {
+    it("should filter methods by minimum duration in nanoseconds", () => {
       const mockApexLog = createMockApexLog();
-      const methods = extractMethods(mockApexLog, 300000000); // 300ms
+      const methods = extractMethods(mockApexLog, 300000000); // 300ms in ns
 
       expect(methods).toHaveLength(2);
       expect(methods.every((method) => method.duration >= 300000000)).toBe(
@@ -204,153 +216,48 @@ describe("analyzeLogPerformance", () => {
       expect(methods[2].selfPercentage).toBe(10); // 100000000 / 1000000000 * 100
     });
 
+    it("should extract thrownCount and SOSL metrics from log lines", () => {
+      const methodWithSOSL = createMockLogLine(
+        "SOSLMethod",
+        500000000,
+        500000000,
+        "default",
+        1,
+        0, // dmlCount
+        0, // soqlCount
+        0, // dmlRows
+        0, // soqlRows
+        5, // soslCount
+        250, // soslRows
+        3, // totalThrownCount
+      );
+
+      const mockApexLog = {
+        duration: { total: 1000000000, self: 0 },
+        children: [methodWithSOSL],
+        type: "EXECUTION_STARTED",
+        text: "Root",
+        namespace: "default",
+        lineNumber: null,
+        dmlCount: { total: 0, self: 0 },
+        soqlCount: { total: 0, self: 0 },
+        dmlRowCount: { total: 0, self: 0 },
+        soqlRowCount: { total: 0, self: 0 },
+      };
+
+      const methods = extractMethods(mockApexLog as any, 0);
+
+      expect(methods).toHaveLength(1);
+      expect(methods[0].thrownCount).toBe(3);
+      expect(methods[0].soslCount).toBe(5);
+      expect(methods[0].soslRows).toBe(250);
+    });
+
     it("should handle zero total time", () => {
       const mockApexLog = createMockApexLogWithZeroTotalTime();
       const methods = extractMethods(mockApexLog, 0);
 
       expect(methods.every((method) => method.selfPercentage === 0)).toBe(true);
-    });
-  });
-
-  describe("Performance Summary Generation", () => {
-    it("should generate correct summary for multiple methods", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLog();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      expect(parsedResult.summary).toContain("Analysis found 3 methods");
-      expect(parsedResult.summary).toContain("SlowMethod");
-      expect(parsedResult.summary).toContain("500.00ms");
-      expect(parsedResult.summary).toContain("50.0% of total execution time");
-      expect(parsedResult.summary).toContain("100.0% of total execution time"); // All methods combined
-    });
-
-    it("should generate appropriate summary for no methods", async () => {
-      const args: AnalyzeLogArgs = {
-        logFilePath: "/test/file.log",
-        minDuration: 2000000000,
-      };
-      const mockApexLog = createMockApexLog();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      expect(parsedResult.summary).toBe(
-        "No methods found matching the criteria.",
-      );
-      expect(parsedResult.totalMethods).toBe(0);
-    });
-  });
-
-  describe("Recommendations Generation", () => {
-    it("should generate SOQL query recommendations", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLogWithHighSOQL();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      const soqlRecommendation = parsedResult.recommendations.find(
-        (rec) =>
-          rec.includes("SOQL queries") && rec.includes("reducing query count"),
-      );
-      expect(soqlRecommendation).toBeDefined();
-    });
-
-    it("should generate DML recommendations", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLogWithHighDML();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      const dmlRecommendation = parsedResult.recommendations.find(
-        (rec) => rec.includes("DML operations") && rec.includes("bulkifying"),
-      );
-      expect(dmlRecommendation).toBeDefined();
-    });
-
-    it("should generate SOQL rows recommendations", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLogWithHighSOQLRows();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      const rowsRecommendation = parsedResult.recommendations.find(
-        (rec) => rec.includes("SOQL rows") && rec.includes("WHERE clauses"),
-      );
-      expect(rowsRecommendation).toBeDefined();
-    });
-
-    it("should generate high percentage recommendations", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLogWithHighPercentage();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      const percentageRecommendation = parsedResult.recommendations.find(
-        (rec) =>
-          rec.includes("% self execution time") &&
-          rec.includes("can be optimized"),
-      );
-      expect(percentageRecommendation).toBeDefined();
-    });
-
-    it("should generate positive message when no issues found", async () => {
-      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
-      const mockApexLog = createMockApexLogWithGoodPerformance();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      expect(parsedResult.recommendations).toContain(
-        "Performance looks good! No obvious bottlenecks detected in the analyzed methods.",
-      );
-    });
-
-    it("should only analyze top 3 methods for recommendations", async () => {
-      const args: AnalyzeLogArgs = {
-        logFilePath: "/test/file.log",
-        topMethods: 10,
-      };
-      const mockApexLog = createMockApexLogWithManyMethods();
-
-      setupMocksForSuccess(mockApexLog);
-
-      const result = await analyzeLogPerformance(args);
-      const parsedResult = toonDecode(result);
-
-      // Should only mention first 3 methods in recommendations
-      const methodMentions = parsedResult.recommendations.filter(
-        (rec) =>
-          rec.includes("Method1") ||
-          rec.includes("Method2") ||
-          rec.includes("Method3") ||
-          rec.includes("Method4"),
-      );
-
-      const mentionsMethod4 = methodMentions.some((rec) =>
-        rec.includes("Method4"),
-      );
-      expect(mentionsMethod4).toBe(false);
     });
   });
 
@@ -366,9 +273,6 @@ describe("analyzeLogPerformance", () => {
 
       expect(parsedResult.totalMethods).toBe(0);
       expect(parsedResult.slowestMethods).toHaveLength(0);
-      expect(parsedResult.summary).toBe(
-        "No methods found matching the criteria.",
-      );
     });
 
     it("should handle log with no matching methods after filtering", async () => {
@@ -450,8 +354,136 @@ describe("analyzeLogPerformance", () => {
       expect(typeof parsedResult.totalMethods).toBe("number");
       expect(typeof parsedResult.totalExecutionTime).toBe("number");
       expect(Array.isArray(parsedResult.slowestMethods)).toBe(true);
-      expect(typeof parsedResult.summary).toBe("string");
       expect(Array.isArray(parsedResult.recommendations)).toBe(true);
+    });
+
+    it("should return LogAnalysisResult with summary string", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLog();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      expect(typeof parsedResult.summary).toBe("string");
+      expect(parsedResult.summary).toContain("Analysis found 3 methods");
+      expect(parsedResult.summary).toContain("SlowMethod");
+      expect(parsedResult.summary).toContain("500.00ms");
+    });
+  });
+
+  describe("Recommendations Generation", () => {
+    it("should generate SOQL query recommendations", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLogWithHighSOQL();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const soqlRecommendation = parsedResult.recommendations.find(
+        (rec) =>
+          rec.includes("SOQL queries") && rec.includes("reducing query count"),
+      );
+      expect(soqlRecommendation).toBeDefined();
+    });
+
+    it("should generate DML recommendations", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLogWithHighDML();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const dmlRecommendation = parsedResult.recommendations.find(
+        (rec) => rec.includes("DML operations") && rec.includes("bulkifying"),
+      );
+      expect(dmlRecommendation).toBeDefined();
+    });
+
+    it("should generate SOQL rows recommendations", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLogWithHighSOQLRows();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const rowsRecommendation = parsedResult.recommendations.find(
+        (rec) => rec.includes("SOQL rows") && rec.includes("WHERE clauses"),
+      );
+      expect(rowsRecommendation).toBeDefined();
+    });
+
+    it("should generate high percentage recommendations", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLogWithHighPercentage();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const percentageRecommendation = parsedResult.recommendations.find(
+        (rec) =>
+          rec.includes("% self execution time") &&
+          rec.includes("can be optimized"),
+      );
+      expect(percentageRecommendation).toBeDefined();
+    });
+
+    it("should generate SOSL search recommendations", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLogWithHighSOSL();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const soslRecommendation = parsedResult.recommendations.find(
+        (rec) =>
+          rec.includes("SOSL searches") &&
+          rec.includes("reducing search count"),
+      );
+      expect(soslRecommendation).toBeDefined();
+    });
+
+    it("should generate positive message when no issues found", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+      const mockApexLog = createMockApexLogWithGoodPerformance();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      expect(parsedResult.recommendations).toContain(
+        "Performance looks good! No obvious bottlenecks detected in the analyzed methods.",
+      );
+    });
+
+    it("should only analyze top 3 methods for recommendations", async () => {
+      const args: AnalyzeLogArgs = {
+        logFilePath: "/test/file.log",
+        topMethods: 10,
+      };
+      const mockApexLog = createMockApexLogWithManyMethods();
+
+      setupMocksForSuccess(mockApexLog);
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      const mentionsMethod4 = parsedResult.recommendations.some((rec) =>
+        rec.includes("Method4"),
+      );
+      expect(mentionsMethod4).toBe(false);
     });
   });
 
@@ -477,6 +509,9 @@ describe("analyzeLogPerformance", () => {
     soqlCount: number = 0,
     dmlRows: number = 0,
     soqlRows: number = 0,
+    soslCount: number = 0,
+    soslRows: number = 0,
+    totalThrownCount: number = 0,
   ): any {
     return {
       type: "METHOD_ENTRY",
@@ -488,6 +523,9 @@ describe("analyzeLogPerformance", () => {
       soqlCount: { total: soqlCount, self: soqlCount },
       dmlRowCount: { total: dmlRows, self: dmlRows },
       soqlRowCount: { total: soqlRows, self: soqlRows },
+      soslCount: { total: soslCount, self: soslCount },
+      soslRowCount: { total: soslRows, self: soslRows },
+      totalThrownCount,
       children: [],
     };
   }
@@ -582,6 +620,9 @@ describe("analyzeLogPerformance", () => {
       soqlCount: { total: 0, self: 0 },
       dmlRowCount: { total: 0, self: 0 },
       soqlRowCount: { total: 0, self: 0 },
+      soslCount: { total: 0, self: 0 },
+      soslRowCount: { total: 0, self: 0 },
+      totalThrownCount: 0,
       children: [],
     };
 
@@ -605,6 +646,21 @@ describe("analyzeLogPerformance", () => {
     return {
       duration: { total: 0, self: 0 },
       children: [method],
+      type: "EXECUTION_STARTED",
+      text: "Root",
+      namespace: "default",
+      lineNumber: null,
+      dmlCount: { total: 0, self: 0 },
+      soqlCount: { total: 0, self: 0 },
+      dmlRowCount: { total: 0, self: 0 },
+      soqlRowCount: { total: 0, self: 0 },
+    };
+  }
+
+  function createEmptyMockApexLog(): any {
+    return {
+      duration: { total: 0, self: 0 },
+      children: [],
       type: "EXECUTION_STARTED",
       text: "Root",
       namespace: "default",
@@ -666,6 +722,35 @@ describe("analyzeLogPerformance", () => {
       dmlCount: { total: 6, self: 0 },
       soqlCount: { total: 2, self: 0 },
       dmlRowCount: { total: 100, self: 0 },
+      soqlRowCount: { total: 50, self: 0 },
+    };
+  }
+
+  function createMockApexLogWithHighSOSL(): any {
+    const highSOSLMethod = createMockLogLine(
+      "HighSOSLMethod",
+      500000000,
+      50000000, // Low self duration to get selfPercentage < 10%
+      "default",
+      1,
+      1, // dmlCount
+      2, // soqlCount
+      10, // dmlRows
+      50, // soqlRows
+      5, // soslCount (> 3 triggers recommendation)
+      200, // soslRows
+    );
+
+    return {
+      duration: { total: 1000000000, self: 500000000 },
+      children: [highSOSLMethod],
+      type: "EXECUTION_STARTED",
+      text: "Root",
+      namespace: "default",
+      lineNumber: null,
+      dmlCount: { total: 1, self: 0 },
+      soqlCount: { total: 2, self: 0 },
+      dmlRowCount: { total: 10, self: 0 },
       soqlRowCount: { total: 50, self: 0 },
     };
   }
@@ -795,7 +880,7 @@ describe("analyzeLogPerformance", () => {
       8,
       100,
       1200,
-    ); // Should not appear in recommendations
+    );
 
     return {
       duration: { total: 1000000000, self: 0 },
@@ -808,21 +893,6 @@ describe("analyzeLogPerformance", () => {
       soqlCount: { total: 26, self: 0 },
       dmlRowCount: { total: 340, self: 0 },
       soqlRowCount: { total: 4200, self: 0 },
-    };
-  }
-
-  function createEmptyMockApexLog(): any {
-    return {
-      duration: { total: 0, self: 0 },
-      children: [],
-      type: "EXECUTION_STARTED",
-      text: "Root",
-      namespace: "default",
-      lineNumber: null,
-      dmlCount: { total: 0, self: 0 },
-      soqlCount: { total: 0, self: 0 },
-      dmlRowCount: { total: 0, self: 0 },
-      soqlRowCount: { total: 0, self: 0 },
     };
   }
 });

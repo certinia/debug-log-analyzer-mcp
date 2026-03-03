@@ -15,7 +15,7 @@ import {
   LogIssue,
   ApexLogParser,
 } from "../src/ApexLogParser";
-import { decode, encode } from "@toon-format/toon";
+import { decode } from "@toon-format/toon";
 
 // Mock the dependencies
 jest.mock("fs", () => ({
@@ -140,7 +140,7 @@ describe("getLogSummary", () => {
       textData: "",
 
       // Counting properties
-      duration: { total: 12500, self: 12500 },
+      duration: { total: 12500000000, self: 12500000000 },
       dmlRowCount: { total: 25, self: 25 },
       soqlRowCount: { total: 150, self: 150 },
       soqlCount: { total: 5, self: 5 },
@@ -190,31 +190,60 @@ describe("getLogSummary", () => {
       expect(mockPath.basename).toHaveBeenCalledWith("/path/to/test-log.log");
       expect(mockParse).toHaveBeenCalledWith(mockLogContent);
 
-      expect(result).toEqual({
-        content: [
-          {
-            type: "text",
-            text: encode({
-              file: "test-log.log",
-              totalExecutionTime: 12500,
-              totalMethods: 3, // 2 METHOD_ENTRY + 1 with subCategory 'Method'
-              totalSOQLQueries: 5,
-              totalDMLOperations: 3,
-              totalSOQLRows: 150,
-              totalDMLRows: 25,
-              governorLimits: {
-                cpuTime: { used: 1500, limit: 10000 },
-                heapSize: { used: 2048, limit: 6000000 },
-                soqlQueries: { used: 5, limit: 100 },
-                dmlStatements: { used: 3, limit: 150 },
-              },
-              namespaces: ["default", "MyNamespace"],
-              logIssues: 0,
-              parsingErrors: 0,
-            }),
-          },
-        ],
+      const parsedResult = toonDecode(result);
+
+      expect(parsedResult.file).toBe("test-log.log");
+      expect(parsedResult.size).toBe(15000);
+      expect(parsedResult.debugLevels).toEqual([]);
+      expect(parsedResult.totalExecutionTime).toBe(12500); // ms
+      expect(parsedResult.totalMethods).toBe(3); // 2 METHOD_ENTRY + 1 with subCategory 'Method'
+      expect(parsedResult.totalSOQLQueries).toBe(5);
+      expect(parsedResult.totalDMLOperations).toBe(3);
+      expect(parsedResult.totalSOQLRows).toBe(150);
+      expect(parsedResult.totalDMLRows).toBe(25);
+      expect(parsedResult.namespaces).toEqual(["default", "MyNamespace"]);
+      expect(parsedResult.logIssues).toEqual([]);
+      expect(parsedResult.parsingErrors).toBe(0);
+
+      // Governor limits: only those with used > 0 or limit > 0
+      expect(parsedResult.governorLimits.cpuTime).toEqual({
+        used: 1500,
+        limit: 10000,
       });
+      expect(parsedResult.governorLimits.soqlQueries).toEqual({
+        used: 5,
+        limit: 100,
+      });
+      expect(parsedResult.governorLimits.dmlStatements).toEqual({
+        used: 3,
+        limit: 150,
+      });
+    });
+
+    it("should map debugLevels to compact category/level objects", async () => {
+      const mockApexLog = createMockApexLog({
+        debugLevels: [
+          { logCategory: "Apex_code", logLevel: "DEBUG" },
+          { logCategory: "System", logLevel: "INFO" },
+        ] as any,
+      });
+
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readFile.mockResolvedValue("mock log content");
+      mockPath.basename.mockReturnValue("debug-levels.log");
+      mockParse.mockReturnValue(mockApexLog);
+
+      const args: LogSummaryArgs = {
+        logFilePath: "/path/to/debug-levels.log",
+      };
+
+      const result = await getLogSummary(args);
+      const parsedResult = toonDecode(result);
+
+      expect(parsedResult.debugLevels).toEqual([
+        { category: "Apex_code", level: "DEBUG" },
+        { category: "System", level: "INFO" },
+      ]);
     });
 
     it("should handle logs with different namespaces", async () => {
@@ -242,7 +271,7 @@ describe("getLogSummary", () => {
       expect(parsedResult.file).toBe("namespace-test.log");
     });
 
-    it("should handle logs with log issues and parsing errors", async () => {
+    it("should include log issues as array of {type, summary} objects", async () => {
       const mockLogIssues: LogIssue[] = [
         {
           summary: "CPU time exceeded",
@@ -269,7 +298,9 @@ describe("getLogSummary", () => {
       const result = await getLogSummary(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.logIssues).toBe(1);
+      expect(parsedResult.logIssues).toEqual([
+        { type: "error", summary: "CPU time exceeded" },
+      ]);
       expect(parsedResult.parsingErrors).toBe(1);
     });
 
@@ -353,14 +384,8 @@ describe("getLogSummary", () => {
       expect(parsedResult.totalDMLOperations).toBe(0);
       expect(parsedResult.totalSOQLRows).toBe(0);
       expect(parsedResult.totalDMLRows).toBe(0);
-      expect(parsedResult.governorLimits.cpuTime).toEqual({
-        used: 0,
-        limit: 0,
-      });
-      expect(parsedResult.governorLimits.heapSize).toEqual({
-        used: 0,
-        limit: 0,
-      });
+      // All limits are 0/0, so governorLimits should be empty
+      expect(parsedResult.governorLimits).toEqual({});
     });
 
     it("should handle different file paths and extensions", async () => {
@@ -488,7 +513,7 @@ describe("getLogSummary", () => {
       const parsedResult = toonDecode(result);
 
       expect(parsedResult.namespaces).toEqual([]);
-      expect(parsedResult.logIssues).toBe(0);
+      expect(parsedResult.logIssues).toEqual([]);
       expect(parsedResult.parsingErrors).toBe(0);
       expect(parsedResult.file).toBe("edge-case.log");
     });
@@ -592,7 +617,7 @@ describe("getLogSummary", () => {
   });
 
   describe("governor limits handling", () => {
-    it("should handle various governor limit configurations", async () => {
+    it("should include all governor limits with used > 0 or limit > 0", async () => {
       const customGovernorLimits: GovernorLimits = {
         soqlQueries: { used: 50, limit: 100 },
         soslQueries: { used: 5, limit: 20 },
@@ -626,11 +651,39 @@ describe("getLogSummary", () => {
       const result = await getLogSummary(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.governorLimits).toEqual({
-        cpuTime: { used: 8000, limit: 10000 },
-        heapSize: { used: 5000000, limit: 6000000 },
-        soqlQueries: { used: 50, limit: 100 },
-        dmlStatements: { used: 25, limit: 150 },
+      // All limits with used > 0 or limit > 0 should be included
+      expect(parsedResult.governorLimits.cpuTime).toEqual({
+        used: 8000,
+        limit: 10000,
+      });
+      expect(parsedResult.governorLimits.heapSize).toEqual({
+        used: 5000000,
+        limit: 6000000,
+      });
+      expect(parsedResult.governorLimits.soqlQueries).toEqual({
+        used: 50,
+        limit: 100,
+      });
+      expect(parsedResult.governorLimits.dmlStatements).toEqual({
+        used: 25,
+        limit: 150,
+      });
+      expect(parsedResult.governorLimits.queryRows).toEqual({
+        used: 2500,
+        limit: 50000,
+      });
+      expect(parsedResult.governorLimits.callouts).toEqual({
+        used: 3,
+        limit: 100,
+      });
+      expect(parsedResult.governorLimits.dmlRows).toEqual({
+        used: 500,
+        limit: 10000,
+      });
+      // mobileApexPushCalls has used: 0, limit: 10 — included since limit > 0
+      expect(parsedResult.governorLimits.mobileApexPushCalls).toEqual({
+        used: 0,
+        limit: 10,
       });
     });
 

@@ -19,7 +19,7 @@ export const analyzeLogPerformanceInputSchema = {
     .number()
     .optional()
     .describe(
-      "Minimum duration in nanoseconds to include a method. For reference: 1ms = 1,000,000ns, 1s = 1,000,000,000ns (default: 0)",
+      "Minimum duration in milliseconds to include a method (default: 0)",
     ),
   namespace: z.string().optional().describe("Filter methods by namespace"),
 };
@@ -31,7 +31,7 @@ export type AnalyzeLogArgs = z.infer<
 export const analyzeLogPerformanceToolConfig = {
   title: "Analyze Apex Log Performance",
   description:
-    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations, SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.",
+    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations (in ms), SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.",
   inputSchema: analyzeLogPerformanceInputSchema,
   annotations: {
     title: "Analyze Apex Log Performance",
@@ -52,6 +52,9 @@ export interface SlowMethod {
   soqlCount: number;
   dmlRows: number;
   soqlRows: number;
+  thrownCount: number;
+  soslCount: number;
+  soslRows: number;
   selfPercentage: number;
 }
 
@@ -62,6 +65,8 @@ export interface LogAnalysisResult {
   summary: string;
   recommendations: string[];
 }
+
+const NS_TO_MS = 1_000_000;
 
 export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   const { logFilePath, topMethods = 10, minDuration = 0, namespace } = args;
@@ -77,8 +82,11 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   const logContent = await fs.readFile(logFilePath, "utf-8");
   const apexLog = parse(logContent);
 
+  // Convert ms input to ns for internal filtering
+  const minDurationNs = minDuration * NS_TO_MS;
+
   // Extract all methods with their performance data
-  const methods = extractMethods(apexLog, minDuration, namespace);
+  const methods = extractMethods(apexLog, minDurationNs, namespace);
 
   // Sort by self duration (descending)
   methods.sort((a, b) => b.selfDuration - a.selfDuration);
@@ -86,12 +94,21 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   // Take top N methods
   const slowestMethods = methods.slice(0, topMethods);
 
+  const msMethods = slowestMethods.map((m) => ({
+    ...m,
+    duration: m.duration / NS_TO_MS,
+    selfDuration: m.selfDuration / NS_TO_MS,
+  }));
+
   const result: LogAnalysisResult = {
     totalMethods: methods.length,
-    totalExecutionTime: apexLog.duration.total,
-    slowestMethods,
-    summary: generatePerformanceSummary(slowestMethods, apexLog.duration.total),
-    recommendations: generateRecommendations(slowestMethods),
+    totalExecutionTime: apexLog.duration.total / NS_TO_MS,
+    slowestMethods: msMethods,
+    summary: generatePerformanceSummary(
+      msMethods,
+      apexLog.duration.total / NS_TO_MS,
+    ),
+    recommendations: generateRecommendations(msMethods),
   };
 
   return {
@@ -130,6 +147,9 @@ export function extractMethods(
             soqlCount: node.soqlCount.total,
             dmlRows: node.dmlRowCount.total,
             soqlRows: node.soqlRowCount.total,
+            thrownCount: node.totalThrownCount,
+            soslCount: node.soslCount.total,
+            soslRows: node.soslRowCount.total,
             selfPercentage:
               totalTime > 0 ? (node.duration.self / totalTime) * 100 : 0,
           });
@@ -148,7 +168,7 @@ export function extractMethods(
 
 function generatePerformanceSummary(
   methods: SlowMethod[],
-  totalTime: number,
+  totalTimeMs: number,
 ): string {
   if (methods.length === 0) {
     return "No methods found matching the criteria.";
@@ -160,33 +180,20 @@ function generatePerformanceSummary(
     0,
   );
   const percentageOfTotal =
-    totalTime > 0 ? (totalSlowMethodsTime / totalTime) * 100 : 0;
+    totalTimeMs > 0 ? (totalSlowMethodsTime / totalTimeMs) * 100 : 0;
 
-  return `Analysis found ${methods.length} methods. The slowest method "${
-    slowestMethod.name
-  }" took ${(slowestMethod.selfDuration / 1000000).toFixed(
-    2,
-  )}ms (${slowestMethod.selfPercentage.toFixed(
-    1,
-  )}% of total execution time). The top ${
-    methods.length
-  } methods account for ${percentageOfTotal.toFixed(
-    1,
-  )}% of total execution time.`;
+  return `Analysis found ${methods.length} methods. The slowest method "${slowestMethod.name}" took ${slowestMethod.selfDuration.toFixed(2)}ms (${slowestMethod.selfPercentage.toFixed(1)}% of total execution time). The top ${methods.length} methods account for ${percentageOfTotal.toFixed(1)}% of total execution time.`;
 }
 
 function generateRecommendations(methods: SlowMethod[]): string[] {
   const recommendations: string[] = [];
 
-  methods.forEach((method, index) => {
-    if (index < 3) {
-      // Focus on top 3 methods
-      const recommendation = getRecommendations(method);
-      if (recommendation) {
-        recommendations.push(recommendation);
-      }
+  for (const method of methods.slice(0, 3)) {
+    const recommendation = getRecommendation(method);
+    if (recommendation) {
+      recommendations.push(recommendation);
     }
-  });
+  }
 
   if (recommendations.length === 0) {
     recommendations.push(
@@ -197,9 +204,8 @@ function generateRecommendations(methods: SlowMethod[]): string[] {
   return recommendations;
 }
 
-function getRecommendations(method: SlowMethod): string | null {
-  // High self time percentage, only include if self duration is significant
-  if (method.selfPercentage > 10 && method.selfDuration > 100) {
+function getRecommendation(method: SlowMethod): string | null {
+  if (method.selfPercentage > 10 && method.selfDuration > 0.1) {
     return `Method "${method.name}" consumes ${method.selfPercentage.toFixed(
       1,
     )}% self execution time. Consider if it can be optimized to make it faster, check how many times it is called and if that can be reduced.`;
@@ -212,6 +218,9 @@ function getRecommendations(method: SlowMethod): string | null {
   }
   if (method.dmlCount > 3) {
     return `Method "${method.name}" performs ${method.dmlCount} DML operations. Consider bulkifying DML operations.`;
+  }
+  if (method.soslCount > 3) {
+    return `Method "${method.name}" executes ${method.soslCount} SOSL searches. Consider reducing search count or caching results.`;
   }
 
   return null;
