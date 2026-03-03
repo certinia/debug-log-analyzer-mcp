@@ -36,7 +36,7 @@ function logLevelProperty(description: string) {
 export const executeAnonymousTool = {
   name: "execute_anonymous",
   description:
-    "Execute a snippet of anonymous Apex against any Salesforce org and retrieve the resulting debug log",
+    "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI) and retrieve the resulting debug log",
   inputSchema: {
     type: "object",
     properties: {

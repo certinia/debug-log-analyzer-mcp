@@ -22,7 +22,7 @@ export interface BottleneckResult {
 export const findPerformanceBottlenecksTool = {
   name: "find_performance_bottlenecks",
   description:
-    "Identify performance bottlenecks in an Apex log by analyzing CPU time, database operations, and method execution patterns",
+    "Check whether an Apex log transaction is approaching governor limits (flags usage above 80%). Analyzes CPU time, SOQL/DML limits, query rows, and method execution patterns by namespace. Best for checking if a transaction is at risk of hitting governor limits.",
   inputSchema: {
     type: "object",
     properties: {
@@ -33,7 +33,8 @@ export const findPerformanceBottlenecksTool = {
       analysisType: {
         type: "string",
         enum: ["cpu", "database", "methods", "all"],
-        description: "Type of bottleneck analysis to perform",
+        description:
+          'Type of analysis: "cpu" checks CPU time governor limit, "database" checks SOQL query/DML statement/query row limits, "methods" groups methods by namespace with duration totals, "all" runs all three (default)',
         default: "all",
       },
     },
@@ -156,7 +157,7 @@ function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       acc[method.namespace].push(method);
       return acc;
     },
-    {}
+    {},
   );
 
   return {
@@ -166,7 +167,7 @@ function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
       methodCount: methodsByNamespace[ns].length,
       totalDuration: methodsByNamespace[ns].reduce(
         (sum: number, m: SlowMethod) => sum + m.duration,
-        0
+        0,
       ),
     })),
   };
@@ -183,7 +184,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
         warnings.push(
           `${key}: ${percentage.toFixed(1)}% of limit used (${value.used}/${
             value.limit
-          })`
+          })`,
         );
       }
     }
@@ -199,7 +200,7 @@ function analyzeGovernorLimits(apexLog: ApexLog): Record<string, unknown> {
       }
       return acc;
     },
-    {}
+    {},
   );
 
   return warnings.length === 0

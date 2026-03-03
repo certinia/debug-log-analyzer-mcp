@@ -37,7 +37,7 @@ export interface LogAnalysisResult {
 export const analyzeLogPerformanceTool = {
   name: "analyze_apex_log_performance",
   description:
-    "Analyze an Apex debug log file and identify the slowest running methods with performance metrics",
+    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations, SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.",
   inputSchema: {
     type: "object",
     properties: {
@@ -58,7 +58,7 @@ export const analyzeLogPerformanceTool = {
       },
       namespace: {
         type: "string",
-        description: "Filter methods by namespace (optional)",
+        description: "Filter methods by namespace",
       },
     },
     required: ["logFilePath"],
@@ -100,7 +100,7 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
     content: [
       {
         type: "text",
-        text: encode(result)
+        text: encode(result),
       },
     ],
   };
@@ -109,7 +109,7 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
 export function extractMethods(
   apexLog: ApexLog,
   minDuration: number,
-  namespaceFilter?: string
+  namespaceFilter?: string,
 ): SlowMethod[] {
   const methods: SlowMethod[] = [];
   const totalTime = apexLog.duration.total;
@@ -150,7 +150,7 @@ export function extractMethods(
 
 function generatePerformanceSummary(
   methods: SlowMethod[],
-  totalTime: number
+  totalTime: number,
 ): string {
   if (methods.length === 0) {
     return "No methods found matching the criteria.";
@@ -159,7 +159,7 @@ function generatePerformanceSummary(
   const slowestMethod = methods[0];
   const totalSlowMethodsTime = methods.reduce(
     (sum, method) => sum + method.selfDuration,
-    0
+    0,
   );
   const percentageOfTotal =
     totalTime > 0 ? (totalSlowMethodsTime / totalTime) * 100 : 0;
@@ -167,13 +167,13 @@ function generatePerformanceSummary(
   return `Analysis found ${methods.length} methods. The slowest method "${
     slowestMethod.name
   }" took ${(slowestMethod.selfDuration / 1000000).toFixed(
-    2
+    2,
   )}ms (${slowestMethod.selfPercentage.toFixed(
-    1
+    1,
   )}% of total execution time). The top ${
     methods.length
   } methods account for ${percentageOfTotal.toFixed(
-    1
+    1,
   )}% of total execution time.`;
 }
 
@@ -192,7 +192,7 @@ function generateRecommendations(methods: SlowMethod[]): string[] {
 
   if (recommendations.length === 0) {
     recommendations.push(
-      "Performance looks good! No obvious bottlenecks detected in the analyzed methods."
+      "Performance looks good! No obvious bottlenecks detected in the analyzed methods.",
     );
   }
 
@@ -203,7 +203,7 @@ function getRecommendations(method: SlowMethod): string | null {
   // High self time percentage, only include if self duration is significant
   if (method.selfPercentage > 10 && method.selfDuration > 100) {
     return `Method "${method.name}" consumes ${method.selfPercentage.toFixed(
-      1
+      1,
     )}% self execution time. Consider if it can be optimized to make it faster, check how many times it is called and if that can be reduced.`;
   }
   if (method.soqlRows > 1000) {
