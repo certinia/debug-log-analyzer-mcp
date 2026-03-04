@@ -58,9 +58,9 @@
   },
   "homepage": "https://github.com/certinia/debug-log-analyzer-mcp#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.26.0",
-    "@salesforce/core": "^8.23.4",
-    "@toon-format/toon": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@salesforce/core": "^8.26.3",
+    "@toon-format/toon": "^2.1.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
