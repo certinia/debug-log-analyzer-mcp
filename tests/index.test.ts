@@ -207,14 +207,16 @@ describe("ApexLogServer", () => {
     (
       executeAnonymous as jest.MockedFunction<typeof executeAnonymous>
     ).mockResolvedValue(mockExecuteAnonymousResult);
-
-    // Clear the module cache and re-import
-    jest.resetModules();
   });
 
   afterEach(() => {
     jest.clearAllMocks();
     process.removeAllListeners("SIGINT");
+  });
+
+  afterAll(() => {
+    mockExit.mockRestore();
+    mockConsoleError.mockRestore();
   });
 
   describe("Server Initialization", () => {
@@ -379,8 +381,8 @@ describe("ApexLogServer", () => {
 
   describe("Server Lifecycle", () => {
     it("should start server correctly", async () => {
-      const lanaServer = new ApexLogServer();
-      await lanaServer.run();
+      const apexLogServer = new ApexLogServer();
+      await apexLogServer.run();
 
       expect(StdioServerTransport).toHaveBeenCalled();
       expect(mockConnect).toHaveBeenCalledWith(mockTransport);
@@ -390,8 +392,8 @@ describe("ApexLogServer", () => {
     });
 
     it("should connect to stdio transport", async () => {
-      const lanaServer = new ApexLogServer();
-      await lanaServer.run();
+      const apexLogServer = new ApexLogServer();
+      await apexLogServer.run();
 
       expect(StdioServerTransport).toHaveBeenCalled();
       expect(mockConnect).toHaveBeenCalledWith(mockTransport);
