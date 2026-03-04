@@ -17,9 +17,10 @@ jobs:
         with:
           node-version: "22"
           cache: "pnpm"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Dependencies
-        run: HUSKY=0 pnpm install
+        run: HUSKY=0 pnpm install --frozen-lockfile
 
       - name: Lint Files
         run: pnpm run lint
@@ -30,17 +31,7 @@ jobs:
       - name: Tests
         run: pnpm run test
 
-      - name: Configure NPM
-        run: |
-          cat ci/.npmrc > .npmrc
-          echo $NPM_CERT | base64 --decode > ci/client.cert
-          echo $NPM_KEY | base64 --decode > ci/client.key
-        env:
-          NPM_CERT: ${{ secrets.ARTIFACTORY_MTLS_CERT_BASE64 }}
-          NPM_KEY: ${{ secrets.ARTIFACTORY_MTLS_KEY_BASE64 }}
-
       - name: Publish
-        run: pnpm publish --registry ${{ secrets.REGISTRY_URL }} --no-git-checks
+        run: pnpm publish --access public --no-git-checks
         env:
-          REGISTRY_BASE_URL: ${{ secrets.REGISTRY_BASE_URL }}
-          REGISTRY_AUTH: ${{ secrets.REGISTRY_AUTH }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
