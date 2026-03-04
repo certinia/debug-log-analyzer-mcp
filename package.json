@@ -1,7 +1,7 @@
 {
   "name": "@certinia/apex-log-mcp",
   "version": "1.0.0",
-  "description": "MCP server for analyzing Salesforce Apex debug logs.",
+  "description": "MCP server that gives AI assistants tools to analyze Salesforce Apex debug logs for performance bottlenecks, slow methods, and governor limit usage.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
