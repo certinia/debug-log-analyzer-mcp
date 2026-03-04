@@ -130,7 +130,7 @@ export class ApexLogParser {
         lastEntry.timestamp,
         "Skipped-Lines",
         `${line}. A section of the log has been skipped and the log has been truncated. Full details of this section of log can not be provided.`,
-        "skip"
+        "skip",
       );
     } else if (
       lastEntry &&
@@ -140,7 +140,7 @@ export class ApexLogParser {
         lastEntry.timestamp,
         "Max-Size-reached",
         "The maximum log size has been reached. Part of the log has been truncated.",
-        "skip"
+        "skip",
       );
       this.maxSizeTimestamp = lastEntry.timestamp;
     } else if (!hasType && settingsPattern.test(line)) {
@@ -154,7 +154,7 @@ export class ApexLogParser {
 
   private *generateLogLines(log: string): Generator<LogLine> {
     const start = log.search(
-      /^\d{2}:\d{2}:\d{2}.\d{1} \(\d+\)\|EXECUTION_STARTED$/m
+      /^\d{2}:\d{2}:\d{2}.\d{1} \(\d+\)\|EXECUTION_STARTED$/m,
     );
     if (start > -1) {
       log = log.slice(start);
@@ -162,8 +162,8 @@ export class ApexLogParser {
 
     const hascrlf = log.indexOf("\r\n") > -1;
     let lastEntry = null;
-    let lfIndex = null;
-    let eolIndex = (lfIndex = log.indexOf("\n"));
+    let lfIndex = log.indexOf("\n");
+    let eolIndex = lfIndex;
     let startIndex = 0;
     let crlfIndex = -1;
 
@@ -221,7 +221,7 @@ export class ApexLogParser {
   private parseTree(
     currentLine: Method,
     lineIter: LineIterator,
-    stack: Method[]
+    stack: Method[],
   ) {
     this.lastTimestamp = currentLine.timestamp;
     currentLine.namespace ||= "default";
@@ -289,7 +289,7 @@ export class ApexLogParser {
           currentLine.exitStamp,
           "Unexpected-End",
           "An entry event was found without a corresponding exit event e.g a `METHOD_ENTRY` event without a `METHOD_EXIT`",
-          "unexpected"
+          "unexpected",
         );
 
         if (currentLine.isTruncated) {
@@ -297,7 +297,7 @@ export class ApexLogParser {
             currentLine.exitStamp,
             "Max-Size-reached",
             "The maximum log size has been reached. Part of the log has been truncated.",
-            "skip"
+            "skip",
           );
           this.maxSizeTimestamp = currentLine.exitStamp;
         }
@@ -323,7 +323,7 @@ export class ApexLogParser {
     startMethod: Method,
     endLine: LogLine,
     lineIter: LineIterator,
-    stack: Method[]
+    stack: Method[],
   ) {
     startMethod.exitStamp = endLine.timestamp;
 
@@ -343,7 +343,7 @@ export class ApexLogParser {
         endLine.timestamp,
         "Unexpected-Exit",
         "An exit event was found without a corresponding entry event e.g a `METHOD_EXIT` event without a `METHOD_ENTRY`",
-        "unexpected"
+        "unexpected",
       );
       return false; // we have no matching method - ignore
     }
@@ -452,7 +452,7 @@ export class ApexLogParser {
     startTime: number,
     summary: string,
     description: string,
-    type: IssueType
+    type: IssueType,
   ) {
     if (!this.reasons.has(summary)) {
       this.reasons.add(summary);
@@ -471,7 +471,7 @@ export class ApexLogParser {
     startTime: number,
     summary: string,
     description: string,
-    type: IssueType
+    type: IssueType,
   ) {
     const elem = this.logIssues.findIndex((item) => {
       return item.summary === summary;
@@ -821,7 +821,7 @@ export class TimedNode extends LogLine {
     parser: ApexLogParser,
     parts: string[] | null,
     timelineKey: LogSubCategory,
-    cpuType: CPUType
+    cpuType: CPUType,
   ) {
     super(parser, parts);
     this.subCategory = timelineKey;
@@ -857,7 +857,7 @@ export class Method extends TimedNode {
     parts: string[] | null,
     exitTypes: string[],
     timelineKey: LogSubCategory,
-    cpuType: CPUType
+    cpuType: CPUType,
   ) {
     super(parser, parts, timelineKey, cpuType);
     this.exitTypes = exitTypes as LogEventType[];
@@ -1168,7 +1168,7 @@ class SystemConstructorEntryLine extends Method {
       parts,
       ["SYSTEM_CONSTRUCTOR_EXIT"],
       "System Method",
-      "method"
+      "method",
     );
     this.lineNumber = this.parseLineNumber(parts[2]);
     this.text = parts[3] || "";
@@ -1308,7 +1308,7 @@ class VFApexCallStartLine extends Method {
       !methodtext &&
       (!classText.includes(" ") ||
         this.invalidClasses.some((invalidCls: string) =>
-          classText.toLowerCase().includes(invalidCls)
+          classText.toLowerCase().includes(invalidCls),
         ))
     ) {
       // we have a system entry and they do not have exits
@@ -1354,7 +1354,7 @@ class VFDeserializeViewstateBeginLine extends Method {
       parts,
       ["VF_DESERIALIZE_VIEWSTATE_END"],
       "System Method",
-      "method"
+      "method",
     );
   }
 }
@@ -1368,7 +1368,7 @@ class VFFormulaStartLine extends Method {
       parts,
       ["VF_EVALUATE_FORMULA_END"],
       "System Method",
-      "custom"
+      "custom",
     );
     this.text = parts[3] || "";
   }
@@ -1390,7 +1390,7 @@ class VFSeralizeViewStateStartLine extends Method {
       parts,
       ["VF_SERIALIZE_VIEWSTATE_END"],
       "System Method",
-      "method"
+      "method",
     );
   }
 }
@@ -1471,7 +1471,7 @@ class SOQLExecuteEndLine extends LogLine {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
     this.soqlRowCount.total = this.soqlRowCount.self = parseRows(
-      parts[3] || ""
+      parts[3] || "",
     );
   }
 }
@@ -1513,14 +1513,16 @@ class SOQLExecuteExplainLine extends LogLine {
 
       this.cardinality = cardinalityText
         ? Number(
-            cardinalityText.slice(cardinalityText.indexOf("cardinality: ") + 13)
+            cardinalityText.slice(
+              cardinalityText.indexOf("cardinality: ") + 13,
+            ),
           )
         : null;
       this.sObjectCardinality = sobjCardinalityText
         ? Number(
             sobjCardinalityText.slice(
-              sobjCardinalityText.indexOf("sobjectCardinality: ") + 20
-            )
+              sobjCardinalityText.indexOf("sobjectCardinality: ") + 20,
+            ),
           )
         : null;
       this.relativeCost = costText
@@ -1554,7 +1556,7 @@ class SOSLExecuteEndLine extends LogLine {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
     this.soslRowCount.total = this.soslRowCount.self = parseRows(
-      parts[3] || ""
+      parts[3] || "",
     );
   }
 }
@@ -1622,7 +1624,7 @@ class CumulativeLimitUsageLine extends Method {
       parts,
       ["CUMULATIVE_LIMIT_USAGE_END"],
       "System Method",
-      "system"
+      "system",
     );
   }
 }
@@ -1644,7 +1646,7 @@ class CumulativeProfilingBeginLine extends Method {
       parts,
       ["CUMULATIVE_PROFILING_END"],
       "System Method",
-      "custom"
+      "custom",
     );
   }
 }
@@ -1722,7 +1724,7 @@ class LimitUsageForNSLine extends LogLine {
       const match = line.match(/^(.+?):\s*([\d,]+)\/([\d,]+)/);
       if (match) {
         const key: keyof Limits = LimitUsageForNSLine.limitsKeys.get(
-          match[1]!.trim()
+          match[1]!.trim(),
         ) as keyof Limits;
         if (key) {
           const used = parseInt(match[2]!.replace(/,/g, ""), 10);
@@ -2374,7 +2376,7 @@ class WFCriteriaBeginLine extends Method {
       parts,
       ["WF_CRITERIA_END", "WF_RULE_NOT_EVALUATED"],
       "Workflow",
-      "custom"
+      "custom",
     );
     this.text = "WF_CRITERIA : " + parts[5] + " : " + parts[3];
   }
@@ -2627,7 +2629,7 @@ class FatalErrorLine extends LogLine {
       this.timestamp,
       "FATAL ERROR! cause=" + summary,
       detailText,
-      "error"
+      "error",
     );
   }
 }
@@ -2749,7 +2751,7 @@ class VFSerializeContinuationStateBegin extends Method {
       parts,
       ["VF_SERIALIZE_CONTINUATION_STATE_END"],
       "Method",
-      "method"
+      "method",
     );
   }
 }
@@ -2761,7 +2763,7 @@ class VFDeserializeContinuationStateBegin extends Method {
       parts,
       ["VF_SERIALIZE_CONTINUATION_STATE_END"],
       "Method",
-      "method"
+      "method",
     );
   }
 }
@@ -2773,7 +2775,7 @@ class MatchEngineBegin extends Method {
 }
 
 function getLogEventClass(
-  eventName: LogEventType
+  eventName: LogEventType,
 ): LogLineConstructor | null | undefined {
   if (!eventName) {
     return null;
@@ -2812,7 +2814,7 @@ function getLogEventClass(
 
 type LogLineConstructor<T extends LogLine = LogLine> = new (
   parser: ApexLogParser,
-  parts: string[]
+  parts: string[],
 ) => T;
 export const lineTypeMap: ReadonlyMap<LogEventType, LogLineConstructor> =
   new Map<LogEventType, LogLineConstructor>([
