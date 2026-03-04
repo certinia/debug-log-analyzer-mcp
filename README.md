@@ -1,7 +1,7 @@
 # 🛠️ Apex Log MCP Server
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.19.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
 Supercharge Salesforce Apex debugging with AI-powered log analysis. Apex Log MCP Server gives AI assistants like Claude and Copilot the ability to identify performance bottlenecks, slow methods, and optimization opportunities in your debug logs - insights that would take hours to find manually.
@@ -33,7 +33,7 @@ Supercharge Salesforce Apex debugging with AI-powered log analysis. Apex Log MCP
 
 ### Requirements
 
-- Node.js >= 18.0.0
+- Node.js >= 20.19.0
 - [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (for `execute_anonymous` tool)
 
 ## Tools
@@ -118,7 +118,7 @@ Add to your `claude_desktop_config.json` or `mcp.json`:
   "mcpServers": {
     "apex-log-mcp": {
       "command": "npx",
-      "args": ["@certinia/apex-log-mcp"]
+      "args": ["-y", "@certinia/apex-log-mcp"]
     }
   }
 }
@@ -133,7 +133,12 @@ The `execute_anonymous` tool is **disabled by default**. To enable it, pass `--a
   "mcpServers": {
     "apex-log-mcp": {
       "command": "npx",
-      "args": ["@certinia/apex-log-mcp", "--allowed-orgs", "ALLOW_ALL_ORGS"]
+      "args": [
+        "-y",
+        "@certinia/apex-log-mcp",
+        "--allowed-orgs",
+        "ALLOW_ALL_ORGS"
+      ]
     }
   }
 }
@@ -150,7 +155,7 @@ The `execute_anonymous` tool is **disabled by default**. To enable it, pass `--a
 You can also pass org usernames or aliases directly:
 
 ```json
-"args": ["@certinia/apex-log-mcp", "--allowed-orgs", "dev@example.com,my-scratch-org"]
+"args": ["-y", "@certinia/apex-log-mcp", "--allowed-orgs", "dev@example.com,my-scratch-org"]
 ```
 
 ## 📚 Documentation
