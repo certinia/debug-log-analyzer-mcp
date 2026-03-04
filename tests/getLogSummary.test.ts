@@ -74,6 +74,10 @@ describe("getLogSummary", () => {
     jest.clearAllMocks();
   });
 
+  function toonDecode(result: any): any {
+    return decode(result.content[0].text) as any;
+  }
+
   const createMockApexLog = (overrides: Partial<ApexLog> = {}): ApexLog => {
     const mockGovernorLimits: GovernorLimits = {
       soqlQueries: { used: 5, limit: 100 },
@@ -731,9 +735,4 @@ describe("getLogSummary", () => {
       expect(parsedResult.governorLimits.dmlStatements.limit).toBe(150);
     });
   });
-
-  // Helper function for decoding TOON-formatted data
-  function toonDecode(result: any): any {
-    return decode(result.content[0].text) as any;
-  }
 });

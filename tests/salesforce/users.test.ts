@@ -99,6 +99,25 @@ describe("Users", () => {
       );
     });
 
+    it("should escape single quotes in username to prevent SOQL injection", async () => {
+      const username = "test'injection@example.com";
+
+      mockQuery.mockResolvedValue({
+        records: [
+          {
+            Id: testUserId,
+          },
+        ],
+      });
+
+      const result = await getUserIdByUsername(mockConnection, username);
+
+      expect(result).toBe(testUserId);
+      expect(mockQuery).toHaveBeenCalledWith(
+        "SELECT Id FROM User WHERE Username = 'test\\'injection@example.com'",
+      );
+    });
+
     it("should handle usernames with spaces", async () => {
       const username = "test user@example.com";
 
