@@ -1,117 +1,31 @@
-# 🛠️ Apex Log MCP Server
+# Apex Log MCP Server
 
+[![npm version](https://img.shields.io/npm/v/@certinia/apex-log-mcp)](https://www.npmjs.com/package/@certinia/apex-log-mcp)
+[![CI](https://github.com/certinia/debug-log-analyzer-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/certinia/debug-log-analyzer-mcp/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.19.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-Supercharge Salesforce Apex debugging with AI-powered log analysis. Apex Log MCP Server gives AI assistants like Claude and Copilot the ability to identify performance bottlenecks, slow methods, and optimization opportunities in your debug logs - insights that would take hours to find manually.
+**An MCP server that gives AI assistants tools to analyze Salesforce Apex debug logs for performance bottlenecks, slow methods, and governor limit usage.**
 
-[Features](#-features "Go to Features") |
-[Usage](#-usage "Go to usage guidelines") |
-[Tools](#tools "Go to Tools") |
+<!-- screenshot placeholder -->
+
+Give your AI assistant — Claude, Copilot, or any MCP-compatible client — the ability to parse Apex debug logs and surface the performance insights that matter. Instead of scrolling through thousands of log lines, ask your assistant to find what's slow and why.
+
+[Quick Start](#quick-start) |
+[What You Can Do](#what-you-can-do) |
+[Tools Reference](#tools-reference) |
 [Configuration](#configuration) |
-[Documentation](#-documentation "Go to Documentation") |
+[Requirements](#requirements) |
+[How It Works](#how-it-works) |
+[Documentation](#documentation) |
 [Contributing](#contributing) |
-[Contributors](#%EF%B8%8F-contributors "Go to Contributors") |
-[License](#-license "Go to License")
+[Contributors](#contributors) |
+[License](#license)
 
-## 🚀 Features
+## Quick Start
 
-- **analyze_apex_log_performance** - Identify the slowest methods in your Apex execution with detailed timing metrics
-- **get_apex_log_summary** - Get high-level statistics on execution time, method counts, and governor limits
-- **find_performance_bottlenecks** - Find CPU, database, and method performance issues categorized by type
-- **execute_anonymous** - Run Apex code against any Salesforce org and immediately analyze the resulting debug log
-
-## 💡 Usage
-
-### Example AI Prompts
-
-- "Analyze this log file for slow methods"
-- "What are the performance bottlenecks in this Apex execution?"
-- "Summarize the database operations in this debug log"
-- "Find methods taking more than 100ms"
-
-### Requirements
-
-- Node.js >= 20.19.0
-- [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (for `execute_anonymous` tool)
-
-## Tools
-
-### analyze_apex_log_performance
-
-Identifies the slowest running methods in a debug log with detailed performance metrics.
-
-| Parameter     | Type   | Required | Description                                       |
-| ------------- | ------ | -------- | ------------------------------------------------- |
-| `logFilePath` | string | Yes      | Absolute path to the .log file                    |
-| `topMethods`  | number | No       | Number of slowest methods to return (default: 10) |
-| `minDuration` | number | No       | Minimum duration in milliseconds (default: 0)     |
-| `namespace`   | string | No       | Filter by namespace                               |
-
-**Example prompts:**
-
-- "Analyze /path/to/debug.log and show me the 5 slowest methods"
-- "Find methods taking more than 100ms in this log"
-- "What are the slowest methods in the default namespace?"
-
-### get_apex_log_summary
-
-Provides a high-level summary of log execution including total time, method counts, and governor limit usage.
-
-| Parameter     | Type   | Required | Description                    |
-| ------------- | ------ | -------- | ------------------------------ |
-| `logFilePath` | string | Yes      | Absolute path to the .log file |
-
-**Example prompts:**
-
-- "Give me a summary of this debug log"
-- "How many SOQL queries were executed in this log?"
-- "What's the total execution time?"
-
-### find_performance_bottlenecks
-
-Detects and categorizes performance issues by type (CPU, database, or method patterns).
-
-| Parameter      | Type   | Required | Description                                                |
-| -------------- | ------ | -------- | ---------------------------------------------------------- |
-| `logFilePath`  | string | Yes      | Absolute path to the .log file                             |
-| `analysisType` | string | No       | One of: `cpu`, `database`, `methods`, `all` (default: all) |
-
-**Example prompts:**
-
-- "Find database bottlenecks in this log"
-- "What are the CPU-intensive operations?"
-- "Identify all performance bottlenecks"
-
-### execute_anonymous
-
-Executes anonymous Apex code against any Salesforce org and retrieves the resulting debug log for analysis.
-
-| Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
-| ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apex`       | string           | Yes      | Anonymous Apex code to execute                                                                                                                                                                                                                   |
-| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                       |
-| `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
-
-**Supported `debugLevel` categories** (when using an object):
-
-`apexCode`, `apexProfiling`, `callout`, `database`, `nba`, `system`, `validation`, `visualforce`, `wave`, `workflow`
-
-Each accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
-
-**Example prompts:**
-
-- "Execute this Apex and show me the log: `System.debug('Hello');`"
-- "Run a query for all Accounts and analyze the performance"
-- "Execute this Apex with all debug levels set to FINEST"
-- "Run this Apex against my QA org with database logging set to FINEST"
-
-**Note:** Requires Salesforce CLI and `--allowed-orgs` to be configured. Uses the project's default org unless `targetOrg` is specified. The response includes the org username and alias (if set).
-
-## Configuration
-
-Add to your `claude_desktop_config.json` or `mcp.json`:
+Add to your MCP client configuration (`claude_desktop_config.json`, VS Code `mcp.json`, etc.):
 
 ```json
 {
@@ -123,6 +37,106 @@ Add to your `claude_desktop_config.json` or `mcp.json`:
   }
 }
 ```
+
+That's it. Open a conversation and ask your AI assistant to analyze an Apex debug log.
+
+## What You Can Do
+
+Ask your AI assistant to work with Apex debug logs using natural language. Here's the recommended workflow:
+
+**Start with a summary** to understand the overall execution:
+
+- "Give me a summary of this debug log"
+- "How many SOQL queries were executed and are we near any governor limits?"
+
+**Drill into performance** to find what's slow:
+
+- "Show me the 5 slowest methods in this log"
+- "Find methods taking more than 100ms in the default namespace"
+
+**Check for governor limit risks** to catch issues before production:
+
+- "Are we approaching any governor limits in this transaction?"
+- "Check for database bottlenecks in this log"
+
+**Execute and analyze Apex** directly from your conversation:
+
+- "Run this Apex against my scratch org and analyze the performance"
+- "Execute `[SELECT Id FROM Account LIMIT 10];` and check the log for bottlenecks"
+
+## Tools Reference
+
+### analyze_apex_log_performance
+
+Rank methods in an Apex debug log by self-execution time. Returns method names, durations (in ms), SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.
+
+| Parameter     | Type   | Required | Description                                                       |
+| ------------- | ------ | -------- | ----------------------------------------------------------------- |
+| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                   |
+| `topMethods`  | number | No       | Number of slowest methods to return (default: 10)                 |
+| `minDuration` | number | No       | Minimum duration in milliseconds to include a method (default: 0) |
+| `namespace`   | string | No       | Filter methods by namespace                                       |
+
+### get_apex_log_summary
+
+Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, and active namespaces. Best for a quick overview before deeper analysis.
+
+| Parameter     | Type   | Required | Description                                     |
+| ------------- | ------ | -------- | ----------------------------------------------- |
+| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
+
+### find_performance_bottlenecks
+
+Check whether an Apex log transaction is approaching governor limits (flags usage above 80%). Analyzes CPU time, SOQL/DML limits, query rows, and method execution patterns by namespace. Best for checking if a transaction is at risk of hitting governor limits.
+
+| Parameter      | Type   | Required | Description                                          |
+| -------------- | ------ | -------- | ---------------------------------------------------- |
+| `logFilePath`  | string | Yes      | Absolute path to the Apex debug log file (.log)      |
+| `analysisType` | string | No       | Type of analysis (default: `all`). See values below. |
+
+**`analysisType` values:**
+
+| Value      | Description                                            |
+| ---------- | ------------------------------------------------------ |
+| `cpu`      | Checks CPU time governor limit                         |
+| `database` | Checks SOQL query, DML statement, and query row limits |
+| `methods`  | Groups methods by namespace with duration totals       |
+| `all`      | Runs all three analysis types (default)                |
+
+### execute_anonymous
+
+Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI) and retrieve the resulting debug log. The response includes the target org username and alias (if set).
+
+| Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
+| ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `apex`       | string           | Yes      | The anonymous Apex to be executed                                                                                                                                                                                                                |
+| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                       |
+| `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
+
+**Default debug levels:**
+
+| Category        | Default Level |
+| --------------- | ------------- |
+| `apexCode`      | FINE          |
+| `apexProfiling` | FINE          |
+| `callout`       | DEBUG         |
+| `database`      | FINEST        |
+| `nba`           | INFO          |
+| `system`        | DEBUG         |
+| `validation`    | DEBUG         |
+| `visualforce`   | FINE          |
+| `wave`          | INFO          |
+| `workflow`      | FINE          |
+
+Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
+
+> **Note:** This tool retrieves the most recent debug log for the executing user. In rare cases where another process generates a log between execution and retrieval, the wrong log may be returned.
+
+> **Note:** Requires Salesforce CLI and `--allowed-orgs` configuration. See [Configuration](#enabling-execute_anonymous).
+
+## Configuration
+
+The [Quick Start](#quick-start) configuration is all you need for log analysis tools. The sections below cover enabling `execute_anonymous`.
 
 ### Enabling `execute_anonymous`
 
@@ -144,7 +158,7 @@ The `execute_anonymous` tool is **disabled by default**. To enable it, pass `--a
 }
 ```
 
-#### Allowed org tokens
+### Allowed org tokens
 
 | Token                    | Description                                                              |
 | ------------------------ | ------------------------------------------------------------------------ |
@@ -158,31 +172,37 @@ You can also pass org usernames or aliases directly:
 "args": ["-y", "@certinia/apex-log-mcp", "--allowed-orgs", "dev@example.com,my-scratch-org"]
 ```
 
-## 📚 Documentation
+## Requirements
+
+- **Node.js** >= 20.19.0
+- **[Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli)** (for `execute_anonymous` only)
+
+## How It Works
+
+This server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to expose Apex log analysis as tools that any MCP-compatible AI client can call.
+
+- **Runs as a local process** — your AI client spawns the server and communicates over stdio. No network requests, no API keys.
+- **Uses the same parser as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer)** — battle-tested parsing of the Apex debug log format.
+- **Returns structured data** — all durations in milliseconds, governor limits as used/limit pairs, methods with SOQL/DML counts — so your AI assistant can reason about the results.
+
+## Documentation
 
 - [User Guide & Docs](https://certinia.github.io/debug-log-analyzer/)
-- [Contribute](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CONTRIBUTING.md)
+- [MCP Specification](https://modelcontextprotocol.io/)
 
 ### Related Projects
 
-- [Apex Log Analyzer VS Code Extension](https://github.com/certinia/debug-log-analyzer) - Full-featured Apex log analyzer for VS Code
-- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) - SDK used to build this server
+- [Apex Log Analyzer VS Code Extension](https://github.com/certinia/debug-log-analyzer) — Full-featured Apex log analyzer for VS Code
+- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) — SDK used to build this server
 
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CONTRIBUTING.md) for details.
 
-- [Developing](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/DEVELOPING.md) - Set up your development environment
-- [Code of Conduct](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CODE_OF_CONDUCT.md) - Community guidelines
+- [Developing](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/DEVELOPING.md) — Set up your development environment
+- [Code of Conduct](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CODE_OF_CONDUCT.md) — Community guidelines
 
-### 🏗️ Architecture
-
-- Built with TypeScript and the MCP SDK
-- Uses the same `ApexLogParser` as the Apex Log Analyzer VS Code extension
-- Runs as a standalone Node.js process
-- Communicates via stdio transport
-
-## ❤️ Contributors
+## Contributors
 
 Thanks to our amazing contributors!
 
@@ -192,7 +212,7 @@ Thanks to our amazing contributors!
   </a>
 </p>
 
-## 📄 License
+## License
 
 <p align="center">
 Copyright &copy; Certinia Inc. All rights reserved.
