@@ -1,3 +1,5 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -6,6 +8,7 @@ import {
   OrgConfigProperties,
   StateAggregator,
 } from "@salesforce/core";
+import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   getOrCreateDebugLevelId,
@@ -16,6 +19,7 @@ import { connect } from "../salesforce/connection.js";
 
 type ApexLogRecord = {
   Id: string;
+  DurationMilliseconds: number;
 };
 
 const LOG_LEVEL_ENUM = [
@@ -42,6 +46,12 @@ export const executeAnonymousInputSchema = {
     .optional()
     .describe(
       "Alias or username of the target Salesforce org. Uses the project default if not specified.",
+    ),
+  outputDir: z
+    .string()
+    .optional()
+    .describe(
+      "Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root.",
     ),
   debugLevel: z
     .union([
@@ -86,7 +96,7 @@ export type ExecuteAnonymousArgs = z.infer<
 export const executeAnonymousToolConfig = {
   title: "Execute Anonymous Apex",
   description:
-    "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI) and retrieve the resulting debug log. The response includes the target org username.",
+    "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI). Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with get_apex_log_summary, analyze_apex_log_performance, or find_performance_bottlenecks for deeper analysis.",
   inputSchema: executeAnonymousInputSchema,
   annotations: {
     title: "Execute Anonymous Apex",
@@ -215,7 +225,7 @@ export async function executeAnonymous(
   // Future enhancement: present a list of recent logs for user selection.
   const logRecord = (await connection
     .sobject("ApexLog")
-    .findOne({ LogUserId: userId }, ["Id"], {
+    .findOne({ LogUserId: userId }, ["Id", "DurationMilliseconds"], {
       sort: { StartTime: -1 },
     })) as ApexLogRecord | null;
 
@@ -226,11 +236,29 @@ export async function executeAnonymous(
   const logId = logRecord.Id;
   const logBody = await connection.request(`/sobjects/ApexLog/${logId}/Body/`);
 
+  const outputDir =
+    args.outputDir ?? path.join(projectPath ?? process.cwd(), ".apex-log-mcp");
+  await fs.mkdir(outputDir, { recursive: true });
+
+  const filePath = path.join(outputDir, `${logId}.log`);
+  await fs.writeFile(filePath, logBody as string, "utf-8");
+  const stats = await fs.stat(filePath);
+
   return {
     content: [
       {
         type: "text" as const,
-        text: `Org: ${orgLabel}\n\n${logBody}`,
+        text: encode({
+          filePath,
+          fileSizeBytes: stats.size,
+          org: orgLabel,
+          success: apexResult.success,
+          ...(apexResult.exceptionMessage && {
+            exceptionMessage: apexResult.exceptionMessage,
+          }),
+          durationMs: logRecord.DurationMilliseconds,
+          tip: "Add .apex-log-mcp/ to your .gitignore to avoid committing debug logs.",
+        }),
       },
     ],
   };
