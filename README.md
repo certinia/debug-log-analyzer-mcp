@@ -86,12 +86,13 @@ Detects and categorizes performance issues by type (CPU, database, or method pat
 
 ### execute_anonymous
 
-Executes anonymous Apex code against any Salesforce org and retrieves the resulting debug log for analysis.
+Executes anonymous Apex code against any Salesforce org. Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with `get_apex_log_summary`, `analyze_apex_log_performance`, or `find_performance_bottlenecks` for deeper analysis.
 
 | Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
 | ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `apex`       | string           | Yes      | Anonymous Apex code to execute                                                                                                                                                                                                                   |
 | `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                       |
+| `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to `.apex-log-mcp/` in the project root.                                                                                                                                                          |
 | `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
 
 **Supported `debugLevel` categories** (when using an object):
@@ -107,7 +108,7 @@ Each accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FIN
 - "Execute this Apex with all debug levels set to FINEST"
 - "Run this Apex against my QA org with database logging set to FINEST"
 
-**Note:** Requires Salesforce CLI and `--allowed-orgs` to be configured. Uses the project's default org unless `targetOrg` is specified. The response includes the org username and alias (if set).
+**Note:** Requires Salesforce CLI and `--allowed-orgs` to be configured. Uses the project's default org unless `targetOrg` is specified. The debug log is saved to a local file (default: `.apex-log-mcp/`) and the response includes the file path, org username, and execution summary. Add `.apex-log-mcp/` to your `.gitignore` to avoid committing debug logs.
 
 ## Configuration
 
