@@ -22,51 +22,26 @@ Give your AI assistant — Claude, Copilot, or any MCP-compatible client — the
 [How It Works](#how-it-works) |
 [Documentation](#documentation) |
 [Contributing](#contributing) |
-[Contributors](#contributors) |
-[License](#license)
+[Contributors](#%EF%B8%8F-contributors "Go to Contributors") |
+[License](#-license "Go to License")
 
-## Quick Start
+## 🚀 Features
 
-Add to your MCP client configuration (`claude_desktop_config.json`, VS Code `mcp.json`, etc.):
+- **analyze_apex_log_performance** - Identify the slowest methods in your Apex execution with detailed timing metrics
+- **get_apex_log_summary** - Get high-level statistics on execution time, method counts, and governor limits
+- **find_performance_bottlenecks** - Find CPU, database, and method performance issues categorized by type
+- **execute_anonymous** - Run Apex code against any Salesforce org and immediately analyze the resulting debug log
 
-```json
-{
-  "mcpServers": {
-    "apex-log-mcp": {
-      "command": "npx",
-      "args": ["-y", "@certinia/apex-log-mcp"]
-    }
-  }
-}
-```
+## 💡 Usage
 
-That's it. Open a conversation and ask your AI assistant to analyze an Apex debug log.
+### Example AI Prompts
 
-## What You Can Do
+- "Analyze this log file for slow methods"
+- "What are the performance bottlenecks in this Apex execution?"
+- "Summarize the database operations in this debug log"
+- "Find methods taking more than 100ms"
 
-Ask your AI assistant to work with Apex debug logs using natural language. Here's the recommended workflow:
-
-**Start with a summary** to understand the overall execution:
-
-- "Give me a summary of this debug log"
-- "How many SOQL queries were executed and are we near any governor limits?"
-
-**Drill into performance** to find what's slow:
-
-- "Show me the 5 slowest methods in this log"
-- "Find methods taking more than 100ms in the default namespace"
-
-**Check for governor limit risks** to catch issues before production:
-
-- "Are we approaching any governor limits in this transaction?"
-- "Check for database bottlenecks in this log"
-
-**Execute and analyze Apex** directly from your conversation:
-
-- "Run this Apex against my scratch org and analyze the performance"
-- "Execute `[SELECT Id FROM Account LIMIT 10];` and check the log for bottlenecks"
-
-## Tools Reference
+## Tools
 
 ### analyze_apex_log_performance
 
@@ -107,12 +82,13 @@ Check whether an Apex log transaction is approaching governor limits (flags usag
 
 ### execute_anonymous
 
-Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI) and retrieve the resulting debug log. The response includes the target org username and alias (if set).
+Executes anonymous Apex code against any Salesforce org and retrieves the resulting debug log for analysis.
 
 | Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
 | ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `apex`       | string           | Yes      | The anonymous Apex to be executed                                                                                                                                                                                                                |
 | `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                       |
+| `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to `.apex-log-mcp/` in the project root.                                                                                                                                                          |
 | `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
 
 **Default debug levels:**
@@ -132,9 +108,14 @@ Execute a snippet of anonymous Apex against an authenticated Salesforce org (via
 
 Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
 
-> **Note:** This tool retrieves the most recent debug log for the executing user. In rare cases where another process generates a log between execution and retrieval, the wrong log may be returned.
+**Example prompts:**
 
-> **Note:** Requires Salesforce CLI and `--allowed-orgs` configuration. See [Configuration](#enabling-execute_anonymous).
+- "Execute this Apex and show me the log: `System.debug('Hello');`"
+- "Run a query for all Accounts and analyze the performance"
+- "Execute this Apex with all debug levels set to FINEST"
+- "Run this Apex against my QA org with database logging set to FINEST"
+
+**Note:** Requires Salesforce CLI and `--allowed-orgs` to be configured. Uses the project's default org unless `targetOrg` is specified. The response includes the org username and alias (if set).
 
 ## Configuration
 
