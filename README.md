@@ -95,7 +95,7 @@ Executes anonymous Apex code against any authenticated Salesforce org. Saves the
 
 | Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
 | ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `apex`       | string           | Yes      | Anonymous Apex code to execute                                                                                                                                                                                                                   |
+| `apex`       | string           | Yes      | The anonymous Apex to be executed                                                                                                                                                                                                                |
 | `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                       |
 | `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to `.apex-log-mcp/` in the project root.                                                                                                                                                          |
 | `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
@@ -113,7 +113,7 @@ Each accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FIN
 - "Execute this Apex with all debug levels set to FINEST"
 - "Run this Apex against my QA org with database logging set to FINEST"
 
-> **Note:** Requires `--allowed-orgs` to be [configured](#enabling-execute_anonymous). Uses the project's default org unless `targetOrg` is specified. The debug log is saved to a local file (default: `.apex-log-mcp/`) and the response includes the file path, org username, and execution summary. Add `.apex-log-mcp/` to your `.gitignore` to avoid committing debug logs.
+> **Note:** Requires `--allowed-orgs` to be [configured](#enabling-execute_anonymous). Uses the project's default org unless `targetOrg` is specified. The debug log is saved to a local file (default: `.apex-log-mcp/`) and the response includes the file path, org username (and alias, if set), and execution summary. Add `.apex-log-mcp/` to your `.gitignore` to avoid committing debug logs.
 
 ## Configuration
 
