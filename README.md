@@ -100,11 +100,28 @@ Executes anonymous Apex code against any authenticated Salesforce org. Saves the
 | `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to `.apex-log-mcp/` in the project root.                                                                                                                                                          |
 | `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
 
-**Supported `debugLevel` categories** (when using an object):
+**`debugLevel` as an object** — override specific categories, the rest keep their defaults:
 
-`apexCode`, `apexProfiling`, `callout`, `database`, `nba`, `system`, `validation`, `visualforce`, `wave`, `workflow`
+```json
+{ "database": "FINEST", "apexCode": "FINE" }
+```
 
-Each accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
+Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
+
+**Default debug levels** (used when `debugLevel` is omitted):
+
+| Category        | Default Level |
+| --------------- | ------------- |
+| `apexCode`      | FINE          |
+| `apexProfiling` | FINE          |
+| `callout`       | DEBUG         |
+| `database`      | FINEST        |
+| `nba`           | INFO          |
+| `system`        | DEBUG         |
+| `validation`    | DEBUG         |
+| `visualforce`   | FINE          |
+| `wave`          | INFO          |
+| `workflow`      | FINE          |
 
 **Example prompts:**
 
