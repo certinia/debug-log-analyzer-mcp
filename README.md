@@ -31,11 +31,6 @@ Supercharge Salesforce Apex debugging with AI-powered log analysis. Apex Log MCP
 - "Summarize the database operations in this debug log"
 - "Find methods taking more than 100ms"
 
-### Requirements
-
-- Node.js >= 18.0.0
-- [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli) (for `execute_anonymous` tool)
-
 ## Tools
 
 ### analyze_apex_log_performance
