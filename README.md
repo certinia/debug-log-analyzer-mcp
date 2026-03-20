@@ -18,30 +18,39 @@ Give your AI assistant — Claude, Copilot, or any MCP-compatible client — the
 [What You Can Do](#what-you-can-do) |
 [Tools Reference](#tools-reference) |
 [Configuration](#configuration) |
-[Requirements](#requirements) |
 [How It Works](#how-it-works) |
 [Documentation](#documentation) |
 [Contributing](#contributing) |
-[Contributors](#%EF%B8%8F-contributors "Go to Contributors") |
-[License](#-license "Go to License")
+[Contributors](#contributors) |
+[License](#license)
 
-## 🚀 Features
+## Quick Start
 
-- **analyze_apex_log_performance** - Identify the slowest methods in your Apex execution with detailed timing metrics
-- **get_apex_log_summary** - Get high-level statistics on execution time, method counts, and governor limits
-- **find_performance_bottlenecks** - Find CPU, database, and method performance issues categorized by type
-- **execute_anonymous** - Run Apex code against any Salesforce org and immediately analyze the resulting debug log
+Add to your MCP client configuration (`claude_desktop_config.json`, VS Code `mcp.json`, etc.):
 
-## 💡 Usage
+```json
+{
+  "mcpServers": {
+    "apex-log-mcp": {
+      "command": "npx",
+      "args": ["-y", "@certinia/apex-log-mcp"]
+    }
+  }
+}
+```
 
-### Example AI Prompts
+That's it. Open a conversation and ask your AI assistant to analyze an Apex debug log.
 
-- "Analyze this log file for slow methods"
-- "What are the performance bottlenecks in this Apex execution?"
-- "Summarize the database operations in this debug log"
-- "Find methods taking more than 100ms"
+## What You Can Do
 
-## Tools
+Ask your AI assistant to work with Apex debug logs using natural language:
+
+- "Give me a summary of this debug log"
+- "Show me the 5 slowest methods in the default namespace"
+- "Are we approaching any governor limits in this transaction?"
+- "Run this Apex against my scratch org and analyze the performance"
+
+## Tools Reference
 
 ### analyze_apex_log_performance
 
@@ -82,7 +91,7 @@ Check whether an Apex log transaction is approaching governor limits (flags usag
 
 ### execute_anonymous
 
-Executes anonymous Apex code against any Salesforce org and retrieves the resulting debug log for analysis.
+Executes anonymous Apex code against any authenticated Salesforce org. Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with `get_apex_log_summary`, `analyze_apex_log_performance`, or `find_performance_bottlenecks` for deeper analysis.
 
 | Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
 | ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -91,7 +100,15 @@ Executes anonymous Apex code against any Salesforce org and retrieves the result
 | `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to `.apex-log-mcp/` in the project root.                                                                                                                                                          |
 | `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
 
-**Default debug levels:**
+**`debugLevel` as an object** — override specific categories, the rest keep their defaults:
+
+```json
+{ "database": "FINEST", "apexCode": "FINE" }
+```
+
+Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
+
+**Default debug levels** (used when `debugLevel` is omitted):
 
 | Category        | Default Level |
 | --------------- | ------------- |
@@ -106,8 +123,6 @@ Executes anonymous Apex code against any Salesforce org and retrieves the result
 | `wave`          | INFO          |
 | `workflow`      | FINE          |
 
-Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
-
 **Example prompts:**
 
 - "Execute this Apex and show me the log: `System.debug('Hello');`"
@@ -115,7 +130,7 @@ Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FI
 - "Execute this Apex with all debug levels set to FINEST"
 - "Run this Apex against my QA org with database logging set to FINEST"
 
-**Note:** Requires Salesforce CLI and `--allowed-orgs` to be configured. Uses the project's default org unless `targetOrg` is specified. The response includes the org username and alias (if set).
+> **Note:** Requires `--allowed-orgs` to be [configured](#enabling-execute_anonymous). Uses the project's default org unless `targetOrg` is specified. The debug log is saved to a local file (default: `.apex-log-mcp/`) and the response includes the file path, org username (and alias, if set), and execution summary. Add `.apex-log-mcp/` to your `.gitignore` to avoid committing debug logs.
 
 ## Configuration
 
@@ -155,16 +170,11 @@ You can also pass org usernames or aliases directly:
 "args": ["-y", "@certinia/apex-log-mcp", "--allowed-orgs", "dev@example.com,my-scratch-org"]
 ```
 
-## Requirements
-
-- **Node.js** >= 20.19.0
-- **[Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli)** (for `execute_anonymous` only)
-
 ## How It Works
 
 This server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to expose Apex log analysis as tools that any MCP-compatible AI client can call.
 
-- **Runs as a local process** — your AI client spawns the server and communicates over stdio. No network requests, no API keys.
+- **Runs as a local process** — your AI client spawns the server and communicates locally. No network requests, no API keys.
 - **Uses the same parser as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer)** — battle-tested parsing of the Apex debug log format.
 - **Returns structured data** — all durations in milliseconds, governor limits as used/limit pairs, methods with SOQL/DML counts — so your AI assistant can reason about the results.
 
@@ -176,7 +186,6 @@ This server implements the [Model Context Protocol (MCP)](https://modelcontextpr
 ### Related Projects
 
 - [Apex Log Analyzer VS Code Extension](https://github.com/certinia/debug-log-analyzer) — Full-featured Apex log analyzer for VS Code
-- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) — SDK used to build this server
 
 ## Contributing
 
