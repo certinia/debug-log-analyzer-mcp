@@ -1,0 +1,46 @@
+name: 'CodeQL'
+
+on:
+  push:
+    branches: [main, release/**]
+    paths-ignore: ['**/*.md', '**/*.txt']
+  pull_request:
+    branches: [main, release/**]
+    paths-ignore: ['**/*.md', '**/*.txt']
+  schedule:
+    - cron: '26 5 * * 3' # weekly
+
+# Cancel superseded PR runs; main/schedule always finish (baseline).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      security-events: write # upload findings
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript-typescript', 'actions']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # TS analyzed from source; no build needed.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'

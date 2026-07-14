@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm' # reads pnpm-lock.yaml
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    versioning-strategy: auto
+    groups:
+      npm-minor-patch:
+        update-types: ['minor', 'patch']
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    groups:
+      github-actions:
+        patterns: ['*']
