@@ -1,0 +1,55 @@
+name: 🐛 Bug Report
+description: Found a bug? Report it so we can get it fixed.
+title: '🐛 bug: '
+type: Bug
+labels: ['bug', 'needs-triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Before you start:
+        - Check the [existing issues](https://github.com/certinia/debug-log-analyzer-mcp/issues) first.
+        - Not sure it's a bug, or need setup/config help? Ask in [Q&A discussions](https://github.com/certinia/debug-log-analyzer-mcp/discussions/categories/q-a) instead.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+      placeholder: 'e.g. "analyze_apex_log_performance returned an empty methods array for a log that clearly contains method calls. I expected the slow methods to be listed."'
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Ask the agent to run <tool> on <log file>.
+        2. See the incorrect result.
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Version & environment
+      description: '`@certinia/apex-log-mcp` version, plus your MCP client, Node version (`node -v`) and OS.'
+      placeholder: 'e.g. apex-log-mcp 1.0.0, Claude Desktop, Node v22.14.0, macOS 15.5'
+    validations:
+      required: true
+
+  - type: textarea
+    id: io
+    attributes:
+      label: Input & output (if possible)
+      description: The tool call/arguments you made and the response or error you got back. A **redacted** sample debug log helps too (remove usernames, IDs, credentials) — you can drag it in.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirm
+      options:
+        - label: I searched the existing issues and this hasn't already been reported.
+          required: true
