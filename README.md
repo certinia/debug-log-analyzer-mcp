@@ -3,16 +3,18 @@
 [![npm version](https://img.shields.io/npm/v/@certinia/apex-log-mcp)](https://www.npmjs.com/package/@certinia/apex-log-mcp)
 [![CI](https://github.com/certinia/debug-log-analyzer-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/certinia/debug-log-analyzer-mcp/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20.19.0-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7.x-blue)](https://www.typescriptlang.org/)
 
-**An MCP server that gives AI assistants tools to analyze Salesforce Apex debug logs for performance bottlenecks, slow methods, and governor limit usage.**
+**A Model Context Protocol (MCP) server that gives AI assistants tools to analyze Salesforce Apex debug logs — surfacing performance bottlenecks, slow methods, and governor limit usage.**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/certinia/debug-log-analyzer-mcp/main/docs/images/apex-log-mcp.png" alt="Claude analyzing an Apex debug log for performance bottlenecks and governor limit concerns" width="800" />
 </p>
 
 Give your AI assistant — Claude, Copilot, or any MCP-compatible client — the ability to parse Apex debug logs and surface the performance insights that matter. Instead of scrolling through thousands of log lines, ask your assistant to find what's slow and why.
+
+Powered by the same powerful log parser as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer) used by thousands of Salesforce developers.
 
 [Quick Start](#quick-start) |
 [What You Can Do](#what-you-can-do) |
@@ -25,6 +27,10 @@ Give your AI assistant — Claude, Copilot, or any MCP-compatible client — the
 [License](#license)
 
 ## Quick Start
+
+**Requirements:** [Node.js](https://nodejs.org/) 22 or later.
+
+<sub>The `execute_anonymous` tool additionally needs an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).</sub>
 
 Add to your MCP client configuration (`claude_desktop_config.json`, VS Code `mcp.json`, etc.):
 
@@ -98,17 +104,23 @@ Executes anonymous Apex code against any authenticated Salesforce org. Saves the
 | `apex`       | string           | Yes      | The anonymous Apex to be executed                                                                                                                                                                                                                |
 | `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                       |
 | `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to `.apex-log-mcp/` in the project root.                                                                                                                                                          |
-| `debugLevel` | string \| object | No       | Controls the trace flag debug levels. Use `"default"` to reset all categories to defaults, a log level string (e.g. `"FINEST"`) to set all categories to that level, or an object to override specific categories. Omit to keep existing config. |
+| `debugLevel` | string \| object | No       | Trace-flag log levels — see the options below. Omit to keep the current config. |
 
-**`debugLevel` as an object** — override specific categories, the rest keep their defaults:
+**`debugLevel` options** — omit to keep the current config, or pass one of:
 
-```json
-{ "database": "FINEST", "apexCode": "FINE" }
-```
+- `"default"` — reset every category to its default.
+- a log level (e.g. `"FINEST"`) — set every category to that level.
+- an object — override specific categories only; the rest keep their defaults:
 
-Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`
+  ```json
+  { "database": "FINEST", "apexCode": "FINE" }
+  ```
 
-**Default debug levels** (used when `debugLevel` is omitted):
+Valid levels: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`.
+
+<details>
+<summary>📋 <strong>Default debug levels</strong> — used when <code>debugLevel</code> is omitted (click to expand)</summary>
+<br />
 
 | Category        | Default Level |
 | --------------- | ------------- |
@@ -122,6 +134,8 @@ Each category accepts a log level: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FI
 | `visualforce`   | FINE          |
 | `wave`          | INFO          |
 | `workflow`      | FINE          |
+
+</details>
 
 **Example prompts:**
 
