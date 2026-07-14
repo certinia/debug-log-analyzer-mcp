@@ -1,0 +1,33 @@
+name: ✨ Feature Request
+description: Suggest a feature or improvement.
+title: '✨ feat: '
+type: Feature
+labels: ['enhancement', 'needs-triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search the [existing issues](https://github.com/certinia/debug-log-analyzer-mcp/issues) first. For early ideas or open questions, an [Ideas discussion](https://github.com/certinia/debug-log-analyzer-mcp/discussions/categories/ideas) is a great place to start.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: What would you like to see?
+      description: Describe the feature and the problem or pain point it solves.
+      placeholder: 'e.g. "A tool that diffs two debug logs and reports what changed in CPU time and SOQL usage, so I can see the impact of a code change."'
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution (optional)
+      description: How might this work? Tool inputs/outputs, expected behavior, or rough ideas — anything helps. Include any alternatives you've considered.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirm
+      options:
+        - label: I searched the existing issues and this hasn't already been suggested.
+          required: true

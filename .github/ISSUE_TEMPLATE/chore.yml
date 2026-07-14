@@ -1,0 +1,14 @@
+name: 🔧 Chore
+description: Tasks that aren't features or bugs (tooling, CI, config, dependencies).
+title: '🔧 chore: '
+type: Task
+labels: ['chore']
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 🔧 Chore description
+      description: What needs to be done?
+      placeholder: 'e.g. "Update ESLint to the latest major version and fix any new lint errors."'
+    validations:
+      required: true
