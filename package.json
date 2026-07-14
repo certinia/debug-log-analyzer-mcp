@@ -70,7 +70,7 @@
     "typescript7": "npm:typescript@^7.0.2"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22"
   },
   "packageManager": "pnpm@10.30.2"
 }
