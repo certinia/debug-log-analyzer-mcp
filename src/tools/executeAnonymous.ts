@@ -12,7 +12,7 @@ import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   getOrCreateDebugLevelId,
-  DebugLevelInput,
+  type DebugLevelInput,
 } from "../salesforce/debugLevels.js";
 import { ensureTraceFlag } from "../salesforce/traceFlags.js";
 import { connect } from "../salesforce/connection.js";

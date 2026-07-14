@@ -13,7 +13,7 @@ export async function getUserIdByUsername(
     throw new Error(`User not found with username: ${username}`);
   }
 
-  const userId = result.records[0].Id;
+  const userId = result.records[0]?.Id;
   if (!userId) {
     throw new Error("User Id is undefined");
   }

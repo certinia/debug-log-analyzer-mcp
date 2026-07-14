@@ -54,10 +54,10 @@ This server is designed to integrate with the Apex Log Analyzer VS Code extensio
 ## TypeScript Configuration
 
 - Target: ES2022
-- Module: ESNext with Node resolution
-- Strict mode enabled
+- Module: NodeNext (module + moduleResolution)
+- Strict mode plus extra strictness (noUncheckedIndexedAccess, noImplicitOverride, verbatimModuleSyntax, isolatedModules)
 - Output to `dist/` directory
-- Source maps and declarations generated
+- Emits `.js` only — no source maps or declarations
 
 ## File Structure
 

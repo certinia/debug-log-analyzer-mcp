@@ -174,7 +174,7 @@ function generatePerformanceSummary(
     return "No methods found matching the criteria.";
   }
 
-  const slowestMethod = methods[0];
+  const slowestMethod = methods[0]!;
   const totalSlowMethodsTime = methods.reduce(
     (sum, method) => sum + method.selfDuration,
     0,
