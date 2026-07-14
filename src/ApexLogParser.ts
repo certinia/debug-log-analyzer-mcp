@@ -792,7 +792,7 @@ export abstract class LogLine {
 
 class BasicLogLine extends LogLine {}
 class BasicExitLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 }
 
 type CPUType = "loading" | "custom" | "method" | "free" | "system" | "pkg" | "";
@@ -870,10 +870,10 @@ export class Method extends TimedNode {
  * Since it has children it extends "Method".
  */
 export class ApexLog extends Method {
-  type = null;
-  text = "LOG_ROOT";
-  timestamp = 0;
-  exitStamp = 0;
+  override type = null;
+  override text = "LOG_ROOT";
+  override timestamp = 0;
+  override exitStamp = 0;
   /**
    * The size of the log, in bytes
    */
@@ -1036,8 +1036,8 @@ class NamedCredentialResponseDetailLine extends LogLine {
 }
 
 class ConstructorEntryLine extends Method {
-  hasValidSymbols = true;
-  suffix = " (constructor)";
+  override hasValidSymbols = true;
+  override suffix = " (constructor)";
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["CONSTRUCTOR_EXIT"], "Method", "method");
@@ -1069,7 +1069,7 @@ class ConstructorEntryLine extends Method {
 }
 
 class ConstructorExitLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1078,7 +1078,7 @@ class ConstructorExitLine extends LogLine {
 }
 
 class EmailQueueLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
@@ -1086,7 +1086,7 @@ class EmailQueueLine extends LogLine {
 }
 
 export class MethodEntryLine extends Method {
-  hasValidSymbols = true;
+  override hasValidSymbols = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["METHOD_EXIT"], "Method", "method");
@@ -1103,7 +1103,7 @@ export class MethodEntryLine extends Method {
     }
   }
 
-  onEnd(end: MethodExitLine, _stack: LogLine[]): void {
+  override onEnd(end: MethodExitLine, _stack: LogLine[]): void {
     if (end.namespace && !end.text.endsWith(")")) {
       this.namespace = end.namespace;
     }
@@ -1140,7 +1140,7 @@ export class MethodEntryLine extends Method {
   }
 }
 class MethodExitLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1160,7 +1160,7 @@ class MethodExitLine extends LogLine {
 }
 
 class SystemConstructorEntryLine extends Method {
-  suffix = "(system constructor)";
+  override suffix = "(system constructor)";
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(
@@ -1176,7 +1176,7 @@ class SystemConstructorEntryLine extends Method {
 }
 
 class SystemConstructorExitLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1192,7 +1192,7 @@ class SystemMethodEntryLine extends Method {
 }
 
 class SystemMethodExitLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1201,7 +1201,7 @@ class SystemMethodExitLine extends LogLine {
 }
 
 export class CodeUnitStartedLine extends Method {
-  suffix = " (entrypoint)";
+  override suffix = " (entrypoint)";
   codeUnitType = "";
 
   constructor(parser: ApexLogParser, parts: string[]) {
@@ -1282,7 +1282,7 @@ export class CodeUnitStartedLine extends Method {
   }
 }
 export class CodeUnitFinishedLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1291,7 +1291,7 @@ export class CodeUnitFinishedLine extends LogLine {
 }
 
 class VFApexCallStartLine extends Method {
-  suffix = " (VF APEX)";
+  override suffix = " (VF APEX)";
   invalidClasses = [
     "pagemessagescomponentcontroller",
     "pagemessagecomponentcontroller",
@@ -1339,7 +1339,7 @@ class VFApexCallStartLine extends Method {
 }
 
 class VFApexCallEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1360,7 +1360,7 @@ class VFDeserializeViewstateBeginLine extends Method {
 }
 
 class VFFormulaStartLine extends Method {
-  suffix = " (VF FORMULA)";
+  override suffix = " (VF FORMULA)";
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(
@@ -1375,7 +1375,7 @@ class VFFormulaStartLine extends Method {
 }
 
 class VFFormulaEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1396,7 +1396,7 @@ class VFSeralizeViewStateStartLine extends Method {
 }
 
 class VFPageMessageLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts[2] || "";
@@ -1404,12 +1404,12 @@ class VFPageMessageLine extends LogLine {
 }
 
 class DMLBeginLine extends Method {
-  dmlCount = {
+  override dmlCount = {
     self: 1,
     total: 1,
   };
 
-  namespace = "default";
+  override namespace = "default";
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["DML_END"], "DML", "free");
@@ -1423,7 +1423,7 @@ class DMLBeginLine extends Method {
 }
 
 class DMLEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1440,7 +1440,7 @@ class IdeasQueryExecuteLine extends LogLine {
 
 class SOQLExecuteBeginLine extends Method {
   aggregations = 0;
-  soqlCount = {
+  override soqlCount = {
     self: 1,
     total: 1,
   };
@@ -1459,13 +1459,13 @@ class SOQLExecuteBeginLine extends Method {
     this.text = soqlString || "";
   }
 
-  onEnd(end: SOQLExecuteEndLine, _stack: LogLine[]): void {
+  override onEnd(end: SOQLExecuteEndLine, _stack: LogLine[]): void {
     this.soqlRowCount.total = this.soqlRowCount.self = end.soqlRowCount.total;
   }
 }
 
 class SOQLExecuteEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1544,13 +1544,13 @@ class SOSLExecuteBeginLine extends Method {
     };
   }
 
-  onEnd(end: SOSLExecuteEndLine, _stack: LogLine[]): void {
+  override onEnd(end: SOSLExecuteEndLine, _stack: LogLine[]): void {
     this.soslRowCount.total = this.soslRowCount.self = end.soslRowCount.total;
   }
 }
 
 class SOSLExecuteEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1607,7 +1607,7 @@ class UserInfoLine extends LogLine {
 }
 
 class UserDebugLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1617,7 +1617,7 @@ class UserDebugLine extends LogLine {
 }
 
 class CumulativeLimitUsageLine extends Method {
-  namespace = "default";
+  override namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(
       parser,
@@ -1630,8 +1630,8 @@ class CumulativeLimitUsageLine extends Method {
 }
 
 class CumulativeProfilingLine extends LogLine {
-  acceptsText = true;
-  namespace = "default";
+  override acceptsText = true;
+  override namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts[2] + " " + (parts[3] ?? "");
@@ -1639,7 +1639,7 @@ class CumulativeProfilingLine extends LogLine {
 }
 
 class CumulativeProfilingBeginLine extends Method {
-  namespace = "default";
+  override namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(
       parser,
@@ -1652,7 +1652,7 @@ class CumulativeProfilingBeginLine extends Method {
 }
 
 class LimitUsageLine extends LogLine {
-  namespace = "default";
+  override namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.lineNumber = this.parseLineNumber(parts[2]);
@@ -1688,7 +1688,7 @@ class LimitUsageForNSLine extends LogLine {
     this.text = parts[2] || "";
   }
 
-  onAfter(parser: ApexLogParser, _next?: LogLine): void {
+  override onAfter(parser: ApexLogParser, _next?: LogLine): void {
     // Parse the namespace from the first line (before any newline)
     this.namespace = this.text
       .slice(0, this.text.indexOf("\n"))
@@ -1754,7 +1754,7 @@ class NBANodeDetail extends LogLine {
   }
 }
 class NBANodeEnd extends LogLine {
-  isExit = true;
+  override isExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts.slice(2).join(" | ");
@@ -1779,7 +1779,7 @@ class NBAStrategyBegin extends Method {
   }
 }
 class NBAStrategyEnd extends LogLine {
-  isExit = true;
+  override isExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts.slice(2).join(" | ");
@@ -1817,7 +1817,7 @@ class QueryMoreBeginLine extends Method {
 }
 
 class QueryMoreEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1857,7 +1857,7 @@ class TotalEmailRecipientsQueuedLine extends LogLine {
 }
 
 class StackFrameVariableListLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1865,7 +1865,7 @@ class StackFrameVariableListLine extends LogLine {
 }
 
 class StaticVariableListLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1890,7 +1890,7 @@ class SystemModeExitLine extends LogLine {
 }
 
 export class ExecutionStartedLine extends Method {
-  namespace = "default";
+  override namespace = "default";
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["EXECUTION_FINISHED"], "Method", "method");
   }
@@ -1906,7 +1906,7 @@ class EnteringManagedPackageLine extends Method {
       lastDot < 0 ? rawNs : rawNs.substring(lastDot + 1);
   }
 
-  onAfter(parser: ApexLogParser, end?: LogLine): void {
+  override onAfter(parser: ApexLogParser, end?: LogLine): void {
     if (end) {
       this.exitStamp = end.timestamp;
     }
@@ -1921,7 +1921,7 @@ class EventSericePubBeginLine extends Method {
 }
 
 class EventSericePubEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1944,7 +1944,7 @@ class EventSericeSubBeginLine extends Method {
 }
 
 class EventSericeSubEndLine extends LogLine {
-  isExit = true;
+  override isExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -1960,14 +1960,14 @@ class EventSericeSubDetailLine extends LogLine {
 }
 
 export class FlowStartInterviewsBeginLine extends Method {
-  declarative = true;
-  text = "FLOW_START_INTERVIEWS : ";
+  override declarative = true;
+  override text = "FLOW_START_INTERVIEWS : ";
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["FLOW_START_INTERVIEWS_END"], "Flow", "custom");
   }
 
-  onEnd(end: LogLine, stack: LogLine[]) {
+  override onEnd(end: LogLine, stack: LogLine[]) {
     const flowType = this.getFlowType(stack);
     this.suffix = ` (${flowType})`;
     this.text += this.getFlowName();
@@ -2001,7 +2001,7 @@ export class FlowStartInterviewsBeginLine extends Method {
 }
 
 class FlowStartInterviewsErrorLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = `${parts[2]} - ${parts[4]}`;
@@ -2037,7 +2037,7 @@ class FlowCreateInterviewErrorLine extends LogLine {
 }
 
 class FlowElementBeginLine extends Method {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["FLOW_ELEMENT_END"], "Flow", "custom");
@@ -2046,7 +2046,7 @@ class FlowElementBeginLine extends Method {
 }
 
 class FlowElementDeferredLine extends LogLine {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2055,8 +2055,8 @@ class FlowElementDeferredLine extends LogLine {
 }
 
 class FlowElementAssignmentLine extends LogLine {
-  declarative = true;
-  acceptsText = true;
+  override declarative = true;
+  override acceptsText = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2114,7 +2114,7 @@ class FlowInterviewPausedLine extends LogLine {
 }
 
 class FlowElementErrorLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts[1] || "" + parts[2] + " " + parts[3] + " " + parts[4];
@@ -2179,7 +2179,7 @@ class FlowRuleDetailLine extends LogLine {
 }
 
 class FlowBulkElementBeginLine extends Method {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["FLOW_BULK_ELEMENT_END"], "Flow", "custom");
@@ -2188,7 +2188,7 @@ class FlowBulkElementBeginLine extends Method {
 }
 
 class FlowBulkElementDetailLine extends LogLine {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2204,7 +2204,7 @@ class FlowBulkElementNotSupportedLine extends LogLine {
 }
 
 class FlowBulkElementLimitUsageLine extends LogLine {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2267,7 +2267,7 @@ class SLAProcessCaseLine extends LogLine {
 }
 
 class TestingLimitsLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2282,7 +2282,7 @@ class ValidationRuleLine extends LogLine {
 }
 
 class ValidationErrorLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts[2] || "";
@@ -2290,7 +2290,7 @@ class ValidationErrorLine extends LogLine {
 }
 
 class ValidationFormulaLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2308,7 +2308,7 @@ class ValidationPassLine extends LogLine {
 }
 
 class WFFlowActionErrorLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts[1] + " " + parts[4];
@@ -2316,7 +2316,7 @@ class WFFlowActionErrorLine extends LogLine {
 }
 
 class WFFlowActionErrorDetailLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts[1] + " " + parts[2];
@@ -2324,8 +2324,8 @@ class WFFlowActionErrorDetailLine extends LogLine {
 }
 
 class WFFieldUpdateLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_FIELD_UPDATE"], "Workflow", "custom");
     this.text =
@@ -2343,7 +2343,7 @@ class WFFieldUpdateLine extends Method {
 }
 
 class WFRuleEvalBeginLine extends Method {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_RULE_EVAL_END"], "Workflow", "custom");
@@ -2359,7 +2359,7 @@ class WFRuleEvalValueLine extends LogLine {
 }
 
 class WFRuleFilterLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2368,7 +2368,7 @@ class WFRuleFilterLine extends LogLine {
 }
 
 class WFCriteriaBeginLine extends Method {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(
@@ -2383,9 +2383,9 @@ class WFCriteriaBeginLine extends Method {
 }
 
 class WFFormulaLine extends Method {
-  acceptsText = true;
-  isExit = true;
-  nextLineIsExit = true;
+  override acceptsText = true;
+  override isExit = true;
+  override nextLineIsExit = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_FORMULA"], "Workflow", "custom");
@@ -2415,8 +2415,8 @@ class WFActionTaskLine extends LogLine {
 }
 
 class WFApprovalLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_APPROVAL"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
@@ -2431,8 +2431,8 @@ class WFApprovalRemoveLine extends LogLine {
 }
 
 class WFApprovalSubmitLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_APPROVAL_SUBMIT"], "Workflow", "custom");
     this.text = `${parts[2]}`;
@@ -2454,8 +2454,8 @@ class WFAssignLine extends LogLine {
 }
 
 class WFEmailAlertLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_EMAIL_ALERT"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
@@ -2463,8 +2463,8 @@ class WFEmailAlertLine extends Method {
 }
 
 class WFEmailSentLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_EMAIL_SENT"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
@@ -2486,8 +2486,8 @@ class WFEscalationActionLine extends LogLine {
 }
 
 class WFEvalEntryCriteriaLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_EVAL_ENTRY_CRITERIA"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
@@ -2503,8 +2503,8 @@ class WFFlowActionDetailLine extends LogLine {
 }
 
 class WFNextApproverLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_NEXT_APPROVER"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]} : ${parts[4]}`;
@@ -2519,8 +2519,8 @@ class WFOutboundMsgLine extends LogLine {
 }
 
 class WFProcessFoundLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_PROCESS_FOUND"], "Workflow", "custom");
     this.text = `${parts[2]} : ${parts[3]}`;
@@ -2528,8 +2528,8 @@ class WFProcessFoundLine extends Method {
 }
 
 class WFProcessNode extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_PROCESS_NODE"], "Workflow", "custom");
     this.text = parts[2] || "";
@@ -2558,8 +2558,8 @@ class WFRuleEntryOrderLine extends LogLine {
 }
 
 class WFRuleInvocationLine extends Method {
-  isExit = true;
-  nextLineIsExit = true;
+  override isExit = true;
+  override nextLineIsExit = true;
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["WF_RULE_INVOCATION"], "Workflow", "custom");
     this.text = parts[2] || "";
@@ -2588,9 +2588,9 @@ class WFSpoolActionBeginLine extends LogLine {
 }
 
 class ExceptionThrownLine extends LogLine {
-  discontinuity = true;
-  acceptsText = true;
-  totalThrownCount = 1;
+  override discontinuity = true;
+  override acceptsText = true;
+  override totalThrownCount = 1;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
@@ -2598,7 +2598,7 @@ class ExceptionThrownLine extends LogLine {
     this.text = parts[3] || "";
   }
 
-  onAfter(parser: ApexLogParser, _next?: LogLine): void {
+  override onAfter(parser: ApexLogParser, _next?: LogLine): void {
     if (this.text.indexOf("System.LimitException") >= 0) {
       const isMultiLine = this.text.indexOf("\n");
       const len = isMultiLine < 0 ? 99 : isMultiLine;
@@ -2611,16 +2611,16 @@ class ExceptionThrownLine extends LogLine {
 }
 
 class FatalErrorLine extends LogLine {
-  acceptsText = true;
+  override acceptsText = true;
   hideable = false;
-  discontinuity = true;
+  override discontinuity = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts);
     this.text = parts[2] || "";
   }
 
-  onAfter(parser: ApexLogParser, _next?: LogLine): void {
+  override onAfter(parser: ApexLogParser, _next?: LogLine): void {
     const newLineIndex = this.text.indexOf("\n");
     const summary =
       newLineIndex > -1 ? this.text.slice(0, newLineIndex + 1) : this.text;
@@ -2663,7 +2663,7 @@ class XDSResponseErrorLine extends LogLine {
 
 // e.g. "09:45:31.888 (38889007737)|DUPLICATE_DETECTION_BEGIN"
 class DuplicateDetectionBegin extends Method {
-  declarative = true;
+  override declarative = true;
 
   constructor(parser: ApexLogParser, parts: string[]) {
     super(parser, parts, ["DUPLICATE_DETECTION_END"], "Workflow", "custom");

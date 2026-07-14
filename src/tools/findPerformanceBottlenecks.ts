@@ -5,7 +5,7 @@
 import { promises as fs } from "fs";
 import { z } from "zod";
 import { parse, ApexLog } from "../ApexLogParser.js";
-import { SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
+import { type SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
 import { encode } from "@toon-format/toon";
 
 export const findPerformanceBottlenecksInputSchema = {
@@ -179,10 +179,7 @@ function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
   const methods = extractMethods(apexLog, 0);
   const methodsByNamespace = methods.reduce(
     (acc: Record<string, SlowMethod[]>, method) => {
-      if (!acc[method.namespace]) {
-        acc[method.namespace] = [];
-      }
-      acc[method.namespace].push(method);
+      (acc[method.namespace] ??= []).push(method);
       return acc;
     },
     {},
@@ -190,14 +187,12 @@ function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
 
   return {
     totalMethods: methods.length,
-    methodsByNamespace: Object.keys(methodsByNamespace).map((ns) => ({
+    methodsByNamespace: Object.entries(methodsByNamespace).map(([ns, group]) => ({
       namespace: ns,
-      methodCount: methodsByNamespace[ns].length,
+      methodCount: group.length,
       totalDuration:
-        methodsByNamespace[ns].reduce(
-          (sum: number, m: SlowMethod) => sum + m.duration,
-          0,
-        ) / NS_TO_MS,
+        group.reduce((sum: number, m: SlowMethod) => sum + m.duration, 0) /
+        NS_TO_MS,
     })),
   };
 }
