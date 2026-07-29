@@ -23,7 +23,7 @@ jest.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
 }));
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
 
-import { ApexLogServer } from "../src/index";
+import { ApexLogServer } from "../src/server";
 
 // Mock the tool modules
 jest.mock("../src/tools/analyzeLogPerformance", () => ({
