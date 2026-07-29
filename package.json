@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "MCP server that gives AI assistants tools to analyze Salesforce Apex debug logs for performance bottlenecks, slow methods, and governor limit usage.",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "bin": {
     "apex-log-mcp": "dist/index.js"
   },

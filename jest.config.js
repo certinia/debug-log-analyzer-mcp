@@ -23,6 +23,7 @@ export default {
     "!src/**/*.d.ts",
     "!src/**/*.test.ts",
     "!src/ApexLogParser.ts", // Exclude the log parser as it will be getting tested independently
+    "!src/index.ts", // Entry point bootstrap only; the server itself is tested via src/server.ts
   ],
   coverageDirectory: "coverage",
   coverageReporters: ["text", "lcov", "html"],
