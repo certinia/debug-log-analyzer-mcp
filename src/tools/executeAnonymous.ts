@@ -2,12 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import {
-  Connection,
-  ConfigAggregator,
-  OrgConfigProperties,
-  StateAggregator,
-} from "@salesforce/core";
+import { Connection, StateAggregator } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
@@ -15,7 +10,15 @@ import {
   type DebugLevelInput,
 } from "../salesforce/debugLevels.js";
 import { ensureTraceFlag } from "../salesforce/traceFlags.js";
-import { connect } from "../salesforce/connection.js";
+import { resolveOrg } from "../salesforce/connection.js";
+import {
+  classifyOrg,
+  type OrgClassification,
+} from "../salesforce/orgClassification.js";
+import {
+  authorizeExecution,
+  APEX_EXECUTION_DISABLED_MESSAGE,
+} from "../policy/orgExecutionPolicy.js";
 
 type ApexLogRecord = {
   Id: string;
@@ -93,19 +96,36 @@ export type ExecuteAnonymousArgs = z.infer<
   z.ZodObject<typeof executeAnonymousInputSchema>
 >;
 
-export const executeAnonymousToolConfig = {
-  title: "Execute Anonymous Apex",
-  description:
-    "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI). Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with get_apex_log_summary, analyze_apex_log_performance, or find_performance_bottlenecks for deeper analysis.",
-  inputSchema: executeAnonymousInputSchema,
-  annotations: {
-    title: "Execute Anonymous Apex",
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: false,
-    openWorldHint: true,
-  },
+export type ExecuteAnonymousPolicy = {
+  allowProductionOrgs: boolean;
+  apexExecutionDisabled: boolean;
+  classificationCache: Map<string, OrgClassification>;
 };
+
+const EXECUTE_ANONYMOUS_DESCRIPTION =
+  "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI). Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with get_apex_log_summary, analyze_apex_log_performance, or find_performance_bottlenecks for deeper analysis. Production orgs require per-call user confirmation or the --allow-production-orgs server flag.";
+
+/**
+ * The tool is always registered so that agents can discover it. When Apex
+ * execution is disabled the description says so up front, which saves the agent
+ * a call to find out.
+ */
+export function executeAnonymousToolConfig(apexExecutionDisabled = false) {
+  return {
+    title: "Execute Anonymous Apex",
+    description: apexExecutionDisabled
+      ? `[DISABLED on this server] ${EXECUTE_ANONYMOUS_DESCRIPTION} ${APEX_EXECUTION_DISABLED_MESSAGE}`
+      : EXECUTE_ANONYMOUS_DESCRIPTION,
+    inputSchema: executeAnonymousInputSchema,
+    annotations: {
+      title: "Execute Anonymous Apex",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  };
+}
 
 async function getProjectPath(server: McpServer): Promise<string | undefined> {
   try {
@@ -117,19 +137,6 @@ async function getProjectPath(server: McpServer): Promise<string | undefined> {
   }
 }
 
-async function resolveConfigProperty(
-  projectPath: string | undefined,
-  property: OrgConfigProperties,
-): Promise<string | undefined> {
-  const aggregator = await ConfigAggregator.create({ projectPath });
-  return aggregator.getPropertyValue<string>(property) ?? undefined;
-}
-
-async function resolveToUsername(aliasOrUsername: string): Promise<string> {
-  const stateAggregator = await StateAggregator.getInstance();
-  return stateAggregator.aliases.resolveUsername(aliasOrUsername);
-}
-
 async function getAliasForUsername(
   username: string,
 ): Promise<string | undefined> {
@@ -137,76 +144,57 @@ async function getAliasForUsername(
   return stateAggregator.aliases.get(username) ?? undefined;
 }
 
-async function validateOrgAllowlist(
-  allowedOrgs: string[],
-  username: string,
-  targetOrg: string | undefined,
-  projectPath: string | undefined,
-): Promise<void> {
-  if (allowedOrgs.length === 0) {
-    throw new Error(
-      "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
-    );
-  }
-
-  if (allowedOrgs.includes("ALLOW_ALL_ORGS")) {
-    return;
-  }
-
-  const resolvedAllowed: string[] = [];
-  for (const entry of allowedOrgs) {
-    if (entry === "DEFAULT_TARGET_ORG") {
-      const resolved = await resolveConfigProperty(
-        projectPath,
-        OrgConfigProperties.TARGET_ORG,
-      );
-      if (resolved) {
-        resolvedAllowed.push(await resolveToUsername(resolved));
-      }
-    } else if (entry === "DEFAULT_TARGET_DEV_HUB") {
-      const resolved = await resolveConfigProperty(
-        projectPath,
-        OrgConfigProperties.TARGET_DEV_HUB,
-      );
-      if (resolved) {
-        resolvedAllowed.push(await resolveToUsername(resolved));
-      }
-    } else {
-      resolvedAllowed.push(await resolveToUsername(entry));
-    }
-  }
-
-  const allowed = resolvedAllowed.map((org) => org.toLowerCase());
-  const isAllowed =
-    allowed.includes(username.toLowerCase()) ||
-    (targetOrg !== undefined && allowed.includes(targetOrg.toLowerCase()));
-
-  if (!isAllowed) {
-    throw new Error(
-      `Org "${targetOrg ?? username}" is not in the allowed orgs list. Allowed orgs: ${allowedOrgs.join(", ")}`,
-    );
-  }
+function toolError(text: string) {
+  return {
+    content: [{ type: "text" as const, text }],
+    isError: true,
+  };
 }
 
 export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
-  allowedOrgs: string[] = [],
+  policy: ExecuteAnonymousPolicy,
 ) {
   const { apex, targetOrg, debugLevel } = args;
+
+  // Short-circuit before touching the client or the org, so a server running with
+  // --no-apex-execution makes no Salesforce calls at all.
+  if (policy.apexExecutionDisabled) {
+    return toolError(APEX_EXECUTION_DISABLED_MESSAGE);
+  }
+
   const projectPath = await getProjectPath(server);
 
-  const connection = await connect(projectPath, targetOrg);
+  const org = await resolveOrg(projectPath, targetOrg);
+  const connection = org.getConnection();
 
   const username = connection.getUsername();
   if (!username) {
     throw new Error("Could not determine username from connection");
   }
 
-  await validateOrgAllowlist(allowedOrgs, username, targetOrg, projectPath);
-
   const alias = await getAliasForUsername(username);
   const orgLabel = alias ? `${username} (${alias})` : username;
+
+  // Authorize before creating any DebugLevel or TraceFlag records, so a refused
+  // call leaves the target org untouched.
+  const { classification, unverifiedReason } = await classifyOrg(
+    org,
+    policy.classificationCache,
+  );
+  const decision = await authorizeExecution({
+    server,
+    classification,
+    orgLabel,
+    apex,
+    allowProductionOrgs: policy.allowProductionOrgs,
+    unverifiedReason,
+  });
+
+  if (!decision.allowed) {
+    return toolError(decision.reason);
+  }
 
   const userId = await getUserIdByUsername(connection, username);
   await validateTraceFlag(connection, userId, debugLevel);
@@ -252,6 +240,7 @@ export async function executeAnonymous(
           filePath,
           fileSizeBytes: stats.size,
           org: orgLabel,
+          orgType: classification,
           success: apexResult.success,
           ...(apexResult.exceptionMessage && {
             exceptionMessage: apexResult.exceptionMessage,

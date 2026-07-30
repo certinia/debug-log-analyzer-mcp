@@ -7,9 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-28
+
 ### Changed
 
 - Minimum supported Node.js is now **22**.
+- **`execute_anonymous` is always available.** It is no longer hidden from `tools/list` when no orgs are configured, so AI agents can discover it. Whether a given call is permitted is now decided per call.
+- **Production orgs are gated per call.** The server identifies the target org type (`sandbox`, `scratch`, `trial`, `developer`, `production`) once per session. Non-production orgs run as before. For a production org the server asks the user to confirm via [MCP elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) if the client supports it, and otherwise refuses with an error explaining how to proceed. An org whose type cannot be determined is treated as production.
+- `execute_anonymous` now declares `destructiveHint: true`, since anonymous Apex can modify or delete data.
+- The response from `execute_anonymous` includes the detected `orgType`.
+
+### Added
+
+- `--allow-production-orgs` — treat production orgs like any other, skipping both the confirmation prompt and the refusal.
+- `--no-apex-execution` — disable Apex execution entirely. The tool remains listed, and says so in its description, but every call is refused without contacting Salesforce. The log analysis tools are unaffected.
+
+### Removed
+
+- **`--allowed-orgs` and its `ALLOW_ALL_ORGS`, `DEFAULT_TARGET_ORG` and `DEFAULT_TARGET_DEV_HUB` tokens.** The flag is still accepted so that existing client configurations continue to start, but it is ignored and logs a deprecation warning to stderr.
+
+### Migration
+
+- `--allowed-orgs <anything>` → remove the flag. Non-production orgs continue to work.
+- `--allowed-orgs ALLOW_ALL_ORGS` → remove the flag, and add `--allow-production-orgs` **only** if executing against production is intentional. `ALLOW_ALL_ORGS` no longer implies consent to run against production.
+- To restore the 1.x default of never executing Apex, pass `--no-apex-execution`.
 
 ## [1.0.0] - 2026-03-20
 

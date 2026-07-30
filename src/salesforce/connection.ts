@@ -1,17 +1,11 @@
-import {
-  Connection,
-  ConfigAggregator,
-  OrgConfigProperties,
-  Org,
-} from "@salesforce/core";
+import { ConfigAggregator, OrgConfigProperties, Org } from "@salesforce/core";
 
-export async function connect(
+export async function resolveOrg(
   projectPath?: string,
   targetOrg?: string,
-): Promise<Connection> {
+): Promise<Org> {
   const aliasOrUsername = targetOrg ?? (await resolveDefaultOrg(projectPath));
-  const org = await Org.create({ aliasOrUsername });
-  return org.getConnection();
+  return Org.create({ aliasOrUsername });
 }
 
 async function resolveDefaultOrg(projectPath?: string): Promise<string> {
