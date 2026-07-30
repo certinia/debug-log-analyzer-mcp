@@ -23,7 +23,7 @@ jest.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
 }));
 jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
 
-import { ApexLogServer } from "../src/server";
+import { ApexLogServer, parseServerConfig } from "../src/server";
 
 // Mock the tool modules
 jest.mock("../src/tools/analyzeLogPerformance", () => ({
@@ -59,13 +59,14 @@ jest.mock("../src/tools/findPerformanceBottlenecks", () => ({
 
 jest.mock("../src/tools/executeAnonymous", () => ({
   executeAnonymous: jest.fn(),
-  executeAnonymousToolConfig: {
+  executeAnonymousToolConfig: jest.fn((disabled = false) => ({
     title: "Execute Anonymous Apex",
-    description:
-      "Execute a snippet of anonymous Apex and retrieve the resulting log",
+    description: disabled
+      ? "[DISABLED on this server] Execute a snippet of anonymous Apex and retrieve the resulting log"
+      : "Execute a snippet of anonymous Apex and retrieve the resulting log",
     inputSchema: {},
     annotations: {},
-  },
+  })),
 }));
 
 // Import the tools after mocking
@@ -226,7 +227,7 @@ describe("ApexLogServer", () => {
       expect(McpServer).toHaveBeenCalledWith(
         {
           name: "apex-log-mcp",
-          version: "1.0.0",
+          version: "2.0.0",
           description: expect.any(String),
         },
         {
@@ -291,24 +292,36 @@ describe("ApexLogServer", () => {
       );
     });
 
-    it("should enable execute_anonymous when allowedOrgs is provided", async () => {
-      new ApexLogServer(["ALLOW_ALL_ORGS"]);
-
-      const execAnonTool = registeredTools.get("execute_anonymous")!;
-      expect(execAnonTool.enabled).toBe(true);
-    });
-
-    it("should disable execute_anonymous when allowedOrgs is empty", async () => {
+    it("should always leave execute_anonymous discoverable", async () => {
       new ApexLogServer();
 
       const execAnonTool = registeredTools.get("execute_anonymous")!;
-      expect(execAnonTool.enabled).toBe(false);
+      expect(execAnonTool.enabled).toBe(true);
+      expect(execAnonTool.disable).not.toHaveBeenCalled();
+    });
+
+    it("should keep execute_anonymous discoverable when apex execution is disabled", async () => {
+      new ApexLogServer({ apexExecutionDisabled: true });
+
+      const execAnonTool = registeredTools.get("execute_anonymous")!;
+      expect(execAnonTool.enabled).toBe(true);
+      expect(execAnonTool.disable).not.toHaveBeenCalled();
+      expect(execAnonTool.config.description).toContain(
+        "[DISABLED on this server]",
+      );
+    });
+
+    it("should not mark the tool disabled in its description by default", async () => {
+      new ApexLogServer();
+
+      const execAnonTool = registeredTools.get("execute_anonymous")!;
+      expect(execAnonTool.config.description).not.toContain("[DISABLED");
     });
   });
 
   describe("Tool Request Handling", () => {
     it("should handle analyze_apex_log_performance tool correctly", async () => {
-      new ApexLogServer(["ALLOW_ALL_ORGS"]);
+      new ApexLogServer();
 
       const tool = registeredTools.get("analyze_apex_log_performance")!;
       const args = {
@@ -323,7 +336,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle get_apex_log_summary tool correctly", async () => {
-      new ApexLogServer(["ALLOW_ALL_ORGS"]);
+      new ApexLogServer();
 
       const tool = registeredTools.get("get_apex_log_summary")!;
       const args = { logFilePath: "/path/to/test.log" };
@@ -335,7 +348,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle find_performance_bottlenecks tool correctly", async () => {
-      new ApexLogServer(["ALLOW_ALL_ORGS"]);
+      new ApexLogServer();
 
       const tool = registeredTools.get("find_performance_bottlenecks")!;
       const args = {
@@ -366,15 +379,58 @@ describe("ApexLogServer", () => {
       ).rejects.toThrow("Tool execution failed");
     });
 
-    it("should return error when execute_anonymous called with empty allowedOrgs", async () => {
+    it("should pass the default policy to execute_anonymous", async () => {
       new ApexLogServer();
 
       const tool = registeredTools.get("execute_anonymous")!;
+      const args = { apex: "System.debug('test');" };
 
-      await expect(
-        tool.callback({ apex: "System.debug('test');" }, {} as any),
-      ).rejects.toThrow(
-        "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
+      const result = await tool.callback(args, {} as any);
+
+      expect(executeAnonymous).toHaveBeenCalledWith(expect.anything(), args, {
+        allowProductionOrgs: false,
+        apexExecutionDisabled: false,
+        classificationCache: expect.any(Map),
+      });
+      expect(result).toEqual(mockExecuteAnonymousResult);
+    });
+
+    it("should pass --allow-production-orgs through to execute_anonymous", async () => {
+      new ApexLogServer({ allowProductionOrgs: true });
+
+      const tool = registeredTools.get("execute_anonymous")!;
+      await tool.callback({ apex: "System.debug('test');" }, {} as any);
+
+      expect(executeAnonymous).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ allowProductionOrgs: true }),
+      );
+    });
+
+    it("should pass --no-apex-execution through to execute_anonymous", async () => {
+      new ApexLogServer({ apexExecutionDisabled: true });
+
+      const tool = registeredTools.get("execute_anonymous")!;
+      await tool.callback({ apex: "System.debug('test');" }, {} as any);
+
+      expect(executeAnonymous).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ apexExecutionDisabled: true }),
+      );
+    });
+
+    it("should reuse one classification cache across calls", async () => {
+      new ApexLogServer();
+
+      const tool = registeredTools.get("execute_anonymous")!;
+      await tool.callback({ apex: "System.debug(1);" }, {} as any);
+      await tool.callback({ apex: "System.debug(2);" }, {} as any);
+
+      const calls = (executeAnonymous as jest.Mock).mock.calls;
+      expect(calls[0][2].classificationCache).toBe(
+        calls[1][2].classificationCache,
       );
     });
   });
@@ -426,7 +482,7 @@ describe("ApexLogServer", () => {
 
   describe("Integration Tests", () => {
     it("should handle complete workflow for analyze_apex_log_performance", async () => {
-      new ApexLogServer(["ALLOW_ALL_ORGS"]);
+      new ApexLogServer();
 
       // Verify all tools registered
       expect(registeredTools.size).toBe(4);
@@ -475,5 +531,62 @@ describe("ApexLogServer", () => {
 
       expect(findPerformanceBottlenecks).toHaveBeenCalledWith(args);
     });
+  });
+});
+
+describe("parseServerConfig", () => {
+  // The suite above restores the shared console spy in afterAll, so use a local one.
+  let consoleError: jest.SpyInstance;
+
+  beforeEach(() => {
+    consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleError.mockRestore();
+  });
+
+  it("should default to the safe policy with no flags", () => {
+    expect(parseServerConfig([])).toEqual({
+      allowProductionOrgs: false,
+      apexExecutionDisabled: false,
+    });
+  });
+
+  it("should read --allow-production-orgs", () => {
+    expect(parseServerConfig(["--allow-production-orgs"])).toEqual({
+      allowProductionOrgs: true,
+      apexExecutionDisabled: false,
+    });
+  });
+
+  it("should read --no-apex-execution", () => {
+    expect(parseServerConfig(["--no-apex-execution"])).toEqual({
+      allowProductionOrgs: false,
+      apexExecutionDisabled: true,
+    });
+  });
+
+  it("should still start when the deprecated --allowed-orgs is passed", () => {
+    expect(
+      parseServerConfig(["--allowed-orgs", "ALLOW_ALL_ORGS"]),
+    ).toEqual({
+      allowProductionOrgs: false,
+      apexExecutionDisabled: false,
+    });
+  });
+
+  it("should warn that --allowed-orgs is deprecated and ignored", () => {
+    parseServerConfig(["--allowed-orgs", "dev@example.com"]);
+
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("--allowed-orgs is deprecated and ignored"),
+    );
+  });
+
+  it("should not warn when --allowed-orgs is absent", () => {
+    parseServerConfig(["--allow-production-orgs"]);
+
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

@@ -144,45 +144,64 @@ Valid levels: `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST
 - "Execute this Apex with all debug levels set to FINEST"
 - "Run this Apex against my QA org with database logging set to FINEST"
 
-> **Note:** Requires `--allowed-orgs` to be [configured](#enabling-execute_anonymous). Uses the project's default org unless `targetOrg` is specified. The debug log is saved to a local file (default: `.apex-log-mcp/`) and the response includes the file path, org username (and alias, if set), and execution summary. Add `.apex-log-mcp/` to your `.gitignore` to avoid committing debug logs.
+> **Note:** Uses the project's default org unless `targetOrg` is specified. Sandbox, scratch, Developer Edition and trial orgs run without prompting; production orgs are gated — see [Production safety](#production-safety). The debug log is saved to a local file (default: `.apex-log-mcp/`) and the response includes the file path, org username (and alias, if set), org type, and execution summary. Add `.apex-log-mcp/` to your `.gitignore` to avoid committing debug logs.
 
 ## Configuration
 
-The [Quick Start](#quick-start) configuration is all you need for log analysis tools. The sections below cover enabling `execute_anonymous`.
+The [Quick Start](#quick-start) configuration is all you need — all four tools are available by default. The sections below cover the production safety policy and how to change it.
 
-### Enabling `execute_anonymous`
+### Production safety
 
-The `execute_anonymous` tool is **disabled by default**. To enable it, pass `--allowed-orgs` with a comma-separated list of allowed orgs:
+`execute_anonymous` runs arbitrary Apex, so before running anything the server identifies what kind of org it is pointed at. It asks the org once per session:
+
+| Org type     | Identified by                                     | Behaviour             |
+| ------------ | ------------------------------------------------- | --------------------- |
+| `sandbox`    | `IsSandbox`, no trial expiry                      | Runs                  |
+| `scratch`    | `IsSandbox` with a trial expiry                   | Runs                  |
+| `trial`      | Not a sandbox, has a trial expiry                 | Runs                  |
+| `developer`  | Developer Edition                                 | Runs                  |
+| `production` | Anything else                                     | Confirmation required |
+| `unknown`    | The org could not be queried                      | Confirmation required |
+
+For a production org, the server:
+
+1. Runs it anyway if the server was started with `--allow-production-orgs`.
+2. Otherwise asks you to confirm, if your MCP client supports [elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation). The prompt names the org and shows the Apex.
+3. Otherwise refuses, and the error explains both ways to proceed.
+
+An org that cannot be identified is treated as production, so a network or permissions problem can never silently downgrade a production org.
+
+### Server flags
+
+| Flag                      | Description                                                                                                            |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `--allow-production-orgs` | Treat production orgs like any other — no confirmation prompt, no refusal. Only set this if production targets are intentional. |
+| `--no-apex-execution`     | Disable Apex execution entirely. The tool stays visible so agents know it exists, but every call is refused. The three log analysis tools are unaffected. |
+
+For an analysis-only deployment:
 
 ```json
 {
   "mcpServers": {
     "apex-log-mcp": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@certinia/apex-log-mcp",
-        "--allowed-orgs",
-        "ALLOW_ALL_ORGS"
-      ]
+      "args": ["-y", "@certinia/apex-log-mcp", "--no-apex-execution"]
     }
   }
 }
 ```
 
-### Allowed org tokens
+### Migrating from 1.x
 
-| Token                    | Description                                                              |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `ALLOW_ALL_ORGS`         | Permits execution against any authenticated org                          |
-| `DEFAULT_TARGET_ORG`     | Resolves the project/global default `target-org` from Salesforce CLI     |
-| `DEFAULT_TARGET_DEV_HUB` | Resolves the project/global default `target-dev-hub` from Salesforce CLI |
+`--allowed-orgs` was removed in 2.0. It is still accepted so existing configurations keep starting, but it is ignored and logs a deprecation warning — you can delete it.
 
-You can also pass org usernames or aliases directly:
+| 1.x                              | 2.0                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| No flag (tool hidden)            | No flag — the tool is visible and works against non-production orgs      |
+| `--allowed-orgs ALLOW_ALL_ORGS`  | No flag. Add `--allow-production-orgs` only if you target production     |
+| `--allowed-orgs <org>,<org>`     | No flag. Org-by-org allowlisting is replaced by the org type policy      |
 
-```json
-"args": ["-y", "@certinia/apex-log-mcp", "--allowed-orgs", "dev@example.com,my-scratch-org"]
-```
+Note that `ALLOW_ALL_ORGS` no longer implies consent to run against production.
 
 ## How It Works
 

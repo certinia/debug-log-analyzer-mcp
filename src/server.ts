@@ -5,7 +5,6 @@
 import { parseArgs } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   analyzeLogPerformance,
   analyzeLogPerformanceToolConfig,
@@ -23,18 +22,26 @@ import {
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
+import type { OrgClassification } from "./salesforce/orgClassification.js";
+
+export type ServerConfig = {
+  allowProductionOrgs?: boolean;
+  apexExecutionDisabled?: boolean;
+};
 
 class ApexLogServer {
   private server: McpServer;
-  private allowedOrgs: string[];
-  private execAnonTool: RegisteredTool;
+  private allowProductionOrgs: boolean;
+  private apexExecutionDisabled: boolean;
+  private classificationCache = new Map<string, OrgClassification>();
 
-  constructor(allowedOrgs: string[] = []) {
-    this.allowedOrgs = allowedOrgs;
+  constructor(config: ServerConfig = {}) {
+    this.allowProductionOrgs = config.allowProductionOrgs ?? false;
+    this.apexExecutionDisabled = config.apexExecutionDisabled ?? false;
     this.server = new McpServer(
       {
         name: "apex-log-mcp",
-        version: "1.0.0",
+        version: "2.0.0",
         description:
           "Analyzes Salesforce Apex debug logs for performance bottlenecks, governor limit usage, and optimization opportunities.",
       },
@@ -47,7 +54,7 @@ class ApexLogServer {
       },
     );
 
-    this.execAnonTool = this.registerTools();
+    this.registerTools();
     this.setupErrorHandling();
   }
 
@@ -63,7 +70,7 @@ class ApexLogServer {
     process.once("SIGINT", shutdown);
   }
 
-  private registerTools(): RegisteredTool {
+  private registerTools(): void {
     this.server.registerTool(
       "analyze_apex_log_performance",
       analyzeLogPerformanceToolConfig,
@@ -82,51 +89,56 @@ class ApexLogServer {
       async (args) => findPerformanceBottlenecks(args),
     );
 
-    const execAnon = this.server.registerTool(
+    // Always registered, so agents can discover it regardless of configuration.
+    // Whether a given call is permitted is decided per call, inside the handler.
+    this.server.registerTool(
       "execute_anonymous",
-      executeAnonymousToolConfig,
-      async (args) => {
-        if (this.allowedOrgs.length === 0) {
-          throw new Error(
-            "execute_anonymous is disabled. Configure --allowed-orgs to enable it.",
-          );
-        }
-        return executeAnonymous(
-          this.server,
-          args as ExecuteAnonymousArgs,
-          this.allowedOrgs,
-        );
-      },
+      executeAnonymousToolConfig(this.apexExecutionDisabled),
+      async (args) =>
+        executeAnonymous(this.server, args as ExecuteAnonymousArgs, {
+          allowProductionOrgs: this.allowProductionOrgs,
+          apexExecutionDisabled: this.apexExecutionDisabled,
+          classificationCache: this.classificationCache,
+        }),
     );
-
-    if (this.allowedOrgs.length === 0) {
-      execAnon.disable();
-    }
-
-    return execAnon;
   }
 
   async run(): Promise<void> {
-    const { values } = parseArgs({
-      args: process.argv.slice(2),
-      options: {
-        "allowed-orgs": { type: "string" },
-      },
-    });
-
-    this.allowedOrgs = values["allowed-orgs"]
-      ? values["allowed-orgs"].split(",").map((org) => org.trim())
-      : [];
-
-    if (this.allowedOrgs.length > 0) {
-      this.execAnonTool.enable();
-    }
-
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
     console.error("Apex Log MCP Server running on stdio");
   }
+}
+
+/**
+ * Parse CLI configuration.
+ *
+ * `--allowed-orgs` is deprecated and ignored, but is still declared here because
+ * parseArgs is strict: leaving it out would make existing client configurations
+ * fail to start.
+ */
+export function parseServerConfig(argv: string[]): ServerConfig {
+  const { values } = parseArgs({
+    args: argv,
+    options: {
+      "allowed-orgs": { type: "string" },
+      "allow-production-orgs": { type: "boolean" },
+      "no-apex-execution": { type: "boolean" },
+    },
+  });
+
+  if (values["allowed-orgs"] !== undefined) {
+    console.error(
+      "WARN --allowed-orgs is deprecated and ignored as of 2.0. execute_anonymous is now\n" +
+        "     always available; production orgs are gated per-call. See --allow-production-orgs.",
+    );
+  }
+
+  return {
+    allowProductionOrgs: values["allow-production-orgs"] ?? false,
+    apexExecutionDisabled: values["no-apex-execution"] ?? false,
+  };
 }
 
 export { ApexLogServer };
