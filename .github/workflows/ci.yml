@@ -48,3 +48,20 @@ jobs:
       - name: Install Packages
         run: HUSKY=0 pnpm install --frozen-lockfile
       - run: ${{ matrix.command }}
+
+  eval:
+    name: Eval (tool responses)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Install Packages
+        run: HUSKY=0 pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Check tool responses stay answerable and lean
+        run: pnpm run eval

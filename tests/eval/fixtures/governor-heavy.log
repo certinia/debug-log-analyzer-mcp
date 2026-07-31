@@ -1,0 +1,727 @@
+64.0 APEX_CODE,FINE;APEX_PROFILING,FINE;CALLOUT,FINEST;DATA_ACCESS,INFO;DB,FINEST;NBA,FINE;SYSTEM,FINE;VALIDATION,INFO;VISUALFORCE,FINE;WAVE,FINE;WORKFLOW,FINE
+Execute Anonymous: AccountService.createAccountsAndContacts();
+10:29:24.6 (6297619)|USER_INFO|[EXTERNAL]|005Ea00000R6orz|first-last@example.com|(GMT-07:00) Pacific Daylight Time (America/Los_Angeles)|GMT-07:00
+10:29:24.6 (6329577)|EXECUTION_STARTED
+10:29:24.6 (6337821)|CODE_UNIT_STARTED|[EXTERNAL]|execute_anonymous_apex
+10:29:24.6 (6957638)|SYSTEM_MODE_ENTER|false
+10:29:24.6 (84434204)|METHOD_ENTRY|[5]|01pEa00000CgcGT|AccountService.AccountService()
+10:29:24.6 (84539933)|SYSTEM_METHOD_ENTRY|[7]|com.salesforce.api.interop.apex.bcl.DateMethods.newInstance(Integer, Integer, Integer)
+10:29:24.6 (84645761)|SYSTEM_METHOD_EXIT|[7]|com.salesforce.api.interop.apex.bcl.DateMethods.newInstance(Integer, Integer, Integer)
+10:29:24.6 (84669076)|METHOD_EXIT|[5]|AccountService
+10:29:24.6 (84707278)|METHOD_ENTRY|[1]|01pEa00000CgcGT|AccountService.createAccountsAndContacts()
+10:29:24.6 (84756747)|METHOD_ENTRY|[11]|01pEa00000CgcGT|AccountService.getRevenue()
+10:29:24.6 (84822141)|SYSTEM_METHOD_ENTRY|[120]|com.salesforce.api.interop.apex.bcl.DateMethods.today()
+10:29:24.6 (84859046)|SYSTEM_METHOD_EXIT|[120]|com.salesforce.api.interop.apex.bcl.DateMethods.today()
+10:29:24.6 (84869926)|METHOD_ENTRY|[120]|01pEa00000CgcGT|AccountService.getDayValue(Date)
+10:29:24.6 (84890620)|SYSTEM_METHOD_ENTRY|[142]|com.salesforce.api.interop.apex.bcl.DateMethods.daysBetween(Date)
+10:29:24.6 (84904980)|SYSTEM_METHOD_EXIT|[142]|com.salesforce.api.interop.apex.bcl.DateMethods.daysBetween(Date)
+10:29:24.6 (84949994)|SYSTEM_METHOD_ENTRY|[1]|Math.Math()
+10:29:24.6 (84998791)|SYSTEM_METHOD_EXIT|[1]|Math
+10:29:24.6 (85010745)|METHOD_ENTRY|[143]||System.Math.mod(Integer, Integer)
+10:29:24.6 (86075910)|METHOD_EXIT|[143]||System.Math.mod(Integer, Integer)
+10:29:24.6 (86151658)|METHOD_EXIT|[120]|01pEa00000CgcGT|AccountService.getDayValue(Date)
+10:29:24.6 (86198738)|SYSTEM_METHOD_ENTRY|[120]|Decimal.multiply(Decimal)
+10:29:24.6 (86225666)|SYSTEM_METHOD_EXIT|[120]|Decimal.multiply(Decimal)
+10:29:24.6 (86232986)|METHOD_EXIT|[11]|01pEa00000CgcGT|AccountService.getRevenue()
+10:29:24.6 (86477829)|SYSTEM_CONSTRUCTOR_ENTRY|[13]|<init>()
+10:29:24.6 (86505921)|SYSTEM_CONSTRUCTOR_EXIT|[13]|<init>()
+10:29:24.6 (86754887)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (86795087)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (86951731)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (86968604)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (87079014)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (87097338)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (87174461)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (87184902)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (87225943)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (87236086)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (87276422)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (87284026)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (87304589)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (87314369)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (87339226)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (87348726)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (87404336)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (87437315)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (87460222)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (87470288)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (87504853)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (87514333)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (87553097)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (87560941)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (87579552)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (87589197)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (87613484)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (87623384)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (87663356)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (87670624)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (87687964)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (87696970)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (87719794)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (87729363)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (87762248)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (87769298)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (87805213)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (87815748)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (87842667)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (87869118)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (87907942)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (87915385)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (87933899)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (87943489)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (87967708)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (87976926)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88016307)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88024870)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (88044293)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (88053463)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (88076857)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (88086187)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88119518)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88142642)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (88162653)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (88191074)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (88249203)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (88262432)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88311769)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88320502)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (88343670)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (88355327)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (88408271)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (88435637)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88475264)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88487395)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (88506754)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (88516205)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (88539890)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (88549422)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88583261)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88590787)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (88608114)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (88617461)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (88640695)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (88650083)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88683242)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88690241)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (88714782)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (88724592)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (88788947)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (88815826)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88855645)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88862866)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (88885520)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (88895447)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (88933847)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (88943559)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (88980267)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (88987353)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89005971)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89015843)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89039406)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89048810)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89081656)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89089062)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89106626)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89115798)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89138918)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89148140)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89181807)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89189582)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89210646)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89220281)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89243466)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89252318)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89326613)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89334466)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89354152)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89364329)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89389051)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89398351)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89432248)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89439681)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89457859)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89467518)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89489767)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89498916)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89531362)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89538941)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89598753)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89618376)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89647385)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89656766)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89690569)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89697762)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89716716)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89725806)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89748641)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89757346)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89789601)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89796364)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89813941)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89823226)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89846110)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89855374)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (89889156)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (89896468)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (89932529)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (89942110)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (89972440)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (89981782)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (90137135)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (90146409)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (90168862)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (90178524)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (90204853)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (90214324)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (90249240)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (90256511)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (90272950)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (90282272)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (90328799)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (90338599)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (90373001)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (90380438)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (90398067)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (90407408)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (90450187)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (90464231)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (90499240)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (90506621)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (90541535)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (90550941)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (90576177)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (90585992)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (90639644)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (90647322)|SYSTEM_METHOD_EXIT|[19]|List<Account>.add(Object)
+10:29:24.6 (90666200)|SYSTEM_METHOD_ENTRY|[16]|String.valueOf(Object)
+10:29:24.6 (90675321)|SYSTEM_METHOD_EXIT|[16]|String.valueOf(Object)
+10:29:24.6 (90698875)|SYSTEM_METHOD_ENTRY|[17]|String.valueOf(Object)
+10:29:24.6 (90708090)|SYSTEM_METHOD_EXIT|[17]|String.valueOf(Object)
+10:29:24.6 (90741126)|SYSTEM_METHOD_ENTRY|[19]|List<Account>.add(Object)
+10:29:24.6 (143822324)|SYSTEM_METHOD_EXIT|[25]|system.ListIterator.hasNext()
+10:29:24.6 (143832776)|SYSTEM_METHOD_ENTRY|[26]|String.isBlank(String)
+10:29:24.6 (143839643)|SYSTEM_METHOD_EXIT|[26]|String.isBlank(String)
+10:29:24.6 (143854221)|SYSTEM_METHOD_ENTRY|[29]|Decimal.compareTo(Decimal)
+10:29:24.6 (143862262)|SYSTEM_METHOD_EXIT|[29]|Decimal.compareTo(Decimal)
+10:29:24.6 (143866974)|SYSTEM_METHOD_ENTRY|[25]|system.ListIterator.hasNext()
+10:29:24.6 (143872509)|SYSTEM_METHOD_EXIT|[25]|system.ListIterator.hasNext()
+10:29:24.6 (144082082)|DML_BEGIN|[36]|Op:Insert|Type:Account|Rows:300
+10:29:24.6 (888486920)|CODE_UNIT_STARTED|[EXTERNAL]|Flow:Account
+10:29:24.953 (953433278)|FLOW_CREATE_INTERVIEW_BEGIN|00DEa00000KOnB0|300Ea00000dqZhh|301Ea000012e1Jw
+10:29:24.953 (953999197)|FLOW_CREATE_INTERVIEW_END|4665a721c57d72783b101ffd513f197d6718885-6a01|Update Account Field (Fast)
+10:29:24.953 (954005384)|FLOW_CREATE_INTERVIEW_END|4666a721c57d72783b101ffd513f197d6718885-6a00|Update Account Field (Fast)
+10:29:24.953 (954009744)|FLOW_CREATE_INTERVIEW_END|4667a721c57d72783b101ffd513f197d6718885-69ff|Update Account Field (Fast)
+10:29:24.953 (954011938)|FLOW_CREATE_INTERVIEW_END|4668a721c57d72783b101ffd513f197d6718885-69fe|Update Account Field (Fast)
+10:29:24.953 (954013948)|FLOW_CREATE_INTERVIEW_END|4669a721c57d72783b101ffd513f197d6718885-69fd|Update Account Field (Fast)
+10:29:24.953 (954015997)|FLOW_CREATE_INTERVIEW_END|4670a721c57d72783b101ffd513f197d6718885-69fc|Update Account Field (Fast)
+10:29:24.953 (954018754)|FLOW_CREATE_INTERVIEW_END|4671a721c57d72783b101ffd513f197d6718885-69fb|Update Account Field (Fast)
+10:29:24.953 (954020862)|FLOW_CREATE_INTERVIEW_END|4672a721c57d72783b101ffd513f197d6718885-69fa|Update Account Field (Fast)
+10:29:24.953 (954022900)|FLOW_CREATE_INTERVIEW_END|4673a721c57d72783b101ffd513f197d6718885-69f9|Update Account Field (Fast)
+10:29:24.953 (954025002)|FLOW_CREATE_INTERVIEW_END|4674a721c57d72783b101ffd513f197d6718885-69f8|Update Account Field (Fast)
+10:29:24.953 (954026981)|FLOW_CREATE_INTERVIEW_END|4675a721c57d72783b101ffd513f197d6718885-69f7|Update Account Field (Fast)
+10:29:24.953 (954028963)|FLOW_CREATE_INTERVIEW_END|4676a721c57d72783b101ffd513f197d6718885-69f6|Update Account Field (Fast)
+10:29:24.953 (954031091)|FLOW_CREATE_INTERVIEW_END|4677a721c57d72783b101ffd513f197d6718885-69f5|Update Account Field (Fast)
+10:29:24.953 (954033159)|FLOW_CREATE_INTERVIEW_END|4678a721c57d72783b101ffd513f197d6718885-69f4|Update Account Field (Fast)
+10:29:24.953 (954035604)|FLOW_CREATE_INTERVIEW_END|4679a721c57d72783b101ffd513f197d6718885-69f3|Update Account Field (Fast)
+10:29:24.953 (954037700)|FLOW_CREATE_INTERVIEW_END|4680a721c57d72783b101ffd513f197d6718885-69f2|Update Account Field (Fast)
+10:29:24.953 (954039899)|FLOW_CREATE_INTERVIEW_END|4681a721c57d72783b101ffd513f197d6718885-69f1|Update Account Field (Fast)
+10:29:24.953 (954041961)|FLOW_CREATE_INTERVIEW_END|4682a721c57d72783b101ffd513f197d6718885-69f0|Update Account Field (Fast)
+10:29:24.953 (954043994)|FLOW_CREATE_INTERVIEW_END|4683a721c57d72783b101ffd513f197d6718885-69ef|Update Account Field (Fast)
+10:29:24.953 (954045985)|FLOW_CREATE_INTERVIEW_END|4684a721c57d72783b101ffd513f197d6718885-69ee|Update Account Field (Fast)
+10:29:24.953 (954047948)|FLOW_CREATE_INTERVIEW_END|4685a721c57d72783b101ffd513f197d6718885-69ed|Update Account Field (Fast)
+  int[]:sizeTable:0
+
+10:29:27.928 (3928196166)|CUMULATIVE_LIMIT_USAGE_END
+
+10:29:27.872 (3928523501)|CODE_UNIT_FINISHED|AccountTrigger on Account trigger event BeforeInsert|__sfdc_trigger/AccountTrigger
+10:29:27.934 (3934728586)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3948516510)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3948573855)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3949347190)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3949624822)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3949870521)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3950035641)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3950082265)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3950107428)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3950118030)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3970918970)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3970974539)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3971390480)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3971402571)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3971616630)|ENTERING_MANAGED_PKG|core_pkg
+10:29:27.934 (3971623600)|ENTERING_MANAGED_PKG|core_pkg
+  Number of DML statements: 1 out of 150
+  Number of Publish Immediate DML: 0 out of 150
+  Number of DML rows: 300 out of 10000
+  Maximum CPU time: 172 out of 10000
+  Maximum heap size: 0 out of 6000000
+  Number of callouts: 0 out of 100
+  Number of Email Invocations: 0 out of 10
+  Number of future calls: 0 out of 50
+  Number of queueable jobs added to the queue: 0 out of 50
+  Number of Mobile Apex push calls: 0 out of 10
+
+10:29:28.66 (4066151244)|CUMULATIVE_LIMIT_USAGE_END
+
+10:29:28.80 (4080646459)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4090678024)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4090743817)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4090782221)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4090801909)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4090811491)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4090848719)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4101205649)|SOQL_EXECUTE_BEGIN|[19]|Aggregations:1|SELECT Name, Id, core_pkg__group_key__c, (SELECT core_pkg__Value__c FROM core_pkg__Values__r ORDER BY core_pkg__Sort__c ASC NULLS FIRST) FROM core_pkg__Config_Option__c
+10:29:28.80 (4125807536)|SOQL_EXECUTE_EXPLAIN|[19]|TableScan on core_pkg__Config_Option__c : [], cardinality: 1, sobjectCardinality: 1, relativeCost 0.65
+10:29:28.80 (4125822651)|SOQL_EXECUTE_END|[19]|Rows:0
+10:29:28.80 (4126432512)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4126469614)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4126483379)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4126490888)|ENTERING_MANAGED_PKG|core_pkg
+10:29:28.80 (4133100752)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4144605120)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4145156777)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4153316109)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4153388854)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4153434764)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4153865773)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4153898799)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4164486411)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4164596557)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4164643599)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4165316985)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4165488019)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4165523826)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4165580133)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4165594168)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4165642082)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4165658786)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4235793267)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4235858648)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4235892226)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4235983842)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4235994428)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:28.80 (4236129278)|ENTERING_MANAGED_PKG|srm_pkg
+10:29:47.859 (24612488832)|METHOD_EXIT|[23]|01pEa00000CfN9K|RecursiveSearcher.search(RecursiveSearcher.SimTree)
+10:29:47.859 (24612492534)|METHOD_EXIT|[23]|01pEa00000CfN9K|RecursiveSearcher.search(RecursiveSearcher.SimTree)
+10:29:47.859 (24612495796)|METHOD_EXIT|[23]|01pEa00000CfN9K|RecursiveSearcher.search(RecursiveSearcher.SimTree)
+10:29:47.859 (24612499330)|METHOD_EXIT|[50]|01pEa00000CfN9K|RecursiveSearcher.search(RecursiveSearcher.SimTree)
+10:29:47.859 (24612505174)|METHOD_EXIT|[102]|01pEa00000CfN9K|RecursiveSearcher.search(Integer, Integer, Integer)
+10:29:47.859 (24612523000)|METHOD_EXIT|[1]|01pEa00000CgcGT|AccountService.createAccountsAndContacts()
+10:29:47.859 (24612576524)|SYSTEM_MODE_EXIT|false
+10:29:47.859 (24612680061)|FATAL_ERROR|System.LimitException: Apex CPU time limit exceeded
+
+Class.RecursiveSearcher.search: line 31, column 1
+Class.RecursiveSearcher.search: line 23, column 1
+Class.RecursiveSearcher.search: line 23, column 1
+Class.RecursiveSearcher.search: line 23, column 1
+Class.RecursiveSearcher.search: line 23, column 1
+Class.RecursiveSearcher.search: line 23, column 1
+Class.RecursiveSearcher.search: line 23, column 1
+Class.RecursiveSearcher.search: line 50, column 1
+Class.AccountService.createAccountsAndContacts: line 102, column 1
+AnonymousBlock: line 1, column 1
+AnonymousBlock: line 1, column 1
+10:29:48.612 (24612836992)|CUMULATIVE_LIMIT_USAGE
+10:29:48.612 (24612836992)|LIMIT_USAGE_FOR_NS|(default)|
+  Number of SOQL queries: 5 out of 100
+  Number of query rows: 600 out of 50000
+  Number of SOSL queries: 0 out of 20
+  Number of DML statements: 6 out of 150
+  Number of Publish Immediate DML: 0 out of 150
+  Number of DML rows: 1200 out of 10000
+  Maximum CPU time: 15163 out of 10000 ******* CLOSE TO LIMIT
+  Maximum heap size: 219591 out of 6000000
+  Number of callouts: 0 out of 100
+  Number of Email Invocations: 0 out of 10
+  Number of future calls: 0 out of 50
+  Number of queueable jobs added to the queue: 0 out of 50
+  Number of Mobile Apex push calls: 0 out of 10
+
+10:29:48.612 (24612836992)|LIMIT_USAGE_FOR_NS|core_pkg|
+  Number of SOQL queries: 1 out of 100
+  Number of query rows: 0 out of 50000
+  Number of SOSL queries: 0 out of 20
+  Number of DML statements: 0 out of 150
+  Number of Publish Immediate DML: 0 out of 150
+  Number of DML rows: 0 out of 10000
+  Maximum CPU time: 0 out of 10000
+  Maximum heap size: 0 out of 6000000
+  Number of callouts: 0 out of 100
+  Number of Email Invocations: 0 out of 10
+  Number of future calls: 0 out of 50
+  Number of queueable jobs added to the queue: 0 out of 50
+  Number of Mobile Apex push calls: 0 out of 10
+
+10:29:48.612 (24612836992)|LIMIT_USAGE_FOR_NS|core_pkg|
+  Number of SOQL queries: 0 out of 100
+  Number of query rows: 2 out of 50000
+  Number of SOSL queries: 0 out of 20
+  Number of DML statements: 0 out of 150
+  Number of Publish Immediate DML: 0 out of 150
+  Number of DML rows: 0 out of 10000
+  Maximum CPU time: 0 out of 10000
+  Maximum heap size: 0 out of 6000000
+  Number of callouts: 0 out of 100
+  Number of Email Invocations: 0 out of 10
+  Number of future calls: 0 out of 50
+  Number of queueable jobs added to the queue: 0 out of 50
+  Number of Mobile Apex push calls: 0 out of 10
+
+10:29:48.612 (24612836992)|LIMIT_USAGE_FOR_NS|srm_pkg|
+  Number of SOQL queries: 0 out of 100
+  Number of query rows: 0 out of 50000
+  Number of SOSL queries: 0 out of 20
+  Number of DML statements: 0 out of 150
+  Number of Publish Immediate DML: 0 out of 150
+  Number of DML rows: 0 out of 10000
+  Maximum CPU time: 0 out of 10000
+  Maximum heap size: 0 out of 6000000
+  Number of callouts: 0 out of 100
+  Number of Email Invocations: 0 out of 10
+  Number of future calls: 0 out of 50
+  Number of queueable jobs added to the queue: 0 out of 50
+  Number of Mobile Apex push calls: 0 out of 10
+
+10:29:48.612 (24612836992)|TOTAL_EMAIL_RECIPIENTS_QUEUED|0
+10:29:48.612 (24612836992)|STATIC_VARIABLE_LIST|
+  boolean:$assertionsDisabled:0
+  int:BINARYSEARCH_THRESHOLD:0
+  int:BYTES:0
+  int:BYTES:0
+  int:BYTES:0
+  String:CAUSE_CAPTION:0
+  int:COPY_THRESHOLD:0
+  byte[]:DigitOnes:0
+  byte[]:DigitTens:0
+  Boolean:FALSE:0
+  int:FILL_THRESHOLD:0
+  int:INDEXOFSUBLIST_THRESHOLD:0
+  int:MAX_EXPONENT:0
+  double:MAX_VALUE:0
+  int:MAX_VALUE:0
+  long:MAX_VALUE:0
+  int:MIN_EXPONENT:0
+  double:MIN_NORMAL:0
+  double:MIN_VALUE:0
+  int:MIN_VALUE:0
+  long:MIN_VALUE:0
+  double:NEGATIVE_INFINITY:0
+  String:NULL_CAUSE_MESSAGE:0
+  double:NaN:0
+  double:POSITIVE_INFINITY:0
+  int:REPLACEALL_THRESHOLD:0
+  int:REVERSE_THRESHOLD:0
+  int:ROTATE_THRESHOLD:0
+  String:SELF_SUPPRESSION_MESSAGE:0
+  int:SHUFFLE_THRESHOLD:0
+  int:SIZE:0
+  int:SIZE:0
+  int:SIZE:0
+  String:SUPPRESSED_CAPTION:0
+  Boolean:TRUE:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcInnerTypes:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:__sfdcProperties:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcAdditionalCodeLocations:0
+  String:_sfdcSuppressedCodeLocations:0
+  String:_sfdcSuppressedCodeLocations:0
+  String:_sfdcSuppressedCodeLocations:0
+  String:_sfdcSuppressedCodeLocations:0
+  String:_sfdcSuppressedCodeLocations:0
+  String:_sfdcSuppressedCodeLocations:0
+  String:_sfdcSuppressedCodeLocations:0
+  String:_static_API_SECRET:0
+  String:_static_APPLOG_ORIGIN:0
+  String:_static_ASSIGNMENT:0
+  String:_static_ASSIGNMENTS:0
+  String:_static_AUTH_STATUS_COMPLETED:0
+  String:_static_AUTH_STATUS_NOT_COMPLETED:0
+  Set<String>:_static_AccountFields:0
+  String:_static_CODE:0
+  String:_static_CONFIGURATION_KEY:0
+  Set<Schema.SObjectField>:_static_CONTACT_FIELDS:0
+  String:_static_CONTENT_TYPE_HEADER:0
+  String:_static_CONTENT_TYPE_HEADER_VALUE:0
+  String:_static_CREATE_INSTANCE:0
+  Integer:_static_DEFAULT_HOUR_SCALE:0
+  Boolean:_static_DEFAULT_USE_IS_RESOURCE_FLAG:0
+  String:_static_DELETED:0
+  String:_static_DELETE_INSTANCE:0
+  String:_static_DELETE_WF_INSTANCE:0
+  String:_static_DEVELOPER_ORG_URL:0
+  Double:_static_E:0
+  String:_static_EMPTY:0
+  String:_static_EMPTY_JSON_BODY:0
+  String:_static_ERROR:0
+  String:_static_ERROR_DESCRIPTION:0
+  String:_static_ERROR_MESSAGE:0
+  String:_static_FEATURE_NAME:0
+  String:_static_FIELDS:0
+  String:_static_FORMULA_KEY:0
+  String:_static_FORMULA_NAME:0
+  String:_static_GRP:0
+  Map<Schema.SObjectType,srm_pkg.ICustomSettingUtil>:_static_HIERARCHY_SETTINGS_CACHE:0
+  String:_static_HTTP_METHOD_TYPE_DELETE:0
+  String:_static_HTTP_METHOD_TYPE_GET:0
+  String:_static_HTTP_METHOD_TYPE_POST:0
+  String:_static_HTTP_METHOD_TYPE_PUT:0
+  String:_static_IDField:0
+  String:_static_ID_KEY:0
+  String:_static_INITIAL_SYNC_WF_INSTANCE:0
+  String:_static_INSTANCES:0
+  Boolean:_static_IS_RUNNING_TEST:0
+  Date:_static_KNOWN_MONDAY:0
+  Map<Schema.SObjectType,srm_pkg.ICustomSettingListUtil>:_static_LIST_SETTINGS_CACHE:0
+  Integer:_static_MAX_BINDINGS:0
+  String:_static_MESSAGE:0
+  Map<Schema.SObjectType,srm_pkg.ICustomSettingUtil>:_static_MOCK_HIERARCHY_SETTINGS_CACHE:0
+  Map<Schema.SObjectType,srm_pkg.ICustomSettingListUtil>:_static_MOCK_LIST_SETTINGS_CACHE:0
+  String:_static_MSG_SEPARATOR:0
+  String:_static_NAME:0
+  String:_static_NAMESPACE:0
+  String:_static_NAMESPACE_SEPARATOR_CLASS:0
+  String:_static_NAMESPACE_SEPARATOR_OBJECT:0
+  String:_static_NAMESPACE_SEPARATOR_OBJECT:0
+  String:_static_NILL:0
+  Boolean:_static_NO_CACHE_DEFAULT:0
+  String:_static_Namespace:0
+  String:_static_OAUTH_PARAMETER:0
+  String:_static_OAUTH_PROXY_NAME:0
+  String:_static_OAUTH_URL:0
+  String:_static_PAGE_URL:0
+  String:_static_PARAMETERS_KEY:0
+  String:_static_PATH:0
+  String:_static_PERFORM_INITIAL_SYNC_STEP_NAME:0
+  Set<Schema.SObjectField>:_static_PE_SUPPORTED_FIELDS:0
+  Double:_static_PI:0
+  String:_static_PRACTICE:0
+  String:_static_PREFIX:0
+  String:_static_PROJECT:0
+  String:_static_PROJECTMANAGER:0
+  String:_static_PROJECTS:0
+  Integer:_static_PROJECT_TASK_APP_LOG_LEVEL:0
+  String:_static_PROJECT_TASK_CREATE:0
+  String:_static_PROJECT_TASK_DELETE:0
+  String:_static_PROJECT_TASK_PARENT_TASK:0
+  String:_static_PROJECT_TASK_UPDATE:0
+  String:_static_PROJECT_UPDATED:0
+  String:_static_PROJECT_WF_INSTANCE:0
+  String:_static_PUSH_MAPPINGS_FEATURE_STEP_NAME:0
+  String:_static_REGION:0
+  String:_static_RESOURCES:0
+  String:_static_RESOURCES_WITHOUT_ASSIGNMENTS:0
+  String:_static_RESOURCE_CURRENT_ACTUAL_DEFAULT_TYPE:0
+  String:_static_RESOURCE_FORMULA_INSTANCE_FEATURE_STEP_NAME:0
+  String:_static_RESOURCE_ID:0
+  String:_static_RESOURCE_NAME:0
+  String:_static_RESOURCE_UPDATED:0
+  String:_static_RESOURCE_WF_INSTANCE:0
+  String:_static_RES_AND_ASSIGNMENT:0
+  String:_static_RETRY_CREATE_SUCCESS:0
+  String:_static_RETRY_DELETE_SUCCESS:0
+  String:_static_RETRY_UPDATE_SUCCESS:0
+  String:_static_SANDBOX_URL:0
+  String:_static_SELF_KEY:0
+  String:_static_SENDTOTHIRDPARTY:0
+  String:_static_SEND_TO_THIRD_PARTY_EXPENSES_APPLICATION:0
+  core_pkg__ErpCommonObjectSettings__c:_static_SETTINGS:0
+  String:_static_SFDC:0
+  String:_static_SF_KEY:0
+  String:_static_SF_SECRET:0
+  String:_static_SLASH:0
+  String:_static_SORT_ORDER_ASCENDING:0
+  String:_static_SORT_ORDER_DESCENDING:0
+  String:_static_STATE:0
+  String:_static_STR_TRUE:0
+  String:_static_SUBTRACT_HOLIDAYS_FROM_TOTAL_HOURS:0
+  Set<String>:_static_SYSTEM_FIELDS:0
+  String:_static_TOKEN_KEY:0
+  String:_static_TPA_APP:0
+  Map<System.Type,List<core_pkg.SObjDomain>>:_static_TriggerStateByClass:0
+  String:_static_UPDATED:0
+  String:_static_UPDATE_INSTANCE:0
+  String:_static_URL_CONST:0
+  Boolean:_static_USE_IS_RESOURCE_FLAG:0
+  String:_static_USE_RESOURCE_LAST_DATE:0
+  String:_static_USE_RESOURCE_START_DATE:0
+  String:_static_VENDOR_NAME:0
+  String:_static_VENDOR_PATH:0
+  Integer:_static_VFPAGE_LIST_LIMIT:0
+  Decimal:_static_ZERO:0
+  String:_static_allFormulaInstancesEndpoint:0
+  String:_static_authAccAdmin:0
+  String:_static_authElementInstance:0
+  String:_static_deactivateFormulaInstanceEndpoint:0
+  String:_static_disableFormulaInstanceEndpoint:0
+  String:_static_endPoint:0
+  String:_static_formulaExecutionEndpoint:0
+  String:_static_formulaIDEndpoint:0
+  String:_static_formulaInstanceEndpoint:0
+  String:_static_getElementResourceQueryEndpoint:0
+  Map<String,Map<String,List<String>>>:_static_groupMap:0
+  Map<String,core_pkg.SObjDescribe>:_static_instanceCache:0
+  Map<String,srm_pkg.SObjDescribe>:_static_instanceCache:0
+  String:_static_instanceID:0
+  String:_static_instanceLevelVDREndpoint:0
+  String:_static_instanceName:0
+  Set<String>:_static_invalidSObjNames:0
+  Set<String>:_static_invalidSObjNames:0
+  Integer:_static_m_VFPAGE_LIST_LIMIT:0
+  Boolean:_static_m_canExecuteOppTrigger:0
+  Map<String,ANY>:_static_mockInstanceByTypeName:0
+  String:_static_modifyElementResourceEndpoint:0
+  String:_static_namespace:0
+  String:_static_namespace:0
+  String:_static_namespaceSObject:0
+  Map<Schema.SObjectType,List<core_pkg.PluggableTriggerApi.PluginConstructor>>:_static_pluggableTriggerCache:0
+  Map<Id,Boolean>:_static_projectTaskIdsMapToSync:0
+  String:_static_transformationFetchEndpoint:0
+  String:_static_transformationPostPutEndpoint:0
+  String:_static_updateformulaInstanceEndpoint:0
+  char[]:digits:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  long:serialVersionUID:0
+  int[]:sizeTable:0
+
+10:29:48.612 (24612836992)|CUMULATIVE_LIMIT_USAGE_END
+
+10:29:47.859 (24613530919)|CODE_UNIT_FINISHED|execute_anonymous_apex
+10:29:47.859 (24613548462)|EXECUTION_FINISHED
+10:29:48.614 (24614437147)|CUMULATIVE_PROFILING_BEGIN
+10:29:48.614 (24614437147)|CUMULATIVE_PROFILING|SOQL operations|
+(core_pkg): [
+			SELECT
+				Name,
+				Id,
+				core_pkg__group_key__c,
+				(SELECT core_pkg__Value__c FROM core_pkg__Values__r ORDER BY core_pkg__Sort__c)
+			FROM core_pkg__Config_Option__c
+		]: executed 1 time in 35 ms
+(core_pkg): com.salesforce.api.Database.query(String): executed 1 time in 28 ms
+(core_pkg): com.salesforce.api.Database.query(String): executed 1 time in 28 ms
+Class.ContactTriggerHandler.handleBeforeInsert: line 17, column 1: [SELECT Id, Name, AnnualRevenue FROM Account WHERE Id IN :accountIds]: executed 2 times in 17 ms
+Class.AccountService.createAccountsAndContacts: line 79, column 1: [SELECT Id, Name, AnnualRevenue FROM Account WHERE Id IN :accountIds]: executed 1 time in 16 ms
+(core_pkg): com.salesforce.api.Database.query(String): executed 1 time in 5 ms
+(core_pkg): com.salesforce.api.Database.query(String): executed 1 time in 5 ms
+
+10:29:48.614 (24614437147)|CUMULATIVE_PROFILING|No profiling information for SOSL operations
+10:29:48.614 (24614437147)|CUMULATIVE_PROFILING|DML operations|
+Class.AccountService.createAccountsAndContacts: line 94, column 1: Insert: List<Contact>: executed 1 time in 9433 ms
+Class.AccountService.createAccountsAndContacts: line 36, column 1: Insert: List<Account>: executed 1 time in 7315 ms
+Class.ContactTriggerHandler.handleAfterInsert: line 65, column 1: Insert: List<Task>: executed 2 times in 578 ms
+
+10:29:48.614 (24614437147)|CUMULATIVE_PROFILING|method invocations|
+Class.RecursiveSearcher.search: line 23, column 1: public void search(RecursiveSearcher.SimTree): executed 1964 times in 76857 ms
+External entry point: public static void execute(): executed 1 time in 24606 ms
+AnonymousBlock: line 1, column 1: public static void createAccountsAndContacts(): executed 1 time in 24528 ms
+Class.RecursiveSearcher.search: line 50, column 1: public void search(RecursiveSearcher.SimTree): executed 34 times in 11582 ms
+Class.AccountService.createAccountsAndContacts: line 90, column 1: public RecursiveSearcher(): executed 2 times in 6904 ms
+Trigger.ContactTrigger: line 13, column 1: public static void handleAfterInsert(List<Contact>): executed 2 times in 3265 ms
+Class.RecursiveSearcher.CallTreeGenerator.buildNode: line 164, column 1: public static String valueOf(Object): executed 3934 times in 3072 ms
+Class.RecursiveSearcher.CallTreeGenerator.buildNode: line 164, column 1: public static String valueOf(Object): executed 3934 times in 3072 ms
+Class.ContactTriggerHandler.handleAfterInsert: line 67, column 1: public RecursiveSearcher(): executed 4 times in 2643 ms
+Trigger.AccountTrigger: line 14, column 1: public void handleAfterInsert(List<Account>): executed 2 times in 1938 ms
+Class.AccountTriggerHandler.handleAfterInsert: line 34, column 1: public RecursiveSearcher(): executed 4 times in 1908 ms
+
+10:29:48.614 (24614437147)|CUMULATIVE_PROFILING_END

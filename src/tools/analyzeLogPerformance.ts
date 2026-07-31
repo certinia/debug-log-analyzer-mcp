@@ -6,6 +6,7 @@ import { promises as fs } from "fs";
 import { z } from "zod";
 import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
 import { encode } from "@toon-format/toon";
+import { omitEmpty, roundMs, roundPercent } from "./responseShaping.js";
 
 export const analyzeLogPerformanceInputSchema = {
   logFilePath: z
@@ -31,7 +32,7 @@ export type AnalyzeLogArgs = z.infer<
 export const analyzeLogPerformanceToolConfig = {
   title: "Analyze Apex Log Performance",
   description:
-    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations (in ms), SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.",
+    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations (in ms), SOQL/DML counts, the share of total runtime the ranked methods account for, and optimization recommendations. Best for finding which specific methods to optimize. Every method row carries the full column set; only `recommendations` is omitted, and only when nothing stood out.",
   inputSchema: analyzeLogPerformanceInputSchema,
   annotations: {
     title: "Analyze Apex Log Performance",
@@ -61,9 +62,16 @@ export interface SlowMethod {
 export interface LogAnalysisResult {
   totalMethods: number;
   totalExecutionTime: number;
+  /**
+   * Share of total execution time the returned methods account for between them.
+   * A low figure says the cost is spread across the rest of the transaction
+   * rather than concentrated in these methods — the one thing the table itself
+   * does not say.
+   */
+  topMethodsSelfPercentage: number;
   slowestMethods: SlowMethod[];
-  summary: string;
-  recommendations: string[];
+  /** Omitted when nothing stands out; an empty list says the same thing. */
+  recommendations?: string[];
 }
 
 const NS_TO_MS = 1_000_000;
@@ -96,19 +104,35 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
 
   const msMethods = slowestMethods.map((m) => ({
     ...m,
-    duration: m.duration / NS_TO_MS,
-    selfDuration: m.selfDuration / NS_TO_MS,
+    duration: roundMs(m.duration / NS_TO_MS),
+    selfDuration: roundMs(m.selfDuration / NS_TO_MS),
+    selfPercentage: roundPercent(m.selfPercentage),
   }));
 
+  // The column set is fixed so that every call returns the same shape, and so
+  // that a zero SOQL count reads as "none" rather than "not measured".
   const result: LogAnalysisResult = {
     totalMethods: methods.length,
-    totalExecutionTime: apexLog.duration.total / NS_TO_MS,
-    slowestMethods: msMethods,
-    summary: generatePerformanceSummary(
-      msMethods,
-      apexLog.duration.total / NS_TO_MS,
+    totalExecutionTime: roundMs(apexLog.duration.total / NS_TO_MS),
+    topMethodsSelfPercentage: roundPercent(
+      slowestMethods.reduce((total, m) => total + m.selfPercentage, 0),
     ),
-    recommendations: generateRecommendations(msMethods),
+    slowestMethods: msMethods.map((m) => ({
+      name: m.name,
+      duration: m.duration,
+      selfDuration: m.selfDuration,
+      selfPercentage: m.selfPercentage,
+      namespace: m.namespace,
+      lineNumber: m.lineNumber,
+      dmlCount: m.dmlCount,
+      soqlCount: m.soqlCount,
+      dmlRows: m.dmlRows,
+      soqlRows: m.soqlRows,
+      thrownCount: m.thrownCount,
+      soslCount: m.soslCount,
+      soslRows: m.soslRows,
+    })),
+    ...omitEmpty({ recommendations: generateRecommendations(msMethods) }),
   };
 
   return {
@@ -166,61 +190,35 @@ export function extractMethods(
   return methods;
 }
 
-function generatePerformanceSummary(
-  methods: SlowMethod[],
-  totalTimeMs: number,
-): string {
-  if (methods.length === 0) {
-    return "No methods found matching the criteria.";
-  }
-
-  const slowestMethod = methods[0]!;
-  const totalSlowMethodsTime = methods.reduce(
-    (sum, method) => sum + method.selfDuration,
-    0,
-  );
-  const percentageOfTotal =
-    totalTimeMs > 0 ? (totalSlowMethodsTime / totalTimeMs) * 100 : 0;
-
-  return `Analysis found ${methods.length} methods. The slowest method "${slowestMethod.name}" took ${slowestMethod.selfDuration.toFixed(2)}ms (${slowestMethod.selfPercentage.toFixed(1)}% of total execution time). The top ${methods.length} methods account for ${percentageOfTotal.toFixed(1)}% of total execution time.`;
-}
-
+/**
+ * Advice for the worst few methods, in the form the caller cannot derive from the
+ * table: which lever to pull. The figure that triggered each one is already a
+ * column on the method's row, so it is not repeated here.
+ *
+ * An empty list means nothing stood out, which is what omitting the field says.
+ */
 function generateRecommendations(methods: SlowMethod[]): string[] {
-  const recommendations: string[] = [];
-
-  for (const method of methods.slice(0, 3)) {
-    const recommendation = getRecommendation(method);
-    if (recommendation) {
-      recommendations.push(recommendation);
-    }
-  }
-
-  if (recommendations.length === 0) {
-    recommendations.push(
-      "Performance looks good! No obvious bottlenecks detected in the analyzed methods.",
-    );
-  }
-
-  return recommendations;
+  return methods
+    .slice(0, 3)
+    .map(getRecommendation)
+    .filter((recommendation): recommendation is string => recommendation !== null);
 }
 
 function getRecommendation(method: SlowMethod): string | null {
   if (method.selfPercentage > 10 && method.selfDuration > 0.1) {
-    return `Method "${method.name}" consumes ${method.selfPercentage.toFixed(
-      1,
-    )}% self execution time. Consider if it can be optimized to make it faster, check how many times it is called and if that can be reduced.`;
+    return `${method.name}: dominates self time. Check whether it can be made faster, and how often it is called.`;
   }
   if (method.soqlRows > 1000) {
-    return `Method "${method.name}" processes ${method.soqlRows} SOQL rows. Consider adding WHERE clauses or using pagination.`;
+    return `${method.name}: high SOQL row count. Add WHERE clauses or paginate.`;
   }
   if (method.soqlCount > 5) {
-    return `Method "${method.name}" executes ${method.soqlCount} SOQL queries. Consider reducing query count through bulkification or caching.`;
+    return `${method.name}: many SOQL queries. Bulkify or cache.`;
   }
   if (method.dmlCount > 3) {
-    return `Method "${method.name}" performs ${method.dmlCount} DML operations. Consider bulkifying DML operations.`;
+    return `${method.name}: many DML operations. Bulkify them.`;
   }
   if (method.soslCount > 3) {
-    return `Method "${method.name}" executes ${method.soslCount} SOSL searches. Consider reducing search count or caching results.`;
+    return `${method.name}: many SOSL searches. Reduce or cache them.`;
   }
 
   return null;

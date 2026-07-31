@@ -229,7 +229,7 @@ describe("findPerformanceBottlenecks", () => {
         cpuTimeUsed: 8500,
         cpuTimeLimit: 10000,
         cpuUsagePercentage: 85,
-        warning: "High CPU usage detected - consider optimizing algorithms",
+        warning: "High CPU usage - consider optimizing algorithms",
       });
 
       // Verify database analysis - only soqlQueries should be present (>80%)
@@ -257,10 +257,9 @@ describe("findPerformanceBottlenecks", () => {
         ]),
       });
 
-      // Verify governor limit warnings exclude cpuTime (deduplicated with cpuBottlenecks)
-      expect(parsedResult.governorLimitWarnings).toBeDefined();
-      expect(parsedResult.governorLimitWarnings!.cpuTime).toBeUndefined();
-      expect(parsedResult.governorLimitWarnings!.soqlQueries).toBeDefined();
+      // cpuTime and soqlQueries are the only limits over threshold and both already
+      // have a dedicated section, so there is nothing left to warn about.
+      expect(parsedResult.governorLimitWarnings).toBeUndefined();
     });
 
     it('should use "all" as default when analysisType is not specified', async () => {
@@ -305,7 +304,7 @@ describe("findPerformanceBottlenecks", () => {
         cpuTimeUsed: 9000,
         cpuTimeLimit: 10000,
         cpuUsagePercentage: 90,
-        warning: "High CPU usage detected - consider optimizing algorithms",
+        warning: "High CPU usage - consider optimizing algorithms",
       });
     });
 
@@ -530,24 +529,22 @@ describe("findPerformanceBottlenecks", () => {
       const result = await findPerformanceBottlenecks(args);
       const parsedResult = toonDecode(result);
 
-      // cpuTime excluded from governorLimitWarnings (deduplicated with cpuBottlenecks)
+      // Every limit a dedicated section already spelled out is left out here rather
+      // than reported a second time: cpuTime by cpuBottlenecks, the rest by
+      // databaseBottlenecks.
       expect(parsedResult.governorLimitWarnings!.cpuTime).toBeUndefined();
-      // Other limits should be present as structured data
-      expect(parsedResult.governorLimitWarnings!.soqlQueries).toMatchObject({
-        used: 90,
-        limit: 100,
-      });
-      expect(parsedResult.governorLimitWarnings!.dmlStatements).toMatchObject({
-        used: 135,
-        limit: 150,
-      });
-      expect(parsedResult.governorLimitWarnings!.queryRows).toMatchObject({
-        used: 45000,
-        limit: 50000,
-      });
+      expect(parsedResult.governorLimitWarnings!.soqlQueries).toBeUndefined();
+      expect(parsedResult.governorLimitWarnings!.dmlStatements).toBeUndefined();
+      expect(parsedResult.governorLimitWarnings!.queryRows).toBeUndefined();
+      // heapSize has no dedicated section, so it is only reported here.
       expect(parsedResult.governorLimitWarnings!.heapSize).toMatchObject({
         used: 5100000,
         limit: 6000000,
+      });
+      expect(parsedResult.databaseBottlenecks).toMatchObject({
+        soqlQueries: { used: 90, limit: 100, percentage: 90 },
+        dmlStatements: { used: 135, limit: 150, percentage: 90 },
+        queryRows: { used: 45000, limit: 50000, percentage: 90 },
       });
     });
 
@@ -706,7 +703,7 @@ describe("findPerformanceBottlenecks", () => {
 
       // Should identify all bottleneck types
       expect(parsedResult.cpuBottlenecks!.warning).toBe(
-        "High CPU usage detected - consider optimizing algorithms",
+        "High CPU usage - consider optimizing algorithms",
       );
       expect(parsedResult.cpuBottlenecks!.cpuUsagePercentage).toBe(95);
 
@@ -722,14 +719,11 @@ describe("findPerformanceBottlenecks", () => {
       expect(methodBottlenecks.totalMethods).toBe(2);
       expect(methodBottlenecks.methodsByNamespace).toHaveLength(2);
 
-      // Governor warnings should have non-CPU limits as structured data
-      expect(parsedResult.governorLimitWarnings).toBeDefined();
-      expect(parsedResult.governorLimitWarnings!.soqlQueries).toMatchObject({
-        used: 95,
-        limit: 100,
+      // Only heapSize is left to warn about: every other limit over threshold was
+      // already detailed by the CPU or database section.
+      expect(parsedResult.governorLimitWarnings).toEqual({
+        heapSize: { used: 5500000, limit: 6000000 },
       });
-      // cpuTime excluded from governorLimitWarnings (deduplicated)
-      expect(parsedResult.governorLimitWarnings!.cpuTime).toBeUndefined();
     });
 
     it("should handle optimal performance scenario", async () => {

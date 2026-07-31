@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Tool responses are smaller, with no loss of fact.** Every field a response used to carry is still there — the saving comes from shape, from not saying the same thing twice, and from not emitting digits nobody reads. Measured on a real 19 MB log: `get_apex_log_summary` ~305 → ~233 tokens, `analyze_apex_log_performance` ~420 → ~294, `find_performance_bottlenecks` ~93 → ~87 (~25% across the three).
+  - `get_apex_log_summary` returns `governorLimits` as a flat table of `{name, used, limit}` rows instead of thirteen nested objects. All thirteen limits are still listed, including those at zero — "no DML statements ran" has to be answerable from the response.
+  - Durations are rounded to 3 decimal places (ms) and percentages to 1, instead of emitting full float precision.
+  - Zero counts, empty tables and every fixed field are still reported. Only lists of things that happened — `logIssues`, `recommendations` — are omitted, and only when nothing happened.
+- **`analyze_apex_log_performance` no longer returns `summary`.** The prose paragraph restated figures already present in `slowestMethods`. Its one unique fact — what share of the run the returned methods account for — is now the scalar `topMethodsSelfPercentage`. `recommendations` is kept, reworded to say what to do without repeating the numbers, and is omitted when nothing stands out; it no longer claims performance looks good on a log that blew the CPU limit.
+- **`get_apex_log_summary` no longer returns `file`.** The caller supplied the path.
+- **`find_performance_bottlenecks` no longer reports a governor limit twice.** SOQL query, DML statement and query row limits detailed by `databaseBottlenecks` are excluded from `governorLimitWarnings`, as CPU time already was.
+- **`execute_anonymous` only includes the `.gitignore` tip when it just created the output directory**, rather than on every call.
+
+### Added
+
+- **`pnpm run eval`** — an evaluation suite that drives the built server over stdio against committed log fixtures and asserts, per tool, that realistic user questions are still answerable, that no figure is reported twice, that the payload is under a token budget, and that it matches its golden file. It runs in CI, and is the gate for any change to a response shape. See [`tests/eval/README.md`](tests/eval/README.md).
+
 ## [2.0.0] - 2026-07-28
 
 ### Changed

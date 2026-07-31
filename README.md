@@ -58,6 +58,14 @@ Ask your AI assistant to work with Apex debug logs using natural language:
 
 ## Tools Reference
 
+All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept deliberately lean to save tokens — without dropping anything you might need to ask about:
+
+- **Every governor limit, debug category and method column is returned**, including the ones at zero. "How many DML statements did this consume?" is answerable from the response, and `0` means none rather than not measured.
+- **The leanness comes from shape.** Data that used to be nested objects is returned as flat tables, which TOON encodes as one header plus one line per row.
+- **Nothing is reported twice.** No prose summary restates the numbers in the table alongside it, and a governor limit detailed in its own section is not repeated in the generic warnings.
+- **Durations are rounded** to 3 decimal places (ms) and percentages to 1.
+- **Only lists of things that happened are omitted when empty** — log issues, recommendations. Nothing to report means the key is absent.
+
 ### analyze_apex_log_performance
 
 Rank methods in an Apex debug log by self-execution time. Returns method names, durations (in ms), SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.
@@ -71,7 +79,9 @@ Rank methods in an Apex debug log by self-execution time. Returns method names, 
 
 ### get_apex_log_summary
 
-Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, and active namespaces. Best for a quick overview before deeper analysis.
+Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, debug levels and active namespaces. Best for a quick overview before deeper analysis.
+
+All thirteen governor limits are listed as `{name, used, limit}` rows, at zero included, so you can ask what a transaction consumed and get an answer either way. `debugLevels` names every log category and its level, which is what tells you whether a missing detail was absent from the run or simply never logged.
 
 | Parameter     | Type   | Required | Description                                     |
 | ------------- | ------ | -------- | ----------------------------------------------- |
@@ -210,6 +220,7 @@ This server implements the [Model Context Protocol (MCP)](https://modelcontextpr
 - **Runs as a local process** — your AI client spawns the server and communicates locally. No network requests, no API keys.
 - **Uses the same parser as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer)** — battle-tested parsing of the Apex debug log format.
 - **Returns structured data** — all durations in milliseconds, governor limits as used/limit pairs, methods with SOQL/DML counts — so your AI assistant can reason about the results.
+- **Keeps responses lean** — TOON encoding, no duplicated figures, and zero/empty fields omitted, so more of the context window is left for reasoning.
 
 ## Documentation
 
