@@ -7,6 +7,7 @@ import { z } from "zod";
 import { parse, ApexLog } from "../ApexLogParser.js";
 import { type SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
 import { encode } from "@toon-format/toon";
+import { roundMs, roundPercent } from "./responseShaping.js";
 
 export const findPerformanceBottlenecksInputSchema = {
   logFilePath: z
@@ -66,10 +67,15 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
 
   const bottlenecks: BottleneckResult = {};
 
+  // Limits already spelled out by a dedicated section, so the generic warning
+  // block does not report them a second time.
+  const reportedLimits = new Set<string>();
+
   if (hasCpuSection) {
     const cpu = analyzeCPUBottlenecks(apexLog);
     if (Object.keys(cpu).length > 0) {
       bottlenecks.cpuBottlenecks = cpu;
+      reportedLimits.add("cpuTime");
     }
   }
 
@@ -77,6 +83,7 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
     const db = analyzeDatabaseBottlenecks(apexLog);
     if (Object.keys(db).length > 0) {
       bottlenecks.databaseBottlenecks = db;
+      Object.keys(db).forEach((limit) => reportedLimits.add(limit));
     }
   }
 
@@ -87,17 +94,13 @@ export async function findPerformanceBottlenecks(args: BottleneckArgs) {
     }
   }
 
-  const governorWarnings = analyzeGovernorLimits(
-    apexLog,
-    hasCpuSection && bottlenecks.cpuBottlenecks !== undefined,
-  );
+  const governorWarnings = analyzeGovernorLimits(apexLog, reportedLimits);
   if (Object.keys(governorWarnings).length > 0) {
     bottlenecks.governorLimitWarnings = governorWarnings;
   }
 
   if (Object.keys(bottlenecks).length === 0) {
-    bottlenecks.note =
-      "No performance bottlenecks or governor limit warnings found.";
+    bottlenecks.note = "No bottlenecks or governor limit warnings found.";
   }
 
   return {
@@ -118,8 +121,8 @@ function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
     return {
       cpuTimeUsed: used,
       cpuTimeLimit: limit,
-      cpuUsagePercentage: cpuUsagePercent,
-      warning: "High CPU usage detected - consider optimizing algorithms",
+      cpuUsagePercentage: roundPercent(cpuUsagePercent),
+      warning: "High CPU usage - consider optimizing algorithms",
     };
   }
 
@@ -140,7 +143,7 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
     bottlenecks.soqlQueries = {
       used: governorLimits.soqlQueries.used,
       limit: governorLimits.soqlQueries.limit,
-      percentage: soqlPercentage,
+      percentage: roundPercent(soqlPercentage),
     };
   }
 
@@ -155,7 +158,7 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
     bottlenecks.dmlStatements = {
       used: governorLimits.dmlStatements.used,
       limit: governorLimits.dmlStatements.limit,
-      percentage: dmlPercentage,
+      percentage: roundPercent(dmlPercentage),
     };
   }
 
@@ -168,7 +171,7 @@ function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
     bottlenecks.queryRows = {
       used: governorLimits.queryRows.used,
       limit: governorLimits.queryRows.limit,
-      percentage: queryRowsPercentage,
+      percentage: roundPercent(queryRowsPercentage),
     };
   }
 
@@ -190,16 +193,17 @@ function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
     methodsByNamespace: Object.entries(methodsByNamespace).map(([ns, group]) => ({
       namespace: ns,
       methodCount: group.length,
-      totalDuration:
+      totalDuration: roundMs(
         group.reduce((sum: number, m: SlowMethod) => sum + m.duration, 0) /
-        NS_TO_MS,
+          NS_TO_MS,
+      ),
     })),
   };
 }
 
 function analyzeGovernorLimits(
   apexLog: ApexLog,
-  excludeCpuTime: boolean,
+  reportedLimits: Set<string>,
 ): Record<string, unknown> {
   const limits = apexLog.governorLimits;
 
@@ -207,7 +211,7 @@ function analyzeGovernorLimits(
 
   Object.entries(limits).forEach(([key, value]: [string, any]) => {
     if (key === "byNamespace") return;
-    if (excludeCpuTime && key === "cpuTime") return;
+    if (reportedLimits.has(key)) return;
     if (value.limit > 0) {
       const percentage = (value.used / value.limit) * 100;
       if (percentage > WARNING_THRESHOLD) {

@@ -1,0 +1,35 @@
+size: 1274
+totalExecutionTime: 0.561
+totalMethods: 1
+totalSOQLQueries: 0
+totalDMLOperations: 0
+totalSOQLRows: 0
+totalDMLRows: 0
+governorLimits[13]{name,used,limit}:
+  soqlQueries,0,100
+  soslQueries,0,20
+  queryRows,0,50000
+  dmlStatements,0,150
+  publishImmediateDml,0,150
+  dmlRows,0,10000
+  cpuTime,0,10000
+  heapSize,0,6000000
+  callouts,0,100
+  emailInvocations,0,10
+  futureCalls,0,50
+  queueableJobsAddedToQueue,0,50
+  mobileApexPushCalls,0,10
+namespaces[1]: default
+debugLevels[11]{category,level}:
+  APEX_CODE,FINE
+  APEX_PROFILING,NONE
+  CALLOUT,NONE
+  DATA_ACCESS,NONE
+  DB,NONE
+  NBA,NONE
+  SYSTEM,DEBUG
+  VALIDATION,NONE
+  VISUALFORCE,NONE
+  WAVE,NONE
+  WORKFLOW,NONE
+parsingErrors: 0
