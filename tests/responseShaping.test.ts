@@ -3,7 +3,6 @@
  */
 
 import {
-  isEmptyValue,
   omitEmpty,
   roundMs,
   roundPercent,
@@ -37,52 +36,19 @@ describe("responseShaping", () => {
     });
   });
 
-  describe("isEmptyValue", () => {
-    it.each([
-      ["null", null],
-      ["undefined", undefined],
-      ["zero", 0],
-      ["the empty string", ""],
-      ["an empty array", []],
-      ["an empty object", {}],
-    ])("should treat %s as empty", (_label, value) => {
-      expect(isEmptyValue(value)).toBe(true);
-    });
-
-    it.each([
-      ["a non-zero number", 1],
-      ["a negative number", -1],
-      ["a non-empty string", "default"],
-      ["a populated array", [0]],
-      ["a populated object", { used: 0 }],
-    ])("should treat %s as carrying information", (_label, value) => {
-      expect(isEmptyValue(value)).toBe(false);
-    });
-
-    it("should treat false as an answer rather than an absence", () => {
-      // A zero count and an absent count mean the same thing; `success: false` and
-      // an absent `success` do not.
-      expect(isEmptyValue(false)).toBe(false);
-    });
-  });
-
   describe("omitEmpty", () => {
-    it("should drop only the keys that carry no information", () => {
+    it("should drop the lists nothing was added to and keep the rest", () => {
       expect(
         omitEmpty({
-          totalMethods: 3,
-          totalSOQLQueries: 0,
-          namespaces: [],
-          governorLimits: {},
-          note: "",
-          parsingErrors: null,
-          success: false,
+          logIssues: [{ type: "error" }],
+          recommendations: [],
+          parsingErrors: [],
         }),
-      ).toEqual({ totalMethods: 3, success: false });
+      ).toEqual({ logIssues: [{ type: "error" }] });
     });
 
-    it("should return an empty object when nothing survives", () => {
-      expect(omitEmpty({ a: 0, b: [] })).toEqual({});
+    it("should return an empty object when every list is empty", () => {
+      expect(omitEmpty({ logIssues: [], recommendations: [] })).toEqual({});
     });
   });
 

@@ -25,37 +25,19 @@ export function roundPercent(percent: number): number {
 }
 
 /**
- * A value that tells the reader nothing the omission wouldn't.
+ * Drop the lists that nothing was added to.
  *
- * `false` is deliberately not empty: it is an answer.
+ * For occurrence lists only — issues found, recommendations made, errors
+ * encountered — where an absent key unambiguously means "nothing occurred". The
+ * signature takes only lists on purpose: a fixed-schema scalar must never go
+ * through here, because an absent count cannot be told apart from a count that
+ * was never parsed, so a zero is reported as a zero.
  */
-export function isEmptyValue(value: unknown): boolean {
-  if (value === null || value === undefined || value === 0 || value === "") {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.length === 0;
-  }
-  if (typeof value === "object") {
-    return Object.keys(value).length === 0;
-  }
-  return false;
-}
-
-/**
- * Drop the keys that carry no information.
- *
- * For occurrence lists and optional sections only — issues found,
- * recommendations made, errors encountered — where an absent key unambiguously
- * means "nothing occurred". Never pass fixed-schema scalars through this: an
- * absent count cannot be told apart from a count that was never parsed, so a
- * zero is reported as a zero.
- */
-export function omitEmpty<T extends Record<string, unknown>>(
+export function omitEmpty<T extends Record<string, readonly unknown[]>>(
   obj: T,
 ): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(([, value]) => !isEmptyValue(value)),
+    Object.entries(obj).filter(([, list]) => list.length > 0),
   ) as Partial<T>;
 }
 

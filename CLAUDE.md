@@ -32,7 +32,7 @@ pnpm start
   - Uses stdio transport for communication
   - Handles file validation, log parsing, analysis, and anonymous Apex execution
 
-- **src/tools/responseShaping.ts**: Shared helpers for keeping responses lean — `omitEmpty`, `pruneColumns`, `roundMs`, `roundPercent`
+- **src/tools/responseShaping.ts**: Shared helpers for keeping responses lean — `omitEmpty`, `toLimitRows`, `roundMs`, `roundPercent`
 
 - **src/ApexLogParser.ts**: Complex log parsing engine (33k+ tokens)
   - Exports `parse()` function and `ApexLogParser` class

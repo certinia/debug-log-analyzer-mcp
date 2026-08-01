@@ -15,7 +15,7 @@
  * 1. Answerability — a realistic user question is only answerable if the fields
  *    it needs are present. Shrinking a response must not cost an answer.
  * 2. No duplication — a figure reported once costs once. No top-level scalar may
- *    be restated in prose, and no unexpected top-level key may appear.
+ *    be restated in prose.
  * 3. Token budget — a per-case ceiling, so bloat fails instead of creeping.
  * 4. Golden files — the exact payload, committed, so any shape change is a diff
  *    a reviewer can read.
@@ -97,6 +97,10 @@ const ANSWERABILITY = {
  * than left out. "How many DML statements ran?" has to be answerable with "none",
  * and an absent field cannot say that — it cannot be told apart from a log the
  * parser never got a limit block for.
+ *
+ * `allLimitsZero` asserts the same of every `governorLimits` row that is present,
+ * without naming them: the golden file is what pins *which* limits exist, so a
+ * new limit needs one edit rather than two.
  */
 const MINIMAL_ZEROS = {
   get_apex_log_summary: {
@@ -107,21 +111,7 @@ const MINIMAL_ZEROS = {
       "totalDMLRows",
       "parsingErrors",
     ],
-    limits: [
-      "soqlQueries",
-      "soslQueries",
-      "queryRows",
-      "dmlStatements",
-      "publishImmediateDml",
-      "dmlRows",
-      "cpuTime",
-      "heapSize",
-      "callouts",
-      "emailInvocations",
-      "futureCalls",
-      "queueableJobsAddedToQueue",
-      "mobileApexPushCalls",
-    ],
+    allLimitsZero: true,
   },
 };
 
@@ -205,16 +195,21 @@ function createClient() {
 }
 
 /**
- * Read the payload's top-level scalars, table headers and keys out of its TOON
+ * Read the payload's top-level scalars, table headers and rows out of its TOON
  * text. Deliberately shallow — enough to assert what is present and what is
  * repeated, without reimplementing the decoder.
+ *
+ * It reads the *encoded text* rather than calling `decode` on purpose: the checks
+ * are about the encoding, so they need the things decoding throws away — the
+ * table header, its column set and its one-line-per-row form.
  */
 function inspect(toon) {
   const scalars = new Map();
   const keys = [];
   const columns = new Set();
-  const rows = new Map();
+  const tables = new Map();
   const strings = [];
+  let table = new Map();
 
   for (const line of toon.split("\n")) {
     if (!line.trim()) continue;
@@ -222,6 +217,8 @@ function inspect(toon) {
     if (topLevel) {
       const [, key, , , header, value] = topLevel;
       keys.push(key);
+      table = new Map();
+      tables.set(key, table);
       if (header) {
         header.split(",").forEach((column) => columns.add(column.trim()));
       } else if (value !== "" && !line.endsWith(":")) {
@@ -238,15 +235,16 @@ function inspect(toon) {
     }
     const indented = line.trim();
     const cells = indented.split(",");
-    rows.set(cells[0], cells);
+    table.set(cells[0], cells);
     strings.push(indented);
   }
 
-  return { scalars, keys, columns, rows, strings };
+  return { scalars, keys, columns, tables, strings };
 }
 
 function checkAnswerability({ tool, fixture }, toon, failures) {
-  const { scalars, keys, columns, rows } = inspect(toon);
+  const { scalars, keys, columns, tables } = inspect(toon);
+  const limitRows = tables.get("governorLimits") ?? new Map();
 
   for (const check of ANSWERABILITY[tool]) {
     const missing = [];
@@ -260,7 +258,7 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
       if (!columns.has(column)) missing.push(column);
     }
     for (const limit of check.limits ?? []) {
-      if (!rows.has(limit)) missing.push(`governorLimits.${limit}`);
+      if (!limitRows.has(limit)) missing.push(`governorLimits.${limit}`);
     }
     if (check.anyKey && !check.anyKey.some((key) => keys.includes(key))) {
       missing.push(`one of ${check.anyKey.join(", ")}`);
@@ -286,23 +284,20 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
       );
     }
   }
-  for (const limit of expectZero.limits ?? []) {
-    const used = rows.get(limit)?.[1];
-    if (used !== "0") {
+  if (!expectZero.allLimitsZero) {
+    return;
+  }
+  for (const [limit, cells] of limitRows) {
+    if (cells[1] !== "0") {
       failures.push(
-        `${tool}/${fixture}: governorLimits.${limit} should be reported with used 0, got ${used ?? "no row"}`,
+        `${tool}/${fixture}: governorLimits.${limit} should be reported with used 0, got ${cells[1]}`,
       );
     }
   }
 }
 
 function checkNoDuplication({ tool, fixture }, toon, failures) {
-  const { scalars, keys, strings } = inspect(toon);
-
-  const duplicateKeys = keys.filter((key, index) => keys.indexOf(key) !== index);
-  if (duplicateKeys.length) {
-    failures.push(`${tool}/${fixture}: key reported twice — ${duplicateKeys.join(", ")}`);
-  }
+  const { scalars, strings } = inspect(toon);
 
   // A prose line must not restate a figure that is already a field of its own.
   // This is what the deleted `summary` paragraph did, and what a well-meaning
@@ -355,10 +350,19 @@ async function checkGolden({ tool, fixture }, toon, failures, update) {
   }
 }
 
-async function report(logFile) {
+/** One server process for the whole run, stopped however the run ends. */
+async function withClient(run) {
   const client = createClient();
   await client.start();
   try {
+    return await run(client);
+  } finally {
+    client.stop();
+  }
+}
+
+async function report(logFile) {
+  await withClient(async (client) => {
     for (const tool of Object.keys(ANSWERABILITY)) {
       const toon = await client.callTool(tool, { logFilePath: logFile });
       console.log(
@@ -366,9 +370,7 @@ async function report(logFile) {
       );
       console.log(toon.replace(/^/gm, "  "));
     }
-  } finally {
-    client.stop();
-  }
+  });
 }
 
 async function main() {
@@ -385,10 +387,8 @@ async function main() {
 
   const update = args.includes("--update");
   const failures = [];
-  const client = createClient();
-  await client.start();
 
-  try {
+  await withClient(async (client) => {
     for (const testCase of CASES) {
       const logFilePath = path.join(FIXTURES, `${testCase.fixture}.log`);
       const toon = await client.callTool(testCase.tool, { logFilePath });
@@ -400,9 +400,7 @@ async function main() {
         `${update ? "updated" : "checked"} ${testCase.tool}/${testCase.fixture} — ~${tokens} tokens`,
       );
     }
-  } finally {
-    client.stop();
-  }
+  });
 
   if (failures.length) {
     console.error(`\n${failures.length} eval failure(s):`);

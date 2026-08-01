@@ -102,36 +102,33 @@ export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   // Take top N methods
   const slowestMethods = methods.slice(0, topMethods);
 
-  const msMethods = slowestMethods.map((m) => ({
-    ...m,
+  // The column set is spelled out rather than spread so that the compiler fails
+  // the build if a `SlowMethod` field is ever added without deciding whether it
+  // belongs on the wire, and so the columns arrive in a readable order. It is a
+  // fixed set: a zero SOQL count reads as "none" rather than "not measured".
+  const msMethods: SlowMethod[] = slowestMethods.map((m) => ({
+    name: m.name,
     duration: roundMs(m.duration / NS_TO_MS),
     selfDuration: roundMs(m.selfDuration / NS_TO_MS),
     selfPercentage: roundPercent(m.selfPercentage),
+    namespace: m.namespace,
+    lineNumber: m.lineNumber,
+    dmlCount: m.dmlCount,
+    soqlCount: m.soqlCount,
+    dmlRows: m.dmlRows,
+    soqlRows: m.soqlRows,
+    thrownCount: m.thrownCount,
+    soslCount: m.soslCount,
+    soslRows: m.soslRows,
   }));
 
-  // The column set is fixed so that every call returns the same shape, and so
-  // that a zero SOQL count reads as "none" rather than "not measured".
   const result: LogAnalysisResult = {
     totalMethods: methods.length,
     totalExecutionTime: roundMs(apexLog.duration.total / NS_TO_MS),
     topMethodsSelfPercentage: roundPercent(
       slowestMethods.reduce((total, m) => total + m.selfPercentage, 0),
     ),
-    slowestMethods: msMethods.map((m) => ({
-      name: m.name,
-      duration: m.duration,
-      selfDuration: m.selfDuration,
-      selfPercentage: m.selfPercentage,
-      namespace: m.namespace,
-      lineNumber: m.lineNumber,
-      dmlCount: m.dmlCount,
-      soqlCount: m.soqlCount,
-      dmlRows: m.dmlRows,
-      soqlRows: m.soqlRows,
-      thrownCount: m.thrownCount,
-      soslCount: m.soslCount,
-      soslRows: m.soslRows,
-    })),
+    slowestMethods: msMethods,
     ...omitEmpty({ recommendations: generateRecommendations(msMethods) }),
   };
 
