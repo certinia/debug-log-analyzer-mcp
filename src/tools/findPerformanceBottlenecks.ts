@@ -2,12 +2,12 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
 import { z } from "zod";
-import { parse, ApexLog } from "../ApexLogParser.js";
+import { ApexLog } from "../ApexLogParser.js";
 import { type SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
 import { encode } from "@toon-format/toon";
-import { roundMs, roundPercent } from "./responseShaping.js";
+import { loadApexLog } from "./apexLogSource.js";
+import { NS_TO_MS, roundMs, roundPercent } from "./responseShaping.js";
 
 export const findPerformanceBottlenecksInputSchema = {
   logFilePath: z
@@ -46,19 +46,10 @@ export const findPerformanceBottlenecksToolConfig = {
 
 export const WARNING_THRESHOLD = 80;
 
-const NS_TO_MS = 1_000_000;
-
 export async function findPerformanceBottlenecks(args: BottleneckArgs) {
   const { logFilePath, analysisType = "all" } = args;
 
-  try {
-    await fs.access(logFilePath);
-  } catch {
-    throw new Error(`Log file not found: ${logFilePath}`);
-  }
-
-  const logContent = await fs.readFile(logFilePath, "utf-8");
-  const apexLog = parse(logContent);
+  const apexLog = await loadApexLog(logFilePath);
 
   const hasCpuSection = analysisType === "cpu" || analysisType === "all";
 

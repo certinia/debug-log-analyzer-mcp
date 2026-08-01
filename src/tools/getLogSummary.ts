@@ -2,11 +2,16 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
 import { z } from "zod";
-import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
+import { ApexLog } from "../ApexLogParser.js";
 import { encode } from "@toon-format/toon";
-import { omitEmpty, roundMs, toLimitRows } from "./responseShaping.js";
+import { loadApexLog, isMethodNode, walkLog } from "./apexLogSource.js";
+import {
+  NS_TO_MS,
+  omitEmpty,
+  roundMs,
+  toLimitRows,
+} from "./responseShaping.js";
 
 export const getLogSummaryInputSchema = {
   logFilePath: z
@@ -29,19 +34,10 @@ export const getLogSummaryToolConfig = {
   },
 };
 
-const NS_TO_MS = 1_000_000;
-
 export async function getLogSummary(args: LogSummaryArgs) {
   const { logFilePath } = args;
 
-  try {
-    await fs.access(logFilePath);
-  } catch {
-    throw new Error(`Log file not found: ${logFilePath}`);
-  }
-
-  const logContent = await fs.readFile(logFilePath, "utf-8");
-  const apexLog = parse(logContent);
+  const apexLog = await loadApexLog(logFilePath);
 
   const logIssues = apexLog.logIssues.map((issue) => ({
     type: issue.type,
@@ -81,17 +77,10 @@ export async function getLogSummary(args: LogSummaryArgs) {
 
 function countMethods(apexLog: ApexLog): number {
   let count = 0;
-  const traverse = (node: LogLine) => {
-    if (
-      node.type === "METHOD_ENTRY" ||
-      (node as any).subCategory === "Method"
-    ) {
+  walkLog(apexLog, (node) => {
+    if (isMethodNode(node)) {
       count++;
     }
-    if (node.children) {
-      node.children.forEach((child: LogLine) => traverse(child));
-    }
-  };
-  traverse(apexLog);
+  });
   return count;
 }

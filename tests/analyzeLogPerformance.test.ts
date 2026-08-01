@@ -2,7 +2,8 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
+import { promises as fs, type Stats } from "fs";
+import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
   analyzeLogPerformance,
   extractMethods,
@@ -17,7 +18,7 @@ import { decode } from "@toon-format/toon";
 // Mock file system operations
 jest.mock("fs", () => ({
   promises: {
-    access: jest.fn(),
+    stat: jest.fn(),
     readFile: jest.fn(),
   },
 }));
@@ -28,10 +29,14 @@ jest.mock("../src/ApexLogParser", () => ({
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
 const mockedParse = parse as jest.MockedFunction<typeof parse>;
+const mockStats = { mtimeMs: 1, size: 1 } as Stats;
 
 describe("analyzeLogPerformance", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // The suites reuse one path with different content, which the cache would
+    // otherwise hide.
+    clearApexLogCache();
   });
 
   describe("Tool Configuration", () => {
@@ -56,13 +61,13 @@ describe("analyzeLogPerformance", () => {
   describe("File Validation", () => {
     it("should throw error when file does not exist", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/nonexistent/file.log" };
-      mockedFs.access.mockRejectedValue(new Error("File not found"));
+      mockedFs.stat.mockRejectedValue(new Error("File not found"));
 
       await expect(analyzeLogPerformance(args)).rejects.toThrow(
         "Log file not found: /nonexistent/file.log",
       );
 
-      expect(mockedFs.access).toHaveBeenCalledWith("/nonexistent/file.log");
+      expect(mockedFs.stat).toHaveBeenCalledWith("/nonexistent/file.log");
     });
 
     it("should proceed when file exists", async () => {
@@ -70,13 +75,13 @@ describe("analyzeLogPerformance", () => {
       const mockLogContent = "mock log content";
       const mockApexLog = createMockApexLog();
 
-      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.stat.mockResolvedValue(mockStats);
       mockedFs.readFile.mockResolvedValue(mockLogContent);
       mockedParse.mockReturnValue(mockApexLog);
 
       const result = await analyzeLogPerformance(args);
 
-      expect(mockedFs.access).toHaveBeenCalledWith("/valid/file.log");
+      expect(mockedFs.stat).toHaveBeenCalledWith("/valid/file.log");
       expect(mockedFs.readFile).toHaveBeenCalledWith(
         "/valid/file.log",
         "utf-8",
@@ -304,7 +309,7 @@ describe("analyzeLogPerformance", () => {
     it("should handle parsing errors gracefully", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
 
-      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.stat.mockResolvedValue(mockStats);
       mockedFs.readFile.mockResolvedValue("invalid log content");
       mockedParse.mockImplementation(() => {
         throw new Error("Parsing failed");
@@ -318,7 +323,7 @@ describe("analyzeLogPerformance", () => {
     it("should handle file read errors", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
 
-      mockedFs.access.mockResolvedValue(undefined);
+      mockedFs.stat.mockResolvedValue(mockStats);
       mockedFs.readFile.mockRejectedValue(new Error("Permission denied"));
 
       await expect(analyzeLogPerformance(args)).rejects.toThrow(
@@ -532,7 +537,7 @@ describe("analyzeLogPerformance", () => {
 
   // Helper functions for creating mock data
   function setupMocksForSuccess(mockApexLog: any): void {
-    mockedFs.access.mockResolvedValue(undefined);
+    mockedFs.stat.mockResolvedValue(mockStats);
     mockedFs.readFile.mockResolvedValue("mock log content");
     mockedParse.mockReturnValue(mockApexLog);
   }

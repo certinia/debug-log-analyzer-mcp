@@ -2,13 +2,14 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
+import { promises as fs, type Stats } from "fs";
 
 import {
   getLogSummary,
   LogSummaryArgs,
   getLogSummaryToolConfig,
 } from "../src/tools/getLogSummary";
+import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
   parse,
   ApexLog,
@@ -23,7 +24,7 @@ import { decode } from "@toon-format/toon";
 // Mock the dependencies
 jest.mock("fs", () => ({
   promises: {
-    access: jest.fn(),
+    stat: jest.fn(),
     readFile: jest.fn(),
   },
 }));
@@ -34,6 +35,7 @@ jest.mock("../src/ApexLogParser", () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockParse = parse as jest.MockedFunction<typeof parse>;
+const mockStats = { mtimeMs: 1, size: 1 } as Stats;
 
 // Helper function to create a mock LogLine
 const createMockLogLine = (
@@ -70,6 +72,9 @@ const createMockLogLine = (
 describe("getLogSummary", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // The suites reuse one path with different content, which the cache would
+    // otherwise hide.
+    clearApexLogCache();
   });
 
   describe("tool configuration", () => {
@@ -182,7 +187,7 @@ describe("getLogSummary", () => {
       const mockLogContent = "mock log content";
       const mockApexLog = createMockApexLog();
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue(mockLogContent);
       mockParse.mockReturnValue(mockApexLog);
 
@@ -192,7 +197,7 @@ describe("getLogSummary", () => {
 
       const result = await getLogSummary(args);
 
-      expect(mockFs.access).toHaveBeenCalledWith("/path/to/test-log.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/test-log.log");
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/test-log.log",
         "utf-8",
@@ -242,7 +247,7 @@ describe("getLogSummary", () => {
         ] as any,
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -268,7 +273,7 @@ describe("getLogSummary", () => {
         namespaces: ["default", "CustomApp", "ThirdParty"],
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -301,7 +306,7 @@ describe("getLogSummary", () => {
         parsingErrors: ["Unknown log event type: CUSTOM_EVENT"],
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -335,7 +340,7 @@ describe("getLogSummary", () => {
         children: mockChildren,
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -379,7 +384,7 @@ describe("getLogSummary", () => {
         children: [],
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -415,7 +420,7 @@ describe("getLogSummary", () => {
       ];
 
       for (const logFilePath of paths) {
-        mockFs.access.mockResolvedValue(undefined);
+        mockFs.stat.mockResolvedValue(mockStats);
         mockFs.readFile.mockResolvedValue("mock log content");
         mockParse.mockReturnValue(createMockApexLog());
 
@@ -432,7 +437,7 @@ describe("getLogSummary", () => {
   describe("error handling", () => {
     it("should throw an error when log file does not exist", async () => {
       const fileNotFoundError = new Error("ENOENT: no such file or directory");
-      mockFs.access.mockRejectedValue(fileNotFoundError);
+      mockFs.stat.mockRejectedValue(fileNotFoundError);
 
       const args: LogSummaryArgs = {
         logFilePath: "/path/to/nonexistent.log",
@@ -442,14 +447,14 @@ describe("getLogSummary", () => {
         "Log file not found: /path/to/nonexistent.log",
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith("/path/to/nonexistent.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/nonexistent.log");
       expect(mockFs.readFile).not.toHaveBeenCalled();
       expect(mockParse).not.toHaveBeenCalled();
     });
 
     it("should throw an error when file access check fails for other reasons", async () => {
       const permissionError = new Error("EACCES: permission denied");
-      mockFs.access.mockRejectedValue(permissionError);
+      mockFs.stat.mockRejectedValue(permissionError);
 
       const args: LogSummaryArgs = {
         logFilePath: "/path/to/restricted.log",
@@ -461,7 +466,7 @@ describe("getLogSummary", () => {
     });
 
     it("should propagate file read errors", async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       const readError = new Error("Failed to read file");
       mockFs.readFile.mockRejectedValue(readError);
 
@@ -471,7 +476,7 @@ describe("getLogSummary", () => {
 
       await expect(getLogSummary(args)).rejects.toThrow("Failed to read file");
 
-      expect(mockFs.access).toHaveBeenCalledWith("/path/to/unreadable.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/unreadable.log");
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/unreadable.log",
         "utf-8",
@@ -480,7 +485,7 @@ describe("getLogSummary", () => {
     });
 
     it("should propagate parsing errors", async () => {
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("invalid log content");
       const parseError = new Error("Failed to parse log");
       mockParse.mockImplementation(() => {
@@ -493,7 +498,7 @@ describe("getLogSummary", () => {
 
       await expect(getLogSummary(args)).rejects.toThrow("Failed to parse log");
 
-      expect(mockFs.access).toHaveBeenCalledWith("/path/to/corrupted.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/corrupted.log");
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/corrupted.log",
         "utf-8",
@@ -509,7 +514,7 @@ describe("getLogSummary", () => {
         parsingErrors: [], // empty parsing errors
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -543,7 +548,7 @@ describe("getLogSummary", () => {
         children: mockChildren,
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -579,7 +584,7 @@ describe("getLogSummary", () => {
         children: mockChildren,
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -607,7 +612,7 @@ describe("getLogSummary", () => {
         children: mockChildren,
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -645,7 +650,7 @@ describe("getLogSummary", () => {
         governorLimits: customGovernorLimits,
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 
@@ -698,7 +703,7 @@ describe("getLogSummary", () => {
         governorLimits: maxGovernorLimits,
       });
 
-      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue(mockStats);
       mockFs.readFile.mockResolvedValue("mock log content");
       mockParse.mockReturnValue(mockApexLog);
 

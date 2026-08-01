@@ -2,11 +2,16 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
 import { z } from "zod";
-import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
+import { ApexLog } from "../ApexLogParser.js";
 import { encode } from "@toon-format/toon";
-import { omitEmpty, roundMs, roundPercent } from "./responseShaping.js";
+import { loadApexLog, isMethodNode, walkLog } from "./apexLogSource.js";
+import {
+  NS_TO_MS,
+  omitEmpty,
+  roundMs,
+  roundPercent,
+} from "./responseShaping.js";
 
 export const analyzeLogPerformanceInputSchema = {
   logFilePath: z
@@ -71,21 +76,10 @@ export interface LogAnalysisResult {
   recommendations?: string[];
 }
 
-const NS_TO_MS = 1_000_000;
-
 export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
   const { logFilePath, topMethods = 10, minDuration = 0, namespace } = args;
 
-  // Validate file exists
-  try {
-    await fs.access(logFilePath);
-  } catch {
-    throw new Error(`Log file not found: ${logFilePath}`);
-  }
-
-  // Read and parse log file
-  const logContent = await fs.readFile(logFilePath, "utf-8");
-  const apexLog = parse(logContent);
+  const apexLog = await loadApexLog(logFilePath);
 
   // Convert ms input to ns for internal filtering
   const minDurationNs = minDuration * NS_TO_MS;
@@ -147,40 +141,29 @@ export function extractMethods(
   const methods: SlowMethod[] = [];
   const totalTime = apexLog.duration.total;
 
-  const traverse = (node: LogLine) => {
-    if (
-      node.type === "CODE_UNIT_STARTED" || // Entry point
-      node.type === "METHOD_ENTRY" || // Methods
-      (node as any).subCategory === "Method"
-    ) {
-      if (node.duration.total >= minDuration) {
-        if (!namespaceFilter || node.namespace === namespaceFilter) {
-          methods.push({
-            name: node.text || "Unknown Method",
-            duration: node.duration.total,
-            selfDuration: node.duration.self,
-            namespace: node.namespace || "default",
-            lineNumber: node.lineNumber,
-            dmlCount: node.dmlCount.total,
-            soqlCount: node.soqlCount.total,
-            dmlRows: node.dmlRowCount.total,
-            soqlRows: node.soqlRowCount.total,
-            thrownCount: node.totalThrownCount,
-            soslCount: node.soslCount.total,
-            soslRows: node.soslRowCount.total,
-            selfPercentage:
-              totalTime > 0 ? (node.duration.self / totalTime) * 100 : 0,
-          });
-        }
-      }
-    }
+  walkLog(apexLog, (node) => {
+    if (!isMethodNode(node)) return;
+    if (node.duration.total < minDuration) return;
+    if (namespaceFilter && node.namespace !== namespaceFilter) return;
 
-    if (node.children) {
-      node.children.forEach((child: LogLine) => traverse(child));
-    }
-  };
+    methods.push({
+      name: node.text || "Unknown Method",
+      duration: node.duration.total,
+      selfDuration: node.duration.self,
+      namespace: node.namespace || "default",
+      lineNumber: node.lineNumber,
+      dmlCount: node.dmlCount.total,
+      soqlCount: node.soqlCount.total,
+      dmlRows: node.dmlRowCount.total,
+      soqlRows: node.soqlRowCount.total,
+      thrownCount: node.totalThrownCount,
+      soslCount: node.soslCount.total,
+      soslRows: node.soslRowCount.total,
+      selfPercentage:
+        totalTime > 0 ? (node.duration.self / totalTime) * 100 : 0,
+    });
+  });
 
-  traverse(apexLog);
   return methods;
 }
 

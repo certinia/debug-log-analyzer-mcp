@@ -14,6 +14,9 @@
 
 import type { GovernorLimits, Limits } from "../ApexLogParser.js";
 
+/** The parser works in nanoseconds; every reported duration is milliseconds. */
+export const NS_TO_MS = 1_000_000;
+
 /** Durations are reported in ms; 3dp keeps microsecond resolution without float noise. */
 export function roundMs(ms: number): number {
   return Math.round(ms * 1000) / 1000;

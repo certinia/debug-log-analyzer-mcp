@@ -2,8 +2,9 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
+import { promises as fs, type Stats } from "fs";
 
+import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
   findPerformanceBottlenecks,
   BottleneckArgs,
@@ -17,7 +18,7 @@ import { decode } from "@toon-format/toon";
 // Mock dependencies
 jest.mock("fs", () => ({
   promises: {
-    access: jest.fn(),
+    stat: jest.fn(),
     readFile: jest.fn(),
   },
 }));
@@ -35,6 +36,7 @@ const mockParse = parse as jest.MockedFunction<typeof parse>;
 const mockExtractMethods = extractMethods as jest.MockedFunction<
   typeof extractMethods
 >;
+const mockStats = { mtimeMs: 1, size: 1 } as Stats;
 
 // Helper function to create mock governor limits
 function createMockGovernorLimits(
@@ -150,7 +152,10 @@ describe("findPerformanceBottlenecks", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFs.access.mockResolvedValue(undefined);
+    // The suites reuse one path with different content, which the cache would
+    // otherwise hide.
+    clearApexLogCache();
+    mockFs.stat.mockResolvedValue(mockStats);
     mockFs.readFile.mockResolvedValue(mockLogContent);
   });
 
@@ -166,13 +171,13 @@ describe("findPerformanceBottlenecks", () => {
   describe("File validation and error handling", () => {
     it("should throw an error if log file does not exist", async () => {
       const args: BottleneckArgs = { logFilePath: "/nonexistent/file.log" };
-      mockFs.access.mockRejectedValue(new Error("File not found"));
+      mockFs.stat.mockRejectedValue(new Error("File not found"));
 
       await expect(findPerformanceBottlenecks(args)).rejects.toThrow(
         "Log file not found: /nonexistent/file.log",
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith("/nonexistent/file.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/nonexistent/file.log");
       expect(mockFs.readFile).not.toHaveBeenCalled();
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -185,7 +190,7 @@ describe("findPerformanceBottlenecks", () => {
         "Permission denied",
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith(mockLogFilePath);
+      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath);
       expect(mockFs.readFile).toHaveBeenCalledWith(mockLogFilePath, "utf-8");
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -200,7 +205,7 @@ describe("findPerformanceBottlenecks", () => {
         "Invalid log format",
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith(mockLogFilePath);
+      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath);
       expect(mockFs.readFile).toHaveBeenCalledWith(mockLogFilePath, "utf-8");
       expect(mockParse).toHaveBeenCalledWith(mockLogContent);
     });
