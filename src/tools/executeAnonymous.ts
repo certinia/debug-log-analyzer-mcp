@@ -7,6 +7,7 @@ import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   getOrCreateDebugLevelId,
+  DEFAULT_TRACE_CONFIG,
   LOG_LEVELS,
   TRACE_CATEGORIES,
   type DebugLevelInput,
@@ -28,6 +29,23 @@ type ApexLogRecord = {
 };
 
 const logLevelSchema = z.enum(LOG_LEVELS);
+
+/**
+ * The defaults, read from `DEFAULT_TRACE_CONFIG` so the description cannot go
+ * stale. Categories are grouped by level to keep the wire text short:
+ * "apexCode, workflow FINE; callout DEBUG".
+ */
+function defaultLevelsClause(): string {
+  const byLevel = Object.entries(DEFAULT_TRACE_CONFIG).reduce(
+    (acc, [category, level]) =>
+      acc.set(level, [...(acc.get(level) ?? []), category]),
+    new Map<string, string[]>(),
+  );
+
+  return [...byLevel]
+    .map(([level, categories]) => `${categories.join(", ")} ${level}`)
+    .join("; ");
+}
 
 export const executeAnonymousInputSchema = {
   apex: z.string().describe("The anonymous Apex to be executed"),
@@ -53,7 +71,7 @@ export const executeAnonymousInputSchema = {
     ])
     .optional()
     .describe(
-      'Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: database FINEST; apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; nba, wave INFO.',
+      `Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: ${defaultLevelsClause()}.`,
     ),
 };
 

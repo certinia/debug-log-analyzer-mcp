@@ -35,7 +35,8 @@ export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
 
 export type TraceConfig = Partial<Record<TraceCategory, LogLevel>>;
 
-const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
+/** The only place the per-category defaults live. */
+export const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
   apexCode: "FINE",
   apexProfiling: "FINE",
   callout: "DEBUG",
@@ -51,8 +52,10 @@ const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
 export type DebugLevelInput = "default" | LogLevel | TraceConfig;
 
 function isLogLevel(value: DebugLevelInput): value is LogLevel {
-  const levels: readonly string[] = LOG_LEVELS;
-  return typeof value === "string" && levels.includes(value);
+  return (
+    typeof value === "string" &&
+    (LOG_LEVELS as readonly string[]).includes(value)
+  );
 }
 
 function resolveLevels(debugLevel: DebugLevelInput): Record<string, string> {
