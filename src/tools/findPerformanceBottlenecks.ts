@@ -17,7 +17,7 @@ export const findPerformanceBottlenecksInputSchema = {
     .enum(["cpu", "database", "methods", "all"])
     .optional()
     .describe(
-      'Type of analysis: "cpu" checks CPU time governor limit, "database" checks SOQL query/DML statement/query row limits, "methods" groups methods by namespace with duration totals, "all" runs all three (default)',
+      "What to check: cpu = the CPU time limit, database = the SOQL query, DML statement and query row limits, methods = duration totals per namespace, all = all three (default).",
     ),
 };
 
@@ -39,7 +39,6 @@ export const findPerformanceBottlenecksToolConfig = {
     "Check whether an Apex log transaction is approaching governor limits (flags usage above 80%). Analyzes CPU time, SOQL/DML limits, query rows, and method execution patterns by namespace. Best for checking if a transaction is at risk of hitting governor limits.",
   inputSchema: findPerformanceBottlenecksInputSchema,
   annotations: {
-    title: "Find Performance Bottlenecks",
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: true,

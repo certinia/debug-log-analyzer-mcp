@@ -7,6 +7,8 @@ import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   getOrCreateDebugLevelId,
+  LOG_LEVELS,
+  TRACE_CATEGORIES,
   type DebugLevelInput,
 } from "../salesforce/debugLevels.js";
 import { ensureTraceFlag } from "../salesforce/traceFlags.js";
@@ -25,22 +27,7 @@ type ApexLogRecord = {
   DurationMilliseconds: number;
 };
 
-const LOG_LEVEL_ENUM = [
-  "NONE",
-  "ERROR",
-  "WARN",
-  "INFO",
-  "DEBUG",
-  "FINE",
-  "FINER",
-  "FINEST",
-] as const;
-
-const logLevelSchema = z.enum(LOG_LEVEL_ENUM);
-
-function logLevelProperty(description: string) {
-  return logLevelSchema.optional().describe(description);
-}
+const logLevelSchema = z.enum(LOG_LEVELS);
 
 export const executeAnonymousInputSchema = {
   apex: z.string().describe("The anonymous Apex to be executed"),
@@ -56,39 +43,17 @@ export const executeAnonymousInputSchema = {
     .describe(
       "Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root.",
     ),
+  // The enums already list the levels and the categories, so the description
+  // says only what they cannot: what each of the three forms does, and the
+  // per-category defaults.
   debugLevel: z
     .union([
-      z
-        .enum(["default", ...LOG_LEVEL_ENUM])
-        .describe(
-          'Use "default" to reset to defaults, or a log level (e.g. "FINEST") to set all categories to that level.',
-        ),
-      z
-        .object({
-          apexCode: logLevelProperty("Apex code log level (default: FINE)"),
-          apexProfiling: logLevelProperty(
-            "Apex profiling log level (default: FINE)",
-          ),
-          callout: logLevelProperty("Callout log level (default: DEBUG)"),
-          database: logLevelProperty("Database log level (default: FINEST)"),
-          nba: logLevelProperty(
-            "NBA (Next Best Action) log level (default: INFO)",
-          ),
-          system: logLevelProperty("System log level (default: DEBUG)"),
-          validation: logLevelProperty("Validation log level (default: DEBUG)"),
-          visualforce: logLevelProperty(
-            "Visualforce log level (default: FINE)",
-          ),
-          wave: logLevelProperty("Wave/Analytics log level (default: INFO)"),
-          workflow: logLevelProperty("Workflow log level (default: FINE)"),
-        })
-        .describe(
-          "Override specific log categories. Only specified categories are updated; others remain unchanged.",
-        ),
+      z.enum(["default", ...LOG_LEVELS]),
+      z.partialRecord(z.enum(TRACE_CATEGORIES), logLevelSchema),
     ])
     .optional()
     .describe(
-      'Optional debug level configuration. Valid log levels: NONE, ERROR, WARN, INFO, DEBUG, FINE, FINER, FINEST. Pass "default" to reset, a single level string to set all categories, or an object with category overrides (apexCode, apexProfiling, callout, database, nba, system, validation, visualforce, wave, workflow).',
+      'Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: database FINEST; apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; nba, wave INFO.',
     ),
 };
 
@@ -103,7 +68,7 @@ export type ExecuteAnonymousPolicy = {
 };
 
 const EXECUTE_ANONYMOUS_DESCRIPTION =
-  "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI). Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with get_apex_log_summary, analyze_apex_log_performance, or find_performance_bottlenecks for deeper analysis. Production orgs require per-call user confirmation or the --allow-production-orgs server flag.";
+  "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI). Saves the resulting debug log to a local file and returns a summary with the file path, which the analysis tools accept. Production orgs require per-call user confirmation or the --allow-production-orgs server flag.";
 
 /**
  * The tool is always registered so that agents can discover it. When Apex
@@ -118,7 +83,6 @@ export function executeAnonymousToolConfig(apexExecutionDisabled = false) {
       : EXECUTE_ANONYMOUS_DESCRIPTION,
     inputSchema: executeAnonymousInputSchema,
     annotations: {
-      title: "Execute Anonymous Apex",
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: false,
