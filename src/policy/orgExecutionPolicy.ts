@@ -3,6 +3,7 @@
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getSupportedElicitationModes } from "@modelcontextprotocol/sdk/client/index.js";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
 
 export type PolicyDecision =
@@ -116,7 +117,13 @@ export async function authorizeExecution(opts: {
       ? (opts.unverifiedReason ?? "The reason was not reported.")
       : undefined;
 
-  if (!server.server.getClientCapabilities()?.elicitation?.form) {
+  // A client that declares a bare `elicitation: {}` supports form mode; the SDK
+  // helper carries that rule, so the capability is not read directly.
+  const { supportsFormMode } = getSupportedElicitationModes(
+    server.server.getClientCapabilities()?.elicitation,
+  );
+
+  if (!supportsFormMode) {
     return { allowed: false, reason: refusal(orgLabel, unverifiedReason) };
   }
 

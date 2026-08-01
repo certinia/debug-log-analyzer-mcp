@@ -161,6 +161,17 @@ describe("authorizeExecution", () => {
     expect(elicitInput).not.toHaveBeenCalled();
   });
 
+  it("should prompt a client that declares a bare elicitation capability", async () => {
+    getClientCapabilities.mockReturnValue({ elicitation: {} });
+    elicitInput.mockResolvedValue({
+      action: "accept",
+      content: { confirm: true },
+    });
+
+    await expect(authorize()).resolves.toEqual({ allowed: true });
+    expect(elicitInput).toHaveBeenCalled();
+  });
+
   describe("with an elicitation-capable client", () => {
     beforeEach(() => {
       getClientCapabilities.mockReturnValue({ elicitation: { form: {} } });
