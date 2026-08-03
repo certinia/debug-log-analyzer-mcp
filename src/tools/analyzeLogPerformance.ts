@@ -32,13 +32,10 @@ export type AnalyzeLogArgs = z.infer<
 export const analyzeLogPerformanceToolConfig = {
   title: "Analyze Apex Log Performance",
   description:
-    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations (in ms), SOQL/DML counts, the share of total runtime the ranked methods account for, and optimization recommendations. Best for finding which specific methods to optimize. Every method row carries the full column set; only `recommendations` is omitted, and only when nothing stood out.",
+    "Rank methods in an Apex debug log by self-execution time. Returns method names, durations, SOQL/DML counts, the share of total runtime the ranked methods account for, and optimization recommendations. Best for finding which specific methods to optimize.",
   inputSchema: analyzeLogPerformanceInputSchema,
   annotations: {
-    title: "Analyze Apex Log Performance",
     readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
     openWorldHint: false,
   },
 };

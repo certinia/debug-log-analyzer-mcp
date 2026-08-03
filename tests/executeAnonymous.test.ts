@@ -14,7 +14,10 @@ jest.mock("../src/salesforce/users", () => ({
   getUserIdByUsername: jest.fn(),
 }));
 
+// Only the network call is mocked — LOG_LEVELS and TRACE_CATEGORIES are the
+// real ones, because the input schema is built from them at import time.
 jest.mock("../src/salesforce/debugLevels", () => ({
+  ...jest.requireActual("../src/salesforce/debugLevels"),
   getOrCreateDebugLevelId: jest.fn(),
 }));
 
@@ -931,6 +934,25 @@ describe("Execute Anonymous", () => {
       expect(executeAnonymousInputSchema.targetOrg).toBeDefined();
       expect(executeAnonymousInputSchema.outputDir).toBeDefined();
       expect(executeAnonymousInputSchema.debugLevel).toBeDefined();
+    });
+
+    it("should accept the three debugLevel forms and reject an unknown category", async () => {
+      const { executeAnonymousInputSchema } = await import(
+        "../src/tools/executeAnonymous"
+      );
+      const debugLevel = executeAnonymousInputSchema.debugLevel;
+
+      expect(debugLevel.safeParse("default").success).toBe(true);
+      expect(debugLevel.safeParse("FINEST").success).toBe(true);
+      expect(
+        debugLevel.safeParse({ apexCode: "FINEST", database: "NONE" }).success,
+      ).toBe(true);
+
+      expect(debugLevel.safeParse("LOUDEST").success).toBe(false);
+      expect(debugLevel.safeParse({ apexCode: "LOUDEST" }).success).toBe(false);
+      expect(debugLevel.safeParse({ notACategory: "FINE" }).success).toBe(
+        false,
+      );
     });
 
     it("should flag the tool as disabled in its description when execution is off", async () => {

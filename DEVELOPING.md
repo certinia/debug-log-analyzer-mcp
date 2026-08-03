@@ -13,7 +13,8 @@ Welcome to the development guide for the **Apex Log MCP Server**. This document 
 3. [Building](#-building)
 4. [Running the Server Locally](#-running-the-server-locally)
 5. [Shaping Tool Responses](#️-shaping-tool-responses)
-6. [Testing Your Changes](#-testing-your-changes)
+6. [Shaping Tool Definitions](#️-shaping-tool-definitions)
+7. [Testing Your Changes](#-testing-your-changes)
 
 ## 🔧 Prerequisites
 
@@ -163,15 +164,58 @@ user questions are still answerable, that no figure appears twice, that the payl
 budget, and that it matches its golden file. Run it — and `pnpm run eval:update` to re-record the
 goldens — for any change to a response shape; the golden diff *is* the review of the change.
 
-One further check runs once per run: the table in [Token Cost](README.md#token-cost) is generated
-from the run, so a change that moves a published figure fails until `pnpm run eval:update`
-regenerates the README with it.
+Two further checks run once per run: the definition budget described in
+[Shaping Tool Definitions](#️-shaping-tool-definitions), and both tables in
+[Token Cost](README.md#token-cost), which are generated from the run — so a change that moves a
+published figure fails until `pnpm run eval:update` regenerates the README with it.
 
 The unit tests cannot substitute for it: jest maps `@toon-format/toon` to a JSON stand-in, so it
 never sees the real encoding.
 
 If you change a tool's output shape, update the [CHANGELOG](CHANGELOG.md) and the tool's entry in the
 [README](README.md#tools-reference) — the output contract is part of the public API.
+
+## 🏷️ Shaping Tool Definitions
+
+A response is paid for when a tool is called. A **definition** is paid for on every request, called or
+not, because the client sends all four with each one. Server `instructions` sit between them: sent once
+per session. So put each fact where its audience reads it, and at the frequency it is worth. A guarantee
+that holds for every tool — "a zero is a measured zero" — belongs in `instructions`, not repeated in
+four descriptions. A rule that applies to one tool belongs in that tool's description.
+
+### Budget the whole wire object
+
+`pnpm run eval` sums `estimateTokens(JSON.stringify(tool))` for each tool in a live `tools/list`
+response, so the budget covers `name`, `title`, `description`, `inputSchema`, `annotations` and
+everything else the client receives. A budget over a subset of the fields guards a subset of the cost:
+it would let `title` or `annotations` grow without a word of complaint.
+
+Three assertions run against those figures:
+
+- **Per-tool budgets** (`DEFINITION_BUDGET`), with about 5% headroom, so one careless sentence fails.
+- **A total under the 1.x baseline** (`V1_DEFINITION_TOKENS`, measured at `b79328f` over this same
+  stdio path). The total also catches a fifth tool, which no per-tool budget can.
+- **Selection keywords** (`SELECTION_KEYWORDS`), one or two phrases per tool. A description is a
+  selection prompt: clients match the words in it, so a trim that saves tokens can cost discovery.
+  The keyword assertion makes that trade visible instead of silent.
+
+The unit tests pin the parts a token budget with headroom would not notice, such as an
+[annotation](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-annotations)
+hint quietly coming back.
+
+### Only annotate what carries information
+
+`destructiveHint` and `idempotentHint` are defined as meaningful only when `readOnlyHint` is false, so
+the three read-only tools declare `readOnlyHint: true` and `openWorldHint: false` and nothing more —
+both differ from the spec default, and both say something. `execute_anonymous` keeps all four hints; it
+is the one tool where a client that misreads a default runs Apex against an org.
+
+### Know the floor
+
+Two fields per tool come from the SDK and cannot be removed through a public API: `$schema`, which
+zod's `toJSONSchema` emits (~52 tokens across the four tools), and `execution`, which `McpServer` adds
+(~40). About 90 tokens of the total are not ours to spend, and are not worth reaching into SDK
+internals for.
 
 ## 🧪 Testing Your Changes
 

@@ -3,30 +3,40 @@ import { Connection } from "@salesforce/core";
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
 const DEBUG_LEVEL_NAME = "Apex_Log_MCP_Debug_Level";
 
-export type LogLevel =
-  | "NONE"
-  | "ERROR"
-  | "WARN"
-  | "INFO"
-  | "DEBUG"
-  | "FINE"
-  | "FINER"
-  | "FINEST";
+/** `as const` so that `z.enum` can consume it — this is the only list of levels. */
+export const LOG_LEVELS = [
+  "NONE",
+  "ERROR",
+  "WARN",
+  "INFO",
+  "DEBUG",
+  "FINE",
+  "FINER",
+  "FINEST",
+] as const;
 
-export type TraceConfig = {
-  apexCode?: LogLevel;
-  apexProfiling?: LogLevel;
-  callout?: LogLevel;
-  database?: LogLevel;
-  nba?: LogLevel;
-  system?: LogLevel;
-  validation?: LogLevel;
-  visualforce?: LogLevel;
-  wave?: LogLevel;
-  workflow?: LogLevel;
-};
+export type LogLevel = (typeof LOG_LEVELS)[number];
 
-const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
+/** The DebugLevel field names, lower-camel. `toSObjectFields` capitalises them. */
+export const TRACE_CATEGORIES = [
+  "apexCode",
+  "apexProfiling",
+  "callout",
+  "database",
+  "nba",
+  "system",
+  "validation",
+  "visualforce",
+  "wave",
+  "workflow",
+] as const;
+
+export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
+
+export type TraceConfig = Partial<Record<TraceCategory, LogLevel>>;
+
+/** The only place the per-category defaults live. */
+export const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
   apexCode: "FINE",
   apexProfiling: "FINE",
   callout: "DEBUG",
@@ -41,19 +51,11 @@ const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
 
 export type DebugLevelInput = "default" | LogLevel | TraceConfig;
 
-const LOG_LEVELS: readonly string[] = [
-  "NONE",
-  "ERROR",
-  "WARN",
-  "INFO",
-  "DEBUG",
-  "FINE",
-  "FINER",
-  "FINEST",
-];
-
 function isLogLevel(value: DebugLevelInput): value is LogLevel {
-  return typeof value === "string" && LOG_LEVELS.includes(value);
+  return (
+    typeof value === "string" &&
+    (LOG_LEVELS as readonly string[]).includes(value)
+  );
 }
 
 function resolveLevels(debugLevel: DebugLevelInput): Record<string, string> {
@@ -63,39 +65,25 @@ function resolveLevels(debugLevel: DebugLevelInput): Record<string, string> {
 }
 
 function allCategoriesAt(level: LogLevel) {
-  return toSObjectFields({
-    apexCode: level,
-    apexProfiling: level,
-    callout: level,
-    database: level,
-    nba: level,
-    system: level,
-    validation: level,
-    visualforce: level,
-    wave: level,
-    workflow: level,
-  });
+  return toSObjectFields(
+    Object.fromEntries(TRACE_CATEGORIES.map((category) => [category, level])),
+  );
 }
 
 type DebugLevelRecord = {
   Id: string;
 };
 
-function toSObjectFields(config: TraceConfig) {
-  const entries: Record<string, string> = {};
-  if (config.apexCode !== undefined) entries.ApexCode = config.apexCode;
-  if (config.apexProfiling !== undefined)
-    entries.ApexProfiling = config.apexProfiling;
-  if (config.callout !== undefined) entries.Callout = config.callout;
-  if (config.database !== undefined) entries.Database = config.database;
-  if (config.nba !== undefined) entries.Nba = config.nba;
-  if (config.system !== undefined) entries.System = config.system;
-  if (config.validation !== undefined) entries.Validation = config.validation;
-  if (config.visualforce !== undefined)
-    entries.Visualforce = config.visualforce;
-  if (config.wave !== undefined) entries.Wave = config.wave;
-  if (config.workflow !== undefined) entries.Workflow = config.workflow;
-  return entries;
+/** Every DebugLevel field name is the category with its first letter capitalised. */
+function toSObjectFields(config: TraceConfig): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(config)
+      .filter(([, level]) => level !== undefined)
+      .map(([category, level]) => [
+        category.charAt(0).toUpperCase() + category.slice(1),
+        level,
+      ]),
+  );
 }
 
 function resolveAllDefaults() {

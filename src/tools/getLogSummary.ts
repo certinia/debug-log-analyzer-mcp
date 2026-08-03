@@ -21,13 +21,10 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, debug levels and active namespaces. Best for a quick overview before deeper analysis. Every governor limit and debug category is listed, including limits with zero usage. Only `logIssues` is omitted, and only when the log contained none.",
+    "Get a high-level summary of an Apex debug log including total execution time, method count, SOQL/DML totals, governor limits, debug levels and active namespaces. Best for a quick overview before deeper analysis.",
   inputSchema: getLogSummaryInputSchema,
   annotations: {
-    title: "Get Apex Log Summary",
     readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
     openWorldHint: false,
   },
 };

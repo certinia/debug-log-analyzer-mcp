@@ -50,7 +50,7 @@ class ApexLogServer {
           tools: {},
         },
         instructions:
-          "Use this server when you have an Apex debug log file to analyze, or when you need to execute anonymous Apex and inspect the resulting log. The log analysis tools accept absolute file paths and return structured data with all durations in milliseconds. Start with get_apex_log_summary for a quick overview, then use analyze_apex_log_performance or find_performance_bottlenecks for deeper analysis. The execute_anonymous tool saves the debug log to a local file and returns a summary with the file path — pass that path to the analysis tools.",
+          "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with get_apex_log_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.",
       },
     );
 
