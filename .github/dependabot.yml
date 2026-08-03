@@ -5,13 +5,27 @@ updates:
     schedule:
       interval: 'weekly'
     versioning-strategy: auto
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    # Let a release settle before adopting it; a compromised publish is
+    # usually yanked within days.
+    cooldown:
+      default-days: 7
     groups:
       npm-minor-patch:
         update-types: ['minor', 'patch']
   - package-ecosystem: 'github-actions'
-    directory: '/'
+    # '/' covers .github/workflows only, so the composite actions are listed
+    # too - otherwise their pinned SHAs would never be updated.
+    directories: ['/', '/.github/actions/*']
     schedule:
       interval: 'weekly'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns: ['*']
