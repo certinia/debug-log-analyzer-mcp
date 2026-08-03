@@ -8,6 +8,7 @@ import {
   findPerformanceBottlenecks,
   BottleneckArgs,
   BottleneckResult,
+  findPerformanceBottlenecksToolConfig,
 } from "../src/tools/findPerformanceBottlenecks";
 import { parse, ApexLog, Limits, GovernorLimits } from "../src/ApexLogParser";
 import { extractMethods, SlowMethod } from "../src/tools/analyzeLogPerformance";
@@ -151,6 +152,15 @@ describe("findPerformanceBottlenecks", () => {
     jest.clearAllMocks();
     mockFs.access.mockResolvedValue(undefined);
     mockFs.readFile.mockResolvedValue(mockLogContent);
+  });
+
+  describe("Tool configuration", () => {
+    it("should annotate only the hints that carry meaning for a read-only tool", () => {
+      expect(findPerformanceBottlenecksToolConfig.annotations).toEqual({
+        readOnlyHint: true,
+        openWorldHint: false,
+      });
+    });
   });
 
   describe("File validation and error handling", () => {

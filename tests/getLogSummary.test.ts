@@ -4,7 +4,11 @@
 
 import { promises as fs } from "fs";
 
-import { getLogSummary, LogSummaryArgs } from "../src/tools/getLogSummary";
+import {
+  getLogSummary,
+  LogSummaryArgs,
+  getLogSummaryToolConfig,
+} from "../src/tools/getLogSummary";
 import {
   parse,
   ApexLog,
@@ -66,6 +70,15 @@ const createMockLogLine = (
 describe("getLogSummary", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe("tool configuration", () => {
+    it("should annotate only the hints that carry meaning for a read-only tool", () => {
+      expect(getLogSummaryToolConfig.annotations).toEqual({
+        readOnlyHint: true,
+        openWorldHint: false,
+      });
+    });
   });
 
   function toonDecode(result: any): any {

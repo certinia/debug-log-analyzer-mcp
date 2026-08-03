@@ -44,6 +44,13 @@ describe("analyzeLogPerformance", () => {
       expect(analyzeLogPerformanceInputSchema.minDuration).toBeDefined();
       expect(analyzeLogPerformanceInputSchema.namespace).toBeDefined();
     });
+
+    it("should annotate only the hints that carry meaning for a read-only tool", () => {
+      expect(analyzeLogPerformanceToolConfig.annotations).toEqual({
+        readOnlyHint: true,
+        openWorldHint: false,
+      });
+    });
   });
 
   describe("File Validation", () => {

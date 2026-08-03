@@ -40,8 +40,6 @@ export const findPerformanceBottlenecksToolConfig = {
   inputSchema: findPerformanceBottlenecksInputSchema,
   annotations: {
     readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
     openWorldHint: false,
   },
 };

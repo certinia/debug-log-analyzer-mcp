@@ -36,8 +36,6 @@ export const analyzeLogPerformanceToolConfig = {
   inputSchema: analyzeLogPerformanceInputSchema,
   annotations: {
     readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
     openWorldHint: false,
   },
 };
