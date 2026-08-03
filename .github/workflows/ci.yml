@@ -43,9 +43,9 @@ jobs:
         task: [Build, Test]
         include:
           - task: Build
-            command: pnpm run build
+            script: build
           - task: Test
-            command: pnpm run test
+            script: test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,7 +53,11 @@ jobs:
       - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: ${{ matrix.node }}
-      - run: ${{ matrix.command }}
+      # Through the environment, not the shell: an expression expanded into
+      # `run` is the template-injection shape, whatever the value happens to be.
+      - run: pnpm run "$TASK_SCRIPT"
+        env:
+          TASK_SCRIPT: ${{ matrix.script }}
 
   eval:
     name: Eval (tool responses)
