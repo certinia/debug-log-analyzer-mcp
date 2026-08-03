@@ -1,0 +1,7 @@
+# Keep the SHA pinning self-enforcing: a floating tag is a finding, not a
+# review comment somebody has to remember to make.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        '*': hash-pin
