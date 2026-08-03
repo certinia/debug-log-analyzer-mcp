@@ -4,20 +4,39 @@ on:
   release:
     types: [published]
 
-permissions:
-  id-token: write # Required for OIDC
-  contents: read
+# Never cancel a publish in flight; a half-run release is worse than a queue.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
 
 jobs:
   build_and_publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-publish
+    permissions:
+      id-token: write # OIDC, for npm trusted publishing
+      contents: read
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-node-pnpm
         with:
-          registry-url: "https://registry.npmjs.org"
+          registry-url: 'https://registry.npmjs.org'
+
+      # A release published from the wrong tag would otherwise ship silently.
+      - name: Verify the package version matches the release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          [ "${RELEASE_TAG#v}" = "$pkg" ] ||
+            { echo "::error::release tag $RELEASE_TAG does not match package.json $pkg"; exit 1; }
 
       - name: Lint Files
         run: pnpm run lint
@@ -28,5 +47,7 @@ jobs:
       - name: Tests
         run: pnpm run test
 
+      # --no-git-checks: the release checkout is detached at the tag, which
+      # pnpm otherwise refuses to publish from.
       - name: Publish
         run: pnpm publish --access public --no-git-checks
