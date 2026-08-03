@@ -14,18 +14,15 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 
 - **Breaking:** refuse `execute_anonymous` against production orgs, and orgs whose type cannot be read, unless the run is confirmed via [MCP elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) or `--allow-production-orgs` is set ([#52])
 - **Breaking:** drop `file` from `get_apex_log_summary`, and the prose `summary` from `analyze_apex_log_performance` in favour of the scalar `topMethodsSelfPercentage` ([#86])
-- Offer `execute_anonymous` in every configuration, so agents can find it without server flags ([#52])
-- Cut about a quarter of the tokens from every tool response, with no field lost ([#86])
-- Report all thirteen governor limits as a flat table of `{name, used, limit}` rows, zeros included ([#86])
-- Stop warning about a governor limit that a dedicated section already details ([#86])
-- Round durations to 3 decimal places and percentages to 1 ([#86])
-- Emit the `.gitignore` tip only when `execute_anonymous` created the output directory ([#86])
+- **Breaking:** report governor limits as a flat `{name, used, limit}` table, and include the limits at zero, so a caller can tell "no DML ran" from "DML was never read" ([#86])
+- Make the `execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
+- Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33%, `execute_anonymous` by 30% after the first run, `get_apex_log_summary` by 27% and `find_performance_bottlenecks` by 5% ([#86])
 
 ### Added
 
 - Add `--allow-production-orgs`, to run against production without confirmation ([#52])
 - Add `--no-apex-execution`, to stop Apex running at all while the log analysis tools keep working ([#52])
-- Add `pnpm run eval`, a suite that drives the built server over stdio against committed fixtures and gates every response-shape change ([#86])
+- Add `pnpm run eval`, which gates every change to a tool response against committed fixtures ([#86])
 
 ### Removed
 
