@@ -3,7 +3,9 @@
 `pnpm run eval` drives the **built** server over stdio against the logs in `fixtures/` and asserts
 four things per (tool, fixture) pair: that realistic questions are still answerable, that no figure
 is reported twice, that the payload is under a token budget, and that it matches the committed
-golden file. See [`scripts/eval.mjs`](../../scripts/eval.mjs).
+golden file. One more check runs once per run: the table in
+[Token Cost](../../README.md#token-cost) is generated from the run. See
+[`scripts/eval.mjs`](../../scripts/eval.mjs).
 
 ## Fixtures
 

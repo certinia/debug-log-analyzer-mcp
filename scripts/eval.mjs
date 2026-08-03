@@ -20,6 +20,11 @@
  * 4. Golden files — the exact payload, committed, so any shape change is a diff
  *    a reviewer can read.
  *
+ * One more is checked once per run:
+ *
+ * 5. README table — the published figures are generated from this run, so a
+ *    change that moves them fails until the README is regenerated with it.
+ *
  * Usage:
  *   node scripts/eval.mjs            # assert
  *   node scripts/eval.mjs --update   # rewrite the golden files
@@ -35,6 +40,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER = path.join(ROOT, "dist", "index.js");
 const FIXTURES = path.join(ROOT, "tests", "eval", "fixtures");
 const GOLDEN = path.join(ROOT, "tests", "eval", "golden");
+const README = path.join(ROOT, "README.md");
+
+/** Every token figure in this file, and in the README, comes from here. */
+const estimateTokens = (text) => Math.round(text.length / 4);
 
 /**
  * Questions a user actually asks, and the fields without which the tool cannot
@@ -115,14 +124,34 @@ const MINIMAL_ZEROS = {
   },
 };
 
-/** chars/4 ceilings. Generous enough not to be noise, tight enough to catch bloat. */
+/**
+ * chars/4 ceilings, each about 5% above what the case currently costs. Tight
+ * enough that a response cannot creep back to its pre-shaping size and still
+ * pass, loose enough that adding one field is a deliberate budget edit rather
+ * than a surprise failure.
+ */
 const TOKEN_BUDGET = {
-  "get_apex_log_summary/governor-heavy": 300,
-  "get_apex_log_summary/minimal": 240,
-  "analyze_apex_log_performance/governor-heavy": 360,
-  "analyze_apex_log_performance/minimal": 200,
-  "find_performance_bottlenecks/governor-heavy": 160,
-  "find_performance_bottlenecks/minimal": 80,
+  "get_apex_log_summary/governor-heavy": 230,
+  "get_apex_log_summary/minimal": 185,
+  "analyze_apex_log_performance/governor-heavy": 290,
+  "analyze_apex_log_performance/minimal": 130,
+  "find_performance_bottlenecks/governor-heavy": 85,
+  "find_performance_bottlenecks/minimal": 35,
+};
+
+/**
+ * What 1.x returned for the same log, so the README can show what changed.
+ * Measured once, through this same stdio path and this same estimator, against
+ * the server built at b79328f — the commit before the shaping work. Static on
+ * purpose: a released figure cannot change.
+ */
+const V1_RESPONSE_TOKENS = {
+  "get_apex_log_summary/governor-heavy": 293,
+  "get_apex_log_summary/minimal": 249,
+  "analyze_apex_log_performance/governor-heavy": 408,
+  "analyze_apex_log_performance/minimal": 190,
+  "find_performance_bottlenecks/governor-heavy": 84,
+  "find_performance_bottlenecks/minimal": 30,
 };
 
 const CASES = [
@@ -318,7 +347,7 @@ function checkNoDuplication({ tool, fixture }, toon, failures) {
 
 function checkTokenBudget({ tool, fixture }, toon, failures) {
   const budget = TOKEN_BUDGET[`${tool}/${fixture}`];
-  const tokens = Math.round(toon.length / 4);
+  const tokens = estimateTokens(toon);
   if (budget === undefined) {
     failures.push(`${tool}/${fixture}: no token budget declared`);
   } else if (tokens > budget) {
@@ -350,6 +379,87 @@ async function checkGolden({ tool, fixture }, toon, failures, update) {
   }
 }
 
+/** Pads cells so the pipes line up, which is what markdownlint MD060 wants. */
+function renderTable(headers, rows) {
+  const widths = headers.map((header, column) =>
+    Math.max(header.length, ...rows.map((row) => row[column].length)),
+  );
+  const line = (cells) =>
+    `| ${cells.map((cell, i) => cell.padEnd(widths[i])).join(" | ")} |`;
+  return [
+    line(headers),
+    `| ${widths.map((width) => "-".repeat(width)).join(" | ")} |`,
+    ...rows.map(line),
+  ].join("\n");
+}
+
+const thousands = (value) => value.toLocaleString("en-US");
+
+/** The two comparison cells: what 1.x cost, and the signed change since. */
+function comparison(before, after) {
+  if (before === undefined) {
+    return ["—", "—"];
+  }
+  const change = Math.round((100 * (after - before)) / before);
+  return [`~${thousands(before)}`, `${change > 0 ? "+" : ""}${change}%`];
+}
+
+/**
+ * The README table, generated so the published figures cannot go stale. Only
+ * the table: the prose around it stays in the README, where it is edited.
+ */
+function renderTokenCost(responses) {
+  return [
+    {
+      id: "token-cost-answers",
+      table: renderTable(
+        ["Tool", "Log", "Response", "1.x", "Change"],
+        responses.map(({ tool, fixture, tokens }) => [
+          `\`${tool}\``,
+          `\`${fixture}.log\``,
+          `~${thousands(tokens)}`,
+          ...comparison(V1_RESPONSE_TOKENS[`${tool}/${fixture}`], tokens),
+        ]),
+      ),
+    },
+  ];
+}
+
+async function checkReadme(blocks, failures, update) {
+  let readme = await fs.readFile(README, "utf-8");
+  let stale = false;
+
+  for (const { id, table } of blocks) {
+    const startMarker = `<!-- ${id}:start -->`;
+    const endMarker = `<!-- ${id}:end -->`;
+    const start = readme.indexOf(startMarker);
+    const end = readme.indexOf(endMarker);
+    if (start === -1 || end === -1) {
+      failures.push(
+        `README.md: missing the ${startMarker} / ${endMarker} markers the table goes between`,
+      );
+      continue;
+    }
+    const wanted = `\n\n${table}\n\n`;
+    if (readme.slice(start + startMarker.length, end) === wanted) {
+      continue;
+    }
+    stale = true;
+    readme = `${readme.slice(0, start + startMarker.length)}${wanted}${readme.slice(end)}`;
+  }
+
+  if (!stale) {
+    return;
+  }
+  if (update) {
+    await fs.writeFile(README, readme, "utf-8");
+    return;
+  }
+  failures.push(
+    "README.md: the token cost table no longer matches this run. Run `pnpm run eval:update` and commit the diff.",
+  );
+}
+
 /** One server process for the whole run, stopped however the run ends. */
 async function withClient(run) {
   const client = createClient();
@@ -366,7 +476,7 @@ async function report(logFile) {
     for (const tool of Object.keys(ANSWERABILITY)) {
       const toon = await client.callTool(tool, { logFilePath: logFile });
       console.log(
-        `${tool}: ${toon.length} chars, ~${Math.round(toon.length / 4)} tokens`,
+        `${tool}: ${toon.length} chars, ~${estimateTokens(toon)} tokens`,
       );
       console.log(toon.replace(/^/gm, "  "));
     }
@@ -388,6 +498,8 @@ async function main() {
   const update = args.includes("--update");
   const failures = [];
 
+  const responses = [];
+
   await withClient(async (client) => {
     for (const testCase of CASES) {
       const logFilePath = path.join(FIXTURES, `${testCase.fixture}.log`);
@@ -396,10 +508,13 @@ async function main() {
       checkNoDuplication(testCase, toon, failures);
       const tokens = checkTokenBudget(testCase, toon, failures);
       await checkGolden(testCase, toon, failures, update);
+      responses.push({ ...testCase, tokens });
       console.log(
         `${update ? "updated" : "checked"} ${testCase.tool}/${testCase.fixture} — ~${tokens} tokens`,
       );
     }
+
+    await checkReadme(renderTokenCost(responses), failures, update);
   });
 
   if (failures.length) {

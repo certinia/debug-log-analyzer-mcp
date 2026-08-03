@@ -18,6 +18,7 @@ Powered by the same powerful log parser as the [Apex Log Analyzer VS Code extens
 
 [Quick Start](#quick-start) |
 [What You Can Do](#what-you-can-do) |
+[Token Cost](#token-cost) |
 [Tools Reference](#tools-reference) |
 [Configuration](#configuration) |
 [How It Works](#how-it-works) |
@@ -56,9 +57,26 @@ Ask your AI assistant to work with Apex debug logs using natural language:
 - "Are we approaching any governor limits in this transaction?"
 - "Run this Apex against my scratch org and analyze the performance"
 
+## Token Cost
+
+The input side is the same for every analysis tool — a tool name and a log file path, about 15 tokens — so what a call costs is what it returns. Each row is one tool answering one of the logs in [`tests/eval/fixtures/`](tests/eval/fixtures), beside what 1.x returned for the same log — the same facts, in a cheaper shape.
+
+<!-- token-cost-answers:start -->
+
+| Tool                           | Log                  | Response | 1.x  | Change |
+| ------------------------------ | -------------------- | -------- | ---- | ------ |
+| `get_apex_log_summary`         | `governor-heavy.log` | ~220     | ~293 | -25%   |
+| `get_apex_log_summary`         | `minimal.log`        | ~174     | ~249 | -30%   |
+| `analyze_apex_log_performance` | `governor-heavy.log` | ~278     | ~408 | -32%   |
+| `analyze_apex_log_performance` | `minimal.log`        | ~121     | ~190 | -36%   |
+| `find_performance_bottlenecks` | `governor-heavy.log` | ~79      | ~84  | -6%    |
+| `find_performance_bottlenecks` | `minimal.log`        | ~30      | ~30  | 0%     |
+
+<!-- token-cost-answers:end -->
+
 ## Tools Reference
 
-All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept deliberately lean to save tokens — without dropping anything you might need to ask about:
+All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept deliberately lean to save tokens — without dropping anything you might need to ask about. See [Token Cost](#token-cost) for what that is worth in practice.
 
 - **Every governor limit, debug category and method column is returned**, including the ones at zero. "How many DML statements did this consume?" is answerable from the response, and `0` means none rather than not measured.
 - **The leanness comes from shape.** Data that used to be nested objects is returned as flat tables, which TOON encodes as one header plus one line per row.

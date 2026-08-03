@@ -163,6 +163,10 @@ user questions are still answerable, that no figure appears twice, that the payl
 budget, and that it matches its golden file. Run it — and `pnpm run eval:update` to re-record the
 goldens — for any change to a response shape; the golden diff *is* the review of the change.
 
+One further check runs once per run: the table in [Token Cost](README.md#token-cost) is generated
+from the run, so a change that moves a published figure fails until `pnpm run eval:update`
+regenerates the README with it.
+
 The unit tests cannot substitute for it: jest maps `@toon-format/toon` to a JSON stand-in, so it
 never sees the real encoding.
 
