@@ -15,7 +15,7 @@ jest.mock("@salesforce/core", () => ({
 }));
 
 import { Org, ConfigAggregator } from "@salesforce/core";
-import { connect } from "../../src/salesforce/connection";
+import { resolveOrg } from "../../src/salesforce/connection";
 
 const mockOrgCreate = Org.create as jest.MockedFunction<typeof Org.create>;
 const mockConfigAggregatorCreate =
@@ -51,9 +51,9 @@ describe("Salesforce Connection", () => {
     mockConfigAggregator.getPropertyValue.mockReturnValue(testUsername);
   });
 
-  describe("connect", () => {
+  describe("resolveOrg", () => {
     it("should successfully connect with default org", async () => {
-      const result = await connect();
+      const result = await resolveOrg();
 
       expect(mockConfigAggregatorCreate).toHaveBeenCalled();
       expect(mockConfigAggregator.getPropertyValue).toHaveBeenCalledWith(
@@ -62,31 +62,31 @@ describe("Salesforce Connection", () => {
       expect(mockOrgCreate).toHaveBeenCalledWith({
         aliasOrUsername: testUsername,
       });
-      expect(result).toBe(mockConnectionInstance);
+      expect(result).toBe(mockOrgInstance);
     });
 
     it("should throw error when no default org is configured", async () => {
       mockConfigAggregator.getPropertyValue.mockReturnValue(undefined);
 
-      await expect(connect()).rejects.toThrow(noDefaultOrgError);
+      await expect(resolveOrg()).rejects.toThrow(noDefaultOrgError);
     });
 
     it("should use targetOrg when provided", async () => {
       const targetOrg = "my-scratch-org";
-      const result = await connect(undefined, targetOrg);
+      const result = await resolveOrg(undefined, targetOrg);
 
       expect(mockConfigAggregatorCreate).not.toHaveBeenCalled();
       expect(mockOrgCreate).toHaveBeenCalledWith({
         aliasOrUsername: targetOrg,
       });
-      expect(result).toBe(mockConnectionInstance);
+      expect(result).toBe(mockOrgInstance);
     });
 
     it("should propagate errors from Org.create", async () => {
       const orgError = new Error("Org not found");
       mockOrgCreate.mockRejectedValue(orgError);
 
-      await expect(connect()).rejects.toThrow("Org not found");
+      await expect(resolveOrg()).rejects.toThrow("Org not found");
     });
   });
 });

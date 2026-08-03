@@ -95,15 +95,15 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
    mcp-inspector node dist/index.js
    ```
 
-3. **Run with `execute_anonymous` enabled:**
+3. **Run against a production org:**
 
-   The `execute_anonymous` tool is disabled by default. Pass `--allowed-orgs` to enable it:
+   All four tools are available by default. Production orgs need a per-call confirmation, or this flag:
 
    ```zsh
-   node dist/index.js --allowed-orgs ALLOW_ALL_ORGS
+   node dist/index.js --allow-production-orgs
    ```
 
-   See the [README](README.md#enabling-execute_anonymous) for all supported tokens.
+   To disable Apex execution altogether, use `--no-apex-execution`. See the [README](README.md#production-safety) for the full policy.
 
 ## 🧪 Testing Your Changes
 
