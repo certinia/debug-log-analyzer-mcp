@@ -32,6 +32,8 @@ pnpm start
   - Uses stdio transport for communication
   - Handles file validation, log parsing, analysis, and anonymous Apex execution
 
+- **src/tools/responseShaping.ts**: Shared helpers for keeping responses lean — `omitEmpty`, `toLimitRows`, `roundMs`, `roundPercent`
+
 - **src/ApexLogParser.ts**: Complex log parsing engine (33k+ tokens)
   - Exports `parse()` function and `ApexLogParser` class
   - Handles Apex debug log format parsing into structured data
@@ -83,6 +85,16 @@ The server provides four main capabilities:
 4. **Execute Anonymous**: Executes anonymous Apex code snippets, saves the debug log to a file, and returns a summary with the file path
 
 Log analysis tools (1-3) accept absolute file paths to `.log` files and return structured JSON for AI processing.
+
+## Response Shaping
+
+Responses are TOON-encoded and deliberately lean, but the saving comes from shape, never from dropping a fact — see the conventions in [DEVELOPING.md](DEVELOPING.md#️-shaping-tool-responses) and the helpers in `src/tools/responseShaping.ts`. In short: restructure before you delete (flatten nested objects into TOON tables — `toLimitRows` is the worked example, 45% cheaper than the nested form and still complete); always report a fixed-schema field even at zero, because an absent count cannot be told apart from one that was never parsed; use `omitEmpty` **only** for occurrence lists, where absence unambiguously means nothing happened; never report the same figure twice; never echo the caller's input back; round durations and percentages (`roundMs`/`roundPercent`); and keep every row of a table on the same key set so TOON keeps its one-header-plus-one-line-per-row form.
+
+Concretely: `analyze_apex_log_performance` returns no prose `summary` — its one unique fact is the scalar `topMethodsSelfPercentage` — and omits `recommendations` only when nothing stands out; `get_apex_log_summary` returns no `file`, all thirteen governor limits as `{name, used, limit}` rows, the full `debugLevels` list, and omits only `logIssues`; `find_performance_bottlenecks` excludes from `governorLimitWarnings` any limit already detailed by a dedicated section; `execute_anonymous` emits the `.gitignore` tip only when it created the output directory.
+
+`pnpm run eval` (`scripts/eval.mjs`, wired into CI) is the gate for response-shape changes: it drives the built server over stdio against `tests/eval/fixtures/` and checks answerability, no duplication, a token budget and golden files. It also regenerates the token cost table in `README.md` between the `<!-- token-cost-answers -->` markers, so any change that moves a published figure fails until the README is regenerated with it. The jest suite cannot do this — `moduleNameMapper` swaps `@toon-format/toon` for a JSON stand-in, so it never sees the real encoding. Re-record goldens with `pnpm run build && pnpm run eval:update` and read the diff.
+
+`outputSchema`/`structuredContent` are deliberately not implemented — the MCP spec asks for the payload to also be serialized into a text block, which would send it twice. Tracked separately.
 Anonymous execution (4) accepts multi-line strings containing Apex, saves the resulting debug log to a local file (default: `.apex-log-mcp/` in the project root), and returns a summary with the file path. The `outputDir` parameter overrides the default save location. It supports an optional `debugLevel` parameter to configure trace flag log levels per category or set all categories at once. The response includes the org alias alongside the username when available, plus the detected org type.
 
 `execute_anonymous` is **always registered** so agents can discover it; authorization happens per call in `src/policy/orgExecutionPolicy.ts`. `src/salesforce/orgClassification.ts` identifies the target org (`sandbox`, `scratch`, `trial`, `developer`, `production`, or `unknown` when it cannot be queried), caching one `Organization` query per org id for the server's lifetime. Non-production orgs run silently. Production and `unknown` orgs need either the `--allow-production-orgs` flag or a per-call user confirmation via MCP elicitation; without either, the call is refused with an `isError` result whose text explains both routes. Authorization runs before any `DebugLevel` or `TraceFlag` record is created, so refused calls leave the org untouched. `--no-apex-execution` refuses every call before contacting Salesforce and marks the tool `[DISABLED on this server]` in its description. The 1.x `--allowed-orgs` flag is accepted but ignored, with a stderr deprecation warning.

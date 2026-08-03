@@ -1,6 +1,6 @@
 {
   "name": "@certinia/apex-log-mcp",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "MCP server that gives AI assistants tools to analyze Salesforce Apex debug logs for performance bottlenecks, slow methods, and governor limit usage.",
   "type": "module",
   "main": "dist/server.js",
@@ -20,6 +20,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "eval": "node scripts/eval.mjs",
+    "eval:update": "node scripts/eval.mjs --update",
     "lint": "eslint ./src ./tests"
   },
   "keywords": [

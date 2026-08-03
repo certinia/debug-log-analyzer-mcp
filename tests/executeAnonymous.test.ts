@@ -227,7 +227,6 @@ describe("Execute Anonymous", () => {
       expect(decoded.success).toBe(true);
       expect(decoded.exceptionMessage).toBeUndefined();
       expect(decoded.durationMs).toBe(150);
-      expect(decoded.tip).toContain(".gitignore");
     });
 
     it("should throw error when connection username cannot be determined", async () => {
@@ -891,14 +890,29 @@ describe("Execute Anonymous", () => {
       expect(decoded.filePath).toContain(`${testLogId}.log`);
     });
 
-    it("should include gitignore tip in response", async () => {
+    it("should include the gitignore tip only when it created the output dir", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      // mkdir resolves to the first directory it created, so a value here means the
+      // caller has a brand new directory that is not yet ignored by git.
+      mockMkdir.mockResolvedValueOnce("/project/.apex-log-mcp");
 
-      expect(toonDecode(result).tip).toBe(
-        "Add .apex-log-mcp/ to your .gitignore to avoid committing debug logs.",
-      );
+      expect(toonDecode(await executeAnonymous(mockServer, args, policy())).tip)
+        .toBe(
+          "Add .apex-log-mcp/ to your .gitignore to avoid committing debug logs.",
+        );
+    });
+
+    it("should omit the gitignore tip when the output dir already existed", async () => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      // An existing directory has already been dealt with once, so repeating the
+      // advice on every run is noise the caller pays for.
+      mockMkdir.mockResolvedValueOnce(undefined);
+
+      expect(
+        toonDecode(await executeAnonymous(mockServer, args, policy())).tip,
+      ).toBeUndefined();
     });
   });
 

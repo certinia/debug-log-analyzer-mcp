@@ -2,8 +2,9 @@ node_modules
 dist
 coverage
 
-# Ignore test logs
+# Ignore test logs, except the committed eval fixtures
 *.log
+!tests/eval/fixtures/*.log
 
 # Environment files
 .env

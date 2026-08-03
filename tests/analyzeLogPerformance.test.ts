@@ -271,8 +271,9 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
+      // "No methods were found" is a result, not an absence of one.
       expect(parsedResult.totalMethods).toBe(0);
-      expect(parsedResult.slowestMethods).toHaveLength(0);
+      expect(parsedResult.slowestMethods).toEqual([]);
     });
 
     it("should handle log with no matching methods after filtering", async () => {
@@ -287,8 +288,10 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
+      // The namespace matched nothing, and the empty table is how the caller
+      // learns that rather than guessing at a missing key.
       expect(parsedResult.totalMethods).toBe(0);
-      expect(parsedResult.slowestMethods).toHaveLength(0);
+      expect(parsedResult.slowestMethods).toEqual([]);
     });
 
     it("should handle parsing errors gracefully", async () => {
@@ -331,7 +334,6 @@ describe("analyzeLogPerformance", () => {
       expect(typeof method.name).toBe("string");
       expect(typeof method.duration).toBe("number");
       expect(typeof method.selfDuration).toBe("number");
-      expect(typeof method.namespace).toBe("string");
       expect(typeof method.dmlCount).toBe("number");
       expect(typeof method.soqlCount).toBe("number");
       expect(typeof method.dmlRows).toBe("number");
@@ -340,6 +342,25 @@ describe("analyzeLogPerformance", () => {
       expect(["number", "string", "object"]).toContain(
         typeof method.lineNumber,
       );
+      // The column set is fixed, so a zero SOSL count reads as "none ran" rather
+      // than "not measured", and the shape is the same on every call.
+      expect(typeof method.namespace).toBe("string");
+      expect(typeof method.thrownCount).toBe("number");
+      expect(typeof method.soslCount).toBe("number");
+      expect(typeof method.soslRows).toBe("number");
+    });
+
+    it("should report the namespace of every method", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+
+      setupMocksForSuccess(createMockApexLogWithNamespaces());
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      expect(
+        parsedResult.slowestMethods.map((method) => method.namespace),
+      ).toEqual(["default", "CustomNamespace"]);
     });
 
     it("should return LogAnalysisResult with correct structure", async () => {
@@ -353,11 +374,31 @@ describe("analyzeLogPerformance", () => {
 
       expect(typeof parsedResult.totalMethods).toBe("number");
       expect(typeof parsedResult.totalExecutionTime).toBe("number");
+      expect(typeof parsedResult.topMethodsSelfPercentage).toBe("number");
       expect(Array.isArray(parsedResult.slowestMethods)).toBe(true);
       expect(Array.isArray(parsedResult.recommendations)).toBe(true);
     });
 
-    it("should return LogAnalysisResult with summary string", async () => {
+    it("should report what share of the run the returned methods account for", async () => {
+      const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+
+      setupMocksForSuccess(createMockApexLog());
+
+      const result = await analyzeLogPerformance(args);
+      const parsedResult = toonDecode(result);
+
+      // The one thing the table cannot say for itself: whether the cost is
+      // concentrated in these methods or spread across the rest of the run.
+      expect(parsedResult.topMethodsSelfPercentage).toBe(
+        parsedResult.slowestMethods.reduce(
+          (total: number, method: { selfPercentage: number }) =>
+            total + method.selfPercentage,
+          0,
+        ),
+      );
+    });
+
+    it("should not restate the table as a prose summary", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
       const mockApexLog = createMockApexLog();
 
@@ -366,10 +407,9 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      expect(typeof parsedResult.summary).toBe("string");
-      expect(parsedResult.summary).toContain("Analysis found 3 methods");
-      expect(parsedResult.summary).toContain("SlowMethod");
-      expect(parsedResult.summary).toContain("500.00ms");
+      // The counts, the worst method and its duration are all already columns, so
+      // a sentence repeating them is pure duplication.
+      expect(parsedResult.summary).toBeUndefined();
     });
   });
 
@@ -383,11 +423,9 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      const soqlRecommendation = parsedResult.recommendations.find(
-        (rec) =>
-          rec.includes("SOQL queries") && rec.includes("reducing query count"),
-      );
-      expect(soqlRecommendation).toBeDefined();
+      expect(parsedResult.recommendations).toEqual([
+        "HighSOQLMethod: many SOQL queries. Bulkify or cache.",
+      ]);
     });
 
     it("should generate DML recommendations", async () => {
@@ -399,10 +437,9 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      const dmlRecommendation = parsedResult.recommendations.find(
-        (rec) => rec.includes("DML operations") && rec.includes("bulkifying"),
-      );
-      expect(dmlRecommendation).toBeDefined();
+      expect(parsedResult.recommendations).toEqual([
+        "HighDMLMethod: many DML operations. Bulkify them.",
+      ]);
     });
 
     it("should generate SOQL rows recommendations", async () => {
@@ -414,10 +451,9 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      const rowsRecommendation = parsedResult.recommendations.find(
-        (rec) => rec.includes("SOQL rows") && rec.includes("WHERE clauses"),
-      );
-      expect(rowsRecommendation).toBeDefined();
+      expect(parsedResult.recommendations).toEqual([
+        "HighRowsMethod: high SOQL row count. Add WHERE clauses or paginate.",
+      ]);
     });
 
     it("should generate high percentage recommendations", async () => {
@@ -429,12 +465,11 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      const percentageRecommendation = parsedResult.recommendations.find(
-        (rec) =>
-          rec.includes("% self execution time") &&
-          rec.includes("can be optimized"),
-      );
-      expect(percentageRecommendation).toBeDefined();
+      // The percentage that triggered this is already a column on the method's row,
+      // so the advice names the lever and leaves the figure out.
+      expect(parsedResult.recommendations).toEqual([
+        "HighPercentageMethod: dominates self time. Check whether it can be made faster, and how often it is called.",
+      ]);
     });
 
     it("should generate SOSL search recommendations", async () => {
@@ -446,15 +481,12 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      const soslRecommendation = parsedResult.recommendations.find(
-        (rec) =>
-          rec.includes("SOSL searches") &&
-          rec.includes("reducing search count"),
-      );
-      expect(soslRecommendation).toBeDefined();
+      expect(parsedResult.recommendations).toEqual([
+        "HighSOSLMethod: many SOSL searches. Reduce or cache them.",
+      ]);
     });
 
-    it("should generate positive message when no issues found", async () => {
+    it("should omit recommendations entirely when nothing stands out", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
       const mockApexLog = createMockApexLogWithGoodPerformance();
 
@@ -463,9 +495,8 @@ describe("analyzeLogPerformance", () => {
       const result = await analyzeLogPerformance(args);
       const parsedResult = toonDecode(result);
 
-      expect(parsedResult.recommendations).toContain(
-        "Performance looks good! No obvious bottlenecks detected in the analyzed methods.",
-      );
+      // An "all good" sentence costs tokens to say what an absent field already says.
+      expect(parsedResult.recommendations).toBeUndefined();
     });
 
     it("should only analyze top 3 methods for recommendations", async () => {

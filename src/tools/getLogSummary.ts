@@ -3,10 +3,10 @@
  */
 
 import { promises as fs } from "fs";
-import path from "path";
 import { z } from "zod";
 import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
 import { encode } from "@toon-format/toon";
+import { omitEmpty, roundMs, toLimitRows } from "./responseShaping.js";
 
 export const getLogSummaryInputSchema = {
   logFilePath: z
@@ -21,7 +21,7 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, and active namespaces. Best for a quick overview before deeper analysis.",
+    "Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, debug levels and active namespaces. Best for a quick overview before deeper analysis. Every governor limit and debug category is listed, including limits with zero usage. Only `logIssues` is omitted, and only when the log contained none.",
   inputSchema: getLogSummaryInputSchema,
   annotations: {
     title: "Get Apex Log Summary",
@@ -46,37 +46,30 @@ export async function getLogSummary(args: LogSummaryArgs) {
   const logContent = await fs.readFile(logFilePath, "utf-8");
   const apexLog = parse(logContent);
 
-  const governorLimits: Record<string, { used: number; limit: number }> = {};
-  Object.entries(apexLog.governorLimits).forEach(
-    ([key, value]: [string, any]) => {
-      if (key !== "byNamespace" && (value.used > 0 || value.limit > 0)) {
-        governorLimits[key] = { used: value.used, limit: value.limit };
-      }
-    },
-  );
-
   const logIssues = apexLog.logIssues.map((issue) => ({
     type: issue.type,
     summary: issue.summary,
   }));
 
+  // Every limit and every category is reported, at zero or NONE included: the
+  // caller has to be able to say "no DML statements ran" and "DB logging was
+  // off, so that detail is missing" without guessing from what is absent.
   const summary = {
-    file: path.basename(logFilePath),
     size: apexLog.size,
-    totalExecutionTime: apexLog.duration.total / NS_TO_MS,
+    totalExecutionTime: roundMs(apexLog.duration.total / NS_TO_MS),
     totalMethods: countMethods(apexLog),
     totalSOQLQueries: apexLog.soqlCount.total,
     totalDMLOperations: apexLog.dmlCount.total,
     totalSOQLRows: apexLog.soqlRowCount.total,
     totalDMLRows: apexLog.dmlRowCount.total,
-    governorLimits,
+    governorLimits: toLimitRows(apexLog.governorLimits),
     namespaces: apexLog.namespaces,
-    debugLevels: apexLog.debugLevels.map((d) => ({
-      category: d.logCategory,
-      level: d.logLevel,
+    debugLevels: apexLog.debugLevels.map((level) => ({
+      category: level.logCategory,
+      level: level.logLevel,
     })),
-    logIssues,
     parsingErrors: apexLog.parsingErrors.length,
+    ...omitEmpty({ logIssues }),
   };
 
   return {
