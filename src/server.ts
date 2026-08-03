@@ -41,7 +41,7 @@ class ApexLogServer {
     this.server = new McpServer(
       {
         name: "apex-log-mcp",
-        version: "2.0.0",
+        version: "1.0.0",
         description:
           "Analyzes Salesforce Apex debug logs for performance bottlenecks, governor limit usage, and optimization opportunities.",
       },
