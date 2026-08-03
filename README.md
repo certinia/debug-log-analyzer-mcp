@@ -59,6 +59,24 @@ Ask your AI assistant to work with Apex debug logs using natural language:
 
 ## Token Cost
 
+### Enabling the tools
+
+Every request carries all four tool definitions, whether or not a tool is called. That is the standing cost of having the server connected, and each figure is the whole definition as the client receives it — name, title, description, input schema and annotations together.
+
+<!-- token-cost-definitions:start -->
+
+| Tool                           | Tokens                              | 1.x        | Change   |
+| ------------------------------ | ----------------------------------- | ---------- | -------- |
+| `execute_anonymous`            | ~428                                | ~844       | -49%     |
+| `analyze_apex_log_performance` | ~238                                | ~247       | -4%      |
+| `find_performance_bottlenecks` | ~234                                | ~267       | -12%     |
+| `get_apex_log_summary`         | ~153                                | ~171       | -11%     |
+| **Total**                      | **~1,053** (0.5% of a 200K context) | **~1,529** | **-31%** |
+
+<!-- token-cost-definitions:end -->
+
+### Calling a tool
+
 The input side is the same for every analysis tool — a tool name and a log file path, about 15 tokens — so what a call costs is what it returns. Each row is one tool answering one of the logs in [`tests/eval/fixtures/`](tests/eval/fixtures), beside what 1.x returned for the same log — the same facts, in a cheaper shape.
 
 <!-- token-cost-answers:start -->

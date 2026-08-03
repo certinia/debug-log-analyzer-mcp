@@ -20,9 +20,13 @@
  * 4. Golden files — the exact payload, committed, so any shape change is a diff
  *    a reviewer can read.
  *
- * One more is checked once per run:
+ * Three more are checked once per run:
  *
- * 5. README table — the published figures are generated from this run, so a
+ * 5. Definition budget — what `tools/list` costs on every request, per tool and
+ *    in total, measured over the whole wire object the client receives.
+ * 6. Selection keywords — the words a client's tool search matches on, so a
+ *    trim that saves tokens cannot quietly cost discovery.
+ * 7. README tables — the published figures are generated from this run, so a
  *    change that moves them fails until the README is regenerated with it.
  *
  * Usage:
@@ -41,6 +45,9 @@ const SERVER = path.join(ROOT, "dist", "index.js");
 const FIXTURES = path.join(ROOT, "tests", "eval", "fixtures");
 const GOLDEN = path.join(ROOT, "tests", "eval", "golden");
 const README = path.join(ROOT, "README.md");
+
+/** The context window the published share is a share of. */
+const CONTEXT_WINDOW = 200_000;
 
 /** Every token figure in this file, and in the README, comes from here. */
 const estimateTokens = (text) => Math.round(text.length / 4);
@@ -140,11 +147,18 @@ const TOKEN_BUDGET = {
 };
 
 /**
- * What 1.x returned for the same log, so the README can show what changed.
- * Measured once, through this same stdio path and this same estimator, against
- * the server built at b79328f — the commit before the shaping work. Static on
- * purpose: a released figure cannot change.
+ * What 1.x cost, so the README can show what changed. Both sets were measured
+ * once, through this same stdio path and this same estimator, against the server
+ * built at b79328f — the commit before the shaping work. Static on purpose: a
+ * released figure cannot change.
  */
+const V1_DEFINITION_TOKENS = {
+  analyze_apex_log_performance: 247,
+  get_apex_log_summary: 171,
+  find_performance_bottlenecks: 267,
+  execute_anonymous: 844,
+};
+
 const V1_RESPONSE_TOKENS = {
   "get_apex_log_summary/governor-heavy": 293,
   "get_apex_log_summary/minimal": 249,
@@ -152,6 +166,42 @@ const V1_RESPONSE_TOKENS = {
   "analyze_apex_log_performance/minimal": 190,
   "find_performance_bottlenecks/governor-heavy": 84,
   "find_performance_bottlenecks/minimal": 30,
+};
+
+/**
+ * What each tool definition costs in `tools/list`, which every request carries
+ * whether or not a tool is called. Measured over the whole wire object, because
+ * a budget on a chosen subset leaves the rest of the object unwatched. Same 5%
+ * headroom as TOKEN_BUDGET: a longer description is a deliberate budget edit,
+ * not a silent tax on every request.
+ */
+const DEFINITION_BUDGET = {
+  analyze_apex_log_performance: 250,
+  get_apex_log_summary: 161,
+  find_performance_bottlenecks: 246,
+  execute_anonymous: 449,
+};
+
+/**
+ * The whole of `tools/list` must stay under what 1.x charged for it. The per-tool
+ * budgets cannot assert this on their own — a fifth tool would pass all four and
+ * still put the total back over the baseline.
+ */
+const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
+  (sum, tokens) => sum + tokens,
+  0,
+);
+
+/**
+ * The words a client's tool search matches on. Asserted so that a trim which
+ * saves tokens cannot quietly cost discovery: a cheaper description that no
+ * longer says "governor limits" is a regression, not a saving.
+ */
+const SELECTION_KEYWORDS = {
+  analyze_apex_log_performance: ["self-execution time", "optimize"],
+  get_apex_log_summary: ["summary", "overview"],
+  find_performance_bottlenecks: ["governor limits", "CPU"],
+  execute_anonymous: ["anonymous Apex", "Salesforce org"],
 };
 
 const CASES = [
@@ -208,6 +258,14 @@ function createClient() {
       child.stdin.write(
         `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
       );
+    },
+    async listTools() {
+      const response = await request("tools/list", {});
+      const tools = response.result?.tools;
+      if (!Array.isArray(tools)) {
+        throw new Error(`tools/list returned no tools: ${JSON.stringify(response)}`);
+      }
+      return tools;
     },
     async callTool(name, args) {
       const response = await request("tools/call", { name, arguments: args });
@@ -379,6 +437,57 @@ async function checkGolden({ tool, fixture }, toon, failures, update) {
   }
 }
 
+/**
+ * What an agent pays for a tool it has not called: the definition exactly as the
+ * client receives it, whole. Not a subset — `title`, `annotations` and the SDK's
+ * own fields cost the same tokens as the description does, and a budget that
+ * cannot see them cannot hold them down.
+ */
+function definitionCosts(tools) {
+  return tools
+    .map((tool) => ({
+      name: tool.name,
+      tokens: estimateTokens(JSON.stringify(tool)),
+      description: tool.description ?? "",
+    }))
+    .sort((a, b) => b.tokens - a.tokens);
+}
+
+function checkDefinitionBudget(costs, failures) {
+  for (const { name, tokens } of costs) {
+    const budget = DEFINITION_BUDGET[name];
+    if (budget === undefined) {
+      failures.push(`${name}: no definition budget declared`);
+    } else if (tokens > budget) {
+      failures.push(
+        `${name}: definition is ~${tokens} tokens, over its budget of ${budget}`,
+      );
+    }
+  }
+  for (const name of Object.keys(DEFINITION_BUDGET)) {
+    if (!costs.some((cost) => cost.name === name)) {
+      failures.push(`${name}: budgeted but absent from tools/list`);
+    }
+  }
+  const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
+  if (total > TOTAL_DEFINITION_BUDGET) {
+    failures.push(
+      `tools/list is ~${total} tokens, over the ${TOTAL_DEFINITION_BUDGET} that 1.x charged for it`,
+    );
+  }
+}
+
+function checkSelectionKeywords(costs, failures) {
+  for (const { name, description } of costs) {
+    const lowered = description.toLowerCase();
+    for (const keyword of SELECTION_KEYWORDS[name] ?? []) {
+      if (!lowered.includes(keyword.toLowerCase())) {
+        failures.push(`${name}: description no longer says "${keyword}"`);
+      }
+    }
+  }
+}
+
 /** Pads cells so the pipes line up, which is what markdownlint MD060 wants. */
 function renderTable(headers, rows) {
   const widths = headers.map((header, column) =>
@@ -405,11 +514,34 @@ function comparison(before, after) {
 }
 
 /**
- * The README table, generated so the published figures cannot go stale. Only
- * the table: the prose around it stays in the README, where it is edited.
+ * The README tables, generated so the published figures cannot go stale. Only
+ * the tables: the prose around them stays in the README, where it is edited.
  */
-function renderTokenCost(responses) {
+function renderTokenCost(costs, responses) {
+  const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
+  const share = ((100 * total) / CONTEXT_WINDOW).toFixed(1);
+  const [v1TotalCell, totalChange] = comparison(TOTAL_DEFINITION_BUDGET, total);
+
   return [
+    {
+      id: "token-cost-definitions",
+      table: renderTable(
+        ["Tool", "Tokens", "1.x", "Change"],
+        [
+          ...costs.map(({ name, tokens }) => [
+            `\`${name}\``,
+            `~${thousands(tokens)}`,
+            ...comparison(V1_DEFINITION_TOKENS[name], tokens),
+          ]),
+          [
+            "**Total**",
+            `**~${thousands(total)}** (${share}% of a 200K context)`,
+            `**${v1TotalCell}**`,
+            `**${totalChange}**`,
+          ],
+        ],
+      ),
+    },
     {
       id: "token-cost-answers",
       table: renderTable(
@@ -456,7 +588,7 @@ async function checkReadme(blocks, failures, update) {
     return;
   }
   failures.push(
-    "README.md: the token cost table no longer matches this run. Run `pnpm run eval:update` and commit the diff.",
+    "README.md: the token cost tables no longer match this run. Run `pnpm run eval:update` and commit the diff.",
   );
 }
 
@@ -514,7 +646,14 @@ async function main() {
       );
     }
 
-    await checkReadme(renderTokenCost(responses), failures, update);
+    const costs = definitionCosts(await client.listTools());
+    checkDefinitionBudget(costs, failures);
+    checkSelectionKeywords(costs, failures);
+    await checkReadme(renderTokenCost(costs, responses), failures, update);
+    const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
+    console.log(
+      `${update ? "updated" : "checked"} tool definitions — ~${total} tokens across ${costs.length} tools`,
+    );
   });
 
   if (failures.length) {
