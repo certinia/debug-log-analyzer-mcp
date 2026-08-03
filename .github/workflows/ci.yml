@@ -8,18 +8,34 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Cancel superseded PR runs; main always finishes (baseline).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Nothing here writes to the repository. Each job asks for what it reads.
+permissions: {}
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm run lint
 
   build-test:
     name: ${{ matrix.task }} (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -32,6 +48,8 @@ jobs:
             command: pnpm run test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: ${{ matrix.node }}
@@ -40,8 +58,13 @@ jobs:
   eval:
     name: Eval (tool responses)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm run build
       - name: Check tool responses stay answerable and lean
