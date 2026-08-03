@@ -2,13 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
+[Common Changelog](https://common-changelog.org/), and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+_If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrating-from-1x)._
+
 ### Changed
 
+- **Breaking:** refuse `execute_anonymous` against production orgs, and orgs whose type cannot be read, unless the run is confirmed via [MCP elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) or `--allow-production-orgs` is set ([#52])
+- Offer `execute_anonymous` in every configuration, so agents can find it without server flags ([#52])
 - **Tool responses are smaller, with no loss of fact.** Every field a response used to carry is still there — the saving comes from shape, from not saying the same thing twice, and from not emitting digits nobody reads. Measured on a real 19 MB log: `get_apex_log_summary` ~305 → ~233 tokens, `analyze_apex_log_performance` ~420 → ~294, `find_performance_bottlenecks` ~93 → ~87 (~25% across the three).
   - `get_apex_log_summary` returns `governorLimits` as a flat table of `{name, used, limit}` rows instead of thirteen nested objects. All thirteen limits are still listed, including those at zero — "no DML statements ran" has to be answerable from the response.
   - Durations are rounded to 3 decimal places (ms) and percentages to 1, instead of emitting full float precision.
@@ -20,32 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `--allow-production-orgs`, to run against production without confirmation ([#52])
+- Add `--no-apex-execution`, to stop Apex running at all while the log analysis tools keep working ([#52])
 - **`pnpm run eval`** — an evaluation suite that drives the built server over stdio against committed log fixtures and asserts, per tool, that realistic user questions are still answerable, that no figure is reported twice, that the payload is under a token budget, and that it matches its golden file. It runs in CI, and is the gate for any change to a response shape. See [`tests/eval/README.md`](tests/eval/README.md).
-
-## [2.0.0] - 2026-07-28
-
-### Changed
-
-- Minimum supported Node.js is now **22**.
-- **`execute_anonymous` is always available.** It is no longer hidden from `tools/list` when no orgs are configured, so AI agents can discover it. Whether a given call is permitted is now decided per call.
-- **Production orgs are gated per call.** The server identifies the target org type (`sandbox`, `scratch`, `trial`, `developer`, `production`) once per session. Non-production orgs run as before. For a production org the server asks the user to confirm via [MCP elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) if the client supports it, and otherwise refuses with an error explaining how to proceed. An org whose type cannot be determined is treated as production.
-- `execute_anonymous` now declares `destructiveHint: true`, since anonymous Apex can modify or delete data.
-- The response from `execute_anonymous` includes the detected `orgType`.
-
-### Added
-
-- `--allow-production-orgs` — treat production orgs like any other, skipping both the confirmation prompt and the refusal.
-- `--no-apex-execution` — disable Apex execution entirely. The tool remains listed, and says so in its description, but every call is refused without contacting Salesforce. The log analysis tools are unaffected.
 
 ### Removed
 
-- **`--allowed-orgs` and its `ALLOW_ALL_ORGS`, `DEFAULT_TARGET_ORG` and `DEFAULT_TARGET_DEV_HUB` tokens.** The flag is still accepted so that existing client configurations continue to start, but it is ignored and logs a deprecation warning to stderr.
+- **Breaking:** remove `--allowed-orgs` and its `ALLOW_ALL_ORGS`, `DEFAULT_TARGET_ORG` and `DEFAULT_TARGET_DEV_HUB` tokens. The flag is accepted but ignored, and warns on stderr ([#52])
+- **Breaking:** drop support for Node.js 20, which reached end of life in April 2026. Node.js 22 is the minimum
 
-### Migration
+### Fixed
 
-- `--allowed-orgs <anything>` → remove the flag. Non-production orgs continue to work.
-- `--allowed-orgs ALLOW_ALL_ORGS` → remove the flag, and add `--allow-production-orgs` **only** if executing against production is intentional. `ALLOW_ALL_ORGS` no longer implies consent to run against production.
-- To restore the 1.x default of never executing Apex, pass `--no-apex-execution`.
+- Declare `execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
 
 ## [1.0.0] - 2026-03-20
 
@@ -58,3 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Org allowlist** (`--allowed-orgs`) — Disabled by default, must be explicitly enabled. Supports special tokens: `ALLOW_ALL_ORGS` (permit any org), `DEFAULT_TARGET_ORG` and `DEFAULT_TARGET_DEV_HUB` (resolve from Salesforce CLI config). Aliases in the allowlist are resolved to usernames for matching.
   - **Debug levels** — Configurable via the `debugLevel` parameter. Set all categories at once (e.g. `"FINEST"`), reset to defaults, or override specific categories like apexCode, database, and nba.
   - **Output directory** — Configurable via the `outputDir` parameter. Defaults to `.apex-log-mcp/` in the project root.
+
+<!-- Unreleased -->
+
+[#52]: https://github.com/certinia/debug-log-analyzer-mcp/issues/52
