@@ -17,7 +17,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 - **Breaking:** report governor limits as a flat `{name, used, limit}` table, and include the limits at zero, so a caller can tell "no DML ran" from "DML was never read" ([#86])
 - Make the `execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
 - Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33%, `execute_anonymous` by 30% after the first run, `get_apex_log_summary` by 27% and `find_performance_bottlenecks` by 5% ([#86])
-- Reduce the cost of enabling the tools by a third, from ~1,612 to ~1,087 tokens across the four definitions, with no tool renamed, no parameter removed and no response changed ([#87])
+- Reduce the standing cost of having the server connected by 31%, with no tool renamed, no parameter removed and no response changed: `execute_anonymous` by 49%, `find_performance_bottlenecks` by 12%, `get_apex_log_summary` by 11% and `analyze_apex_log_performance` by 4% ([#87])
 
 ### Added
 
