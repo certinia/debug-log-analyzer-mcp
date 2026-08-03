@@ -50,7 +50,7 @@ class ApexLogServer {
           tools: {},
         },
         instructions:
-          "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with get_apex_log_summary, then go deeper with the other tools.",
+          "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with get_apex_log_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.",
       },
     );
 
