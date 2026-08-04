@@ -8,25 +8,43 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Cancel superseded PR runs; main always finishes (baseline).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Nothing here writes to the repository. Each job asks for what it reads.
+permissions: {}
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - name: Set up Node
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '22'
+          persist-credentials: false
+      # pnpm before setup-node, here and below: the pnpm cache shells out to
+      # `pnpm store path`.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.nvmrc'
           cache: 'pnpm'
       - name: Install Packages
-        run: HUSKY=0 pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - run: pnpm run lint
 
   build-test:
     name: ${{ matrix.task }} (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -34,34 +52,45 @@ jobs:
         task: [Build, Test]
         include:
           - task: Build
-            command: pnpm run build
+            script: build
           - task: Test
-            command: pnpm run test
+            script: test
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
           cache: 'pnpm'
       - name: Install Packages
-        run: HUSKY=0 pnpm install --frozen-lockfile
-      - run: ${{ matrix.command }}
+        run: pnpm install --frozen-lockfile
+      # Through the environment, not the shell: an expression expanded into
+      # `run` is the template-injection shape, whatever the value happens to be.
+      - run: pnpm run "$TASK_SCRIPT"
+        env:
+          TASK_SCRIPT: ${{ matrix.script }}
 
   eval:
     name: Eval (tool responses)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - name: Set up Node
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: '22'
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.nvmrc'
           cache: 'pnpm'
       - name: Install Packages
-        run: HUSKY=0 pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - name: Check tool responses stay answerable and lean
         run: pnpm run eval

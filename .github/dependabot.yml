@@ -5,6 +5,10 @@ updates:
     schedule:
       interval: 'weekly'
     versioning-strategy: auto
+    # Let a release settle before adopting it; a compromised publish is
+    # usually yanked within days.
+    cooldown:
+      default-days: 7
     groups:
       npm-minor-patch:
         update-types: ['minor', 'patch']
@@ -12,6 +16,8 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns: ['*']

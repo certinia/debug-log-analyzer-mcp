@@ -4,9 +4,11 @@ on:
   push:
     branches: [main, release/**]
     paths-ignore: ['**/*.md', '**/*.txt']
+  # No branch or path filter, unlike the push trigger above: a required check
+  # that a pull request can skip stays pending forever. 2488157 removed the same
+  # branch filter from ci.yml, because a pull request stacked on another feature
+  # branch got no checks at all and merged unchecked.
   pull_request:
-    branches: [main, release/**]
-    paths-ignore: ['**/*.md', '**/*.txt']
   schedule:
     - cron: '26 5 * * 3' # weekly
 
@@ -15,11 +17,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions: {}
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    # build-mode: none on a repo this size finishes in minutes.
+    timeout-minutes: 30
     permissions:
       security-events: write # upload findings
       actions: read
@@ -30,17 +35,19 @@ jobs:
         language: ['javascript-typescript', 'actions']
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # TS analyzed from source; no build needed.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           queries: security-extended
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
         with:
           category: '/language:${{ matrix.language }}'
