@@ -1,8 +1,9 @@
 name: 'Dependency Review'
 
 on:
+  # No branch filter: a required check that a pull request can skip stays
+  # pending forever. See the same note in codeql.yml.
   pull_request:
-    branches: [main, release/**]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -4,9 +4,11 @@ on:
   push:
     branches: [main, release/**]
     paths-ignore: ['**/*.md', '**/*.txt']
+  # No branch or path filter, unlike the push trigger above: a required check
+  # that a pull request can skip stays pending forever. 2488157 removed the same
+  # branch filter from ci.yml, because a pull request stacked on another feature
+  # branch got no checks at all and merged unchecked.
   pull_request:
-    branches: [main, release/**]
-    paths-ignore: ['**/*.md', '**/*.txt']
   schedule:
     - cron: '26 5 * * 3' # weekly
 
