@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs, type Stats } from "fs";
+import { promises as fs, type BigIntStats } from "fs";
 
 import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
@@ -36,7 +36,12 @@ const mockParse = parse as jest.MockedFunction<typeof parse>;
 const mockExtractMethods = extractMethods as jest.MockedFunction<
   typeof extractMethods
 >;
-const mockStats = { mtimeMs: 1, size: 1 } as Stats;
+const mockStats = {
+  ino: 1n,
+  size: 1n,
+  mtimeNs: 1n,
+  ctimeNs: 1n,
+} as BigIntStats;
 
 // Helper function to create mock governor limits
 function createMockGovernorLimits(
@@ -177,7 +182,7 @@ describe("findPerformanceBottlenecks", () => {
         "Log file not found: /nonexistent/file.log",
       );
 
-      expect(mockFs.stat).toHaveBeenCalledWith("/nonexistent/file.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/nonexistent/file.log", { bigint: true });
       expect(mockFs.readFile).not.toHaveBeenCalled();
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -190,7 +195,7 @@ describe("findPerformanceBottlenecks", () => {
         "Permission denied",
       );
 
-      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath);
+      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath, { bigint: true });
       expect(mockFs.readFile).toHaveBeenCalledWith(mockLogFilePath, "utf-8");
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -205,7 +210,7 @@ describe("findPerformanceBottlenecks", () => {
         "Invalid log format",
       );
 
-      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath);
+      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath, { bigint: true });
       expect(mockFs.readFile).toHaveBeenCalledWith(mockLogFilePath, "utf-8");
       expect(mockParse).toHaveBeenCalledWith(mockLogContent);
     });

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
+import { promises as fs, type BigIntStats } from "fs";
 import {
   parse,
   ApexLog,
@@ -12,10 +12,27 @@ import {
 
 type CachedLog = {
   path: string;
-  mtimeMs: number;
-  size: number;
+  fingerprint: string;
   log: Promise<ApexLog>;
 };
+
+/**
+ * Everything `fs.stat` can say about which bytes are at this path.
+ *
+ * Size and modification time alone are not enough: `cp -p` puts a different
+ * file here and keeps both of them. The change time closes that, because POSIX
+ * moves `ctime` on any change to the inode and no copy tool can hold it back.
+ * The inode number closes a rename over the path. Both are read from the same
+ * `fs.stat` the cache already makes, so neither costs a further read.
+ *
+ * Nanoseconds rather than milliseconds, so two writes inside one millisecond
+ * are still two fingerprints. This is not a guarantee — only the content is
+ * that — but what it leaves is a file rewritten in place, to the same length,
+ * inside one nanosecond.
+ */
+function fingerprintOf(stats: BigIntStats): string {
+  return `${stats.ino}:${stats.size}:${stats.mtimeNs}:${stats.ctimeNs}`;
+}
 
 /**
  * The last parse, kept so that the usual "summary, then go deeper" flow parses
@@ -33,21 +50,21 @@ let cached: CachedLog | undefined;
 
 /**
  * Read and parse the log, reusing the last parse when the same file is asked
- * for again and neither its size nor its modification time has changed.
+ * for again and nothing `fs.stat` can see about it has changed.
  */
 export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
   let stats;
   try {
-    stats = await fs.stat(logFilePath);
+    stats = await fs.stat(logFilePath, { bigint: true });
   } catch {
     throw new Error(`Log file not found: ${logFilePath}`);
   }
 
+  const fingerprint = fingerprintOf(stats);
   if (
     cached &&
     cached.path === logFilePath &&
-    cached.mtimeMs === stats.mtimeMs &&
-    cached.size === stats.size
+    cached.fingerprint === fingerprint
   ) {
     return cached.log;
   }
@@ -57,12 +74,7 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
   // starting its own. The slot is filled in the same microtask as the miss
   // above, so a second caller cannot slip between the two.
   const pending = fs.readFile(logFilePath, "utf-8").then(parse);
-  cached = {
-    path: logFilePath,
-    mtimeMs: stats.mtimeMs,
-    size: stats.size,
-    log: pending,
-  };
+  cached = { path: logFilePath, fingerprint, log: pending };
 
   // A read or parse that failed must not be served to the next caller.
   pending.catch(() => {

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs, type Stats } from "fs";
+import { promises as fs, type BigIntStats } from "fs";
 import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
   analyzeLogPerformance,
@@ -29,7 +29,12 @@ jest.mock("../src/ApexLogParser", () => ({
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
 const mockedParse = parse as jest.MockedFunction<typeof parse>;
-const mockStats = { mtimeMs: 1, size: 1 } as Stats;
+const mockStats = {
+  ino: 1n,
+  size: 1n,
+  mtimeNs: 1n,
+  ctimeNs: 1n,
+} as BigIntStats;
 
 describe("analyzeLogPerformance", () => {
   beforeEach(() => {
@@ -67,7 +72,7 @@ describe("analyzeLogPerformance", () => {
         "Log file not found: /nonexistent/file.log",
       );
 
-      expect(mockedFs.stat).toHaveBeenCalledWith("/nonexistent/file.log");
+      expect(mockedFs.stat).toHaveBeenCalledWith("/nonexistent/file.log", { bigint: true });
     });
 
     it("should proceed when file exists", async () => {
@@ -81,7 +86,7 @@ describe("analyzeLogPerformance", () => {
 
       const result = await analyzeLogPerformance(args);
 
-      expect(mockedFs.stat).toHaveBeenCalledWith("/valid/file.log");
+      expect(mockedFs.stat).toHaveBeenCalledWith("/valid/file.log", { bigint: true });
       expect(mockedFs.readFile).toHaveBeenCalledWith(
         "/valid/file.log",
         "utf-8",

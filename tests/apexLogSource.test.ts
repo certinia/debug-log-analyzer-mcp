@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs, type Stats } from "fs";
+import { promises as fs, type BigIntStats } from "fs";
 
 import {
   clearApexLogCache,
@@ -26,7 +26,17 @@ jest.mock("../src/ApexLogParser", () => ({
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockParse = parse as jest.MockedFunction<typeof parse>;
 
-const statsOf = (mtimeMs: number, size: number) => ({ mtimeMs, size }) as Stats;
+const statsOf = (
+  mtimeNs: number,
+  size: number,
+  { ctimeNs = mtimeNs, ino = 7 } = {},
+) =>
+  ({
+    ino: BigInt(ino),
+    size: BigInt(size),
+    mtimeNs: BigInt(mtimeNs),
+    ctimeNs: BigInt(ctimeNs),
+  }) as BigIntStats;
 
 const nodeOf = (props: Record<string, unknown>): LogLine =>
   props as unknown as LogLine;
@@ -74,6 +84,24 @@ describe("apexLogSource", () => {
     it("parses again when the file size changed", async () => {
       await loadApexLog(logPath);
       mockFs.stat.mockResolvedValue(statsOf(1, 20));
+      await loadApexLog(logPath);
+
+      expect(mockParse).toHaveBeenCalledTimes(2);
+    });
+
+    it("parses again when a copy kept the modification time", async () => {
+      await loadApexLog(logPath);
+      // What `cp -p` leaves behind: same size, same mtime, same inode, and a
+      // change time it cannot hold back.
+      mockFs.stat.mockResolvedValue(statsOf(1, 10, { ctimeNs: 2 }));
+      await loadApexLog(logPath);
+
+      expect(mockParse).toHaveBeenCalledTimes(2);
+    });
+
+    it("parses again when another file was renamed over the path", async () => {
+      await loadApexLog(logPath);
+      mockFs.stat.mockResolvedValue(statsOf(1, 10, { ino: 8 }));
       await loadApexLog(logPath);
 
       expect(mockParse).toHaveBeenCalledTimes(2);

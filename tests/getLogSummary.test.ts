@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs, type Stats } from "fs";
+import { promises as fs, type BigIntStats } from "fs";
 
 import {
   getLogSummary,
@@ -35,7 +35,12 @@ jest.mock("../src/ApexLogParser", () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockParse = parse as jest.MockedFunction<typeof parse>;
-const mockStats = { mtimeMs: 1, size: 1 } as Stats;
+const mockStats = {
+  ino: 1n,
+  size: 1n,
+  mtimeNs: 1n,
+  ctimeNs: 1n,
+} as BigIntStats;
 
 // Helper function to create a mock LogLine
 const createMockLogLine = (
@@ -197,7 +202,7 @@ describe("getLogSummary", () => {
 
       const result = await getLogSummary(args);
 
-      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/test-log.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/test-log.log", { bigint: true });
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/test-log.log",
         "utf-8",
@@ -447,7 +452,7 @@ describe("getLogSummary", () => {
         "Log file not found: /path/to/nonexistent.log",
       );
 
-      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/nonexistent.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/nonexistent.log", { bigint: true });
       expect(mockFs.readFile).not.toHaveBeenCalled();
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -476,7 +481,7 @@ describe("getLogSummary", () => {
 
       await expect(getLogSummary(args)).rejects.toThrow("Failed to read file");
 
-      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/unreadable.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/unreadable.log", { bigint: true });
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/unreadable.log",
         "utf-8",
@@ -498,7 +503,7 @@ describe("getLogSummary", () => {
 
       await expect(getLogSummary(args)).rejects.toThrow("Failed to parse log");
 
-      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/corrupted.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/corrupted.log", { bigint: true });
       expect(mockFs.readFile).toHaveBeenCalledWith(
         "/path/to/corrupted.log",
         "utf-8",
