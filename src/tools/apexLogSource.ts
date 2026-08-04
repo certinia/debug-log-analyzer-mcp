@@ -17,13 +17,13 @@ type CachedLog = {
 };
 
 /**
- * Everything `fs.stat` can say about which bytes are at this path.
+ * Everything a stat can say about which bytes these are.
  *
  * Size and modification time alone are not enough: `cp -p` puts a different
  * file here and keeps both of them. The change time closes that, because POSIX
  * moves `ctime` on any change to the inode and no copy tool can hold it back.
- * The inode number closes a rename over the path. Both are read from the same
- * `fs.stat` the cache already makes, so neither costs a further read.
+ * The inode number closes a rename over the path. Both are read from the stat
+ * the cache already makes, so neither costs a further read.
  *
  * Nanoseconds rather than milliseconds, so two writes inside one millisecond
  * are still two fingerprints. This is not a guarantee — only the content is
@@ -66,42 +66,53 @@ function scheduleEviction(): void {
 
 /**
  * Read and parse the log, reusing the last parse when the same file is asked
- * for again and nothing `fs.stat` can see about it has changed.
+ * for again and nothing a stat can see about it has changed.
  */
 export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
-  let stats;
+  // Open the file once, and stat and read that one handle. A stat of the path
+  // and then a read of the path can touch two different files, if something
+  // replaces the path between them: the fingerprint would belong to the old
+  // file and the bytes to the new one. A handle holds one inode, so the
+  // fingerprint below describes exactly the bytes this call goes on to read.
+  let handle;
+  let fingerprint;
   try {
-    stats = await fs.stat(logFilePath, { bigint: true });
+    handle = await fs.open(logFilePath, "r");
+    fingerprint = fingerprintOf(await handle.stat({ bigint: true }));
   } catch {
+    await handle?.close();
     throw new Error(`Log file not found: ${logFilePath}`);
   }
 
-  const fingerprint = fingerprintOf(stats);
-  if (
-    cached &&
-    cached.path === logFilePath &&
-    cached.fingerprint === fingerprint
-  ) {
-    scheduleEviction();
-    return cached.log;
-  }
-
-  // Hold the parse while it runs, not after it finishes, so a caller that
-  // arrives while a large log is still being read shares that read instead of
-  // starting its own. The slot is filled in the same microtask as the miss
-  // above, so a second caller cannot slip between the two.
-  const pending = fs.readFile(logFilePath, "utf-8").then(parse);
-  cached = { path: logFilePath, fingerprint, log: pending };
-  scheduleEviction();
-
-  // A read or parse that failed must not be served to the next caller.
-  pending.catch(() => {
-    if (cached?.log === pending) {
-      clearApexLogCache();
+  try {
+    if (
+      cached &&
+      cached.path === logFilePath &&
+      cached.fingerprint === fingerprint
+    ) {
+      scheduleEviction();
+      return cached.log;
     }
-  });
 
-  return pending;
+    // Hold the parse while it runs, not after it finishes, so a caller that
+    // arrives while a large log is still being read shares that read instead of
+    // starting its own. The slot is filled in the same microtask as the miss
+    // above, so a second caller cannot slip between the two.
+    const pending = handle.readFile("utf-8").then(parse);
+    cached = { path: logFilePath, fingerprint, log: pending };
+    scheduleEviction();
+
+    // A read or parse that failed must not be served to the next caller.
+    pending.catch(() => {
+      if (cached?.log === pending) {
+        clearApexLogCache();
+      }
+    });
+
+    return await pending;
+  } finally {
+    await handle.close();
+  }
 }
 
 /** Drop the cached parse. Called on the idle timer, and by tests. */

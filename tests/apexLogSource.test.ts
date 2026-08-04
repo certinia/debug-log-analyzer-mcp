@@ -12,12 +12,23 @@ import {
 } from "../src/tools/apexLogSource";
 import { parse, ApexLog, LogLine } from "../src/ApexLogParser";
 
-jest.mock("fs", () => ({
-  promises: {
-    stat: jest.fn(),
-    readFile: jest.fn(),
-  },
-}));
+jest.mock("fs", () => {
+  const stat = jest.fn();
+  const readFile = jest.fn();
+  // A handle is the file at one path, so its stat and read delegate to the
+  // mocks above with that path filled in. Tests set and assert on those.
+  return {
+    promises: {
+      stat,
+      readFile,
+      open: jest.fn(async (path: string) => ({
+        stat: (options: unknown) => stat(path, options),
+        readFile: (encoding: unknown) => readFile(path, encoding),
+        close: jest.fn(),
+      })),
+    },
+  };
+});
 
 jest.mock("../src/ApexLogParser", () => ({
   parse: jest.fn(),
@@ -78,9 +89,22 @@ describe("apexLogSource", () => {
     it("parses the file on the first call", async () => {
       const log = await loadApexLog(logPath);
 
+      expect(mockFs.open).toHaveBeenCalledWith(logPath, "r");
       expect(mockFs.readFile).toHaveBeenCalledWith(logPath, "utf-8");
       expect(mockParse).toHaveBeenCalledWith("log content");
       expect(log).toBe(mockParse.mock.results[0]?.value);
+    });
+
+    it("closes every file it opens", async () => {
+      await loadApexLog(logPath);
+      // The second call is a cache hit, and still opened the file to stat it.
+      await loadApexLog(logPath);
+
+      const handles = await Promise.all(
+        mockFs.open.mock.results.map((result) => result.value),
+      );
+      expect(handles).toHaveLength(2);
+      handles.forEach((handle) => expect(handle.close).toHaveBeenCalled());
     });
 
     it("reuses the parse when the same unchanged file is asked for again", async () => {

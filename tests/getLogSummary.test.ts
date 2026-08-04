@@ -22,12 +22,23 @@ import {
 import { decode } from "@toon-format/toon";
 
 // Mock the dependencies
-jest.mock("fs", () => ({
-  promises: {
-    stat: jest.fn(),
-    readFile: jest.fn(),
-  },
-}));
+jest.mock("fs", () => {
+  const stat = jest.fn();
+  const readFile = jest.fn();
+  // A handle is the file at one path, so its stat and read delegate to the
+  // mocks above with that path filled in. Tests set and assert on those.
+  return {
+    promises: {
+      stat,
+      readFile,
+      open: jest.fn(async (path: string) => ({
+        stat: (options: unknown) => stat(path, options),
+        readFile: (encoding: unknown) => readFile(path, encoding),
+        close: jest.fn(),
+      })),
+    },
+  };
+});
 
 jest.mock("../src/ApexLogParser", () => ({
   parse: jest.fn(),
