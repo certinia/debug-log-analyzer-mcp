@@ -34,7 +34,7 @@ pnpm start
 
 - **src/tools/responseShaping.ts**: Shared helpers for keeping responses lean — `omitEmpty`, `toLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`
 
-- **src/tools/apexLogSource.ts**: The one way the three analysis tools get a log — `loadApexLog` (reads and parses, caching the last parse by path and a fingerprint of everything `fs.stat` can see — inode, size, and modification and change time in nanoseconds, so a `cp -p` that keeps the modification time still misses; the slot holds the in-flight promise, so concurrent callers share one parse and a failed read is not kept), `isMethodNode` (the one method test, so the tools agree on `totalMethods`) and `walkLog`
+- **src/tools/apexLogSource.ts**: The one way the three analysis tools get a log — `loadApexLog` (reads and parses, caching the last parse by path and a fingerprint of everything `fs.stat` can see — inode, size, and modification and change time in nanoseconds, so a `cp -p` that keeps the modification time still misses; the slot holds the in-flight promise, so concurrent callers share one parse and a failed read is not kept; it is dropped five minutes after its last use, on an `unref`ed timer, because a parsed log holds four to five times the size of the file), `isMethodNode` (the one method test, so the tools agree on `totalMethods`) and `walkLog`
 
 - **src/ApexLogParser.ts**: Complex log parsing engine (33k+ tokens)
   - Exports `parse()` function and `ApexLogParser` class

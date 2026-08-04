@@ -49,6 +49,22 @@ function fingerprintOf(stats: BigIntStats): string {
 let cached: CachedLog | undefined;
 
 /**
+ * How long the slot survives after its last use. A parsed log holds four to
+ * five times the size of the file, so a 200 MB log holds about a gigabyte.
+ * That is worth holding while an agent works through one log, and not worth
+ * holding until the process exits.
+ */
+const IDLE_EVICTION_MS = 5 * 60_000;
+
+let evictionTimer: NodeJS.Timeout | undefined;
+
+function scheduleEviction(): void {
+  clearTimeout(evictionTimer);
+  // unref, so a waiting timer never keeps an otherwise idle server alive.
+  evictionTimer = setTimeout(clearApexLogCache, IDLE_EVICTION_MS).unref();
+}
+
+/**
  * Read and parse the log, reusing the last parse when the same file is asked
  * for again and nothing `fs.stat` can see about it has changed.
  */
@@ -66,6 +82,7 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
     cached.path === logFilePath &&
     cached.fingerprint === fingerprint
   ) {
+    scheduleEviction();
     return cached.log;
   }
 
@@ -75,19 +92,22 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
   // above, so a second caller cannot slip between the two.
   const pending = fs.readFile(logFilePath, "utf-8").then(parse);
   cached = { path: logFilePath, fingerprint, log: pending };
+  scheduleEviction();
 
   // A read or parse that failed must not be served to the next caller.
   pending.catch(() => {
     if (cached?.log === pending) {
-      cached = undefined;
+      clearApexLogCache();
     }
   });
 
   return pending;
 }
 
-/** Drop the cached parse. For tests, which write a new log to the same path. */
+/** Drop the cached parse. Called on the idle timer, and by tests. */
 export function clearApexLogCache(): void {
+  clearTimeout(evictionTimer);
+  evictionTimer = undefined;
   cached = undefined;
 }
 

@@ -18,7 +18,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 - Make the `execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
 - Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33%, `execute_anonymous` by 30% after the first run, `get_apex_log_summary` by 27% and `find_performance_bottlenecks` by 5% ([#86])
 - Reduce the standing cost of having the server connected by 31%, with no tool renamed, no parameter removed and no response changed: `execute_anonymous` by 49%, `find_performance_bottlenecks` by 12%, `get_apex_log_summary` by 11% and `analyze_apex_log_performance` by 4% ([#87])
-- Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again ([#88])
+- Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again. The parse is dropped after five minutes unused, so a large log is not held for the life of the session ([#88])
 
 ### Added
 

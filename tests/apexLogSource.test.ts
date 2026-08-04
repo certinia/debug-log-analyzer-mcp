@@ -41,6 +41,25 @@ const statsOf = (
 const nodeOf = (props: Record<string, unknown>): LogLine =>
   props as unknown as LogLine;
 
+/**
+ * Run the body with the clock under our control. `jest.useRealTimers()` leaves
+ * `globalThis.clearTimeout` deleted rather than restored in this environment,
+ * so the real ones are put back by hand.
+ */
+const withFakeTimers = async (body: () => Promise<void>): Promise<void> => {
+  const real = {
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+  };
+  jest.useFakeTimers();
+  try {
+    await body();
+  } finally {
+    jest.useRealTimers();
+    Object.assign(globalThis, real);
+  }
+};
+
 describe("apexLogSource", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -112,6 +131,28 @@ describe("apexLogSource", () => {
       await loadApexLog("/path/to/other.log");
 
       expect(mockParse).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops the parse once it has sat unused", async () => {
+      await withFakeTimers(async () => {
+        await loadApexLog(logPath);
+        jest.advanceTimersByTime(5 * 60_000);
+        await loadApexLog(logPath);
+      });
+
+      expect(mockParse).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the parse while it is still asked for", async () => {
+      await withFakeTimers(async () => {
+        await loadApexLog(logPath);
+        jest.advanceTimersByTime(4 * 60_000);
+        await loadApexLog(logPath);
+        jest.advanceTimersByTime(4 * 60_000);
+        await loadApexLog(logPath);
+      });
+
+      expect(mockParse).toHaveBeenCalledTimes(1);
     });
 
     it("shares one parse between callers that arrive while it runs", async () => {
