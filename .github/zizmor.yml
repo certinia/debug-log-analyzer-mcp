@@ -1,7 +1,25 @@
 # Keep the SHA pinning self-enforcing: a floating tag is a finding, not a
-# review comment somebody has to remember to make.
+# review comment somebody has to remember to make. This only blocks a merge
+# because the job runs zizmor with `advanced-security: false` - see the comment
+# on that step in workflow-lint.yml.
 rules:
   unpinned-uses:
     config:
       policies:
         '*': hash-pin
+
+  # ci.yml only, and judged rather than waved through. The audit fires because
+  # `workflow_dispatch` is a trigger that often publishes. This workflow does
+  # not - it lints, builds and tests, uploads no artifact and feeds no later
+  # job, so a poisoned pnpm store has nowhere to go, and the cache is worth
+  # keeping for the six-way matrix. publish.yml, the one workflow that does
+  # publish, needs no entry here: it sets `package-manager-cache: false`, so
+  # the audit is satisfied by the code and stays live if a cache is added back.
+  #
+  # Scoped to the file rather than the three steps, because zizmor's inline
+  # form would put text after the `# v7.0.0` comment that dependabot reads to
+  # update the pin. The cost of the wider scope: a future `actions/cache` step
+  # or a new job in ci.yml is covered by this too, and should be re-judged.
+  cache-poisoning:
+    ignore:
+      - ci.yml

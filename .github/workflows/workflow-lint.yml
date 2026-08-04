@@ -13,10 +13,6 @@ concurrency:
 
 permissions: {}
 
-env:
-  ACTIONLINT_VERSION: 1.7.12
-  ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-
 jobs:
   actionlint:
     name: actionlint
@@ -31,7 +27,12 @@ jobs:
 
       # The release tarball rather than docker://rhysd/actionlint, so the job
       # does not depend on an anonymous Docker Hub pull. The checksum pins it.
+      # The price of that choice: dependabot only rewrites `uses:` refs, so
+      # unlike every other pin on this branch these two need a manual bump.
       - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
           tarball="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           curl --fail --silent --show-error --location --output "$tarball" \
@@ -48,10 +49,21 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      security-events: write # upload the SARIF report to code scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      # `advanced-security: false` is what makes this job a gate and not a
+      # report. It defaults to true, which runs zizmor with `--format=sarif`,
+      # and zizmor suppresses its exit codes 11-14 in SARIF mode on purpose, so
+      # a finding would upload to the security tab and the job would still
+      # pass. Measured on zizmor 1.29.0 with one unpinned action: console
+      # format exits 14, SARIF exits 0. Console format also needs no
+      # `security-events: write`.
+      # `annotations: true` puts each finding on the PR diff instead. It
+      # requires `advanced-security: false`; the two are mutually exclusive.
       - uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          advanced-security: false
+          annotations: true
