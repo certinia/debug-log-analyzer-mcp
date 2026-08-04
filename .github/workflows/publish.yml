@@ -15,7 +15,6 @@ jobs:
   build_and_publish:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: npm-publish
     permissions:
       id-token: write # OIDC, for npm trusted publishing
       contents: read
