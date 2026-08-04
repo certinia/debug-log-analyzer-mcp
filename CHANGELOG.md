@@ -35,7 +35,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 
 - Declare `execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
 - Stop `analyze_apex_log_performance` reporting that performance looks good on a log that exhausted the CPU limit ([#86])
-- Report the same `totalMethods` from all three analysis tools; `get_apex_log_summary` did not count entry points, so it reported fewer methods than the other two ([#88])
+- Report the same `totalMethods` from all three analysis tools on an unfiltered call; `get_apex_log_summary` did not count entry points, so it reported fewer methods than the other two ([#88])
 
 ## [1.0.0] - 2026-03-20
 
