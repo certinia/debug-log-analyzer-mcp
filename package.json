@@ -22,7 +22,7 @@
     "test:coverage": "jest --coverage",
     "eval": "node scripts/eval.mjs",
     "eval:update": "node scripts/eval.mjs --update",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint/ ./src ./tests"
+    "lint": "eslint ./src ./tests"
   },
   "keywords": [
     "mcp",
