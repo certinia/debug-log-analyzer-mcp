@@ -3,7 +3,12 @@
  */
 
 import { promises as fs } from "fs";
-import { parse, ApexLog, LogLine } from "../ApexLogParser.js";
+import {
+  parse,
+  ApexLog,
+  LogLine,
+  type LogSubCategory,
+} from "../ApexLogParser.js";
 
 type CachedLog = {
   path: string;
@@ -81,7 +86,7 @@ export function clearApexLogCache(): void {
 export function isMethodNode(node: LogLine): boolean {
   // subCategory is declared on TimedNode, a subclass, so it is read off the
   // node rather than tested with instanceof.
-  const { subCategory } = node as LogLine & { subCategory?: string };
+  const { subCategory } = node as LogLine & { subCategory?: LogSubCategory };
   return (
     node.type === "CODE_UNIT_STARTED" ||
     node.type === "METHOD_ENTRY" ||

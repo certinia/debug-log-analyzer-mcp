@@ -28,7 +28,8 @@ const mockParse = parse as jest.MockedFunction<typeof parse>;
 
 const statsOf = (mtimeMs: number, size: number) => ({ mtimeMs, size }) as Stats;
 
-const nodeOf = (props: Partial<LogLine>): LogLine => props as LogLine;
+const nodeOf = (props: Record<string, unknown>): LogLine =>
+  props as unknown as LogLine;
 
 describe("apexLogSource", () => {
   beforeEach(() => {
@@ -128,10 +129,9 @@ describe("apexLogSource", () => {
       expect(isMethodNode(nodeOf({ type: "METHOD_ENTRY" }))).toBe(true);
       expect(isMethodNode(nodeOf({ type: "SOQL_EXECUTE_BEGIN" }))).toBe(false);
       expect(
-        isMethodNode({
-          type: "CONSTRUCTOR_ENTRY",
-          subCategory: "Method",
-        } as unknown as LogLine),
+        isMethodNode(
+          nodeOf({ type: "CONSTRUCTOR_ENTRY", subCategory: "Method" }),
+        ),
       ).toBe(true);
     });
   });
