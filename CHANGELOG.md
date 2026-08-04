@@ -18,6 +18,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 - Make the `execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
 - Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33%, `execute_anonymous` by 30% after the first run, `get_apex_log_summary` by 27% and `find_performance_bottlenecks` by 5% ([#86])
 - Reduce the standing cost of having the server connected by 31%, with no tool renamed, no parameter removed and no response changed: `execute_anonymous` by 49%, `find_performance_bottlenecks` by 12%, `get_apex_log_summary` by 11% and `analyze_apex_log_performance` by 4% ([#87])
+- Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again. The parse is dropped after five minutes unused, so a large log is not held for the life of the session ([#88])
 
 ### Added
 
@@ -34,6 +35,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 
 - Declare `execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
 - Stop `analyze_apex_log_performance` reporting that performance looks good on a log that exhausted the CPU limit ([#86])
+- Report the same `totalMethods` from all three analysis tools on an unfiltered call; `get_apex_log_summary` did not count entry points, so it reported fewer methods than the other two ([#88])
 
 ## [1.0.0] - 2026-03-20
 
@@ -52,3 +54,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 [#52]: https://github.com/certinia/debug-log-analyzer-mcp/issues/52
 [#86]: https://github.com/certinia/debug-log-analyzer-mcp/issues/86
 [#87]: https://github.com/certinia/debug-log-analyzer-mcp/issues/87
+[#88]: https://github.com/certinia/debug-log-analyzer-mcp/issues/88

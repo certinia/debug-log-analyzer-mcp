@@ -1,6 +1,6 @@
 size: 1274
 totalExecutionTime: 0.561
-totalMethods: 1
+totalMethods: 2
 totalSOQLQueries: 0
 totalDMLOperations: 0
 totalSOQLRows: 0

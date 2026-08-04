@@ -2,8 +2,9 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs } from "fs";
+import { promises as fs, type BigIntStats } from "fs";
 
+import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
   findPerformanceBottlenecks,
   BottleneckArgs,
@@ -15,12 +16,23 @@ import { extractMethods, SlowMethod } from "../src/tools/analyzeLogPerformance";
 import { decode } from "@toon-format/toon";
 
 // Mock dependencies
-jest.mock("fs", () => ({
-  promises: {
-    access: jest.fn(),
-    readFile: jest.fn(),
-  },
-}));
+jest.mock("fs", () => {
+  const stat = jest.fn();
+  const readFile = jest.fn();
+  // A handle is the file at one path, so its stat and read delegate to the
+  // mocks above with that path filled in. Tests set and assert on those.
+  return {
+    promises: {
+      stat,
+      readFile,
+      open: jest.fn(async (path: string) => ({
+        stat: (options: unknown) => stat(path, options),
+        readFile: (encoding: unknown) => readFile(path, encoding),
+        close: jest.fn(),
+      })),
+    },
+  };
+});
 
 jest.mock("../src/ApexLogParser", () => ({
   parse: jest.fn(),
@@ -35,6 +47,12 @@ const mockParse = parse as jest.MockedFunction<typeof parse>;
 const mockExtractMethods = extractMethods as jest.MockedFunction<
   typeof extractMethods
 >;
+const mockStats = {
+  ino: 1n,
+  size: 1n,
+  mtimeNs: 1n,
+  ctimeNs: 1n,
+} as BigIntStats;
 
 // Helper function to create mock governor limits
 function createMockGovernorLimits(
@@ -150,7 +168,10 @@ describe("findPerformanceBottlenecks", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockFs.access.mockResolvedValue(undefined);
+    // The suites reuse one path with different content, which the cache would
+    // otherwise hide.
+    clearApexLogCache();
+    mockFs.stat.mockResolvedValue(mockStats);
     mockFs.readFile.mockResolvedValue(mockLogContent);
   });
 
@@ -166,13 +187,13 @@ describe("findPerformanceBottlenecks", () => {
   describe("File validation and error handling", () => {
     it("should throw an error if log file does not exist", async () => {
       const args: BottleneckArgs = { logFilePath: "/nonexistent/file.log" };
-      mockFs.access.mockRejectedValue(new Error("File not found"));
+      mockFs.stat.mockRejectedValue(new Error("File not found"));
 
       await expect(findPerformanceBottlenecks(args)).rejects.toThrow(
         "Log file not found: /nonexistent/file.log",
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith("/nonexistent/file.log");
+      expect(mockFs.stat).toHaveBeenCalledWith("/nonexistent/file.log", { bigint: true });
       expect(mockFs.readFile).not.toHaveBeenCalled();
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -185,7 +206,7 @@ describe("findPerformanceBottlenecks", () => {
         "Permission denied",
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith(mockLogFilePath);
+      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath, { bigint: true });
       expect(mockFs.readFile).toHaveBeenCalledWith(mockLogFilePath, "utf-8");
       expect(mockParse).not.toHaveBeenCalled();
     });
@@ -200,7 +221,7 @@ describe("findPerformanceBottlenecks", () => {
         "Invalid log format",
       );
 
-      expect(mockFs.access).toHaveBeenCalledWith(mockLogFilePath);
+      expect(mockFs.stat).toHaveBeenCalledWith(mockLogFilePath, { bigint: true });
       expect(mockFs.readFile).toHaveBeenCalledWith(mockLogFilePath, "utf-8");
       expect(mockParse).toHaveBeenCalledWith(mockLogContent);
     });
