@@ -85,6 +85,33 @@ describe("apexLogSource", () => {
       expect(mockParse).toHaveBeenCalledTimes(2);
     });
 
+    it("shares one parse between callers that arrive while it runs", async () => {
+      let release: (content: string) => void = () => {};
+      mockFs.readFile.mockReturnValue(
+        new Promise<string>((resolve) => {
+          release = resolve;
+        }) as ReturnType<typeof fs.readFile>,
+      );
+
+      const both = Promise.all([loadApexLog(logPath), loadApexLog(logPath)]);
+      release("log content");
+      const [first, second] = await both;
+
+      expect(second).toBe(first);
+      expect(mockFs.readFile).toHaveBeenCalledTimes(1);
+      expect(mockParse).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not serve a failed read to the next caller", async () => {
+      mockFs.readFile.mockRejectedValueOnce(new Error("EACCES"));
+
+      await expect(loadApexLog(logPath)).rejects.toThrow("EACCES");
+      const retried = await loadApexLog(logPath);
+
+      expect(retried).toBe(mockParse.mock.results[0]?.value);
+      expect(mockFs.readFile).toHaveBeenCalledTimes(2);
+    });
+
     it("reports a missing file and does not read it", async () => {
       mockFs.stat.mockRejectedValue(new Error("ENOENT"));
 

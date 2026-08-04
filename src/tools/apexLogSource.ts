@@ -9,7 +9,7 @@ type CachedLog = {
   path: string;
   mtimeMs: number;
   size: number;
-  log: ApexLog;
+  log: Promise<ApexLog>;
 };
 
 /**
@@ -41,14 +41,26 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
     return cached.log;
   }
 
-  const log = parse(await fs.readFile(logFilePath, "utf-8"));
+  // Hold the parse while it runs, not after it finishes, so a caller that
+  // arrives while a large log is still being read shares that read instead of
+  // starting its own. The slot is filled in the same microtask as the miss
+  // above, so a second caller cannot slip between the two.
+  const pending = fs.readFile(logFilePath, "utf-8").then(parse);
   cached = {
     path: logFilePath,
     mtimeMs: stats.mtimeMs,
     size: stats.size,
-    log,
+    log: pending,
   };
-  return log;
+
+  // A read or parse that failed must not be served to the next caller.
+  pending.catch(() => {
+    if (cached?.log === pending) {
+      cached = undefined;
+    }
+  });
+
+  return pending;
 }
 
 /** Drop the cached parse. For tests, which write a new log to the same path. */
