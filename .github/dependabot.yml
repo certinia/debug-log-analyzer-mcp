@@ -16,9 +16,7 @@ updates:
       npm-minor-patch:
         update-types: ['minor', 'patch']
   - package-ecosystem: 'github-actions'
-    # '/' covers .github/workflows only, so the composite actions are listed
-    # too - otherwise their pinned SHAs would never be updated.
-    directories: ['/', '/.github/actions/*']
+    directory: '/'
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 5
