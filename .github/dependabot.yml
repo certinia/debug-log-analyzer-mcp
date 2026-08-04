@@ -5,9 +5,6 @@ updates:
     schedule:
       interval: 'weekly'
     versioning-strategy: auto
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: 'chore(deps)'
     # Let a release settle before adopting it; a compromised publish is
     # usually yanked within days.
     cooldown:
@@ -19,9 +16,6 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: 'chore(deps)'
     cooldown:
       default-days: 7
     groups:
