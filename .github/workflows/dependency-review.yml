@@ -17,9 +17,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      # Post the summary comment on the PR. A fork PR gets a read-only token,
-      # so the comment is skipped there; the check itself still runs.
-      pull-requests: write
+      pull-requests: write # post the summary comment on the PR
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
