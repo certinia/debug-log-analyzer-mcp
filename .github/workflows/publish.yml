@@ -66,5 +66,9 @@ jobs:
 
       # --no-git-checks: the release checkout is detached at the tag, which
       # pnpm otherwise refuses to publish from.
+      # --provenance: attaches a signed statement of the repository, commit and
+      # workflow run that built the tarball. It needs the `id-token: write`
+      # granted above, and the `repository` field in package.json, which npm
+      # checks against the repository it is building from.
       - name: Publish
-        run: pnpm publish --access public --no-git-checks
+        run: pnpm publish --access public --no-git-checks --provenance
