@@ -201,6 +201,17 @@ describe("analyzeLogPerformance", () => {
       );
     });
 
+    it("should drop a method whose timestamps did not parse to a number", () => {
+      const mockApexLog = createMockApexLog();
+      mockApexLog.children.push(createMockLogLine("BrokenMethod", NaN, NaN));
+
+      const methods = extractMethods(mockApexLog, 0);
+
+      expect(methods.map((method) => method.name)).not.toContain(
+        "BrokenMethod",
+      );
+    });
+
     it("should filter methods by namespace", () => {
       const mockApexLog = createMockApexLogWithNamespaces();
       const methods = extractMethods(mockApexLog, 0, "CustomNamespace");

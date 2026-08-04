@@ -143,7 +143,9 @@ export function extractMethods(
 
   walkLog(apexLog, (node) => {
     if (!isMethodNode(node)) return;
-    if (node.duration.total < minDuration) return;
+    // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
+    // NaN, which fails both, and such a method must be dropped, not reported.
+    if (!(node.duration.total >= minDuration)) return;
     if (namespaceFilter && node.namespace !== namespaceFilter) return;
 
     methods.push({
