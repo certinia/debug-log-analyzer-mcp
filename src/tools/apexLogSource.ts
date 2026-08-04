@@ -17,6 +17,12 @@ type CachedLog = {
  * a large log once instead of once per tool. One slot only: the flow works
  * through a single log at a time, and a parsed 19 MB log is too big to hold
  * several of.
+ *
+ * This is not protocol state, so it holds under a stateless MCP revision. It is
+ * a memo of a pure function of a file on disk, re-checked against `fs.stat` on
+ * every call, and `logFilePath` is already the explicit handle the MCP
+ * "Stateful Tools" guidance asks a tool to take. No request depends on an
+ * earlier one: drop the slot and every response is the same.
  */
 let cached: CachedLog | undefined;
 
