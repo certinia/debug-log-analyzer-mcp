@@ -1,4 +1,4 @@
-name: Publish Stable
+name: Publish
 
 on:
   release:
@@ -43,14 +43,14 @@ jobs:
 
       # Before the install, which is the slow step here: a release published
       # from the wrong tag would otherwise ship silently, and there is no
-      # reason to pay for a cold install before finding that out.
-      - name: Verify the package version matches the release tag
+      # reason to pay for a cold install before finding that out. The script
+      # needs no dependencies, only the checkout.
+      - name: Resolve the npm dist-tag
+        id: release
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          pkg=$(node -p "require('./package.json').version")
-          [ "${RELEASE_TAG#v}" = "$pkg" ] ||
-            { echo "::error::release tag $RELEASE_TAG does not match package.json $pkg"; exit 1; }
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: node scripts/release-tag.mjs
 
       - name: Dependencies
         run: pnpm install --frozen-lockfile
@@ -70,5 +70,11 @@ jobs:
       # workflow run that built the tarball. It needs the `id-token: write`
       # granted above, and the `repository` field in package.json, which npm
       # checks against the repository it is building from.
+      # --tag: without it every publish moves `latest`, which is the pointer
+      # `npx` and a bare `npm install` follow. The value is one of four words
+      # the step above picks from a fixed list, so it can carry nothing else
+      # into this command.
       - name: Publish
-        run: pnpm publish --access public --no-git-checks --provenance
+        run: >-
+          pnpm publish --access public --no-git-checks --provenance
+          --tag ${{ steps.release.outputs.dist_tag }}

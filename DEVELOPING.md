@@ -15,6 +15,7 @@ Welcome to the development guide for the **Apex Log MCP Server**. This document 
 5. [Shaping Tool Responses](#️-shaping-tool-responses)
 6. [Shaping Tool Definitions](#️-shaping-tool-definitions)
 7. [Testing Your Changes](#-testing-your-changes)
+8. [Releasing](#-releasing)
 
 ## 🔧 Prerequisites
 
@@ -237,3 +238,54 @@ pnpm run build && pnpm run eval
 ```
 
 Ensure all tests pass before submitting your pull request.
+
+## 🚢 Releasing
+
+Publishing a release publishes to npm. `.github/workflows/publish.yml` runs on `release: published`, and `scripts/release-tag.mjs` decides which npm **dist-tag** the version goes under.
+
+A dist-tag is a pointer to one version. `latest` is the one that matters, because `npm install @certinia/apex-log-mcp`, `@latest` and `npx` all follow it — and the VS Code extension starts this server through `npx`. A prerelease published under `latest` reaches every user on their next run, and the only way back is to publish again.
+
+So the version chooses the channel:
+
+| Version           | dist-tag | Installed with |
+| ----------------- | -------- | -------------- |
+| `2.0.0`           | `latest` | `@certinia/apex-log-mcp` |
+| `2.0.0-beta.1`    | `beta`   | `@certinia/apex-log-mcp@beta` |
+| `2.0.0-alpha.1`   | `alpha`  | `@certinia/apex-log-mcp@alpha` |
+| `2.0.0-rc.1`      | `rc`     | `@certinia/apex-log-mcp@rc` |
+
+`alpha`, `beta` and `rc` are the only prerelease identifiers accepted; any other fails the release rather than create a dist-tag nobody would ask for.
+
+### Publishing a beta
+
+Nothing changes in the release flow itself. The version string picks the channel, and the pre-release tick has to agree with it.
+
+1. Bump the version, without a local tag — GitHub creates the tag when the release is published:
+
+   ```zsh
+   pnpm version premajor --preid beta --no-git-tag-version   # 1.0.0 -> 2.0.0-beta.0
+   ```
+
+2. Commit and push it to `main`.
+3. Draft a new GitHub release, and create the tag `2.0.0-beta.0` on publish, as usual.
+4. **Tick “Set as a pre-release”.** This is the only new step.
+5. Publish. The workflow reads the tag, resolves `beta`, and publishes there.
+6. Check the pointers: `npm dist-tag ls @certinia/apex-log-mcp`. `latest` must still be the last stable.
+
+Later betas come from `pnpm version prerelease --no-git-tag-version`, and the stable release from `pnpm version major --no-git-tag-version`, which drops the identifier — and then the tick comes off.
+
+To see the dist-tag before you tag anything:
+
+```zsh
+RELEASE_TAG=2.0.0-beta.0 PRERELEASE=true node scripts/release-tag.mjs
+```
+
+### When the release is refused
+
+The check runs before the install, and long before the publish, so a refused release leaves npm untouched. Correct the version or the tick and release again.
+
+Re-running the failed job does not help: a re-run replays the original event, so it carries the same pre-release flag that failed. Delete the release and create it again — the git tag can stay, and the new release selects it instead of creating it.
+
+### The changelog
+
+`## [Unreleased]` stays as it is through the betas. A beta is a preview of the same unreleased content, not its own set of changes; the heading becomes `## [2.0.0] - <date>` when the stable release is tagged.
