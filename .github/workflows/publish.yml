@@ -5,8 +5,10 @@ on:
     types: [published]
 
 # Never cancel a publish in flight; a half-run release is worse than a queue.
+# No ${{ github.ref }} in the group, on purpose: the ref is the release tag, so
+# keying on it would let two releases publish at the same time.
 concurrency:
-  group: publish-${{ github.ref }}
+  group: publish
   cancel-in-progress: false
 
 permissions: {}
