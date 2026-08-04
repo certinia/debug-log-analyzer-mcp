@@ -7,7 +7,6 @@ tests/
 # Development files
 .github/
 .vscode/
-.husky/
 tsconfig.json
 jest.config.js
 eslint.config.js
