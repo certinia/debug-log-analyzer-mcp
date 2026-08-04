@@ -25,17 +25,23 @@ jobs:
           persist-credentials: false
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      # Nothing is cached in this job, deliberately: it is the one job whose
+      # output reaches users, and a restored cache is writable by any run on
+      # the default branch. A cold install costs seconds, once per release.
+      # Both switches are set, because `cache` is opt-in but
+      # `package-manager-cache` defaults to true - it only auto-caches when
+      # `packageManager` names npm, and saying so here keeps the guarantee from
+      # resting on that field staying `pnpm`.
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: ".nvmrc"
-          cache: "pnpm"
           registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
 
-      - name: Dependencies
-        run: pnpm install --frozen-lockfile
-
-      # A release published from the wrong tag would otherwise ship silently.
+      # Before the install, which is the slow step here: a release published
+      # from the wrong tag would otherwise ship silently, and there is no
+      # reason to pay for a cold install before finding that out.
       - name: Verify the package version matches the release tag
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -43,6 +49,9 @@ jobs:
           pkg=$(node -p "require('./package.json').version")
           [ "${RELEASE_TAG#v}" = "$pkg" ] ||
             { echo "::error::release tag $RELEASE_TAG does not match package.json $pkg"; exit 1; }
+
+      - name: Dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Lint Files
         run: pnpm run lint
