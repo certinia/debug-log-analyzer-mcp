@@ -55,7 +55,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@salesforce/core": "^8.32.3",
-    "@toon-format/toon": "^2.3.0",
+    "@toon-format/toon": "^4.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
