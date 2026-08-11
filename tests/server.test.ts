@@ -213,6 +213,7 @@ describe("ApexLogServer", () => {
   afterEach(() => {
     jest.clearAllMocks();
     process.removeAllListeners("SIGINT");
+    process.removeAllListeners("SIGTERM");
   });
 
   afterAll(() => {
@@ -253,15 +254,12 @@ describe("ApexLogServer", () => {
       expect(mockConsoleError).toHaveBeenCalledWith("[MCP Error]", testError);
     });
 
-    it("should setup SIGINT handler", async () => {
+    it.each(["SIGINT", "SIGTERM"])("closes cleanly on %s", async (signal) => {
       const mockProcessOnce = jest.spyOn(process, "once");
 
       new ApexLogServer();
 
-      expect(mockProcessOnce).toHaveBeenCalledWith(
-        "SIGINT",
-        expect.any(Function),
-      );
+      expect(mockProcessOnce).toHaveBeenCalledWith(signal, expect.any(Function));
     });
   });
 
