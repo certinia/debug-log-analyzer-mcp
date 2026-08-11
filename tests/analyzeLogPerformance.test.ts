@@ -77,7 +77,9 @@ describe("analyzeLogPerformance", () => {
   describe("File Validation", () => {
     it("should throw error when file does not exist", async () => {
       const args: AnalyzeLogArgs = { logFilePath: "/nonexistent/file.log" };
-      mockedFs.stat.mockRejectedValue(new Error("File not found"));
+      mockedFs.stat.mockRejectedValue(
+        Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+      );
 
       await expect(analyzeLogPerformance(args)).rejects.toThrow(
         "Log file not found: /nonexistent/file.log",

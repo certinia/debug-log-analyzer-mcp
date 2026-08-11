@@ -187,7 +187,9 @@ describe("findPerformanceBottlenecks", () => {
   describe("File validation and error handling", () => {
     it("should throw an error if log file does not exist", async () => {
       const args: BottleneckArgs = { logFilePath: "/nonexistent/file.log" };
-      mockFs.stat.mockRejectedValue(new Error("File not found"));
+      mockFs.stat.mockRejectedValue(
+        Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+      );
 
       await expect(findPerformanceBottlenecks(args)).rejects.toThrow(
         "Log file not found: /nonexistent/file.log",

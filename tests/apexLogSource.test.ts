@@ -207,7 +207,9 @@ describe("apexLogSource", () => {
     });
 
     it("reports a missing file and does not read it", async () => {
-      mockFs.stat.mockRejectedValue(new Error("ENOENT"));
+      mockFs.stat.mockRejectedValue(
+        Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+      );
 
       await expect(loadApexLog("/path/to/missing.log")).rejects.toThrow(
         "Log file not found: /path/to/missing.log",

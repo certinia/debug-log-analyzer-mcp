@@ -452,7 +452,10 @@ describe("getLogSummary", () => {
 
   describe("error handling", () => {
     it("should throw an error when log file does not exist", async () => {
-      const fileNotFoundError = new Error("ENOENT: no such file or directory");
+      const fileNotFoundError = Object.assign(
+        new Error("ENOENT: no such file or directory"),
+        { code: "ENOENT" },
+      );
       mockFs.stat.mockRejectedValue(fileNotFoundError);
 
       const args: LogSummaryArgs = {
@@ -468,8 +471,11 @@ describe("getLogSummary", () => {
       expect(mockParse).not.toHaveBeenCalled();
     });
 
-    it("should throw an error when file access check fails for other reasons", async () => {
-      const permissionError = new Error("EACCES: permission denied");
+    it("names the cause when the file is there but cannot be opened", async () => {
+      const permissionError = Object.assign(
+        new Error("EACCES: permission denied"),
+        { code: "EACCES" },
+      );
       mockFs.stat.mockRejectedValue(permissionError);
 
       const args: LogSummaryArgs = {
@@ -477,7 +483,7 @@ describe("getLogSummary", () => {
       };
 
       await expect(getLogSummary(args)).rejects.toThrow(
-        "Log file not found: /path/to/restricted.log",
+        "Cannot read log file /path/to/restricted.log: EACCES",
       );
     });
 

@@ -79,9 +79,18 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
   try {
     handle = await fs.open(logFilePath, "r");
     fingerprint = fingerprintOf(await handle.stat({ bigint: true }));
-  } catch {
+  } catch (error) {
     await handle?.close();
-    throw new Error(`Log file not found: ${logFilePath}`);
+    // A missing file is one of several ways this fails. Reporting all of them
+    // as "not found" sends the caller to look for a file that is there, when
+    // the real cause was a permission, a directory in place of a file, or a
+    // full descriptor table. Name the cause, and keep the original as `cause`.
+    const code = (error as NodeJS.ErrnoException).code ?? String(error);
+    const message =
+      code === "ENOENT"
+        ? `Log file not found: ${logFilePath}`
+        : `Cannot read log file ${logFilePath}: ${code}`;
+    throw new Error(message, { cause: error });
   }
 
   try {

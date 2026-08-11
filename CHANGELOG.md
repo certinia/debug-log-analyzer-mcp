@@ -36,6 +36,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 - Declare `execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
 - Stop `analyze_apex_log_performance` reporting that performance looks good on a log that exhausted the CPU limit ([#86])
 - Report the same `totalMethods` from all three analysis tools on an unfiltered call; `get_apex_log_summary` did not count entry points, so it reported fewer methods than the other two ([#88])
+- Name the real cause when a log file cannot be opened. A permission error, a directory in place of a file, or an exhausted descriptor table were all reported as "Log file not found", sending the caller to look for a file that was there ([#109])
 
 ## [1.0.0] - 2026-03-20
 
@@ -55,3 +56,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 [#86]: https://github.com/certinia/debug-log-analyzer-mcp/issues/86
 [#87]: https://github.com/certinia/debug-log-analyzer-mcp/issues/87
 [#88]: https://github.com/certinia/debug-log-analyzer-mcp/issues/88
+[#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109
