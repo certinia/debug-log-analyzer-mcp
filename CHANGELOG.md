@@ -36,6 +36,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 - Declare `execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
 - Stop `analyze_apex_log_performance` reporting that performance looks good on a log that exhausted the CPU limit ([#86])
 - Report the same `totalMethods` from all three analysis tools on an unfiltered call; `get_apex_log_summary` did not count entry points, so it reported fewer methods than the other two ([#88])
+- Warn when a caller-given `execute_anonymous` `outputDir` resolves outside every root the client declared. The log is still written, and the response names where it went ([#109])
 - Close cleanly on `SIGTERM`, so a supervised restart or a container stop no longer kills the server mid-shutdown ([#109])
 - Return an absolute `filePath` from `execute_anonymous`, so the path it hands back is one the analysis tools accept. A relative `outputDir` now anchors to the project root, the same base the default uses ([#109])
 - Refuse a relative `logFilePath` instead of resolving it against the server's working directory, which is where the client spawned the server and not where the caller is ([#109])
