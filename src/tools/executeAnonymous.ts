@@ -206,8 +206,14 @@ export async function executeAnonymous(
   const logId = logRecord.Id;
   const logBody = await connection.request(`/sobjects/ApexLog/${logId}/Body/`);
 
-  const outputDir =
-    args.outputDir ?? path.join(projectPath ?? process.cwd(), ".apex-log-mcp");
+  // Absolute, because `filePath` below goes straight back to the analysis
+  // tools, which refuse a relative path. A relative `outputDir` anchors to the
+  // project root, the same base the default uses, rather than to wherever the
+  // client happened to spawn this server.
+  const outputDir = path.resolve(
+    projectPath ?? process.cwd(),
+    args.outputDir ?? ".apex-log-mcp",
+  );
   // Resolves to the first directory created, or undefined when it already existed,
   // which is exactly when the .gitignore tip below is worth its tokens.
   const createdDir = await fs.mkdir(outputDir, { recursive: true });

@@ -8,6 +8,7 @@ import {
   clearApexLogCache,
   isMethodNode,
   loadApexLog,
+  logFilePathSchema,
   walkLog,
 } from "../src/tools/apexLogSource";
 import { parse, ApexLog, LogLine } from "../src/ApexLogParser";
@@ -216,6 +217,24 @@ describe("apexLogSource", () => {
       );
       expect(mockFs.readFile).not.toHaveBeenCalled();
     });
+  });
+
+  describe("logFilePathSchema", () => {
+    it("accepts an absolute path", () => {
+      expect(logFilePathSchema.safeParse("/logs/run.log").success).toBe(true);
+    });
+
+    it.each(["./run.log", ""])(
+      "refuses %p rather than resolving it against our cwd",
+      (path) => {
+        const result = logFilePathSchema.safeParse(path);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0]?.message).toBe(
+          "must be an absolute path",
+        );
+      },
+    );
   });
 
   describe("isMethodNode", () => {

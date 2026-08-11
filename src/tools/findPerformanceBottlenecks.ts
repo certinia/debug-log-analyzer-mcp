@@ -6,13 +6,11 @@ import { z } from "zod";
 import { ApexLog } from "../ApexLogParser.js";
 import { type SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
 import { encode } from "@toon-format/toon";
-import { loadApexLog } from "./apexLogSource.js";
+import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { NS_TO_MS, roundMs, roundPercent } from "./responseShaping.js";
 
 export const findPerformanceBottlenecksInputSchema = {
-  logFilePath: z
-    .string()
-    .describe("Absolute path to the Apex debug log file (.log)"),
+  logFilePath: logFilePathSchema,
   analysisType: z
     .enum(["cpu", "database", "methods", "all"])
     .optional()

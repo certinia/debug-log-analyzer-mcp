@@ -5,7 +5,12 @@
 import { z } from "zod";
 import { ApexLog } from "../ApexLogParser.js";
 import { encode } from "@toon-format/toon";
-import { loadApexLog, isMethodNode, walkLog } from "./apexLogSource.js";
+import {
+  loadApexLog,
+  isMethodNode,
+  walkLog,
+  logFilePathSchema,
+} from "./apexLogSource.js";
 import {
   NS_TO_MS,
   omitEmpty,
@@ -14,9 +19,7 @@ import {
 } from "./responseShaping.js";
 
 export const getLogSummaryInputSchema = {
-  logFilePath: z
-    .string()
-    .describe("Absolute path to the Apex debug log file (.log)"),
+  logFilePath: logFilePathSchema,
 };
 
 export type LogSummaryArgs = z.infer<

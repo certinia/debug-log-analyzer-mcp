@@ -847,6 +847,28 @@ describe("Execute Anonymous", () => {
       );
     });
 
+    it("anchors a relative outputDir to the project root, so the returned path is absolute", async () => {
+      (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
+        roots: [{ uri: "file:///my/project" }],
+      });
+
+      const args: ExecuteAnonymousArgs = {
+        apex: testApexCode,
+        outputDir: "logs",
+      };
+
+      await executeAnonymous(mockServer, args, policy());
+
+      expect(mockMkdir).toHaveBeenCalledWith("/my/project/logs", {
+        recursive: true,
+      });
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/my\/project\/logs\/.+\.log$/),
+        testLogBody,
+        "utf-8",
+      );
+    });
+
     it("should default outputDir to .apex-log-mcp in project root", async () => {
       (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
         roots: [{ uri: "file:///my/project" }],

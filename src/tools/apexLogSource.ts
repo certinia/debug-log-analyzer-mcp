@@ -3,12 +3,29 @@
  */
 
 import { promises as fs, type BigIntStats } from "fs";
+import { isAbsolute } from "path";
+import { z } from "zod";
 import {
   parse,
   ApexLog,
   LogLine,
   type LogSubCategory,
 } from "../ApexLogParser.js";
+
+/**
+ * The one declaration of the log path, shared by every tool that takes one, so
+ * all three enforce it the same way.
+ *
+ * A relative path is refused rather than resolved: it would resolve against the
+ * server's working directory, which is where the client happened to spawn us
+ * and not where the caller is. Resolving would read a different file, or none,
+ * and report neither. Refinements do not reach the JSON schema, so this costs
+ * no tokens in the tool definition — `pnpm run eval` holds that to its budget.
+ */
+export const logFilePathSchema = z
+  .string()
+  .refine(isAbsolute, "must be an absolute path")
+  .describe("Absolute path to the Apex debug log file (.log)");
 
 type CachedLog = {
   path: string;
