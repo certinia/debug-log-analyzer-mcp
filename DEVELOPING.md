@@ -217,8 +217,9 @@ one-liners.
   `62.569866677679975`, and every one of those digits is a token nobody reads.
 - **Keep table rows identical in shape.** TOON emits one header plus one line per row only while the
   rows agree on their keys, so a column is either present on every row or on none.
-- **Make conditional information conditional.** A static tip that is only relevant sometimes should
-  be emitted only then.
+- **Report the fact, not the advice.** A tip is a rule applied to a fact the caller cannot see. Report
+  the fact instead and let the agent apply its own rule: `outputDirCreated` is 4 tokens where the
+  ".gitignore" sentence it replaced was ~15, and it answers the question either way.
 - **Say in the tool description what is omitted and when.** Currently that is one sentence per tool,
   because there is one omission per tool.
 
