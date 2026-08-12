@@ -3,6 +3,7 @@
  */
 
 import type { ApexLog } from "../src/ApexLogParser";
+import { LOG_CATEGORIES } from "../src/salesforce/debugLevels";
 import {
   groupOperations,
   listOperations,
@@ -92,7 +93,9 @@ describe("listOperations", () => {
 
   it("covers every kind it declares", () => {
     expect(new Set(OPERATION_KINDS).size).toBe(OPERATION_KINDS.length);
-    OPERATION_KINDS.forEach((kind) => expect(logCategoryOf(kind)).toBeTruthy());
+    OPERATION_KINDS.forEach((kind) =>
+      expect(LOG_CATEGORIES).toContain(logCategoryOf(kind)),
+    );
   });
 
   it("drops the transaction frame, which owns no time of its own", () => {
