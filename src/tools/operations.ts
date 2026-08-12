@@ -3,6 +3,7 @@
  */
 
 import type { ApexLog, LogLine, LogSubCategory } from "../ApexLogParser.js";
+import type { LogCategory } from "../salesforce/debugLevels.js";
 import { walkLog } from "./apexLogSource.js";
 
 /**
@@ -29,8 +30,13 @@ export const OPERATION_KINDS = [
 
 export type OperationKind = (typeof OPERATION_KINDS)[number];
 
-/** The trace category that decides whether a kind reaches the log. */
-const LOG_CATEGORY_BY_KIND: Record<OperationKind, string> = {
+/**
+ * The category that decides whether a kind reaches the log.
+ *
+ * Typed as `LogCategory`, so the spelling here cannot drift from the one the
+ * `debugLevels` rows carry — a caller reads `timeByKind` against them.
+ */
+const LOG_CATEGORY_BY_KIND: Record<OperationKind, LogCategory> = {
   codeUnit: "APEX_CODE",
   managedPackage: "APEX_CODE",
   method: "APEX_CODE",
@@ -42,7 +48,7 @@ const LOG_CATEGORY_BY_KIND: Record<OperationKind, string> = {
   workflow: "WORKFLOW",
 };
 
-export function logCategoryOf(kind: OperationKind): string {
+export function logCategoryOf(kind: OperationKind): LogCategory {
   return LOG_CATEGORY_BY_KIND[kind];
 }
 

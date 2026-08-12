@@ -2,8 +2,15 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 import { Connection } from "@salesforce/core";
-import { getOrCreateDebugLevelId } from "../../src/salesforce/debugLevels";
+import {
+  getOrCreateDebugLevelId,
+  LOG_CATEGORIES,
+  TRACE_CATEGORIES,
+} from "../../src/salesforce/debugLevels";
 
 describe("Debug Levels", () => {
   const testId = "000000000000000000";
@@ -260,4 +267,40 @@ describe("Debug Levels", () => {
       });
     });
   });
+
+  describe("log categories", () => {
+    const fixtures = path.join(__dirname, "..", "eval", "fixtures");
+
+    it.each(fs.readdirSync(fixtures).filter((name) => name.endsWith(".log")))(
+      "spells every category in %s the way the log header does",
+      (name) => {
+        const header = fs
+          .readFileSync(path.join(fixtures, name), "utf8")
+          .split("\n")[0]!;
+        const categories = header
+          .split(" ")[1]!
+          .split(";")
+          .map((pair) => pair.split(",")[0]!);
+
+        expect(categories.length).toBeGreaterThan(0);
+        categories.forEach((category) =>
+          expect(LOG_CATEGORIES).toContain(category),
+        );
+      },
+    );
+
+    it("gives every settable category a header spelling", () => {
+      TRACE_CATEGORIES.forEach((category) => {
+        const spelling =
+          category === "database" ? "DB" : toScreamingSnake(category);
+
+        expect(LOG_CATEGORIES).toContain(spelling);
+      });
+    });
+  });
 });
+
+/** `apexCode` as a log header spells it: `APEX_CODE`. */
+function toScreamingSnake(category: string): string {
+  return category.replace(/([A-Z])/g, "_$1").toUpperCase();
+}
