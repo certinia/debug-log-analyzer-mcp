@@ -101,11 +101,9 @@ describe("ApexLogServer", () => {
       {
         type: "text" as const,
         text: JSON.stringify({
-          totalMethods: 5,
-          totalExecutionTime: 1000000,
-          slowestMethods: [],
-          summary: "Test summary",
-          recommendations: [],
+          durationTotalMs: 1000,
+          returnedSelfPercentage: 0,
+          operations: [],
         }),
       },
     ],
@@ -323,7 +321,7 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("analyze_apex_log_performance")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        topMethods: 5,
+        limit: 5,
       };
 
       const result = await tool.callback(args, {} as any);
@@ -488,8 +486,8 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("analyze_apex_log_performance")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        topMethods: 10,
-        minDuration: 1000,
+        limit: 10,
+        minSelfMs: 1000,
       };
 
       const result = await tool.callback(args, {} as any);

@@ -76,6 +76,7 @@ describe("listOperations", () => {
 
   it.each([
     ["CODE_UNIT_STARTED", "Code Unit", "codeUnit"],
+    ["ENTERING_MANAGED_PKG", "Method", "managedPackage"],
     ["METHOD_ENTRY", "Method", "method"],
     ["SYSTEM_METHOD_ENTRY", "System Method", "systemMethod"],
     ["SOQL_EXECUTE_BEGIN", "SOQL", "soql"],
@@ -94,16 +95,28 @@ describe("listOperations", () => {
     OPERATION_KINDS.forEach((kind) => expect(logCategoryOf(kind)).toBeTruthy());
   });
 
-  it.each(["EXECUTION_STARTED", "ENTERING_MANAGED_PKG"])(
-    "drops %s, which owns no time of its own",
-    (type) => {
-      const operations = listOperations(
-        logOf({ type, subCategory: "Method", text: type }),
-      );
+  it("drops the transaction frame, which owns no time of its own", () => {
+    const operations = listOperations(
+      logOf({
+        type: "EXECUTION_STARTED",
+        subCategory: "Method",
+        text: "Root",
+      }),
+    );
 
-      expect(operations).toEqual([]);
-    },
-  );
+    expect(operations).toEqual([]);
+  });
+
+  it("drops the root, which the parser adds and which holds the whole log", () => {
+    const root = node({
+      type: null,
+      subCategory: "Method",
+      text: "LOG_ROOT",
+      totalNs: 1_000_000_000,
+    }) as ApexLog;
+
+    expect(listOperations(root)).toEqual([]);
+  });
 
   it("drops an untimed node, which has no sub-category", () => {
     expect(listOperations(logOf({ type: "USER_INFO" }))).toEqual([]);

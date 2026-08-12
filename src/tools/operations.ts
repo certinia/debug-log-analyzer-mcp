@@ -15,18 +15,9 @@ import { walkLog } from "./apexLogSource.js";
  * is readable — `soql 0` beside `DB NONE` means "not logged", and beside
  * `DB FINEST` means "no queries ran".
  */
-export type OperationKind =
-  | "codeUnit"
-  | "method"
-  | "systemMethod"
-  | "soql"
-  | "sosl"
-  | "dml"
-  | "flow"
-  | "workflow";
-
-export const OPERATION_KINDS: readonly OperationKind[] = [
+export const OPERATION_KINDS = [
   "codeUnit",
+  "managedPackage",
   "method",
   "systemMethod",
   "soql",
@@ -34,11 +25,14 @@ export const OPERATION_KINDS: readonly OperationKind[] = [
   "dml",
   "flow",
   "workflow",
-];
+] as const;
+
+export type OperationKind = (typeof OPERATION_KINDS)[number];
 
 /** The trace category that decides whether a kind reaches the log. */
 const LOG_CATEGORY_BY_KIND: Record<OperationKind, string> = {
   codeUnit: "APEX_CODE",
+  managedPackage: "APEX_CODE",
   method: "APEX_CODE",
   systemMethod: "SYSTEM",
   soql: "DB",
@@ -77,21 +71,24 @@ export interface Operation {
 }
 
 /**
- * Two frames that own no time of their own.
- *
- * `EXECUTION_STARTED` is the transaction itself, so ranking it says only that
- * the transaction took as long as it took. `ENTERING_MANAGED_PKG` is a
- * namespace marker. Both carry the `Method` sub-category, so a test on
- * sub-category alone counts them as methods and inflates every method total.
+ * The transaction frame owns no time of its own: ranking it says only that the
+ * transaction took as long as it took. It carries the `Method` sub-category, so
+ * a test on sub-category alone counts it as a method and inflates every method
+ * total.
  */
-const FRAME_TYPES = new Set(["EXECUTION_STARTED", "ENTERING_MANAGED_PKG"]);
+const FRAME_TYPES = new Set(["EXECUTION_STARTED"]);
 
 /**
+ * Two types the sub-category cannot tell apart.
+ *
  * SOSL shares the `SOQL` sub-category, and a search is not a query: it has its
- * own governor limit and its own fix.
+ * own governor limit and its own fix. A managed package entry carries `Method`,
+ * but its self time is the time the package spent where the log shows nothing —
+ * often most of the transaction, and never a method the caller can open.
  */
 const KIND_BY_TYPE: Record<string, OperationKind> = {
   SOSL_EXECUTE_BEGIN: "sosl",
+  ENTERING_MANAGED_PKG: "managedPackage",
 };
 
 const KIND_BY_SUB_CATEGORY: Record<LogSubCategory, OperationKind> = {
@@ -127,7 +124,9 @@ function kindOf(node: LogLine): OperationKind | undefined {
 export function listOperations(apexLog: ApexLog): Operation[] {
   const operations: Operation[] = [];
 
-  walkLog(apexLog, (node) => {
+  // The children, not the log: the root is a pseudo node the parser adds, and
+  // it holds the whole transaction as its own time.
+  const visit = (node: LogLine) => {
     const kind = kindOf(node);
     if (!kind) {
       return;
@@ -150,7 +149,9 @@ export function listOperations(apexLog: ApexLog): Operation[] {
         node.soslRowCount.total,
       thrownCount: node.totalThrownCount,
     });
-  });
+  };
+
+  apexLog.children.forEach((child) => walkLog(child, visit));
 
   return operations;
 }

@@ -79,15 +79,18 @@ const ANSWERABILITY = {
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
   analyze_apex_log_performance: [
-    { question: "Which methods are the slowest?", keys: ["slowestMethods"] },
+    { question: "What did the transaction spend its time on?", keys: ["operations"] },
     {
-      question: "What share of the runtime do those methods account for?",
-      fields: ["topMethodsSelfPercentage", "totalExecutionTime"],
+      question: "Was it a method, a query, a search or DML?",
+      columns: ["kind", "callCount"],
     },
-    { question: "How many methods were considered?", fields: ["totalMethods"] },
     {
-      question: "Did any of the slowest methods touch the database?",
-      columns: ["dmlCount", "soqlCount", "dmlRows", "soqlRows"],
+      question: "What share of the runtime do those operations account for?",
+      fields: ["returnedSelfPercentage", "durationTotalMs"],
+    },
+    {
+      question: "Did any of them touch the database, and how much did they move?",
+      columns: ["dmlCount", "soqlCount", "soslCount", "rowCount"],
     },
     {
       question: "Where in the code are they, and whose namespace are they in?",
@@ -174,7 +177,9 @@ const V1_RESPONSE_TOKENS = {
  * not a silent tax on every request.
  */
 const DEFINITION_BUDGET = {
-  analyze_apex_log_performance: 250,
+  // Raised for the five selection parameters, which the caller acts on: without
+  // them a ranking over every operation kind can only be read whole.
+  analyze_apex_log_performance: 338,
   get_apex_log_summary: 161,
   find_performance_bottlenecks: 210,
   execute_anonymous: 449,
@@ -311,8 +316,8 @@ function inspect(toon) {
         if (Number.isFinite(numeric) && /^-?[\d.]+$/.test(value)) {
           scalars.set(key, numeric);
         } else {
-          // Prose at the top level — a `note`, a `recommendations` list, or a
-          // reintroduced `summary`. Scanned for restated figures below.
+          // Prose at the top level — a `note`, or a reintroduced `summary`.
+          // Scanned for restated figures below.
           strings.push(value);
         }
       }

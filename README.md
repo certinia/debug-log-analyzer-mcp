@@ -68,10 +68,10 @@ Every request carries all four tool definitions, whether or not a tool is called
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
 | `execute_anonymous`            | ~428                                | ~844       | -49%     |
-| `analyze_apex_log_performance` | ~238                                | ~247       | -4%      |
+| `analyze_apex_log_performance` | ~326                                | ~247       | +32%     |
 | `find_performance_bottlenecks` | ~201                                | ~267       | -25%     |
 | `get_apex_log_summary`         | ~153                                | ~171       | -11%     |
-| **Total**                      | **~1,020** (0.5% of a 200K context) | **~1,529** | **-33%** |
+| **Total**                      | **~1,108** (0.6% of a 200K context) | **~1,529** | **-28%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -85,8 +85,8 @@ The input side is the same for every analysis tool — a tool name and a log fil
 | ------------------------------ | -------------------- | -------- | ---- | ------ |
 | `get_apex_log_summary`         | `governor-heavy.log` | ~220     | ~293 | -25%   |
 | `get_apex_log_summary`         | `minimal.log`        | ~174     | ~249 | -30%   |
-| `analyze_apex_log_performance` | `governor-heavy.log` | ~278     | ~408 | -32%   |
-| `analyze_apex_log_performance` | `minimal.log`        | ~121     | ~190 | -36%   |
+| `analyze_apex_log_performance` | `governor-heavy.log` | ~275     | ~408 | -33%   |
+| `analyze_apex_log_performance` | `minimal.log`        | ~87      | ~190 | -54%   |
 | `find_performance_bottlenecks` | `governor-heavy.log` | ~21      | ~84  | -75%   |
 | `find_performance_bottlenecks` | `minimal.log`        | ~6       | ~30  | -80%   |
 
@@ -96,22 +96,28 @@ The input side is the same for every analysis tool — a tool name and a log fil
 
 All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept deliberately lean to save tokens — without dropping anything you might need to ask about. See [Token Cost](#token-cost) for what that is worth in practice.
 
-- **Every governor limit, debug category and method column is returned**, including the ones at zero. "How many DML statements did this consume?" is answerable from the response, and `0` means none rather than not measured.
+- **Every governor limit, debug category and operation column is returned**, including the ones at zero. "How many DML statements did this consume?" is answerable from the response, and `0` means none rather than not measured.
 - **The leanness comes from shape.** Data that used to be nested objects is returned as flat tables, which TOON encodes as one header plus one line per row.
-- **Nothing is reported twice.** No prose summary restates the numbers in the table alongside it, and a governor limit detailed in its own section is not repeated in the generic warnings.
+- **Nothing is reported twice.** No prose summary restates the numbers in the table alongside it, and no figure appears in two places.
 - **Durations are rounded** to 3 decimal places (ms) and percentages to 1.
-- **Only lists of things that happened are omitted when empty** — log issues, recommendations. Nothing to report means the key is absent.
+- **Only lists of things that happened are omitted when empty** — log issues. Nothing to report means the key is absent.
 
 ### analyze_apex_log_performance
 
-Rank methods in an Apex debug log by self-execution time. Returns method names, durations (in ms), SOQL/DML counts, and optimization recommendations. Best for finding which specific methods to optimize.
+Rank what an Apex debug log spent its time on by self-execution time — code units, managed packages, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations (in ms), database counts and rows. Best for finding what to optimize.
 
-| Parameter     | Type   | Required | Description                                                       |
-| ------------- | ------ | -------- | ----------------------------------------------------------------- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                   |
-| `topMethods`  | number | No       | Number of slowest methods to return (default: 10)                 |
-| `minDuration` | number | No       | Minimum duration in milliseconds to include a method (default: 0) |
-| `namespace`   | string | No       | Filter methods by namespace                                       |
+Rows are `{kind, name, namespace, lineNumber, callCount, durationTotalMs, durationSelfMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs` and the `returnedSelfPercentage` the returned rows account for between them.
+
+`kind` is one of `codeUnit`, `managedPackage`, `method`, `systemMethod`, `soql`, `sosl`, `dml`, `flow` or `workflow`. A `managedPackage` row is the time a package spent where the log shows nothing, and is often most of a transaction.
+
+| Parameter     | Type   | Required | Description                                             |
+| ------------- | ------ | -------- | ------------------------------------------------------- |
+| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)         |
+| `kind`        | string | No       | Rank only operations of this kind                       |
+| `namespace`   | string | No       | Rank only this namespace                                |
+| `minSelfMs`   | number | No       | Drop operations below this self time (default: 0)       |
+| `limit`       | number | No       | Rows to return (default: 10)                            |
+| `groupBy`     | string | No       | Fold repeats into one row per `name` or per `namespace` |
 
 ### get_apex_log_summary
 

@@ -192,11 +192,11 @@ one-liners.
 - **A fixed-schema field is always reported, even at zero.** The set of governor limits, debug
   categories and method columns is fixed and known, so a zero is a fact and an absent key is an
   ambiguity — the reader cannot tell "nothing ran" from "never parsed". Report the zero.
-- **Only occurrence lists are omitted when empty** — issues found, recommendations made, errors
+- **Only occurrence lists are omitted when empty** — issues found, errors
   encountered. There, absence is unambiguous: nothing occurred. `omitEmpty` is for these and nothing
   else; never pass a fixed-schema scalar through it. (`false` is *not* empty — it is an answer.)
 - **Say it once.** Never restate in prose a figure that is already in a table, and never report a
-  value in two sections. Recommendations say what to *do*; the numbers stay in the data. Where prose
+  value in two sections. Where prose
   carried a fact the table could not, replace it with a scalar rather than deleting it —
   `topMethodsSelfPercentage` is ~8 tokens where the paragraph it replaced was ~55.
 - **Don't state what the caller can derive.** A sentence earns its tokens only if it carries a fact the
