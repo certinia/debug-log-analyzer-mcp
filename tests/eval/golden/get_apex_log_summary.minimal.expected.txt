@@ -1,11 +1,21 @@
-size: 1274
-totalExecutionTime: 0.561
-totalMethods: 2
-totalSOQLQueries: 0
-totalDMLOperations: 0
-totalSOQLRows: 0
-totalDMLRows: 0
-governorLimits[13]{name,used,limit}:
+fileSizeBytes: 1274
+durationTotalMs: 0.561
+truncated: false
+parsingErrorCount: 0
+namespaces[1]: default
+debugLevels[11]{logCategory,level}:
+  APEX_CODE,FINE
+  APEX_PROFILING,NONE
+  CALLOUT,NONE
+  DATA_ACCESS,NONE
+  DB,NONE
+  NBA,NONE
+  SYSTEM,DEBUG
+  VALIDATION,NONE
+  VISUALFORCE,NONE
+  WAVE,NONE
+  WORKFLOW,NONE
+governorLimits[13]{limit,used,max}:
   soqlQueries,0,100
   soslQueries,0,20
   queryRows,0,50000
@@ -19,17 +29,14 @@ governorLimits[13]{name,used,limit}:
   futureCalls,0,50
   queueableJobsAddedToQueue,0,50
   mobileApexPushCalls,0,10
-namespaces[1]: default
-debugLevels[11]{category,level}:
-  APEX_CODE,FINE
-  APEX_PROFILING,NONE
-  CALLOUT,NONE
-  DATA_ACCESS,NONE
-  DB,NONE
-  NBA,NONE
-  SYSTEM,DEBUG
-  VALIDATION,NONE
-  VISUALFORCE,NONE
-  WAVE,NONE
-  WORKFLOW,NONE
-parsingErrors: 0
+limitsByNamespace: []
+timeByKind[9]{kind,logCategory,operationCount,durationSelfMs,selfPercentage}:
+  codeUnit,APEX_CODE,1,0.546,97.3
+  managedPackage,APEX_CODE,0,0,0
+  method,APEX_CODE,0,0,0
+  systemMethod,SYSTEM,1,0,0
+  soql,DB,0,0,0
+  sosl,DB,0,0,0
+  dml,DB,0,0,0
+  flow,WORKFLOW,0,0,0
+  workflow,WORKFLOW,0,0,0

@@ -3,21 +3,25 @@
  */
 
 import { z } from "zod";
-import { ApexLog } from "../ApexLogParser.js";
-import { type SlowMethod, extractMethods } from "./analyzeLogPerformance.js";
 import { encode } from "@toon-format/toon";
-import { loadApexLog } from "./apexLogSource.js";
-import { NS_TO_MS, roundMs, roundPercent } from "./responseShaping.js";
+import type { GovernorLimits } from "../ApexLogParser.js";
+import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
+import {
+  percentageOf,
+  roundPercent,
+  toLimitRows,
+} from "./responseShaping.js";
+
+/** Where a limit becomes worth reporting, when the caller names no other. */
+export const WARNING_THRESHOLD = 80;
 
 export const findPerformanceBottlenecksInputSchema = {
-  logFilePath: z
-    .string()
-    .describe("Absolute path to the Apex debug log file (.log)"),
-  analysisType: z
-    .enum(["cpu", "database", "methods", "all"])
+  logFilePath: logFilePathSchema,
+  threshold: z
+    .number()
     .optional()
     .describe(
-      "What to check: cpu = the CPU time limit, database = the SOQL query, DML statement and query row limits, methods = duration totals per namespace, all = all three (default).",
+      `Report a limit once it is this percentage consumed (default: ${WARNING_THRESHOLD})`,
     ),
 };
 
@@ -25,18 +29,27 @@ export type BottleneckArgs = z.infer<
   z.ZodObject<typeof findPerformanceBottlenecksInputSchema>
 >;
 
-export interface BottleneckResult {
-  cpuBottlenecks?: Record<string, unknown>;
-  databaseBottlenecks?: Record<string, unknown>;
-  methodBottlenecks?: Record<string, unknown>;
-  governorLimitWarnings?: Record<string, unknown>;
-  note?: string;
+export interface LimitRisk {
+  limit: string;
+  used: number;
+  max: number;
+  usedPercentage: number;
+}
+
+export interface LimitRiskResult {
+  /**
+   * What "at risk" meant for this call. The rows are a selection, so without it
+   * an empty table cannot be told apart from a threshold nothing could reach.
+   */
+  threshold: number;
+  /** Worst first. Empty means every limit is under the threshold. */
+  atRisk: LimitRisk[];
 }
 
 export const findPerformanceBottlenecksToolConfig = {
-  title: "Find Performance Bottlenecks",
+  title: "List Apex Log Limit Risks",
   description:
-    "Check whether an Apex log transaction is approaching governor limits (flags usage above 80%). Analyzes CPU time, SOQL/DML limits, query rows, and method execution patterns by namespace. Best for checking if a transaction is at risk of hitting governor limits.",
+    "List the governor limits an Apex log transaction has nearly consumed — CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote — worst first, with how much of each was used. Best for checking whether a transaction is at risk of failing on a limit.",
   inputSchema: findPerformanceBottlenecksInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -44,169 +57,42 @@ export const findPerformanceBottlenecksToolConfig = {
   },
 };
 
-export const WARNING_THRESHOLD = 80;
-
 export async function findPerformanceBottlenecks(args: BottleneckArgs) {
-  const { logFilePath, analysisType = "all" } = args;
+  const { logFilePath, threshold = WARNING_THRESHOLD } = args;
 
   const apexLog = await loadApexLog(logFilePath);
 
-  const hasCpuSection = analysisType === "cpu" || analysisType === "all";
-
-  const bottlenecks: BottleneckResult = {};
-
-  // Limits already spelled out by a dedicated section, so the generic warning
-  // block does not report them a second time.
-  const reportedLimits = new Set<string>();
-
-  if (hasCpuSection) {
-    const cpu = analyzeCPUBottlenecks(apexLog);
-    if (Object.keys(cpu).length > 0) {
-      bottlenecks.cpuBottlenecks = cpu;
-      reportedLimits.add("cpuTime");
-    }
-  }
-
-  if (analysisType === "database" || analysisType === "all") {
-    const db = analyzeDatabaseBottlenecks(apexLog);
-    if (Object.keys(db).length > 0) {
-      bottlenecks.databaseBottlenecks = db;
-      Object.keys(db).forEach((limit) => reportedLimits.add(limit));
-    }
-  }
-
-  if (analysisType === "methods" || analysisType === "all") {
-    const methods = analyzeMethodBottlenecks(apexLog);
-    if (Object.keys(methods).length > 0) {
-      bottlenecks.methodBottlenecks = methods;
-    }
-  }
-
-  const governorWarnings = analyzeGovernorLimits(apexLog, reportedLimits);
-  if (Object.keys(governorWarnings).length > 0) {
-    bottlenecks.governorLimitWarnings = governorWarnings;
-  }
-
-  if (Object.keys(bottlenecks).length === 0) {
-    bottlenecks.note = "No bottlenecks or governor limit warnings found.";
-  }
+  const result: LimitRiskResult = {
+    threshold,
+    atRisk: atRiskLimits(apexLog.governorLimits, threshold),
+  };
 
   return {
     content: [
       {
         type: "text" as const,
-        text: encode(bottlenecks),
+        text: encode(result),
       },
     ],
   };
 }
 
-function analyzeCPUBottlenecks(apexLog: ApexLog): Record<string, unknown> {
-  const { used, limit } = apexLog.governorLimits.cpuTime;
-  const cpuUsagePercent = limit > 0 ? (used / limit) * 100 : 0;
-
-  if (cpuUsagePercent > WARNING_THRESHOLD) {
-    return {
-      cpuTimeUsed: used,
-      cpuTimeLimit: limit,
-      cpuUsagePercentage: roundPercent(cpuUsagePercent),
-      warning: "High CPU usage - consider optimizing algorithms",
-    };
-  }
-
-  return {};
-}
-
-function analyzeDatabaseBottlenecks(apexLog: ApexLog): Record<string, unknown> {
-  const governorLimits = apexLog.governorLimits;
-  const bottlenecks: Record<string, unknown> = {};
-
-  const soqlPercentage =
-    governorLimits.soqlQueries.limit > 0
-      ? (governorLimits.soqlQueries.used / governorLimits.soqlQueries.limit) *
-        100
-      : 0;
-
-  if (soqlPercentage > WARNING_THRESHOLD) {
-    bottlenecks.soqlQueries = {
-      used: governorLimits.soqlQueries.used,
-      limit: governorLimits.soqlQueries.limit,
-      percentage: roundPercent(soqlPercentage),
-    };
-  }
-
-  const dmlPercentage =
-    governorLimits.dmlStatements.limit > 0
-      ? (governorLimits.dmlStatements.used /
-          governorLimits.dmlStatements.limit) *
-        100
-      : 0;
-
-  if (dmlPercentage > WARNING_THRESHOLD) {
-    bottlenecks.dmlStatements = {
-      used: governorLimits.dmlStatements.used,
-      limit: governorLimits.dmlStatements.limit,
-      percentage: roundPercent(dmlPercentage),
-    };
-  }
-
-  const queryRowsPercentage =
-    governorLimits.queryRows.limit > 0
-      ? (governorLimits.queryRows.used / governorLimits.queryRows.limit) * 100
-      : 0;
-
-  if (queryRowsPercentage > WARNING_THRESHOLD) {
-    bottlenecks.queryRows = {
-      used: governorLimits.queryRows.used,
-      limit: governorLimits.queryRows.limit,
-      percentage: roundPercent(queryRowsPercentage),
-    };
-  }
-
-  return bottlenecks;
-}
-
-function analyzeMethodBottlenecks(apexLog: ApexLog): Record<string, unknown> {
-  const methods = extractMethods(apexLog, 0);
-  const methodsByNamespace = methods.reduce(
-    (acc: Record<string, SlowMethod[]>, method) => {
-      (acc[method.namespace] ??= []).push(method);
-      return acc;
-    },
-    {},
-  );
-
-  return {
-    totalMethods: methods.length,
-    methodsByNamespace: Object.entries(methodsByNamespace).map(([ns, group]) => ({
-      namespace: ns,
-      methodCount: group.length,
-      totalDuration: roundMs(
-        group.reduce((sum: number, m: SlowMethod) => sum + m.duration, 0) /
-          NS_TO_MS,
-      ),
-    })),
-  };
-}
-
-function analyzeGovernorLimits(
-  apexLog: ApexLog,
-  reportedLimits: Set<string>,
-): Record<string, unknown> {
-  const limits = apexLog.governorLimits;
-
-  const result: Record<string, unknown> = {};
-
-  Object.entries(limits).forEach(([key, value]: [string, any]) => {
-    if (key === "byNamespace") return;
-    if (reportedLimits.has(key)) return;
-    if (value.limit > 0) {
-      const percentage = (value.used / value.limit) * 100;
-      if (percentage > WARNING_THRESHOLD) {
-        result[key] = value;
-      }
-    }
-  });
-
-  return result;
+/**
+ * The limits at or above the threshold, worst first.
+ *
+ * A limit with no ceiling is skipped rather than reported at zero: the log did
+ * not say what it was, so no share of it can be worked out.
+ */
+function atRiskLimits(
+  governorLimits: GovernorLimits,
+  threshold: number,
+): LimitRisk[] {
+  return toLimitRows(governorLimits)
+    .filter((row) => row.max > 0)
+    .map((row) => ({
+      ...row,
+      usedPercentage: roundPercent(percentageOf(row.used, row.max)),
+    }))
+    .filter((risk) => risk.usedPercentage >= threshold)
+    .sort((a, b) => b.usedPercentage - a.usedPercentage);
 }
