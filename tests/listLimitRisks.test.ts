@@ -7,12 +7,12 @@ import { decode } from "@toon-format/toon";
 
 import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
-  findPerformanceBottlenecks,
-  findPerformanceBottlenecksToolConfig,
+  listLimitRisks,
+  listLimitRisksToolConfig,
   WARNING_THRESHOLD,
-  type BottleneckArgs,
+  type LimitRisksArgs,
   type LimitRiskResult,
-} from "../src/tools/findPerformanceBottlenecks";
+} from "../src/tools/listLimitRisks";
 import { parse, ApexLog, Limits, GovernorLimits } from "../src/ApexLogParser";
 
 jest.mock("fs", () => {
@@ -46,7 +46,7 @@ const mockStats = {
   ctimeNs: 1n,
 } as BigIntStats;
 
-const ARGS: BottleneckArgs = { logFilePath: "/test/file.log" };
+const ARGS: LimitRisksArgs = { logFilePath: "/test/file.log" };
 
 function governorLimits(overrides: Partial<Limits> = {}): GovernorLimits {
   const defaults: Limits = {
@@ -80,12 +80,12 @@ function mockLog(overrides: Partial<Limits> = {}): void {
   } as unknown as ApexLog);
 }
 
-async function risks(args: BottleneckArgs = ARGS): Promise<LimitRiskResult> {
-  const result = await findPerformanceBottlenecks(args);
+async function risks(args: LimitRisksArgs = ARGS): Promise<LimitRiskResult> {
+  const result = await listLimitRisks(args);
   return decode(result.content[0]!.text) as LimitRiskResult;
 }
 
-describe("findPerformanceBottlenecks", () => {
+describe("listLimitRisks", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // The suites reuse one path with different content, which the cache would
@@ -95,13 +95,13 @@ describe("findPerformanceBottlenecks", () => {
 
   describe("tool configuration", () => {
     it("says which limits it covers, so a client can select it", () => {
-      expect(findPerformanceBottlenecksToolConfig.description).toContain(
+      expect(listLimitRisksToolConfig.description).toContain(
         "governor limits",
       );
     });
 
     it("annotates only the hints that carry meaning for a read-only tool", () => {
-      expect(findPerformanceBottlenecksToolConfig.annotations).toEqual({
+      expect(listLimitRisksToolConfig.annotations).toEqual({
         readOnlyHint: true,
         openWorldHint: false,
       });
@@ -171,7 +171,7 @@ describe("findPerformanceBottlenecks", () => {
     );
 
     await expect(
-      findPerformanceBottlenecks({ logFilePath: "/nonexistent/file.log" }),
+      listLimitRisks({ logFilePath: "/nonexistent/file.log" }),
     ).rejects.toThrow("Log file not found: /nonexistent/file.log");
   });
 });

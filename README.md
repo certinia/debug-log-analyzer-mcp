@@ -31,7 +31,7 @@ Powered by the same powerful log parser as the [Apex Log Analyzer VS Code extens
 
 **Requirements:** [Node.js](https://nodejs.org/) 22 or later.
 
-<sub>The `execute_anonymous` tool additionally needs an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).</sub>
+<sub>The `apexlog_execute_anonymous` tool additionally needs an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).</sub>
 
 Add to your MCP client configuration (`claude_desktop_config.json`, VS Code `mcp.json`, etc.):
 
@@ -67,11 +67,11 @@ Every request carries all four tool definitions, whether or not a tool is called
 
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
-| `execute_anonymous`            | ~428                                | ~844       | -49%     |
-| `analyze_apex_log_performance` | ~326                                | ~247       | +32%     |
-| `find_performance_bottlenecks` | ~201                                | ~267       | -25%     |
-| `get_apex_log_summary`         | ~172                                | ~171       | +1%      |
-| **Total**                      | **~1,127** (0.6% of a 200K context) | **~1,529** | **-26%** |
+| `apexlog_execute_anonymous`    | ~430                                | ~844       | -49%     |
+| `apexlog_list_slow_operations` | ~326                                | ~247       | +32%     |
+| `apexlog_list_limit_risks`     | ~200                                | ~267       | -25%     |
+| `apexlog_get_summary`          | ~172                                | ~171       | +1%      |
+| **Total**                      | **~1,128** (0.6% of a 200K context) | **~1,529** | **-26%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -83,12 +83,12 @@ The input side is the same for every analysis tool — a tool name and a log fil
 
 | Tool                           | Log                  | Response | 1.x  | Change |
 | ------------------------------ | -------------------- | -------- | ---- | ------ |
-| `get_apex_log_summary`         | `governor-heavy.log` | ~341     | ~293 | +16%   |
-| `get_apex_log_summary`         | `minimal.log`        | ~238     | ~249 | -4%    |
-| `analyze_apex_log_performance` | `governor-heavy.log` | ~275     | ~408 | -33%   |
-| `analyze_apex_log_performance` | `minimal.log`        | ~87      | ~190 | -54%   |
-| `find_performance_bottlenecks` | `governor-heavy.log` | ~21      | ~84  | -75%   |
-| `find_performance_bottlenecks` | `minimal.log`        | ~6       | ~30  | -80%   |
+| `apexlog_get_summary`          | `governor-heavy.log` | ~341     | ~293 | +16%   |
+| `apexlog_get_summary`          | `minimal.log`        | ~238     | ~249 | -4%    |
+| `apexlog_list_slow_operations` | `governor-heavy.log` | ~275     | ~408 | -33%   |
+| `apexlog_list_slow_operations` | `minimal.log`        | ~87      | ~190 | -54%   |
+| `apexlog_list_limit_risks`     | `governor-heavy.log` | ~21      | ~84  | -75%   |
+| `apexlog_list_limit_risks`     | `minimal.log`        | ~6       | ~30  | -80%   |
 
 <!-- token-cost-answers:end -->
 
@@ -102,7 +102,7 @@ All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept 
 - **Durations are rounded** to 3 decimal places (ms) and percentages to 1.
 - **Only lists of things that happened are omitted when empty** — log issues. Nothing to report means the key is absent.
 
-### analyze_apex_log_performance
+### apexlog_list_slow_operations
 
 Rank what an Apex debug log spent its time on by self-execution time — code units, managed packages, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations (in ms), database counts and rows. Best for finding what to optimize.
 
@@ -119,19 +119,19 @@ Rows are `{kind, name, namespace, lineNumber, callCount, durationTotalMs, durati
 | `limit`       | number | No       | Rows to return (default: 10)                            |
 | `groupBy`     | string | No       | Fold repeats into one row per `name` or per `namespace` |
 
-### get_apex_log_summary
+### apexlog_get_summary
 
 Get a high-level summary of an Apex debug log: how long the transaction ran (in ms), where the time went by kind of operation, every governor limit it and each namespace consumed, the debug levels it was logged at, and whether the log is complete. Best for a quick overview before deeper analysis.
 
 All thirteen governor limits are listed as `{limit, used, max}` rows, at zero included, so you can ask what a transaction consumed and get an answer either way. `limitsByNamespace` adds `{namespace, limit, used}` rows for each limit a namespace consumed, which is how you see that a managed package spent your CPU time; it names no ceiling, because the parser keeps one ceiling per limit for the whole transaction and it is already in `governorLimits`.
 
-`timeByKind` gives `{kind, logCategory, operationCount, durationSelfMs, selfPercentage}` for every kind `analyze_apex_log_performance` ranks. `logCategory` is the trace category that decides whether the kind reaches the log at all, so a zero can be read: `soql 0` beside `DB NONE` in `debugLevels`, whose rows are `{logCategory, level}`, means the queries were not logged, and beside `DB FINEST` it means none ran.
+`timeByKind` gives `{kind, logCategory, operationCount, durationSelfMs, selfPercentage}` for every kind `apexlog_list_slow_operations` ranks. `logCategory` is the trace category that decides whether the kind reaches the log at all, so a zero can be read: `soql 0` beside `DB NONE` in `debugLevels`, whose rows are `{logCategory, level}`, means the queries were not logged, and beside `DB FINEST` it means none ran.
 
 | Parameter     | Type   | Required | Description                                     |
 | ------------- | ------ | -------- | ----------------------------------------------- |
 | `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
 
-### find_performance_bottlenecks
+### apexlog_list_limit_risks
 
 List the governor limits an Apex log transaction has nearly consumed — CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote — worst first, with how much of each was used. Best for checking whether a transaction is at risk of failing on a limit.
 
@@ -142,9 +142,9 @@ Rows are `{limit, used, max, usedPercentage}`. The `threshold` that produced the
 | `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                  |
 | `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
 
-### execute_anonymous
+### apexlog_execute_anonymous
 
-Executes anonymous Apex code against any authenticated Salesforce org. Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with `get_apex_log_summary`, `analyze_apex_log_performance`, or `find_performance_bottlenecks` for deeper analysis.
+Executes anonymous Apex code against any authenticated Salesforce org. Saves the resulting debug log to a local file and returns a summary with the file path. Use the file path with `apexlog_get_summary`, `apexlog_list_slow_operations`, or `apexlog_list_limit_risks` for deeper analysis.
 
 | Parameter    | Type             | Required | Description                                                                                                                                                                                                                                      |
 | ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -199,7 +199,7 @@ The [Quick Start](#quick-start) configuration is all you need — all four tools
 
 ### Production safety
 
-`execute_anonymous` runs arbitrary Apex, so before running anything the server identifies what kind of org it is pointed at. It asks the org once per session:
+`apexlog_execute_anonymous` runs arbitrary Apex, so before running anything the server identifies what kind of org it is pointed at. It asks the org once per session:
 
 | Org type     | Identified by                                     | Behaviour             |
 | ------------ | ------------------------------------------------- | --------------------- |

@@ -57,7 +57,7 @@ const estimateTokens = (text) => Math.round(text.length / 4);
  * answer them.
  */
 const ANSWERABILITY = {
-  get_apex_log_summary: [
+  apexlog_get_summary: [
     {
       question: "How many DML statements and SOQL queries were consumed?",
       limits: ["dmlStatements", "soqlQueries"],
@@ -95,7 +95,7 @@ const ANSWERABILITY = {
     },
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
-  analyze_apex_log_performance: [
+  apexlog_list_slow_operations: [
     { question: "What did the transaction spend its time on?", keys: ["operations"] },
     {
       question: "Was it a method, a query, a search or DML?",
@@ -114,7 +114,7 @@ const ANSWERABILITY = {
       columns: ["namespace", "lineNumber"],
     },
   ],
-  find_performance_bottlenecks: [
+  apexlog_list_limit_risks: [
     {
       question: "Is any governor limit nearly consumed?",
       keys: ["atRisk"],
@@ -137,7 +137,7 @@ const ANSWERABILITY = {
  * new limit needs one edit rather than two.
  */
 const MINIMAL_ZEROS = {
-  get_apex_log_summary: {
+  apexlog_get_summary: {
     fields: ["parsingErrorCount"],
     allLimitsZero: true,
   },
@@ -153,12 +153,12 @@ const TOKEN_BUDGET = {
   // Raised for the two tables #62 added: what each namespace consumed of the
   // limits, and where the time went by kind of operation. Both answer questions
   // the 1.x summary could not.
-  "get_apex_log_summary/governor-heavy": 357,
-  "get_apex_log_summary/minimal": 249,
-  "analyze_apex_log_performance/governor-heavy": 290,
-  "analyze_apex_log_performance/minimal": 130,
-  "find_performance_bottlenecks/governor-heavy": 40,
-  "find_performance_bottlenecks/minimal": 15,
+  "apexlog_get_summary/governor-heavy": 357,
+  "apexlog_get_summary/minimal": 249,
+  "apexlog_list_slow_operations/governor-heavy": 290,
+  "apexlog_list_slow_operations/minimal": 130,
+  "apexlog_list_limit_risks/governor-heavy": 40,
+  "apexlog_list_limit_risks/minimal": 15,
 };
 
 /**
@@ -168,19 +168,19 @@ const TOKEN_BUDGET = {
  * released figure cannot change.
  */
 const V1_DEFINITION_TOKENS = {
-  analyze_apex_log_performance: 247,
-  get_apex_log_summary: 171,
-  find_performance_bottlenecks: 267,
-  execute_anonymous: 844,
+  apexlog_list_slow_operations: 247,
+  apexlog_get_summary: 171,
+  apexlog_list_limit_risks: 267,
+  apexlog_execute_anonymous: 844,
 };
 
 const V1_RESPONSE_TOKENS = {
-  "get_apex_log_summary/governor-heavy": 293,
-  "get_apex_log_summary/minimal": 249,
-  "analyze_apex_log_performance/governor-heavy": 408,
-  "analyze_apex_log_performance/minimal": 190,
-  "find_performance_bottlenecks/governor-heavy": 84,
-  "find_performance_bottlenecks/minimal": 30,
+  "apexlog_get_summary/governor-heavy": 293,
+  "apexlog_get_summary/minimal": 249,
+  "apexlog_list_slow_operations/governor-heavy": 408,
+  "apexlog_list_slow_operations/minimal": 190,
+  "apexlog_list_limit_risks/governor-heavy": 84,
+  "apexlog_list_limit_risks/minimal": 30,
 };
 
 /**
@@ -193,12 +193,12 @@ const V1_RESPONSE_TOKENS = {
 const DEFINITION_BUDGET = {
   // Raised for the five selection parameters, which the caller acts on: without
   // them a ranking over every operation kind can only be read whole.
-  analyze_apex_log_performance: 338,
+  apexlog_list_slow_operations: 338,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
-  get_apex_log_summary: 180,
-  find_performance_bottlenecks: 210,
-  execute_anonymous: 449,
+  apexlog_get_summary: 180,
+  apexlog_list_limit_risks: 210,
+  apexlog_execute_anonymous: 449,
 };
 
 /**
@@ -217,16 +217,16 @@ const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
  * longer says "governor limits" is a regression, not a saving.
  */
 const SELECTION_KEYWORDS = {
-  analyze_apex_log_performance: ["self-execution time", "optimize"],
-  get_apex_log_summary: ["summary", "overview"],
-  find_performance_bottlenecks: ["governor limits", "CPU time"],
-  execute_anonymous: ["anonymous Apex", "Salesforce org"],
+  apexlog_list_slow_operations: ["self-execution time", "optimize"],
+  apexlog_get_summary: ["summary", "overview"],
+  apexlog_list_limit_risks: ["governor limits", "CPU time"],
+  apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
 };
 
 const CASES = [
-  "get_apex_log_summary",
-  "analyze_apex_log_performance",
-  "find_performance_bottlenecks",
+  "apexlog_get_summary",
+  "apexlog_list_slow_operations",
+  "apexlog_list_limit_risks",
 ].flatMap((tool) =>
   ["governor-heavy", "minimal"].map((fixture) => ({ tool, fixture })),
 );
