@@ -6,8 +6,8 @@ import { promises as fs, type BigIntStats } from "fs";
 
 import {
   clearApexLogCache,
-  isMethodNode,
   loadApexLog,
+  logFilePathSchema,
   walkLog,
 } from "../src/tools/apexLogSource";
 import { parse, ApexLog, LogLine } from "../src/ApexLogParser";
@@ -48,9 +48,6 @@ const statsOf = (
     mtimeNs: BigInt(mtimeNs),
     ctimeNs: BigInt(ctimeNs),
   }) as BigIntStats;
-
-const nodeOf = (props: Record<string, unknown>): LogLine =>
-  props as unknown as LogLine;
 
 /**
  * Run the body with the clock under our control. `jest.useRealTimers()` leaves
@@ -207,7 +204,9 @@ describe("apexLogSource", () => {
     });
 
     it("reports a missing file and does not read it", async () => {
-      mockFs.stat.mockRejectedValue(new Error("ENOENT"));
+      mockFs.stat.mockRejectedValue(
+        Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+      );
 
       await expect(loadApexLog("/path/to/missing.log")).rejects.toThrow(
         "Log file not found: /path/to/missing.log",
@@ -216,17 +215,22 @@ describe("apexLogSource", () => {
     });
   });
 
-  describe("isMethodNode", () => {
-    it("accepts code units, method entries and timed method nodes", () => {
-      expect(isMethodNode(nodeOf({ type: "CODE_UNIT_STARTED" }))).toBe(true);
-      expect(isMethodNode(nodeOf({ type: "METHOD_ENTRY" }))).toBe(true);
-      expect(isMethodNode(nodeOf({ type: "SOQL_EXECUTE_BEGIN" }))).toBe(false);
-      expect(
-        isMethodNode(
-          nodeOf({ type: "CONSTRUCTOR_ENTRY", subCategory: "Method" }),
-        ),
-      ).toBe(true);
+  describe("logFilePathSchema", () => {
+    it("accepts an absolute path", () => {
+      expect(logFilePathSchema.safeParse("/logs/run.log").success).toBe(true);
     });
+
+    it.each(["./run.log", ""])(
+      "refuses %p rather than resolving it against our cwd",
+      (path) => {
+        const result = logFilePathSchema.safeParse(path);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0]?.message).toBe(
+          "must be an absolute path",
+        );
+      },
+    );
   });
 
   describe("walkLog", () => {

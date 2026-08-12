@@ -7,6 +7,8 @@ jest.mock("node:fs", () => ({
     mkdir: jest.fn().mockResolvedValue(undefined),
     writeFile: jest.fn().mockResolvedValue(undefined),
     stat: jest.fn().mockResolvedValue({ size: 1024 }),
+    // No symlinks in the test filesystem, so every path resolves to itself.
+    realpath: jest.fn((target: string) => Promise.resolve(target)),
   },
 }));
 
@@ -845,6 +847,101 @@ describe("Execute Anonymous", () => {
         testLogBody,
         "utf-8",
       );
+    });
+
+    it("anchors a relative outputDir to the project root, so the returned path is absolute", async () => {
+      (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
+        roots: [{ uri: "file:///my/project" }],
+      });
+
+      const args: ExecuteAnonymousArgs = {
+        apex: testApexCode,
+        outputDir: "logs",
+      };
+
+      await executeAnonymous(mockServer, args, policy());
+
+      expect(mockMkdir).toHaveBeenCalledWith("/my/project/logs", {
+        recursive: true,
+      });
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/my\/project\/logs\/.+\.log$/),
+        testLogBody,
+        "utf-8",
+      );
+    });
+
+    describe("outputDir outside the client roots", () => {
+      const textOf = (result: Awaited<ReturnType<typeof executeAnonymous>>) =>
+        result.content[0]?.text ?? "";
+
+      let consoleError: jest.SpyInstance;
+
+      beforeEach(() => {
+        consoleError = jest.spyOn(console, "error").mockImplementation();
+      });
+
+      afterEach(() => consoleError.mockRestore());
+
+      const withRoot = async (outputDir?: string) => {
+        (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
+          roots: [{ uri: "file:///my/project" }],
+        });
+        return executeAnonymous(
+          mockServer,
+          { apex: testApexCode, ...(outputDir && { outputDir }) },
+          policy(),
+        );
+      };
+
+      it("warns in the response and on stderr, and still writes the log", async () => {
+        const result = await withRoot("/elsewhere/logs");
+
+        expect(textOf(result)).toContain(
+          "Debug log written to /elsewhere/logs, which is outside every root this client declared.",
+        );
+        expect(consoleError).toHaveBeenCalledWith(
+          expect.stringContaining("/elsewhere/logs"),
+        );
+        expect(mockWriteFile).toHaveBeenCalled();
+      });
+
+      it.each([
+        ["inside a root", "/my/project/logs"],
+        ["the root itself", "/my/project"],
+      ])("stays silent for %s", async (_name, outputDir) => {
+        expect(textOf(await withRoot(outputDir))).not.toContain("warning");
+      });
+
+      it("stays silent for the default outputDir", async () => {
+        expect(textOf(await withRoot())).not.toContain("warning");
+      });
+
+      it("stays silent when the client declares no roots", async () => {
+        (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
+          roots: [],
+        });
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, outputDir: "/elsewhere/logs" },
+          policy(),
+        );
+
+        expect(textOf(result)).not.toContain("warning");
+      });
+
+      it("follows symlinks, so a link inside a root that leaves one warns", async () => {
+        // The first call resolves outputDir; the roots after it keep the
+        // resolves-to-itself default.
+        (fs.realpath as unknown as jest.Mock).mockImplementationOnce(() =>
+          Promise.resolve("/elsewhere/logs"),
+        );
+
+        expect(textOf(await withRoot("/my/project/logs"))).toContain(
+          "/elsewhere/logs",
+        );
+      });
     });
 
     it("should default outputDir to .apex-log-mcp in project root", async () => {

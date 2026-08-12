@@ -101,11 +101,9 @@ describe("ApexLogServer", () => {
       {
         type: "text" as const,
         text: JSON.stringify({
-          totalMethods: 5,
-          totalExecutionTime: 1000000,
-          slowestMethods: [],
-          summary: "Test summary",
-          recommendations: [],
+          durationTotalMs: 1000,
+          returnedSelfPercentage: 0,
+          operations: [],
         }),
       },
     ],
@@ -130,9 +128,8 @@ describe("ApexLogServer", () => {
       {
         type: "text" as const,
         text: JSON.stringify({
-          cpuBottlenecks: {},
-          databaseBottlenecks: {},
-          governorLimitWarnings: {},
+          threshold: 80,
+          atRisk: [],
         }),
       },
     ],
@@ -213,6 +210,7 @@ describe("ApexLogServer", () => {
   afterEach(() => {
     jest.clearAllMocks();
     process.removeAllListeners("SIGINT");
+    process.removeAllListeners("SIGTERM");
   });
 
   afterAll(() => {
@@ -253,15 +251,12 @@ describe("ApexLogServer", () => {
       expect(mockConsoleError).toHaveBeenCalledWith("[MCP Error]", testError);
     });
 
-    it("should setup SIGINT handler", async () => {
+    it.each(["SIGINT", "SIGTERM"])("closes cleanly on %s", async (signal) => {
       const mockProcessOnce = jest.spyOn(process, "once");
 
       new ApexLogServer();
 
-      expect(mockProcessOnce).toHaveBeenCalledWith(
-        "SIGINT",
-        expect.any(Function),
-      );
+      expect(mockProcessOnce).toHaveBeenCalledWith(signal, expect.any(Function));
     });
   });
 
@@ -326,7 +321,7 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("analyze_apex_log_performance")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        topMethods: 5,
+        limit: 5,
       };
 
       const result = await tool.callback(args, {} as any);
@@ -353,7 +348,7 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("find_performance_bottlenecks")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        analysisType: "cpu",
+        threshold: 90,
       };
 
       const result = await tool.callback(args, {} as any);
@@ -491,8 +486,8 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("analyze_apex_log_performance")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        topMethods: 10,
-        minDuration: 1000,
+        limit: 10,
+        minSelfMs: 1000,
       };
 
       const result = await tool.callback(args, {} as any);
@@ -524,7 +519,7 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("find_performance_bottlenecks")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        analysisType: "database" as const,
+        threshold: 50,
       };
 
       await tool.callback(args, {} as any);

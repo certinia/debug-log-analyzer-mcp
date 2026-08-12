@@ -13,11 +13,14 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 ### Changed
 
 - **Breaking:** refuse `execute_anonymous` against production orgs, and orgs whose type cannot be read, unless the run is confirmed via [MCP elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) or `--allow-production-orgs` is set ([#52])
-- **Breaking:** drop `file` from `get_apex_log_summary`, and the prose `summary` from `analyze_apex_log_performance` in favour of the scalar `topMethodsSelfPercentage` ([#86])
-- **Breaking:** report governor limits as a flat `{name, used, limit}` table, and include the limits at zero, so a caller can tell "no DML ran" from "DML was never read" ([#86])
+- **Breaking:** `analyze_apex_log_performance` now ranks every timed operation by self time, not methods alone: code units, managed packages, methods, system methods, queries, searches, DML, flows and workflows, in one table of `{kind, name, namespace, lineNumber, callCount, durationTotalMs, durationSelfMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}` rows. `slowestMethods`, `totalMethods`, `totalExecutionTime`, `topMethodsSelfPercentage` and `recommendations` are gone, replaced by `operations`, `durationTotalMs` and `returnedSelfPercentage`. The `topMethods` and `minDuration` parameters are now `limit` and `minSelfMs`, beside new `kind`, `namespace` and `groupBy` parameters that select and fold the rows ([#108])
+- **Breaking:** `find_performance_bottlenecks` now returns one table of the governor limits at risk — `{limit, used, max, usedPercentage}` rows, worst first — beside the `threshold` that selected them. The `cpuBottlenecks`, `databaseBottlenecks`, `methodBottlenecks` and `governorLimitWarnings` sections, the `note`, and the `analysisType` parameter are gone; a new `threshold` parameter sets where a limit becomes worth reporting. All thirteen limits are covered, where the sections covered six, and the response costs 78% less ([#108])
+- **Breaking:** drop `file` from `get_apex_log_summary`, and the prose `summary` from `analyze_apex_log_performance` in favour of a scalar share of the runtime ([#86], [#108])
+- **Breaking:** `get_apex_log_summary` now reports where the time went and what each namespace consumed. `timeByKind` gives `{kind, logCategory, operationCount, durationSelfMs, selfPercentage}` for every kind of operation, and `limitsByNamespace` gives `{namespace, limit, used}` for each limit a namespace consumed, so a managed package that spends your CPU time is visible. `totalMethods`, `totalSOQLQueries`, `totalDMLOperations`, `totalSOQLRows` and `totalDMLRows` are gone, and searches are covered for the first time. `size`, `totalExecutionTime` and `parsingErrors` are now `fileSizeBytes`, `durationTotalMs` and `parsingErrorCount`, beside a new `truncated`. A `debugLevels` row names its `logCategory`, not its `category`, which is the name `timeByKind` uses for the same fact ([#62], [#108])
+- **Breaking:** report governor limits as a flat `{limit, used, max}` table, and include the limits at zero, so a caller can tell "no DML ran" from "DML was never read" ([#86], [#62])
 - Make the `execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
-- Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33%, `execute_anonymous` by 30% after the first run, `get_apex_log_summary` by 27% and `find_performance_bottlenecks` by 5% ([#86])
-- Reduce the standing cost of having the server connected by 31%, with no tool renamed, no parameter removed and no response changed: `execute_anonymous` by 49%, `find_performance_bottlenecks` by 12%, `get_apex_log_summary` by 11% and `analyze_apex_log_performance` by 4% ([#87])
+- Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33% ([#86], [#108]) and `execute_anonymous` by 30% after the first run ([#86]). `get_apex_log_summary` costs 16% more on a log that uses its limits, for the two tables it gained ([#62])
+- Reduce the standing cost of having the server connected by 26%: `execute_anonymous` by 49% and `find_performance_bottlenecks` by 25% ([#87], [#108]). `analyze_apex_log_performance` costs 32% more, for the five parameters that select what it ranks ([#108])
 - Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again. The parse is dropped after five minutes unused, so a large log is not held for the life of the session ([#88])
 
 ### Added
@@ -34,8 +37,11 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 ### Fixed
 
 - Declare `execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
-- Stop `analyze_apex_log_performance` reporting that performance looks good on a log that exhausted the CPU limit ([#86])
-- Report the same `totalMethods` from all three analysis tools on an unfiltered call; `get_apex_log_summary` did not count entry points, so it reported fewer methods than the other two ([#88])
+- Warn when a caller-given `execute_anonymous` `outputDir` resolves outside every root the client declared. The log is still written, and the response names where it went ([#109])
+- Close cleanly on `SIGTERM`, so a supervised restart or a container stop no longer kills the server mid-shutdown ([#109])
+- Return an absolute `filePath` from `execute_anonymous`, so the path it hands back is one the analysis tools accept. A relative `outputDir` now anchors to the project root, the same base the default uses ([#109])
+- Refuse a relative `logFilePath` instead of resolving it against the server's working directory, which is where the client spawned the server and not where the caller is ([#109])
+- Name the real cause when a log file cannot be opened. A permission error, a directory in place of a file, or an exhausted descriptor table were all reported as "Log file not found", sending the caller to look for a file that was there ([#109])
 
 ## [1.0.0] - 2026-03-20
 
@@ -52,6 +58,9 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 <!-- Unreleased -->
 
 [#52]: https://github.com/certinia/debug-log-analyzer-mcp/issues/52
+[#62]: https://github.com/certinia/debug-log-analyzer-mcp/issues/62
 [#86]: https://github.com/certinia/debug-log-analyzer-mcp/issues/86
 [#87]: https://github.com/certinia/debug-log-analyzer-mcp/issues/87
 [#88]: https://github.com/certinia/debug-log-analyzer-mcp/issues/88
+[#108]: https://github.com/certinia/debug-log-analyzer-mcp/issues/108
+[#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109

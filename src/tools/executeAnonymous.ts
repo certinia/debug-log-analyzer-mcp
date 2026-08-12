@@ -109,14 +109,51 @@ export function executeAnonymousToolConfig(apexExecutionDisabled = false) {
   };
 }
 
-async function getProjectPath(server: McpServer): Promise<string | undefined> {
+async function getRootPaths(server: McpServer): Promise<string[]> {
   try {
     const { roots } = await server.server.listRoots();
-    const rootUri = roots[0]?.uri;
-    return rootUri ? new URL(rootUri).pathname : undefined;
+    return roots.map((root) => new URL(root.uri).pathname);
   } catch {
+    return [];
+  }
+}
+
+/** The resolved path, or the path itself when it does not resolve. */
+async function realPathOrSelf(target: string): Promise<string> {
+  return fs.realpath(target).catch(() => target);
+}
+
+/**
+ * The MCP spec expects a server to work inside the roots the client declares,
+ * and `outputDir` is agent-supplied, so it is the path an injected instruction
+ * takes. Refusing would break a caller who means to write elsewhere, so say so
+ * instead: the response names where the log went, and the same line goes to
+ * stderr for the person watching the server.
+ *
+ * Symlinks are followed on both sides, so a link inside a root that points out
+ * of one is still outside. A client that declares no roots gives nothing to
+ * compare against, so it stays silent.
+ */
+async function warnIfOutsideRoots(
+  outputDir: string,
+  rootPaths: string[],
+): Promise<string | undefined> {
+  if (rootPaths.length === 0) {
     return undefined;
   }
+
+  const target = await realPathOrSelf(outputDir);
+  const roots = await Promise.all(rootPaths.map(realPathOrSelf));
+  const inside = roots.some(
+    (root) => target === root || target.startsWith(root + path.sep),
+  );
+  if (inside) {
+    return undefined;
+  }
+
+  const warning = `Debug log written to ${target}, which is outside every root this client declared.`;
+  console.error(`[apex-log-mcp] ${warning}`);
+  return warning;
 }
 
 async function getAliasForUsername(
@@ -146,7 +183,8 @@ export async function executeAnonymous(
     return toolError(APEX_EXECUTION_DISABLED_MESSAGE);
   }
 
-  const projectPath = await getProjectPath(server);
+  const rootPaths = await getRootPaths(server);
+  const projectPath = rootPaths[0];
 
   const org = await resolveOrg(projectPath, targetOrg);
   const connection = org.getConnection();
@@ -206,8 +244,14 @@ export async function executeAnonymous(
   const logId = logRecord.Id;
   const logBody = await connection.request(`/sobjects/ApexLog/${logId}/Body/`);
 
-  const outputDir =
-    args.outputDir ?? path.join(projectPath ?? process.cwd(), ".apex-log-mcp");
+  // Absolute, because `filePath` below goes straight back to the analysis
+  // tools, which refuse a relative path. A relative `outputDir` anchors to the
+  // project root, the same base the default uses, rather than to wherever the
+  // client happened to spawn this server.
+  const outputDir = path.resolve(
+    projectPath ?? process.cwd(),
+    args.outputDir ?? ".apex-log-mcp",
+  );
   // Resolves to the first directory created, or undefined when it already existed,
   // which is exactly when the .gitignore tip below is worth its tokens.
   const createdDir = await fs.mkdir(outputDir, { recursive: true });
@@ -216,12 +260,19 @@ export async function executeAnonymous(
   await fs.writeFile(filePath, logBody as string, "utf-8");
   const stats = await fs.stat(filePath);
 
+  // Only for a caller-given directory: the default is inside the project root
+  // by construction, so checking it could only ever say the obvious.
+  const warning = args.outputDir
+    ? await warnIfOutsideRoots(outputDir, rootPaths)
+    : undefined;
+
   return {
     content: [
       {
         type: "text" as const,
         text: encode({
           filePath,
+          ...(warning && { warning }),
           fileSizeBytes: stats.size,
           org: orgLabel,
           orgType: classification,

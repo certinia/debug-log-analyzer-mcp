@@ -60,7 +60,6 @@ const ANSWERABILITY = {
   get_apex_log_summary: [
     {
       question: "How many DML statements and SOQL queries were consumed?",
-      fields: ["totalDMLOperations", "totalSOQLQueries"],
       limits: ["dmlStatements", "soqlQueries"],
     },
     {
@@ -68,26 +67,47 @@ const ANSWERABILITY = {
       limits: ["cpuTime", "heapSize", "queryRows", "dmlRows"],
     },
     {
-      question: "How long did the transaction take, and how much code ran?",
-      fields: ["totalExecutionTime", "totalMethods", "size"],
+      question: "Which searches and future calls did it use?",
+      limits: ["soslQueries", "futureCalls"],
+    },
+    {
+      question: "Which namespace consumed the limits?",
+      keys: ["limitsByNamespace"],
+    },
+    {
+      question: "How long did the transaction take, and how big is the log?",
+      fields: ["durationTotalMs", "fileSizeBytes"],
+    },
+    {
+      question: "Where did the time go — methods, queries or a managed package?",
+      keys: ["timeByKind"],
+      columns: ["kind", "operationCount", "durationSelfMs"],
     },
     {
       question: "Is detail missing because a log category was switched off?",
       keys: ["debugLevels"],
+      columns: ["logCategory", "level"],
     },
-    { question: "Did the log parse cleanly?", fields: ["parsingErrors"] },
+    {
+      question: "Did the log parse cleanly, and did it capture the whole run?",
+      fields: ["parsingErrorCount"],
+      keys: ["truncated"],
+    },
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
   analyze_apex_log_performance: [
-    { question: "Which methods are the slowest?", keys: ["slowestMethods"] },
+    { question: "What did the transaction spend its time on?", keys: ["operations"] },
     {
-      question: "What share of the runtime do those methods account for?",
-      fields: ["topMethodsSelfPercentage", "totalExecutionTime"],
+      question: "Was it a method, a query, a search or DML?",
+      columns: ["kind", "callCount"],
     },
-    { question: "How many methods were considered?", fields: ["totalMethods"] },
     {
-      question: "Did any of the slowest methods touch the database?",
-      columns: ["dmlCount", "soqlCount", "dmlRows", "soqlRows"],
+      question: "What share of the runtime do those operations account for?",
+      fields: ["returnedSelfPercentage", "durationTotalMs"],
+    },
+    {
+      question: "Did any of them touch the database, and how much did they move?",
+      columns: ["dmlCount", "soqlCount", "soslCount", "rowCount"],
     },
     {
       question: "Where in the code are they, and whose namespace are they in?",
@@ -96,14 +116,12 @@ const ANSWERABILITY = {
   ],
   find_performance_bottlenecks: [
     {
-      question: "Is anything over or near a limit, and what should I look at?",
-      anyKey: [
-        "cpuBottlenecks",
-        "databaseBottlenecks",
-        "methodBottlenecks",
-        "governorLimitWarnings",
-        "note",
-      ],
+      question: "Is any governor limit nearly consumed?",
+      keys: ["atRisk"],
+    },
+    {
+      question: "How near does a limit have to be to appear here?",
+      fields: ["threshold"],
     },
   ],
 };
@@ -120,13 +138,7 @@ const ANSWERABILITY = {
  */
 const MINIMAL_ZEROS = {
   get_apex_log_summary: {
-    fields: [
-      "totalSOQLQueries",
-      "totalDMLOperations",
-      "totalSOQLRows",
-      "totalDMLRows",
-      "parsingErrors",
-    ],
+    fields: ["parsingErrorCount"],
     allLimitsZero: true,
   },
 };
@@ -138,12 +150,15 @@ const MINIMAL_ZEROS = {
  * than a surprise failure.
  */
 const TOKEN_BUDGET = {
-  "get_apex_log_summary/governor-heavy": 230,
-  "get_apex_log_summary/minimal": 185,
+  // Raised for the two tables #62 added: what each namespace consumed of the
+  // limits, and where the time went by kind of operation. Both answer questions
+  // the 1.x summary could not.
+  "get_apex_log_summary/governor-heavy": 357,
+  "get_apex_log_summary/minimal": 249,
   "analyze_apex_log_performance/governor-heavy": 290,
   "analyze_apex_log_performance/minimal": 130,
-  "find_performance_bottlenecks/governor-heavy": 85,
-  "find_performance_bottlenecks/minimal": 35,
+  "find_performance_bottlenecks/governor-heavy": 40,
+  "find_performance_bottlenecks/minimal": 15,
 };
 
 /**
@@ -176,9 +191,13 @@ const V1_RESPONSE_TOKENS = {
  * not a silent tax on every request.
  */
 const DEFINITION_BUDGET = {
-  analyze_apex_log_performance: 250,
-  get_apex_log_summary: 161,
-  find_performance_bottlenecks: 246,
+  // Raised for the five selection parameters, which the caller acts on: without
+  // them a ranking over every operation kind can only be read whole.
+  analyze_apex_log_performance: 338,
+  // Raised for the two facts the summary gained: per-namespace limit usage, and
+  // time by kind of operation.
+  get_apex_log_summary: 180,
+  find_performance_bottlenecks: 210,
   execute_anonymous: 449,
 };
 
@@ -200,7 +219,7 @@ const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
 const SELECTION_KEYWORDS = {
   analyze_apex_log_performance: ["self-execution time", "optimize"],
   get_apex_log_summary: ["summary", "overview"],
-  find_performance_bottlenecks: ["governor limits", "CPU"],
+  find_performance_bottlenecks: ["governor limits", "CPU time"],
   execute_anonymous: ["anonymous Apex", "Salesforce org"],
 };
 
@@ -313,8 +332,8 @@ function inspect(toon) {
         if (Number.isFinite(numeric) && /^-?[\d.]+$/.test(value)) {
           scalars.set(key, numeric);
         } else {
-          // Prose at the top level — a `note`, a `recommendations` list, or a
-          // reintroduced `summary`. Scanned for restated figures below.
+          // Prose at the top level — a `note`, or a reintroduced `summary`.
+          // Scanned for restated figures below.
           strings.push(value);
         }
       }

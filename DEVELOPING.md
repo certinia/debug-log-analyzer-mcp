@@ -12,9 +12,10 @@ Welcome to the development guide for the **Apex Log MCP Server**. This document 
 2. [Setting Up the Development Environment](#-setting-up-the-development-environment)
 3. [Building](#-building)
 4. [Running the Server Locally](#-running-the-server-locally)
-5. [Shaping Tool Responses](#️-shaping-tool-responses)
-6. [Shaping Tool Definitions](#️-shaping-tool-definitions)
-7. [Testing Your Changes](#-testing-your-changes)
+5. [Naming Tools and Fields](#-naming-tools-and-fields)
+6. [Shaping Tool Responses](#️-shaping-tool-responses)
+7. [Shaping Tool Definitions](#️-shaping-tool-definitions)
+8. [Testing Your Changes](#-testing-your-changes)
 
 ## 🔧 Prerequisites
 
@@ -108,6 +109,60 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
 
    To disable Apex execution altogether, use `--no-apex-execution`. See the [README](README.md#production-safety) for the full policy.
 
+## 🔤 Naming Tools and Fields
+
+A name has to be decidable: for any new tool or field, exactly one name follows from these rules. The
+reader is an agent that cannot ask what a name means.
+
+### Prefix every tool with `apexlog_`
+
+Unprefixed names collide across servers. `get_issue` and `list_issues` ship in both the GitHub and the
+Sentry server; `search_files` and `read_file` in both Filesystem and Google Drive. A client with two of
+those loaded cannot tell them apart.
+
+One unbroken unit — `apexlog_`, not `apex_log_`, as `slack_` is — so the boundary between the namespace
+and the verb is visible.
+
+### The verb states the shape of the result
+
+The result is what the caller plans around. The work is invisible to it.
+
+| Verb | The caller gets back |
+| --- | --- |
+| `get_` | exactly one thing, identified by the input |
+| `list_` | a collection; filters, thresholds and ranking are allowed |
+| `search_` | a collection matched to a query the caller supplies |
+| `create_` / `update_` / `delete_` / `write_` | one resource, written |
+| `execute_` / `run_` | an effect outside this server |
+
+A filter does not make it a `search_` — Sentry's `list_issues` and GitHub's `list_pull_requests` both
+take filters. `search_` is for a caller's query string.
+
+Banned: `analyze`, `process`, `handle` and `manage`, because they name work, so two tools can both
+claim them; `find`, `detect`, `check` and `fetch`, because they are synonyms of the verbs above.
+
+The noun states what the result is, in the caller's words: `slow_operations`, not `timed_nodes`.
+
+A bare noun (`apexlog_summary`) is shorter, and `git_status` shows it can work — but only because git's
+subcommands *are* its vocabulary, so `status` reads as a verb there. Ours is not, and a bare noun
+cannot say whether one thing or many come back.
+
+### Fields
+
+1. **Name the fact, not the calculation**: `returnedSelfPercentage`, not `coveredSelfPercentage`.
+2. **Carry the unit** when the type cannot: `durationSelfMs`, `fileSizeBytes`.
+3. **`total` always means "including children", `self` always means "excluding them".** Never "summed
+   across rows". A log's duration *is* its root frame's, so `durationTotalMs` names it at every scope,
+   and the parser's own `duration.total` / `duration.self` reach the wire unrenamed.
+4. **One name per fact, in every tool.** A word may still serve two unrelated facts where position
+   prevents confusion: `limit` is both the input row count and the column naming which governor limit
+   a row is about.
+5. **Counts are `<singularNoun>Count`**: `soqlCount`, `dmlRowCount`. Not `totalX`, not a plural alone.
+6. **lowerCamel, acronyms folded**: `soqlCount`.
+7. **Booleans are bare adjectives that read true**: `truncated`, `succeeded`. No `isX`, no `hasX`.
+8. **An input names what it limits, on the axis it acts on**: `limit`, `minSelfMs`. `minDuration`
+   filtered on total time while the ranking used self time, and the name hid it.
+
 ## ✂️ Shaping Tool Responses
 
 Every token a tool returns is a token the agent cannot spend on reasoning, so responses are kept as
@@ -124,10 +179,16 @@ it, and it costs nothing. Measured on the 13 governor limits of a real 19 MB log
 | --- | --- | --- |
 | Nested objects, all 13 | ~151 | yes |
 | Nested objects, `used > 0` only | ~42 | **no** |
-| **Flat table (`{name, used, limit}`), all 13** | **~84** | yes |
+| **Flat table (`{limit, used, max}`), all 13** | **~84** | yes |
 
 The flat table is 45% cheaper than the nested form *and* complete. Deleting the zero rows buys 42
 more tokens and costs the answer, so we don't. `toLimitRows` is the helper that does this.
+
+Per-namespace usage is the exception that proves the rule. `toNamespaceLimitRows` reports only the
+limits a namespace consumed, because there a row *is* an occurrence: whether a limit was measured at
+all is a property of the transaction, which the whole-log table already answers, so a namespace with
+no row for a limit consumed none of it. It states no ceiling either — the parser keeps one ceiling
+per limit for the whole transaction, and it is already in `governorLimits`.
 
 ### The conventions
 
@@ -137,13 +198,18 @@ one-liners.
 - **A fixed-schema field is always reported, even at zero.** The set of governor limits, debug
   categories and method columns is fixed and known, so a zero is a fact and an absent key is an
   ambiguity — the reader cannot tell "nothing ran" from "never parsed". Report the zero.
-- **Only occurrence lists are omitted when empty** — issues found, recommendations made, errors
+- **Only occurrence lists are omitted when empty** — issues found, errors
   encountered. There, absence is unambiguous: nothing occurred. `omitEmpty` is for these and nothing
   else; never pass a fixed-schema scalar through it. (`false` is *not* empty — it is an answer.)
 - **Say it once.** Never restate in prose a figure that is already in a table, and never report a
-  value in two sections. Recommendations say what to *do*; the numbers stay in the data. Where prose
+  value in two sections. Where prose
   carried a fact the table could not, replace it with a scalar rather than deleting it —
   `topMethodsSelfPercentage` is ~8 tokens where the paragraph it replaced was ~55.
+- **Don't state what the caller can derive.** A sentence earns its tokens only if it carries a fact the
+  numbers do not. "No bottlenecks found" follows from an always-present empty list, so the fix is a
+  complete shape, not a sentence; "High CPU usage — consider optimizing algorithms" follows from the
+  percentage beside it. Advice built from one column and a hardcoded threshold is a worse copy of what
+  the agent does anyway, because the agent reads every column.
 - **Don't echo the input back.** If the caller supplied it (a file path, a flag), it does not belong
   in the response.
 - **Round to the precision someone acts on.** `roundMs` for durations (3dp, keeps microsecond

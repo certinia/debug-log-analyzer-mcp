@@ -1,15 +1,13 @@
-totalMethods: 13
-totalExecutionTime: 24608.108
-topMethodsSelfPercentage: 96.6
-slowestMethods[10]{name,duration,selfDuration,selfPercentage,namespace,lineNumber,dmlCount,soqlCount,dmlRows,soqlRows,thrownCount,soslCount,soslRows}:
-  srm_pkg,20479.388,20479.388,83.2,srm_pkg,null,0,0,0,0,0,0,0
-  "Flow:Account",3040.037,3040.037,12.4,default,null,0,0,0,0,0,0,0
-  core_pkg,131.423,131.423,0.5,core_pkg,null,0,0,0,0,0,0,0
-  execute_anonymous_apex,24607.193,79.143,0.3,default,null,1,1,300,0,0,0,0
-  core_pkg,10.528,10.528,0,core_pkg,null,0,0,0,0,0,0,0
-  srm_pkg,10.032,10.032,0,srm_pkg,null,0,0,0,0,0,0,0
-  core_pkg,6.668,6.668,0,core_pkg,null,0,0,0,0,0,0,0
-  AccountService.createAccountsAndContacts(),24527.816,3.58,0,default,1,1,1,300,0,0,0,0
-  "System.Math.mod(Integer, Integer)",1.065,1.065,0,default,143,0,0,0,0,0,0,0
-  AccountService.getDayValue(Date),1.282,0.153,0,default,120,0,0,0,0,0,0,0
-recommendations[2]: "srm_pkg: dominates self time. Check whether it can be made faster, and how often it is called.","Flow:Account: dominates self time. Check whether it can be made faster, and how often it is called."
+durationTotalMs: 24608.108
+returnedSelfPercentage: 100
+operations[10]{kind,name,namespace,lineNumber,callCount,durationTotalMs,durationSelfMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:
+  managedPackage,srm_pkg,srm_pkg,null,1,20479.388,20479.388,83.2,0,0,0,0,0
+  codeUnit,"Flow:Account",default,null,1,3040.037,3040.037,12.4,0,0,0,0,0
+  dml,"DML Op:Insert Type:Account",default,36,1,24468.441,765.749,3.1,1,1,0,300,0
+  managedPackage,core_pkg,core_pkg,null,1,131.423,131.423,0.5,0,0,0,0,0
+  codeUnit,execute_anonymous_apex,default,null,1,24607.193,79.143,0.3,1,1,0,300,0
+  systemMethod,List<Account>.add(Object),default,19,1,24521.782,53.321,0.2,1,1,0,300,0
+  soql,"SELECT Name, Id, core_pkg__group_key__c, (SELECT core_pkg__Value__c FROM core_pkg__Values__r ORDER BY core_pkg__Sort__c ASC NULLS FIRST) FROM core_pkg__Config_Option__c",default,19,1,24.617,24.617,0.1,1,0,0,0,0
+  managedPackage,core_pkg,core_pkg,null,1,10.528,10.528,0,0,0,0,0,0
+  managedPackage,srm_pkg,srm_pkg,null,1,10.032,10.032,0,0,0,0,0,0
+  managedPackage,core_pkg,core_pkg,null,1,6.668,6.668,0,0,0,0,0,0

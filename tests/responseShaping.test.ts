@@ -7,6 +7,7 @@ import {
   roundMs,
   roundPercent,
   toLimitRows,
+  toNamespaceLimitRows,
 } from "../src/tools/responseShaping";
 import type { GovernorLimits, Limits } from "../src/ApexLogParser";
 
@@ -52,41 +53,38 @@ describe("responseShaping", () => {
     });
   });
 
+  const limitNames: (keyof Limits)[] = [
+    "soqlQueries",
+    "soslQueries",
+    "queryRows",
+    "dmlStatements",
+    "publishImmediateDml",
+    "dmlRows",
+    "cpuTime",
+    "heapSize",
+    "callouts",
+    "emailInvocations",
+    "futureCalls",
+    "queueableJobsAddedToQueue",
+    "mobileApexPushCalls",
+  ];
+
+  const limitsOf = (used: Partial<Record<keyof Limits, number>>): Limits =>
+    Object.fromEntries(
+      limitNames.map((name) => [name, { used: used[name] ?? 0, limit: 100 }]),
+    ) as Limits;
+
+  const buildLimits = (
+    used: Partial<Record<keyof Limits, number>> = {},
+  ): GovernorLimits =>
+    ({ ...limitsOf(used), byNamespace: new Map() }) as GovernorLimits;
+
   describe("toLimitRows", () => {
-    const limitNames: (keyof Limits)[] = [
-      "soqlQueries",
-      "soslQueries",
-      "queryRows",
-      "dmlStatements",
-      "publishImmediateDml",
-      "dmlRows",
-      "cpuTime",
-      "heapSize",
-      "callouts",
-      "emailInvocations",
-      "futureCalls",
-      "queueableJobsAddedToQueue",
-      "mobileApexPushCalls",
-    ];
-
-    const buildLimits = (
-      used: Partial<Record<keyof Limits, number>> = {},
-    ): GovernorLimits =>
-      ({
-        ...Object.fromEntries(
-          limitNames.map((name) => [
-            name,
-            { used: used[name] ?? 0, limit: 100 },
-          ]),
-        ),
-        byNamespace: new Map(),
-      }) as GovernorLimits;
-
     it("should return one row per limit in parser order", () => {
       const rows = toLimitRows(buildLimits());
 
       expect(rows).toHaveLength(limitNames.length);
-      expect(rows.map((row) => row.name)).toEqual(limitNames);
+      expect(rows.map((row) => row.limit)).toEqual(limitNames);
     });
 
     it("should keep a limit nothing was spent against", () => {
@@ -95,17 +93,58 @@ describe("responseShaping", () => {
       const rows = toLimitRows(buildLimits({ cpuTime: 15163 }));
 
       expect(rows).toContainEqual({
-        name: "dmlStatements",
+        limit: "dmlStatements",
         used: 0,
-        limit: 100,
+        max: 100,
       });
-      expect(rows).toContainEqual({ name: "cpuTime", used: 15163, limit: 100 });
+      expect(rows).toContainEqual({ limit: "cpuTime", used: 15163, max: 100 });
     });
 
     it("should skip byNamespace, which is not a limit", () => {
-      expect(toLimitRows(buildLimits()).map((row) => row.name)).not.toContain(
+      expect(toLimitRows(buildLimits()).map((row) => row.limit)).not.toContain(
         "byNamespace",
       );
+    });
+  });
+
+  describe("toNamespaceLimitRows", () => {
+    it("should report one row per limit a namespace consumed", () => {
+      const rows = toNamespaceLimitRows(
+        new Map([
+          ["srm_pkg", limitsOf({ soqlQueries: 4, cpuTime: 900 })],
+          ["default", limitsOf({ dmlStatements: 2 })],
+        ]),
+      );
+
+      expect(rows).toEqual([
+        { namespace: "srm_pkg", limit: "soqlQueries", used: 4 },
+        { namespace: "srm_pkg", limit: "cpuTime", used: 900 },
+        { namespace: "default", limit: "dmlStatements", used: 2 },
+      ]);
+    });
+
+    it("should drop the limits a namespace did not consume", () => {
+      // A row here is an occurrence. Whether a limit was measured at all is a
+      // property of the transaction, and the whole-log table answers that.
+      const rows = toNamespaceLimitRows(
+        new Map([["srm_pkg", limitsOf({ cpuTime: 900 })]]),
+      );
+
+      expect(rows).toEqual([
+        { namespace: "srm_pkg", limit: "cpuTime", used: 900 },
+      ]);
+    });
+
+    it("should not repeat the ceiling, which belongs to the transaction", () => {
+      const [row] = toNamespaceLimitRows(
+        new Map([["srm_pkg", limitsOf({ cpuTime: 900 })]]),
+      );
+
+      expect(row).not.toHaveProperty("max");
+    });
+
+    it("should return no rows when the log named no namespace", () => {
+      expect(toNamespaceLimitRows(new Map())).toEqual([]);
     });
   });
 });

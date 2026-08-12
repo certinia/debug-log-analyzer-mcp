@@ -1,4 +1,2 @@
-methodBottlenecks:
-  totalMethods: 2
-  methodsByNamespace[1]{namespace,methodCount,totalDuration}:
-    default,2,1.107
+threshold: 80
+atRisk: []

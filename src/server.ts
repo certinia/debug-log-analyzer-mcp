@@ -67,7 +67,11 @@ class ApexLogServer {
       this.server.close();
       process.exit(0);
     };
+    // SIGTERM as well as SIGINT. A supervised restart, a container stop, and a
+    // client that ends a stdio server all send SIGTERM, and Node's default for
+    // it is to exit without running any of this.
     process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
   }
 
   private registerTools(): void {
