@@ -1,11 +1,21 @@
-size: 39532
-totalExecutionTime: 24608.108
-totalMethods: 13
-totalSOQLQueries: 1
-totalDMLOperations: 1
-totalSOQLRows: 0
-totalDMLRows: 300
-governorLimits[13]{name,used,limit}:
+fileSizeBytes: 39532
+durationTotalMs: 24608.108
+truncated: false
+parsingErrorCount: 11
+namespaces[3]: default,core_pkg,srm_pkg
+debugLevels[11]{logCategory,level}:
+  APEX_CODE,FINE
+  APEX_PROFILING,FINE
+  CALLOUT,FINEST
+  DATA_ACCESS,INFO
+  DB,FINEST
+  NBA,FINE
+  SYSTEM,FINE
+  VALIDATION,INFO
+  VISUALFORCE,FINE
+  WAVE,FINE
+  WORKFLOW,FINE
+governorLimits[13]{limit,used,max}:
   soqlQueries,5,100
   soslQueries,0,20
   queryRows,602,50000
@@ -19,20 +29,24 @@ governorLimits[13]{name,used,limit}:
   futureCalls,0,50
   queueableJobsAddedToQueue,0,50
   mobileApexPushCalls,0,10
-namespaces[3]: default,core_pkg,srm_pkg
-debugLevels[11]{category,level}:
-  APEX_CODE,FINE
-  APEX_PROFILING,FINE
-  CALLOUT,FINEST
-  DATA_ACCESS,INFO
-  DB,FINEST
-  NBA,FINE
-  SYSTEM,FINE
-  VALIDATION,INFO
-  VISUALFORCE,FINE
-  WAVE,FINE
-  WORKFLOW,FINE
-parsingErrors: 11
+limitsByNamespace[7]{namespace,limit,used}:
+  default,soqlQueries,5
+  default,queryRows,600
+  default,dmlStatements,6
+  default,dmlRows,1200
+  default,cpuTime,15163
+  default,heapSize,219591
+  core_pkg,queryRows,2
+timeByKind[9]{kind,logCategory,operationCount,durationSelfMs,selfPercentage}:
+  codeUnit,APEX_CODE,2,3119.179,12.7
+  managedPackage,APEX_CODE,5,20638.038,83.9
+  method,APEX_CODE,5,5.058,0
+  systemMethod,SYSTEM,98,54.552,0.2
+  soql,DB,1,24.617,0.1
+  sosl,DB,0,0,0
+  dml,DB,1,765.749,3.1
+  flow,WORKFLOW,0,0,0
+  workflow,WORKFLOW,0,0,0
 logIssues[2]{type,summary}:
   unexpected,Unexpected-Exit
   error,"FATAL ERROR! cause=System.LimitException: Apex CPU time limit exceeded\n"

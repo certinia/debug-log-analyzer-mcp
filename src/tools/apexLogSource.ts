@@ -9,7 +9,6 @@ import {
   parse,
   ApexLog,
   LogLine,
-  type LogSubCategory,
 } from "../ApexLogParser.js";
 
 /**
@@ -146,21 +145,6 @@ export function clearApexLogCache(): void {
   clearTimeout(evictionTimer);
   evictionTimer = undefined;
   cached = undefined;
-}
-
-/**
- * The units the tools count and rank: entry points and the methods below them.
- * Every tool uses this one test, so their method totals agree.
- */
-export function isMethodNode(node: LogLine): boolean {
-  // subCategory is declared on TimedNode, a subclass, so it is read off the
-  // node rather than tested with instanceof.
-  const { subCategory } = node as LogLine & { subCategory?: LogSubCategory };
-  return (
-    node.type === "CODE_UNIT_STARTED" ||
-    node.type === "METHOD_ENTRY" ||
-    subCategory === "Method"
-  );
 }
 
 /** Visit the node and every node below it, parents first. */

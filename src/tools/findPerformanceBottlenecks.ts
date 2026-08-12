@@ -4,9 +4,13 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
-import type { GovernorLimits, Limits } from "../ApexLogParser.js";
+import type { GovernorLimits } from "../ApexLogParser.js";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
-import { roundPercent } from "./responseShaping.js";
+import {
+  percentageOf,
+  roundPercent,
+  toLimitRows,
+} from "./responseShaping.js";
 
 /** Where a limit becomes worth reporting, when the caller names no other. */
 export const WARNING_THRESHOLD = 80;
@@ -83,17 +87,12 @@ function atRiskLimits(
   governorLimits: GovernorLimits,
   threshold: number,
 ): LimitRisk[] {
-  return Object.entries(governorLimits)
-    .filter(([name]) => name !== "byNamespace")
-    .map(([name, value]) => {
-      const { used, limit } = value as Limits[keyof Limits];
-      return {
-        limit: name,
-        used,
-        max: limit,
-        usedPercentage: limit > 0 ? roundPercent((used / limit) * 100) : 0,
-      };
-    })
-    .filter((risk) => risk.max > 0 && risk.usedPercentage >= threshold)
+  return toLimitRows(governorLimits)
+    .filter((row) => row.max > 0)
+    .map((row) => ({
+      ...row,
+      usedPercentage: roundPercent(percentageOf(row.used, row.max)),
+    }))
+    .filter((risk) => risk.usedPercentage >= threshold)
     .sort((a, b) => b.usedPercentage - a.usedPercentage);
 }

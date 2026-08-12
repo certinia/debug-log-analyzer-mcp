@@ -6,7 +6,6 @@ import { promises as fs, type BigIntStats } from "fs";
 
 import {
   clearApexLogCache,
-  isMethodNode,
   loadApexLog,
   logFilePathSchema,
   walkLog,
@@ -49,9 +48,6 @@ const statsOf = (
     mtimeNs: BigInt(mtimeNs),
     ctimeNs: BigInt(ctimeNs),
   }) as BigIntStats;
-
-const nodeOf = (props: Record<string, unknown>): LogLine =>
-  props as unknown as LogLine;
 
 /**
  * Run the body with the clock under our control. `jest.useRealTimers()` leaves
@@ -235,19 +231,6 @@ describe("apexLogSource", () => {
         );
       },
     );
-  });
-
-  describe("isMethodNode", () => {
-    it("accepts code units, method entries and timed method nodes", () => {
-      expect(isMethodNode(nodeOf({ type: "CODE_UNIT_STARTED" }))).toBe(true);
-      expect(isMethodNode(nodeOf({ type: "METHOD_ENTRY" }))).toBe(true);
-      expect(isMethodNode(nodeOf({ type: "SOQL_EXECUTE_BEGIN" }))).toBe(false);
-      expect(
-        isMethodNode(
-          nodeOf({ type: "CONSTRUCTOR_ENTRY", subCategory: "Method" }),
-        ),
-      ).toBe(true);
-    });
   });
 
   describe("walkLog", () => {

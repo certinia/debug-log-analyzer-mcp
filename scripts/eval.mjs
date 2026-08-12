@@ -60,7 +60,6 @@ const ANSWERABILITY = {
   get_apex_log_summary: [
     {
       question: "How many DML statements and SOQL queries were consumed?",
-      fields: ["totalDMLOperations", "totalSOQLQueries"],
       limits: ["dmlStatements", "soqlQueries"],
     },
     {
@@ -68,14 +67,32 @@ const ANSWERABILITY = {
       limits: ["cpuTime", "heapSize", "queryRows", "dmlRows"],
     },
     {
-      question: "How long did the transaction take, and how much code ran?",
-      fields: ["totalExecutionTime", "totalMethods", "size"],
+      question: "Which searches and future calls did it use?",
+      limits: ["soslQueries", "futureCalls"],
+    },
+    {
+      question: "Which namespace consumed the limits?",
+      keys: ["limitsByNamespace"],
+    },
+    {
+      question: "How long did the transaction take, and how big is the log?",
+      fields: ["durationTotalMs", "fileSizeBytes"],
+    },
+    {
+      question: "Where did the time go — methods, queries or a managed package?",
+      keys: ["timeByKind"],
+      columns: ["kind", "operationCount", "durationSelfMs"],
     },
     {
       question: "Is detail missing because a log category was switched off?",
       keys: ["debugLevels"],
+      columns: ["logCategory", "level"],
     },
-    { question: "Did the log parse cleanly?", fields: ["parsingErrors"] },
+    {
+      question: "Did the log parse cleanly, and did it capture the whole run?",
+      fields: ["parsingErrorCount"],
+      keys: ["truncated"],
+    },
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
   analyze_apex_log_performance: [
@@ -121,13 +138,7 @@ const ANSWERABILITY = {
  */
 const MINIMAL_ZEROS = {
   get_apex_log_summary: {
-    fields: [
-      "totalSOQLQueries",
-      "totalDMLOperations",
-      "totalSOQLRows",
-      "totalDMLRows",
-      "parsingErrors",
-    ],
+    fields: ["parsingErrorCount"],
     allLimitsZero: true,
   },
 };
@@ -139,8 +150,11 @@ const MINIMAL_ZEROS = {
  * than a surprise failure.
  */
 const TOKEN_BUDGET = {
-  "get_apex_log_summary/governor-heavy": 230,
-  "get_apex_log_summary/minimal": 185,
+  // Raised for the two tables #62 added: what each namespace consumed of the
+  // limits, and where the time went by kind of operation. Both answer questions
+  // the 1.x summary could not.
+  "get_apex_log_summary/governor-heavy": 357,
+  "get_apex_log_summary/minimal": 249,
   "analyze_apex_log_performance/governor-heavy": 290,
   "analyze_apex_log_performance/minimal": 130,
   "find_performance_bottlenecks/governor-heavy": 40,
@@ -180,7 +194,9 @@ const DEFINITION_BUDGET = {
   // Raised for the five selection parameters, which the caller acts on: without
   // them a ranking over every operation kind can only be read whole.
   analyze_apex_log_performance: 338,
-  get_apex_log_summary: 161,
+  // Raised for the two facts the summary gained: per-namespace limit usage, and
+  // time by kind of operation.
+  get_apex_log_summary: 180,
   find_performance_bottlenecks: 210,
   execute_anonymous: 449,
 };

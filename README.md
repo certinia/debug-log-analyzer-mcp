@@ -70,8 +70,8 @@ Every request carries all four tool definitions, whether or not a tool is called
 | `execute_anonymous`            | ~428                                | ~844       | -49%     |
 | `analyze_apex_log_performance` | ~326                                | ~247       | +32%     |
 | `find_performance_bottlenecks` | ~201                                | ~267       | -25%     |
-| `get_apex_log_summary`         | ~153                                | ~171       | -11%     |
-| **Total**                      | **~1,108** (0.6% of a 200K context) | **~1,529** | **-28%** |
+| `get_apex_log_summary`         | ~172                                | ~171       | +1%      |
+| **Total**                      | **~1,127** (0.6% of a 200K context) | **~1,529** | **-26%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -83,8 +83,8 @@ The input side is the same for every analysis tool — a tool name and a log fil
 
 | Tool                           | Log                  | Response | 1.x  | Change |
 | ------------------------------ | -------------------- | -------- | ---- | ------ |
-| `get_apex_log_summary`         | `governor-heavy.log` | ~220     | ~293 | -25%   |
-| `get_apex_log_summary`         | `minimal.log`        | ~174     | ~249 | -30%   |
+| `get_apex_log_summary`         | `governor-heavy.log` | ~341     | ~293 | +16%   |
+| `get_apex_log_summary`         | `minimal.log`        | ~238     | ~249 | -4%    |
 | `analyze_apex_log_performance` | `governor-heavy.log` | ~275     | ~408 | -33%   |
 | `analyze_apex_log_performance` | `minimal.log`        | ~87      | ~190 | -54%   |
 | `find_performance_bottlenecks` | `governor-heavy.log` | ~21      | ~84  | -75%   |
@@ -121,9 +121,11 @@ Rows are `{kind, name, namespace, lineNumber, callCount, durationTotalMs, durati
 
 ### get_apex_log_summary
 
-Get a high-level summary of an Apex debug log including total execution time (in ms), method count, SOQL/DML totals, governor limits, debug levels and active namespaces. Best for a quick overview before deeper analysis.
+Get a high-level summary of an Apex debug log: how long the transaction ran (in ms), where the time went by kind of operation, every governor limit it and each namespace consumed, the debug levels it was logged at, and whether the log is complete. Best for a quick overview before deeper analysis.
 
-All thirteen governor limits are listed as `{name, used, limit}` rows, at zero included, so you can ask what a transaction consumed and get an answer either way. `debugLevels` names every log category and its level, which is what tells you whether a missing detail was absent from the run or simply never logged.
+All thirteen governor limits are listed as `{limit, used, max}` rows, at zero included, so you can ask what a transaction consumed and get an answer either way. `limitsByNamespace` adds `{namespace, limit, used}` rows for each limit a namespace consumed, which is how you see that a managed package spent your CPU time; it names no ceiling, because the parser keeps one ceiling per limit for the whole transaction and it is already in `governorLimits`.
+
+`timeByKind` gives `{kind, logCategory, operationCount, durationSelfMs, selfPercentage}` for every kind `analyze_apex_log_performance` ranks. `logCategory` is the trace category that decides whether the kind reaches the log at all, so a zero can be read: `soql 0` beside `DB NONE` in `debugLevels`, whose rows are `{logCategory, level}`, means the queries were not logged, and beside `DB FINEST` it means none ran.
 
 | Parameter     | Type   | Required | Description                                     |
 | ------------- | ------ | -------- | ----------------------------------------------- |
@@ -254,7 +256,7 @@ This server implements the [Model Context Protocol (MCP)](https://modelcontextpr
 
 - **Runs as a local process** — your AI client spawns the server and communicates locally. No network requests, no API keys.
 - **Uses the same parser as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer)** — battle-tested parsing of the Apex debug log format.
-- **Returns structured data** — all durations in milliseconds, governor limits as used/limit pairs, methods with SOQL/DML counts — so your AI assistant can reason about the results.
+- **Returns structured data** — all durations in milliseconds, governor limits as used/max rows, operations with SOQL/DML counts — so your AI assistant can reason about the results.
 - **Keeps responses lean** — TOON encoding, no duplicated figures, and zero/empty fields omitted, so more of the context window is left for reasoning.
 - **Parses a log once, not once per tool** — a summary followed by a deeper analysis of the same file reuses the parse, so a large log is read and parsed one time.
 

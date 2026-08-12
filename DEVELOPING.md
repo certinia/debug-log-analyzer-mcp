@@ -179,10 +179,16 @@ it, and it costs nothing. Measured on the 13 governor limits of a real 19 MB log
 | --- | --- | --- |
 | Nested objects, all 13 | ~151 | yes |
 | Nested objects, `used > 0` only | ~42 | **no** |
-| **Flat table (`{name, used, limit}`), all 13** | **~84** | yes |
+| **Flat table (`{limit, used, max}`), all 13** | **~84** | yes |
 
 The flat table is 45% cheaper than the nested form *and* complete. Deleting the zero rows buys 42
 more tokens and costs the answer, so we don't. `toLimitRows` is the helper that does this.
+
+Per-namespace usage is the exception that proves the rule. `toNamespaceLimitRows` reports only the
+limits a namespace consumed, because there a row *is* an occurrence: whether a limit was measured at
+all is a property of the transaction, which the whole-log table already answers, so a namespace with
+no row for a limit consumed none of it. It states no ceiling either — the parser keeps one ceiling
+per limit for the whole transaction, and it is already in `governorLimits`.
 
 ### The conventions
 
