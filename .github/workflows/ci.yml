@@ -6,6 +6,7 @@ on:
   # No branch filter: a pull request onto any base, including a stacked PR
   # onto another feature branch, must be checked before it is merged.
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 # Cancel superseded PR runs; main always finishes (baseline).
