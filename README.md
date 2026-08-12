@@ -238,18 +238,6 @@ For an analysis-only deployment:
 }
 ```
 
-### Migrating from 1.x
-
-`--allowed-orgs` was removed in 2.0. It is still accepted so existing configurations keep starting, but it is ignored and logs a deprecation warning — you can delete it.
-
-| 1.x                              | 2.0                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| No flag (tool hidden)            | No flag — the tool is visible and works against non-production orgs      |
-| `--allowed-orgs ALLOW_ALL_ORGS`  | No flag. Add `--allow-production-orgs` only if you target production     |
-| `--allowed-orgs <org>,<org>`     | No flag. Org-by-org allowlisting is replaced by the org type policy      |
-
-Note that `ALLOW_ALL_ORGS` no longer implies consent to run against production.
-
 ## How It Works
 
 This server implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to expose Apex log analysis as tools that any MCP-compatible AI client can call.

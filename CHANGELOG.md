@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-_If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrating-from-1x)._
+_If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 ### Changed
 
