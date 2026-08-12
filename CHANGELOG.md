@@ -13,11 +13,12 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 ### Changed
 
 - **Breaking:** refuse `execute_anonymous` against production orgs, and orgs whose type cannot be read, unless the run is confirmed via [MCP elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation) or `--allow-production-orgs` is set ([#52])
+- **Breaking:** `find_performance_bottlenecks` now returns one table of the governor limits at risk — `{limit, used, max, usedPercentage}` rows, worst first — beside the `threshold` that selected them. The `cpuBottlenecks`, `databaseBottlenecks`, `methodBottlenecks` and `governorLimitWarnings` sections, the `note`, and the `analysisType` parameter are gone; a new `threshold` parameter sets where a limit becomes worth reporting. All thirteen limits are covered, where the sections covered six, and the response costs 78% less ([#108])
 - **Breaking:** drop `file` from `get_apex_log_summary`, and the prose `summary` from `analyze_apex_log_performance` in favour of the scalar `topMethodsSelfPercentage` ([#86])
 - **Breaking:** report governor limits as a flat `{name, used, limit}` table, and include the limits at zero, so a caller can tell "no DML ran" from "DML was never read" ([#86])
 - Make the `execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
-- Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33%, `execute_anonymous` by 30% after the first run, `get_apex_log_summary` by 27% and `find_performance_bottlenecks` by 5% ([#86])
-- Reduce the standing cost of having the server connected by 31%, with no tool renamed, no parameter removed and no response changed: `execute_anonymous` by 49%, `find_performance_bottlenecks` by 12%, `get_apex_log_summary` by 11% and `analyze_apex_log_performance` by 4% ([#87])
+- Reduce every tool response with no fact lost: `analyze_apex_log_performance` by 33%, `execute_anonymous` by 30% after the first run, and `get_apex_log_summary` by 27% ([#86])
+- Reduce the standing cost of having the server connected by 33%: `execute_anonymous` by 49%, `find_performance_bottlenecks` by 25% ([#87], [#108]), `get_apex_log_summary` by 11% and `analyze_apex_log_performance` by 4% ([#87])
 - Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again. The parse is dropped after five minutes unused, so a large log is not held for the life of the session ([#88])
 
 ### Added
@@ -60,4 +61,5 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](README.md#migrat
 [#86]: https://github.com/certinia/debug-log-analyzer-mcp/issues/86
 [#87]: https://github.com/certinia/debug-log-analyzer-mcp/issues/87
 [#88]: https://github.com/certinia/debug-log-analyzer-mcp/issues/88
+[#108]: https://github.com/certinia/debug-log-analyzer-mcp/issues/108
 [#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109

@@ -69,9 +69,9 @@ Every request carries all four tool definitions, whether or not a tool is called
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
 | `execute_anonymous`            | ~428                                | ~844       | -49%     |
 | `analyze_apex_log_performance` | ~238                                | ~247       | -4%      |
-| `find_performance_bottlenecks` | ~234                                | ~267       | -12%     |
+| `find_performance_bottlenecks` | ~201                                | ~267       | -25%     |
 | `get_apex_log_summary`         | ~153                                | ~171       | -11%     |
-| **Total**                      | **~1,053** (0.5% of a 200K context) | **~1,529** | **-31%** |
+| **Total**                      | **~1,020** (0.5% of a 200K context) | **~1,529** | **-33%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -87,8 +87,8 @@ The input side is the same for every analysis tool — a tool name and a log fil
 | `get_apex_log_summary`         | `minimal.log`        | ~174     | ~249 | -30%   |
 | `analyze_apex_log_performance` | `governor-heavy.log` | ~278     | ~408 | -32%   |
 | `analyze_apex_log_performance` | `minimal.log`        | ~121     | ~190 | -36%   |
-| `find_performance_bottlenecks` | `governor-heavy.log` | ~79      | ~84  | -6%    |
-| `find_performance_bottlenecks` | `minimal.log`        | ~30      | ~30  | 0%     |
+| `find_performance_bottlenecks` | `governor-heavy.log` | ~21      | ~84  | -75%   |
+| `find_performance_bottlenecks` | `minimal.log`        | ~6       | ~30  | -80%   |
 
 <!-- token-cost-answers:end -->
 
@@ -125,21 +125,14 @@ All thirteen governor limits are listed as `{name, used, limit}` rows, at zero i
 
 ### find_performance_bottlenecks
 
-Check whether an Apex log transaction is approaching governor limits (flags usage above 80%). Analyzes CPU time, SOQL/DML limits, query rows, and method execution patterns by namespace. Best for checking if a transaction is at risk of hitting governor limits.
+List the governor limits an Apex log transaction has nearly consumed — CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote — worst first, with how much of each was used. Best for checking whether a transaction is at risk of failing on a limit.
 
-| Parameter      | Type   | Required | Description                                          |
-| -------------- | ------ | -------- | ---------------------------------------------------- |
-| `logFilePath`  | string | Yes      | Absolute path to the Apex debug log file (.log)      |
-| `analysisType` | string | No       | Type of analysis (default: `all`). See values below. |
+Rows are `{limit, used, max, usedPercentage}`. The `threshold` that produced them is reported alongside, so an empty table reads as "nothing is that far consumed" rather than as a missing answer.
 
-**`analysisType` values:**
-
-| Value      | Description                                            |
-| ---------- | ------------------------------------------------------ |
-| `cpu`      | Checks CPU time governor limit                         |
-| `database` | Checks SOQL query, DML statement, and query row limits |
-| `methods`  | Groups methods by namespace with duration totals       |
-| `all`      | Runs all three analysis types (default)                |
+| Parameter     | Type   | Required | Description                                                      |
+| ------------- | ------ | -------- | ---------------------------------------------------------------- |
+| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                  |
+| `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
 
 ### execute_anonymous
 

@@ -130,9 +130,8 @@ describe("ApexLogServer", () => {
       {
         type: "text" as const,
         text: JSON.stringify({
-          cpuBottlenecks: {},
-          databaseBottlenecks: {},
-          governorLimitWarnings: {},
+          threshold: 80,
+          atRisk: [],
         }),
       },
     ],
@@ -351,7 +350,7 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("find_performance_bottlenecks")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        analysisType: "cpu",
+        threshold: 90,
       };
 
       const result = await tool.callback(args, {} as any);
@@ -522,7 +521,7 @@ describe("ApexLogServer", () => {
       const tool = registeredTools.get("find_performance_bottlenecks")!;
       const args = {
         logFilePath: "/path/to/test.log",
-        analysisType: "database" as const,
+        threshold: 50,
       };
 
       await tool.callback(args, {} as any);

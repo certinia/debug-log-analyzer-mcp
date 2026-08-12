@@ -96,14 +96,12 @@ const ANSWERABILITY = {
   ],
   find_performance_bottlenecks: [
     {
-      question: "Is anything over or near a limit, and what should I look at?",
-      anyKey: [
-        "cpuBottlenecks",
-        "databaseBottlenecks",
-        "methodBottlenecks",
-        "governorLimitWarnings",
-        "note",
-      ],
+      question: "Is any governor limit nearly consumed?",
+      keys: ["atRisk"],
+    },
+    {
+      question: "How near does a limit have to be to appear here?",
+      fields: ["threshold"],
     },
   ],
 };
@@ -142,8 +140,8 @@ const TOKEN_BUDGET = {
   "get_apex_log_summary/minimal": 185,
   "analyze_apex_log_performance/governor-heavy": 290,
   "analyze_apex_log_performance/minimal": 130,
-  "find_performance_bottlenecks/governor-heavy": 85,
-  "find_performance_bottlenecks/minimal": 35,
+  "find_performance_bottlenecks/governor-heavy": 40,
+  "find_performance_bottlenecks/minimal": 15,
 };
 
 /**
@@ -178,7 +176,7 @@ const V1_RESPONSE_TOKENS = {
 const DEFINITION_BUDGET = {
   analyze_apex_log_performance: 250,
   get_apex_log_summary: 161,
-  find_performance_bottlenecks: 246,
+  find_performance_bottlenecks: 210,
   execute_anonymous: 449,
 };
 
@@ -200,7 +198,7 @@ const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
 const SELECTION_KEYWORDS = {
   analyze_apex_log_performance: ["self-execution time", "optimize"],
   get_apex_log_summary: ["summary", "overview"],
-  find_performance_bottlenecks: ["governor limits", "CPU"],
+  find_performance_bottlenecks: ["governor limits", "CPU time"],
   execute_anonymous: ["anonymous Apex", "Salesforce org"],
 };
 
