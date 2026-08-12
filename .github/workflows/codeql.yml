@@ -9,6 +9,7 @@ on:
   # branch filter from ci.yml, because a pull request stacked on another feature
   # branch got no checks at all and merged unchecked.
   pull_request:
+  merge_group:
   schedule:
     - cron: '26 5 * * 3' # weekly
 
