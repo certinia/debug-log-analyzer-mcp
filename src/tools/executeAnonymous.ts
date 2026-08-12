@@ -252,8 +252,7 @@ export async function executeAnonymous(
     projectPath ?? process.cwd(),
     args.outputDir ?? ".apex-log-mcp",
   );
-  // Resolves to the first directory created, or undefined when it already existed,
-  // which is exactly when the .gitignore tip below is worth its tokens.
+  // Resolves to the first directory created, or undefined when it already existed.
   const createdDir = await fs.mkdir(outputDir, { recursive: true });
 
   const filePath = path.join(outputDir, `${logId}.log`);
@@ -276,14 +275,15 @@ export async function executeAnonymous(
           fileSizeBytes: stats.size,
           org: orgLabel,
           orgType: classification,
-          success: apexResult.success,
+          succeeded: apexResult.success,
           ...(apexResult.exceptionMessage && {
             exceptionMessage: apexResult.exceptionMessage,
           }),
           durationMs: logRecord.DurationMilliseconds,
-          ...(createdDir && {
-            tip: "Add .apex-log-mcp/ to your .gitignore to avoid committing debug logs.",
-          }),
+          // A fact about this run, not advice about it: the directory is new, so
+          // nothing yet ignores it. Reported either way, because an absent field
+          // cannot be told apart from one this server never worked out.
+          outputDirCreated: Boolean(createdDir),
         }),
       },
     ],
