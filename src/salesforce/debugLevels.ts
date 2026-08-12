@@ -35,6 +35,29 @@ export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
 
 export type TraceConfig = Partial<Record<TraceCategory, LogLevel>>;
 
+/**
+ * The same categories as a debug log header spells them.
+ *
+ * A log opens with `APEX_CODE,FINE;DB,FINEST;…`, which is what the parser reads
+ * into `debugLevels`, so this is the spelling every response uses. `DATA_ACCESS`
+ * appears there but is not a `DebugLevel` field, so nothing can set it.
+ */
+export const LOG_CATEGORIES = [
+  "APEX_CODE",
+  "APEX_PROFILING",
+  "CALLOUT",
+  "DATA_ACCESS",
+  "DB",
+  "NBA",
+  "SYSTEM",
+  "VALIDATION",
+  "VISUALFORCE",
+  "WAVE",
+  "WORKFLOW",
+] as const;
+
+export type LogCategory = (typeof LOG_CATEGORIES)[number];
+
 /** The only place the per-category defaults live. */
 export const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
   apexCode: "FINE",

@@ -99,6 +99,7 @@ const ANSWERABILITY = {
     { question: "What did the transaction spend its time on?", keys: ["operations"] },
     {
       question: "Was it a method, a query, a search or DML?",
+      keys: ["operations"],
       columns: ["kind", "callCount"],
     },
     {
@@ -107,10 +108,12 @@ const ANSWERABILITY = {
     },
     {
       question: "Did any of them touch the database, and how much did they move?",
+      keys: ["operations"],
       columns: ["dmlCount", "soqlCount", "soslCount", "rowCount"],
     },
     {
       question: "Where in the code are they, and whose namespace are they in?",
+      keys: ["operations"],
       columns: ["namespace", "lineNumber"],
     },
   ],
@@ -312,7 +315,7 @@ function createClient() {
 function inspect(toon) {
   const scalars = new Map();
   const keys = [];
-  const columns = new Set();
+  const columns = new Map();
   const tables = new Map();
   const strings = [];
   let table = new Map();
@@ -326,7 +329,10 @@ function inspect(toon) {
       table = new Map();
       tables.set(key, table);
       if (header) {
-        header.split(",").forEach((column) => columns.add(column.trim()));
+        columns.set(
+          key,
+          new Set(header.split(",").map((column) => column.trim())),
+        );
       } else if (value !== "" && !line.endsWith(":")) {
         const numeric = Number(value);
         if (Number.isFinite(numeric) && /^-?[\d.]+$/.test(value)) {
@@ -360,8 +366,19 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
     for (const key of check.keys ?? []) {
       if (!keys.includes(key)) missing.push(key);
     }
-    for (const column of check.columns ?? []) {
-      if (!columns.has(column)) missing.push(column);
+    // A column belongs to one table. Pooling every header into one set let a
+    // check pass on a column another table happened to carry.
+    if (check.columns) {
+      const [table, ...rest] = check.keys ?? [];
+      if (!table || rest.length) {
+        throw new Error(
+          `${tool}: a "columns" check names the one table they are in, in "keys" — "${check.question}"`,
+        );
+      }
+      const header = columns.get(table) ?? new Set();
+      for (const column of check.columns) {
+        if (!header.has(column)) missing.push(`${table}.${column}`);
+      }
     }
     for (const limit of check.limits ?? []) {
       if (!limitRows.has(limit)) missing.push(`governorLimits.${limit}`);
