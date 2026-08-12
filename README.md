@@ -240,6 +240,26 @@ For an analysis-only deployment:
 
 ### Migrating from 1.x
 
+#### Tool names
+
+Every tool was renamed. An unprefixed name collides with the other servers a client has loaded, and a verb that names the work says nothing about what comes back — see [Naming Tools and Fields](DEVELOPING.md#-naming-tools-and-fields).
+
+| 1.x                            | 2.0                            |
+| ------------------------------ | ------------------------------ |
+| `get_apex_log_summary`         | `apexlog_get_summary`          |
+| `analyze_apex_log_performance` | `apexlog_list_slow_operations` |
+| `find_performance_bottlenecks` | `apexlog_list_limit_risks`     |
+| `execute_anonymous`            | `apexlog_execute_anonymous`    |
+
+Nothing needs changing if your client only calls tools by the name it read from the server. Update anywhere you named a tool yourself:
+
+- **Client allow and deny lists.** Claude Code writes these as `mcp__<server>__<tool>`, so `mcp__apex-log-mcp__execute_anonymous` becomes `mcp__apex-log-mcp__apexlog_execute_anonymous`. Check `permissions` in `.claude/settings.json`, and the equivalent list in any other client.
+- **Prompts, agents and skills** that name a tool in their text.
+
+The response fields changed with them. See the [changelog](CHANGELOG.md) for the field-by-field list.
+
+#### Org access
+
 `--allowed-orgs` was removed in 2.0. It is still accepted so existing configurations keep starting, but it is ignored and logs a deprecation warning — you can delete it.
 
 | 1.x                              | 2.0                                                                      |
