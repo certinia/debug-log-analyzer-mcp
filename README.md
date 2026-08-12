@@ -245,7 +245,7 @@ This server implements the [Model Context Protocol (MCP)](https://modelcontextpr
 - **Runs as a local process** — your AI client spawns the server and communicates locally. No network requests, no API keys.
 - **Uses the same parser as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer)** — battle-tested parsing of the Apex debug log format.
 - **Returns structured data** — all durations in milliseconds, governor limits as used/max rows, operations with SOQL/DML counts — so your AI assistant can reason about the results.
-- **Keeps responses lean** — TOON encoding, no duplicated figures, and zero/empty fields omitted, so more of the context window is left for reasoning.
+- **Keeps responses lean** — TOON tables and no duplicated figures, so more of the context window is left for reasoning. The fields stay, including the ones at zero: see [Tools Reference](#tools-reference).
 - **Parses a log once, not once per tool** — a summary followed by a deeper analysis of the same file reuses the parse, so a large log is read and parsed one time.
 
 ## Documentation
