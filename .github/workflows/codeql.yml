@@ -9,8 +9,6 @@ on:
   # branch filter from ci.yml, because a pull request stacked on another feature
   # branch got no checks at all and merged unchecked.
   pull_request:
-  # A required check has to report on the queued commit too. See the same note
-  # in ci.yml.
   merge_group:
   schedule:
     - cron: '26 5 * * 3' # weekly

@@ -4,8 +4,6 @@ on:
   # No branch filter: a required check that a pull request can skip stays
   # pending forever. See the same note in codeql.yml.
   pull_request:
-  # A required check has to report on the queued commit too. See the same note
-  # in ci.yml.
   merge_group:
 
 concurrency:
@@ -27,15 +25,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The two commits the review compares have to be in the clone.
           fetch-depth: 0
 
       - name: Dependency Review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-          # A merge_group run has no pull request to read the commits from, or
-          # to comment on.
           base-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
           head-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
           comment-summary-in-pr: ${{ github.event_name == 'merge_group' && 'never' || 'on-failure' }}
