@@ -14,7 +14,7 @@ import {
 } from "./operations.js";
 import { NS_TO_MS, roundMs, roundPercent } from "./responseShaping.js";
 
-export const analyzeLogPerformanceInputSchema = {
+export const listSlowOperationsInputSchema = {
   logFilePath: logFilePathSchema,
   kind: z
     .enum(OPERATION_KINDS)
@@ -34,15 +34,15 @@ export const analyzeLogPerformanceInputSchema = {
     ),
 };
 
-export type AnalyzeLogArgs = z.infer<
-  z.ZodObject<typeof analyzeLogPerformanceInputSchema>
+export type SlowOperationsArgs = z.infer<
+  z.ZodObject<typeof listSlowOperationsInputSchema>
 >;
 
-export const analyzeLogPerformanceToolConfig = {
+export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
     "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why.",
-  inputSchema: analyzeLogPerformanceInputSchema,
+  inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,
     openWorldHint: false,
@@ -77,7 +77,7 @@ export interface SlowOperationsResult {
   operations: SlowOperation[];
 }
 
-export async function analyzeLogPerformance(args: AnalyzeLogArgs) {
+export async function listSlowOperations(args: SlowOperationsArgs) {
   const {
     logFilePath,
     kind,

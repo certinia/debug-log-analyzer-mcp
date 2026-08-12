@@ -7,12 +7,12 @@ import { decode } from "@toon-format/toon";
 
 import { clearApexLogCache } from "../src/tools/apexLogSource";
 import {
-  analyzeLogPerformance,
-  analyzeLogPerformanceInputSchema,
-  analyzeLogPerformanceToolConfig,
-  type AnalyzeLogArgs,
+  listSlowOperations,
+  listSlowOperationsInputSchema,
+  listSlowOperationsToolConfig,
+  type SlowOperationsArgs,
   type SlowOperationsResult,
-} from "../src/tools/analyzeLogPerformance";
+} from "../src/tools/listSlowOperations";
 import { parse, type ApexLog } from "../src/ApexLogParser";
 
 jest.mock("fs", () => {
@@ -46,7 +46,7 @@ const mockStats = {
   ctimeNs: 1n,
 } as BigIntStats;
 
-const ARGS: AnalyzeLogArgs = { logFilePath: "/test/file.log" };
+const ARGS: SlowOperationsArgs = { logFilePath: "/test/file.log" };
 const MS = 1_000_000;
 
 type NodeSpec = {
@@ -115,13 +115,13 @@ const query = (spec: NodeSpec): NodeSpec => ({
 });
 
 async function ranked(
-  args: AnalyzeLogArgs = ARGS,
+  args: SlowOperationsArgs = ARGS,
 ): Promise<SlowOperationsResult> {
-  const result = await analyzeLogPerformance(args);
+  const result = await listSlowOperations(args);
   return decode(result.content[0]!.text) as SlowOperationsResult;
 }
 
-describe("analyzeLogPerformance", () => {
+describe("listSlowOperations", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // The suites reuse one path with different content, which the cache would
@@ -131,13 +131,13 @@ describe("analyzeLogPerformance", () => {
 
   describe("tool configuration", () => {
     it("says it ranks by self time, so a client can select it", () => {
-      expect(analyzeLogPerformanceToolConfig.description).toContain(
+      expect(listSlowOperationsToolConfig.description).toContain(
         "self-execution time",
       );
     });
 
     it("takes every axis a caller narrows the ranking on", () => {
-      expect(Object.keys(analyzeLogPerformanceInputSchema)).toEqual([
+      expect(Object.keys(listSlowOperationsInputSchema)).toEqual([
         "logFilePath",
         "kind",
         "namespace",
@@ -148,7 +148,7 @@ describe("analyzeLogPerformance", () => {
     });
 
     it("annotates only the hints that carry meaning for a read-only tool", () => {
-      expect(analyzeLogPerformanceToolConfig.annotations).toEqual({
+      expect(listSlowOperationsToolConfig.annotations).toEqual({
         readOnlyHint: true,
         openWorldHint: false,
       });
@@ -326,7 +326,7 @@ describe("analyzeLogPerformance", () => {
     );
 
     await expect(
-      analyzeLogPerformance({ logFilePath: "/nonexistent/file.log" }),
+      listSlowOperations({ logFilePath: "/nonexistent/file.log" }),
     ).rejects.toThrow("Log file not found: /nonexistent/file.log");
   });
 });

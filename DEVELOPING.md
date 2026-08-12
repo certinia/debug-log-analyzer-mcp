@@ -47,7 +47,7 @@ To get started, clone this repository and install the necessary dependencies.
    pnpm i
    ```
 
-4. **Optional: Set a default org (execute_anonymous tool only)**
+4. **Optional: Set a default org (apexlog_execute_anonymous tool only)**
 
    The execute anonymous Apex tool requires a default org to be set using the Salesforce CLI. To do this in a repository that has no `sfdx-project.json` like this one, set your default org globally:
 
@@ -274,7 +274,7 @@ hint quietly coming back.
 
 `destructiveHint` and `idempotentHint` are defined as meaningful only when `readOnlyHint` is false, so
 the three read-only tools declare `readOnlyHint: true` and `openWorldHint: false` and nothing more —
-both differ from the spec default, and both say something. `execute_anonymous` keeps all four hints; it
+both differ from the spec default, and both say something. `apexlog_execute_anonymous` keeps all four hints; it
 is the one tool where a client that misreads a default runs Apex against an org.
 
 ### Know the floor

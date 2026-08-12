@@ -15,7 +15,7 @@ import {
 /** Where a limit becomes worth reporting, when the caller names no other. */
 export const WARNING_THRESHOLD = 80;
 
-export const findPerformanceBottlenecksInputSchema = {
+export const listLimitRisksInputSchema = {
   logFilePath: logFilePathSchema,
   threshold: z
     .number()
@@ -25,8 +25,8 @@ export const findPerformanceBottlenecksInputSchema = {
     ),
 };
 
-export type BottleneckArgs = z.infer<
-  z.ZodObject<typeof findPerformanceBottlenecksInputSchema>
+export type LimitRisksArgs = z.infer<
+  z.ZodObject<typeof listLimitRisksInputSchema>
 >;
 
 export interface LimitRisk {
@@ -46,18 +46,18 @@ export interface LimitRiskResult {
   atRisk: LimitRisk[];
 }
 
-export const findPerformanceBottlenecksToolConfig = {
+export const listLimitRisksToolConfig = {
   title: "List Apex Log Limit Risks",
   description:
     "List the governor limits an Apex log transaction has nearly consumed — CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote — worst first, with how much of each was used. Best for checking whether a transaction is at risk of failing on a limit.",
-  inputSchema: findPerformanceBottlenecksInputSchema,
+  inputSchema: listLimitRisksInputSchema,
   annotations: {
     readOnlyHint: true,
     openWorldHint: false,
   },
 };
 
-export async function findPerformanceBottlenecks(args: BottleneckArgs) {
+export async function listLimitRisks(args: LimitRisksArgs) {
   const { logFilePath, threshold = WARNING_THRESHOLD } = args;
 
   const apexLog = await loadApexLog(logFilePath);

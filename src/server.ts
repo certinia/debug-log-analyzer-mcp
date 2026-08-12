@@ -6,17 +6,17 @@ import { parseArgs } from "node:util";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
-  analyzeLogPerformance,
-  analyzeLogPerformanceToolConfig,
-} from "./tools/analyzeLogPerformance.js";
+  listSlowOperations,
+  listSlowOperationsToolConfig,
+} from "./tools/listSlowOperations.js";
 import {
   getLogSummary,
   getLogSummaryToolConfig,
 } from "./tools/getLogSummary.js";
 import {
-  findPerformanceBottlenecks,
-  findPerformanceBottlenecksToolConfig,
-} from "./tools/findPerformanceBottlenecks.js";
+  listLimitRisks,
+  listLimitRisksToolConfig,
+} from "./tools/listLimitRisks.js";
 import {
   executeAnonymous,
   executeAnonymousToolConfig,
@@ -50,7 +50,7 @@ class ApexLogServer {
           tools: {},
         },
         instructions:
-          "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with get_apex_log_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.",
+          "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.",
       },
     );
 
@@ -76,27 +76,27 @@ class ApexLogServer {
 
   private registerTools(): void {
     this.server.registerTool(
-      "analyze_apex_log_performance",
-      analyzeLogPerformanceToolConfig,
-      async (args) => analyzeLogPerformance(args),
+      "apexlog_list_slow_operations",
+      listSlowOperationsToolConfig,
+      async (args) => listSlowOperations(args),
     );
 
     this.server.registerTool(
-      "get_apex_log_summary",
+      "apexlog_get_summary",
       getLogSummaryToolConfig,
       async (args) => getLogSummary(args),
     );
 
     this.server.registerTool(
-      "find_performance_bottlenecks",
-      findPerformanceBottlenecksToolConfig,
-      async (args) => findPerformanceBottlenecks(args),
+      "apexlog_list_limit_risks",
+      listLimitRisksToolConfig,
+      async (args) => listLimitRisks(args),
     );
 
     // Always registered, so agents can discover it regardless of configuration.
     // Whether a given call is permitted is decided per call, inside the handler.
     this.server.registerTool(
-      "execute_anonymous",
+      "apexlog_execute_anonymous",
       executeAnonymousToolConfig(this.apexExecutionDisabled),
       async (args) =>
         executeAnonymous(this.server, args as ExecuteAnonymousArgs, {
@@ -134,7 +134,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
 
   if (values["allowed-orgs"] !== undefined) {
     console.error(
-      "WARN --allowed-orgs is deprecated and ignored as of 2.0. execute_anonymous is now\n" +
+      "WARN --allowed-orgs is deprecated and ignored as of 2.0. apexlog_execute_anonymous is now\n" +
         "     always available; production orgs are gated per-call. See --allow-production-orgs.",
     );
   }
