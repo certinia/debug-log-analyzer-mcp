@@ -6,6 +6,10 @@ on:
   # No branch filter: a pull request onto any base, including a stacked PR
   # onto another feature branch, must be checked before it is merged.
   pull_request:
+  # The merge queue tests the queued commit, not the pull request head, and it
+  # waits for the required checks to report on it. A check that does not run on
+  # merge_group never reports, so the queue holds the pull request forever.
+  merge_group:
   workflow_dispatch:
 
 # Cancel superseded PR runs; main always finishes (baseline).
