@@ -24,6 +24,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - Reduce every tool response with no fact lost: `apexlog_list_slow_operations` by 33% ([#86], [#108]) and `apexlog_execute_anonymous` by 30% ([#86], [#109]). `apexlog_get_summary` costs 16% more on a log that uses its limits, for the two tables it gained ([#62])
 - **Breaking:** move to the MCP TypeScript SDK v2 packages, so the server speaks the 2026-07-28 protocol revision. Clients on the 2025 revisions keep working through the SDK's compatibility layer ([#103])
 - Reduce the standing cost of having the server connected by 29%: `apexlog_execute_anonymous` by 50%, `apexlog_list_limit_risks` by 28% and `apexlog_get_summary` by 5% ([#87], [#108], [#103]). `apexlog_list_slow_operations` costs 28% more, for the five parameters that select what it ranks ([#108])
+- Encode responses with TOON v4. No response changed: v4 removes key folding and path expansion, and this server used neither ([#121])
 - Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again. The parse is dropped after five minutes unused, so a large log is not held for the life of the session ([#88])
 
 ### Added
@@ -69,3 +70,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#108]: https://github.com/certinia/debug-log-analyzer-mcp/issues/108
 [#103]: https://github.com/certinia/debug-log-analyzer-mcp/issues/103
 [#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109
+[#121]: https://github.com/certinia/debug-log-analyzer-mcp/issues/121
