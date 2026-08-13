@@ -222,6 +222,11 @@ one-liners.
   ".gitignore" sentence it replaced was ~15, and it answers the question either way.
 - **Say in the tool description what is omitted and when.** Currently that is one sentence per tool,
   because there is one omission per tool.
+- **Encode with the TOON defaults.** Measured, none of the alternatives pay:
+  - `indentSize: 1` — saves 2.4%, but `decode` rejects it without a matching `indentSize`.
+  - keyed tabular (`[n:]`) — costs one character per row, `,` becoming `: `.
+  - `delimiter` tab or pipe — 2 tokens on a 9,365-token response. Quoting comes from `:` in a name.
+  - nested field groups — nothing left to fold; every table is already flat.
 
 ### The gate
 
