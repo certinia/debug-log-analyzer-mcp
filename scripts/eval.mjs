@@ -116,6 +116,11 @@ const ANSWERABILITY = {
       keys: ["operations"],
       columns: ["namespace", "lineNumber"],
     },
+    {
+      question: "Is it one slow call or many cheap ones?",
+      keys: ["operations"],
+      columns: ["callCount", "durationSelfMaxMs"],
+    },
   ],
   apexlog_list_limit_risks: [
     {
@@ -158,7 +163,9 @@ const TOKEN_BUDGET = {
   // the 1.x summary could not.
   "apexlog_get_summary/governor-heavy": 357,
   "apexlog_get_summary/minimal": 249,
-  "apexlog_list_slow_operations/governor-heavy": 290,
+  // Raised for the grouped default #126 made: every row now carries its call
+  // count and the self time of its slowest call.
+  "apexlog_list_slow_operations/governor-heavy": 325,
   "apexlog_list_slow_operations/minimal": 130,
   "apexlog_list_limit_risks/governor-heavy": 40,
   "apexlog_list_limit_risks/minimal": 15,
@@ -196,8 +203,9 @@ const V1_RESPONSE_TOKENS = {
 const DEFINITION_BUDGET = {
   // Raised for the five selection parameters, which the caller acts on: without
   // them a ranking over every operation kind can only be read whole, and for the
-  // warning that a grouped durationTotalMs must not be summed across rows.
-  apexlog_list_slow_operations: 343,
+  // warning that a grouped durationTotalMs must not be summed across rows, and
+  // for what grouping by default now states about the row it returns.
+  apexlog_list_slow_operations: 372,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,

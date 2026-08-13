@@ -183,6 +183,7 @@ describe("listSlowOperations", () => {
           callCount: 1,
           durationTotalMs: 500,
           durationSelfMs: 500,
+          durationSelfMaxMs: 500,
           selfPercentage: 50,
           soqlCount: 0,
           dmlCount: 0,
@@ -301,8 +302,56 @@ describe("listSlowOperations", () => {
         callCount: 3,
         durationSelfMs: 300,
         soqlCount: 3,
-        lineNumber: null,
+        lineNumber: 12,
       }),
+    ]);
+  });
+
+  it("groups by name unless the caller says otherwise, so volume surfaces", async () => {
+    const cheap = () => method({ text: "A.run", totalNs: 30 * MS });
+    mockLog(
+      1000 * MS,
+      ...Array.from({ length: 20 }, cheap),
+      method({ text: "B.run", totalNs: 100 * MS }),
+    );
+
+    expect((await ranked()).operations[0]).toMatchObject({
+      name: "A.run",
+      callCount: 20,
+      durationSelfMs: 600,
+    });
+  });
+
+  it("ranks each call on its own when the caller passes none", async () => {
+    const cheap = () => method({ text: "A.run", totalNs: 30 * MS });
+    mockLog(1000 * MS, cheap(), cheap());
+
+    const operations = (await ranked({ ...ARGS, groupBy: "none" })).operations;
+
+    expect(operations).toHaveLength(2);
+    // The row is one call, so its slowest call is the row itself.
+    expect(operations[0]).not.toHaveProperty("durationSelfMaxMs");
+  });
+
+  it("separates one bad call from sheer volume in durationSelfMaxMs", async () => {
+    mockLog(
+      1000 * MS,
+      method({ text: "Outlier", totalNs: 490 * MS }),
+      method({ text: "Outlier", totalNs: 10 * MS }),
+      ...Array.from({ length: 10 }, () =>
+        method({ text: "Volume", totalNs: 40 * MS }),
+      ),
+    );
+
+    expect(
+      (await ranked()).operations.map((o) => [
+        o.name,
+        o.durationSelfMs,
+        o.durationSelfMaxMs,
+      ]),
+    ).toEqual([
+      ["Outlier", 500, 490],
+      ["Volume", 400, 40],
     ]);
   });
 
