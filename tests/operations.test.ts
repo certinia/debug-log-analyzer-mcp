@@ -201,6 +201,24 @@ describe("groupOperations", () => {
     expect(groupOperations(operations, "name")[0]?.lineNumber).toBe(12);
   });
 
+  it("counts a nested call once, so the total stays what the group costs", () => {
+    const call = (children: NodeSpec[] = []): NodeSpec => ({
+      type: "METHOD_ENTRY",
+      subCategory: "Method",
+      text: "A.run",
+      totalNs: 100_000_000,
+      selfNs: 40_000_000,
+      children,
+    });
+    const operations = listOperations(logOf(call([call()])));
+
+    expect(groupOperations(operations, "name")[0]).toMatchObject({
+      callCount: 2,
+      durationTotalNs: 100_000_000,
+      durationSelfNs: 80_000_000,
+    });
+  });
+
   it("groups by namespace, and names the row after it", () => {
     const operations = listOperations(
       logOf(repeatedQuery("default", 1), repeatedQuery("Custom", 2)),

@@ -306,6 +306,50 @@ describe("listSlowOperations", () => {
     ]);
   });
 
+  it("reports what a group costs, counting a nested call once", async () => {
+    mockLog(
+      1000 * MS,
+      method({
+        text: "Outer",
+        totalNs: 500 * MS,
+        selfNs: 100 * MS,
+        children: [method({ text: "Inner", totalNs: 400 * MS })],
+      }),
+    );
+
+    expect(
+      (await ranked({ ...ARGS, groupBy: "namespace" })).operations,
+    ).toEqual([
+      expect.objectContaining({
+        name: "default",
+        callCount: 2,
+        durationTotalMs: 500,
+      }),
+    ]);
+  });
+
+  it("keeps the summed self time of grouped rows within the transaction", async () => {
+    mockLog(
+      1000 * MS,
+      method({
+        text: "Outer",
+        totalNs: 900 * MS,
+        selfNs: 200 * MS,
+        children: [
+          method({ text: "Inner", totalNs: 700 * MS, selfNs: 700 * MS }),
+        ],
+      }),
+    );
+
+    const result = await ranked({ ...ARGS, groupBy: "namespace" });
+    const summed = result.operations.reduce(
+      (total, operation) => total + operation.durationSelfMs,
+      0,
+    );
+
+    expect(summed).toBeLessThanOrEqual(result.durationTotalMs);
+  });
+
   it("groups by namespace, and names each row after it", async () => {
     mockLog(
       1000 * MS,
