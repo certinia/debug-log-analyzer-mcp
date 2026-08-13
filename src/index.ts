@@ -4,7 +4,6 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { ApexLogServer, parseServerConfig } from "./server.js";
+import { parseServerConfig, runStdioServer } from "./server.js";
 
-const server = new ApexLogServer(parseServerConfig(process.argv.slice(2)));
-server.run().catch(console.error);
+runStdioServer(parseServerConfig(process.argv.slice(2)));

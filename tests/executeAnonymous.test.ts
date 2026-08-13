@@ -44,10 +44,10 @@ jest.mock("@salesforce/core", () => {
   };
 });
 
-jest.mock("@modelcontextprotocol/sdk/server/mcp.js");
+jest.mock("@modelcontextprotocol/server");
 
 import { promises as fs } from "node:fs";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer } from "@modelcontextprotocol/server";
 import { ConfigAggregator, StateAggregator } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import {

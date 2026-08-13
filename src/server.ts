@@ -3,8 +3,11 @@
  */
 
 import { parseArgs } from "node:util";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import {
+  serveStdio,
+  type StdioServerHandle,
+} from "@modelcontextprotocol/server/stdio";
 import {
   listSlowOperations,
   listSlowOperationsToolConfig,
@@ -30,7 +33,7 @@ export type ServerConfig = {
 };
 
 class ApexLogServer {
-  private server: McpServer;
+  readonly server: McpServer;
   private allowProductionOrgs: boolean;
   private apexExecutionDisabled: boolean;
   private classificationCache = new Map<string, OrgClassification>();
@@ -55,23 +58,6 @@ class ApexLogServer {
     );
 
     this.registerTools();
-    this.setupErrorHandling();
-  }
-
-  private setupErrorHandling(): void {
-    this.server.server.onerror = (error) => {
-      console.error("[MCP Error]", error);
-    };
-
-    const shutdown = async () => {
-      this.server.close();
-      process.exit(0);
-    };
-    // SIGTERM as well as SIGINT. A supervised restart, a container stop, and a
-    // client that ends a stdio server all send SIGTERM, and Node's default for
-    // it is to exit without running any of this.
-    process.once("SIGINT", shutdown);
-    process.once("SIGTERM", shutdown);
   }
 
   private registerTools(): void {
@@ -107,12 +93,34 @@ class ApexLogServer {
     );
   }
 
-  async run(): Promise<void> {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
+}
 
-    console.error("Apex Log MCP Server running on stdio");
-  }
+/**
+ * Serve MCP over stdio.
+ *
+ * The factory is called once per connection, after the opening exchange has
+ * chosen the protocol era, so one `ApexLogServer` serves 2025-era and
+ * 2026-era clients alike. `legacy: "serve"` is the SDK default and is stated
+ * here because dropping 2025-era clients would be a breaking change.
+ */
+export function runStdioServer(config: ServerConfig = {}): StdioServerHandle {
+  const handle = serveStdio(() => new ApexLogServer(config).server, {
+    legacy: "serve",
+    onerror: (error) => console.error("[MCP Error]", error),
+  });
+
+  const shutdown = async () => {
+    await handle.close();
+    process.exit(0);
+  };
+  // SIGTERM as well as SIGINT. A supervised restart, a container stop, and a
+  // client that ends a stdio server all send SIGTERM, and Node's default for
+  // it is to exit without running any of this.
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+
+  console.error("Apex Log MCP Server running on stdio");
+  return handle;
 }
 
 /**
