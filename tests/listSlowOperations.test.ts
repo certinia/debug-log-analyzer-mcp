@@ -307,8 +307,9 @@ describe("listSlowOperations", () => {
     ]);
   });
 
+  const cheap = () => method({ text: "A.run", totalNs: 30 * MS });
+
   it("groups by name unless the caller says otherwise, so volume surfaces", async () => {
-    const cheap = () => method({ text: "A.run", totalNs: 30 * MS });
     mockLog(
       1000 * MS,
       ...Array.from({ length: 20 }, cheap),
@@ -323,7 +324,6 @@ describe("listSlowOperations", () => {
   });
 
   it("ranks each call on its own when the caller passes none", async () => {
-    const cheap = () => method({ text: "A.run", totalNs: 30 * MS });
     mockLog(1000 * MS, cheap(), cheap());
 
     const operations = (await ranked({ ...ARGS, groupBy: "none" })).operations;

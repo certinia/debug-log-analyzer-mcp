@@ -205,7 +205,7 @@ const DEFINITION_BUDGET = {
   // them a ranking over every operation kind can only be read whole, and for the
   // warning that a grouped durationTotalMs must not be summed across rows, and
   // for what grouping by default now states about the row it returns.
-  apexlog_list_slow_operations: 372,
+  apexlog_list_slow_operations: 354,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,

@@ -192,7 +192,10 @@ export function listOperations(apexLog: ApexLog): Operation[] {
   return operations;
 }
 
-export type GroupBy = "name" | "namespace";
+/** What a fold can key on, so the tool schema cannot drift from this module. */
+export const GROUP_BY = ["name", "namespace"] as const;
+
+export type GroupBy = (typeof GROUP_BY)[number];
 
 /**
  * Fold repeats together, so that a query run four hundred times in a loop is
@@ -209,10 +212,23 @@ export function groupOperations(
   by: GroupBy,
 ): Operation[] {
   const groups = new Map<string, Operation>();
-  const keyOf = (operation: Operation) =>
-    by === "name"
-      ? `${operation.kind} ${operation.namespace} ${operation.name}`
-      : `${operation.kind} ${operation.namespace}`;
+
+  // Memoized: the nesting test walks the ancestors of every member, and a deep
+  // Apex stack would otherwise rebuild the same key at every level of it.
+  const keys = new Map<Operation, string>();
+  const keyOf = (operation: Operation): string => {
+    const known = keys.get(operation);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const key =
+      by === "name"
+        ? `${operation.kind} ${operation.namespace} ${operation.name}`
+        : `${operation.kind} ${operation.namespace}`;
+    keys.set(operation, key);
+    return key;
+  };
 
   const nestedInGroup = (operation: Operation, key: string): boolean =>
     operation.parent !== null &&
