@@ -27,7 +27,7 @@ pnpm start
 ### Core Components
 
 - **src/index.ts**: CLI entry point (`bin`) — parses flags, constructs and runs the server
-- **src/server.ts**: Main MCP server implementation (`ApexLogServer` class, `parseServerConfig`)
+- **src/server.ts**: Main MCP server implementation (`createApexLogServer`, `runStdioServer`, `parseServerConfig`)
   - Implements 4 MCP tools: `apexlog_list_slow_operations`, `apexlog_get_summary`, `apexlog_list_limit_risks`, `apexlog_execute_anonymous`
   - Uses stdio transport for communication
   - Handles file validation, log parsing, analysis, and anonymous Apex execution
@@ -107,4 +107,4 @@ Anonymous execution (4) accepts multi-line strings containing Apex, saves the re
 
 `apexlog_execute_anonymous` is **always registered** so agents can discover it; authorization happens per call in `src/policy/orgExecutionPolicy.ts`. `src/salesforce/orgClassification.ts` identifies the target org (`sandbox`, `scratch`, `trial`, `developer`, `production`, or `unknown` when it cannot be queried), caching one `Organization` query per org id for the server's lifetime. Non-production orgs run silently. Production and `unknown` orgs need either the `--allow-production-orgs` flag or a per-call user confirmation via MCP elicitation; without either, the call is refused with an `isError` result whose text explains both routes. Authorization runs before any `DebugLevel` or `TraceFlag` record is created, so refused calls leave the org untouched. `--no-apex-execution` refuses every call before contacting Salesforce and marks the tool `[DISABLED on this server]` in its description. The 1.x `--allowed-orgs` flag is accepted but ignored, with a stderr deprecation warning.
 
-`src/index.ts` stays the `bin` entry point (`dist/index.js`) and does nothing but parse flags and start the server. `src/server.ts` holds `ApexLogServer` and `parseServerConfig` and is free of import side effects, so tests can import it without spawning a server or parsing the test runner's own argv.
+`src/index.ts` stays the `bin` entry point (`dist/index.js`) and does nothing but parse flags and call `runStdioServer`. `src/server.ts` holds `createApexLogServer`, `runStdioServer` and `parseServerConfig` and is free of import side effects, so tests can import it without spawning a server or parsing the test runner's own argv.

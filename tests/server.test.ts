@@ -25,7 +25,11 @@ jest.mock("@modelcontextprotocol/server/stdio", () => ({
   serveStdio: jest.fn(),
 }));
 
-import { ApexLogServer, parseServerConfig, runStdioServer } from "../src/server";
+import {
+  createApexLogServer,
+  parseServerConfig,
+  runStdioServer,
+} from "../src/server";
 
 // Mock the tool modules
 jest.mock("../src/tools/listSlowOperations", () => ({
@@ -87,10 +91,8 @@ const mockConsoleError = jest
   .spyOn(console, "error")
   .mockImplementation(() => {});
 
-describe("ApexLogServer", () => {
+describe("createApexLogServer", () => {
   let mockRegisterTool: jest.Mock;
-  let mockConnect: jest.Mock;
-  let mockClose: jest.Mock;
   let mockHandleClose: jest.Mock;
   let registeredTools: Map<
     string,
@@ -168,14 +170,10 @@ describe("ApexLogServer", () => {
       registeredTools.set(name, tool);
       return tool;
     });
-    mockConnect = jest.fn();
-    mockClose = jest.fn();
     mockHandleClose = jest.fn().mockResolvedValue(undefined);
 
     const mockServer = {
       registerTool: mockRegisterTool,
-      connect: mockConnect,
-      close: mockClose,
       sendToolListChanged: jest.fn(),
       server: {
         listRoots: jest.fn(),
@@ -219,7 +217,7 @@ describe("ApexLogServer", () => {
 
   describe("Server Initialization", () => {
     it("should create server with correct configuration", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       expect(McpServer).toHaveBeenCalledWith(
         {
@@ -257,7 +255,7 @@ describe("ApexLogServer", () => {
 
   describe("Tool Registration", () => {
     it("should register all 4 tools via registerTool", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       expect(mockRegisterTool).toHaveBeenCalledTimes(4);
       expect(mockRegisterTool).toHaveBeenCalledWith(
@@ -283,7 +281,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should always leave apexlog_execute_anonymous discoverable", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const execAnonTool = registeredTools.get("apexlog_execute_anonymous")!;
       expect(execAnonTool.enabled).toBe(true);
@@ -291,7 +289,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should keep apexlog_execute_anonymous discoverable when apex execution is disabled", async () => {
-      new ApexLogServer({ apexExecutionDisabled: true });
+      createApexLogServer({ apexExecutionDisabled: true });
 
       const execAnonTool = registeredTools.get("apexlog_execute_anonymous")!;
       expect(execAnonTool.enabled).toBe(true);
@@ -302,7 +300,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should not mark the tool disabled in its description by default", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const execAnonTool = registeredTools.get("apexlog_execute_anonymous")!;
       expect(execAnonTool.config.description).not.toContain("[DISABLED");
@@ -311,7 +309,7 @@ describe("ApexLogServer", () => {
 
   describe("Tool Request Handling", () => {
     it("should handle apexlog_list_slow_operations tool correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_slow_operations")!;
       const args = {
@@ -326,7 +324,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle apexlog_get_summary tool correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_get_summary")!;
       const args = { logFilePath: "/path/to/test.log" };
@@ -338,7 +336,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle apexlog_list_limit_risks tool correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_limit_risks")!;
       const args = {
@@ -360,7 +358,7 @@ describe("ApexLogServer", () => {
         >
       ).mockRejectedValueOnce(error);
 
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_slow_operations")!;
 
@@ -370,7 +368,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should pass the default policy to apexlog_execute_anonymous", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       const args = { apex: "System.debug('test');" };
@@ -386,7 +384,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should pass --allow-production-orgs through to apexlog_execute_anonymous", async () => {
-      new ApexLogServer({ allowProductionOrgs: true });
+      createApexLogServer({ allowProductionOrgs: true });
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       await tool.callback({ apex: "System.debug('test');" }, {} as any);
@@ -399,7 +397,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should pass --no-apex-execution through to apexlog_execute_anonymous", async () => {
-      new ApexLogServer({ apexExecutionDisabled: true });
+      createApexLogServer({ apexExecutionDisabled: true });
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       await tool.callback({ apex: "System.debug('test');" }, {} as any);
@@ -412,7 +410,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should reuse one classification cache across calls", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       await tool.callback({ apex: "System.debug(1);" }, {} as any);
@@ -477,7 +475,7 @@ describe("ApexLogServer", () => {
 
   describe("Integration Tests", () => {
     it("should handle complete workflow for apexlog_list_slow_operations", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       // Verify all tools registered
       expect(registeredTools.size).toBe(4);
@@ -496,7 +494,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle edge cases with malformed requests", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       (
         listSlowOperations as jest.MockedFunction<
@@ -514,7 +512,7 @@ describe("ApexLogServer", () => {
 
   describe("Type Safety", () => {
     it("should handle typed arguments correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_limit_risks")!;
       const args = {
