@@ -2,8 +2,8 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { getSupportedElicitationModes } from "@modelcontextprotocol/sdk/client/index.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { getSupportedElicitationModes } from "@modelcontextprotocol/client";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
 
 export type PolicyDecision =

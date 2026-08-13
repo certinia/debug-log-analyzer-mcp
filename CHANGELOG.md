@@ -22,7 +22,8 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - **Breaking:** report governor limits as a flat `{limit, used, max}` table, and include the limits at zero, so a caller can tell "no DML ran" from "DML was never read" ([#86], [#62])
 - Make the `apexlog_execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
 - Reduce every tool response with no fact lost: `apexlog_list_slow_operations` by 33% ([#86], [#108]) and `apexlog_execute_anonymous` by 30% ([#86], [#109]). `apexlog_get_summary` costs 16% more on a log that uses its limits, for the two tables it gained ([#62])
-- Reduce the standing cost of having the server connected by 26%: `apexlog_execute_anonymous` by 49% and `apexlog_list_limit_risks` by 25% ([#87], [#108]). `apexlog_list_slow_operations` costs 32% more, for the five parameters that select what it ranks ([#108])
+- **Breaking:** move to the MCP TypeScript SDK v2 packages, so the server speaks the 2026-07-28 protocol revision. Clients on the 2025 revisions keep working through the SDK's compatibility layer ([#103])
+- Reduce the standing cost of having the server connected by 29%: `apexlog_execute_anonymous` by 50%, `apexlog_list_limit_risks` by 28% and `apexlog_get_summary` by 5% ([#87], [#108], [#103]). `apexlog_list_slow_operations` costs 28% more, for the five parameters that select what it ranks ([#108])
 - Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again. The parse is dropped after five minutes unused, so a large log is not held for the life of the session ([#88])
 
 ### Added
@@ -66,4 +67,5 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#88]: https://github.com/certinia/debug-log-analyzer-mcp/issues/88
 [#107]: https://github.com/certinia/debug-log-analyzer-mcp/issues/107
 [#108]: https://github.com/certinia/debug-log-analyzer-mcp/issues/108
+[#103]: https://github.com/certinia/debug-log-analyzer-mcp/issues/103
 [#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109

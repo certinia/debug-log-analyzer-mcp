@@ -2,11 +2,11 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 // Mock the MCP SDK components
-jest.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
+jest.mock("@modelcontextprotocol/server", () => ({
   McpServer: jest.fn().mockImplementation(() => ({
     registerTool: jest.fn(() => ({
       enable: jest.fn(),
@@ -18,12 +18,18 @@ jest.mock("@modelcontextprotocol/sdk/server/mcp.js", () => ({
     connect: jest.fn(),
     close: jest.fn(),
     sendToolListChanged: jest.fn(),
-    server: { onerror: undefined },
+    server: {},
   })),
 }));
-jest.mock("@modelcontextprotocol/sdk/server/stdio.js");
+jest.mock("@modelcontextprotocol/server/stdio", () => ({
+  serveStdio: jest.fn(),
+}));
 
-import { ApexLogServer, parseServerConfig } from "../src/server";
+import {
+  createApexLogServer,
+  parseServerConfig,
+  runStdioServer,
+} from "../src/server";
 
 // Mock the tool modules
 jest.mock("../src/tools/listSlowOperations", () => ({
@@ -85,11 +91,9 @@ const mockConsoleError = jest
   .spyOn(console, "error")
   .mockImplementation(() => {});
 
-describe("ApexLogServer", () => {
+describe("createApexLogServer", () => {
   let mockRegisterTool: jest.Mock;
-  let mockConnect: jest.Mock;
-  let mockClose: jest.Mock;
-  let mockTransport: jest.Mocked<StdioServerTransport>;
+  let mockHandleClose: jest.Mock;
   let registeredTools: Map<
     string,
     { config: any; callback: (...args: any[]) => any; enabled: boolean }
@@ -166,29 +170,22 @@ describe("ApexLogServer", () => {
       registeredTools.set(name, tool);
       return tool;
     });
-    mockConnect = jest.fn();
-    mockClose = jest.fn();
+    mockHandleClose = jest.fn().mockResolvedValue(undefined);
 
     const mockServer = {
       registerTool: mockRegisterTool,
-      connect: mockConnect,
-      close: mockClose,
       sendToolListChanged: jest.fn(),
       server: {
-        onerror: undefined as ((error: unknown) => void) | undefined,
         listRoots: jest.fn(),
       },
     };
 
-    // Setup transport mock
-    mockTransport = {} as jest.Mocked<StdioServerTransport>;
-
     (McpServer as jest.MockedClass<typeof McpServer>).mockImplementation(
       () => mockServer as any,
     );
-    (
-      StdioServerTransport as jest.MockedClass<typeof StdioServerTransport>
-    ).mockImplementation(() => mockTransport);
+    (serveStdio as jest.Mock).mockImplementation(() => ({
+      close: mockHandleClose,
+    }));
 
     // Setup tool mocks
     (
@@ -220,7 +217,7 @@ describe("ApexLogServer", () => {
 
   describe("Server Initialization", () => {
     it("should create server with correct configuration", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       expect(McpServer).toHaveBeenCalledWith(
         {
@@ -238,15 +235,11 @@ describe("ApexLogServer", () => {
     });
 
     it("should setup error handling", async () => {
-      new ApexLogServer();
+      runStdioServer();
 
-      const mcpInstance = (McpServer as jest.MockedClass<typeof McpServer>).mock
-        .results[0].value;
-      expect(mcpInstance.server.onerror).toBeDefined();
-
-      // Test error handler
+      const options = (serveStdio as jest.Mock).mock.calls[0][1];
       const testError = new Error("Test error");
-      mcpInstance.server.onerror(testError);
+      options.onerror(testError);
 
       expect(mockConsoleError).toHaveBeenCalledWith("[MCP Error]", testError);
     });
@@ -254,7 +247,7 @@ describe("ApexLogServer", () => {
     it.each(["SIGINT", "SIGTERM"])("closes cleanly on %s", async (signal) => {
       const mockProcessOnce = jest.spyOn(process, "once");
 
-      new ApexLogServer();
+      runStdioServer();
 
       expect(mockProcessOnce).toHaveBeenCalledWith(signal, expect.any(Function));
     });
@@ -262,7 +255,7 @@ describe("ApexLogServer", () => {
 
   describe("Tool Registration", () => {
     it("should register all 4 tools via registerTool", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       expect(mockRegisterTool).toHaveBeenCalledTimes(4);
       expect(mockRegisterTool).toHaveBeenCalledWith(
@@ -288,7 +281,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should always leave apexlog_execute_anonymous discoverable", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const execAnonTool = registeredTools.get("apexlog_execute_anonymous")!;
       expect(execAnonTool.enabled).toBe(true);
@@ -296,7 +289,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should keep apexlog_execute_anonymous discoverable when apex execution is disabled", async () => {
-      new ApexLogServer({ apexExecutionDisabled: true });
+      createApexLogServer({ apexExecutionDisabled: true });
 
       const execAnonTool = registeredTools.get("apexlog_execute_anonymous")!;
       expect(execAnonTool.enabled).toBe(true);
@@ -307,7 +300,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should not mark the tool disabled in its description by default", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const execAnonTool = registeredTools.get("apexlog_execute_anonymous")!;
       expect(execAnonTool.config.description).not.toContain("[DISABLED");
@@ -316,7 +309,7 @@ describe("ApexLogServer", () => {
 
   describe("Tool Request Handling", () => {
     it("should handle apexlog_list_slow_operations tool correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_slow_operations")!;
       const args = {
@@ -331,7 +324,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle apexlog_get_summary tool correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_get_summary")!;
       const args = { logFilePath: "/path/to/test.log" };
@@ -343,7 +336,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle apexlog_list_limit_risks tool correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_limit_risks")!;
       const args = {
@@ -365,7 +358,7 @@ describe("ApexLogServer", () => {
         >
       ).mockRejectedValueOnce(error);
 
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_slow_operations")!;
 
@@ -375,7 +368,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should pass the default policy to apexlog_execute_anonymous", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       const args = { apex: "System.debug('test');" };
@@ -391,7 +384,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should pass --allow-production-orgs through to apexlog_execute_anonymous", async () => {
-      new ApexLogServer({ allowProductionOrgs: true });
+      createApexLogServer({ allowProductionOrgs: true });
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       await tool.callback({ apex: "System.debug('test');" }, {} as any);
@@ -404,7 +397,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should pass --no-apex-execution through to apexlog_execute_anonymous", async () => {
-      new ApexLogServer({ apexExecutionDisabled: true });
+      createApexLogServer({ apexExecutionDisabled: true });
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       await tool.callback({ apex: "System.debug('test');" }, {} as any);
@@ -417,7 +410,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should reuse one classification cache across calls", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
       await tool.callback({ apex: "System.debug(1);" }, {} as any);
@@ -432,26 +425,31 @@ describe("ApexLogServer", () => {
 
   describe("Server Lifecycle", () => {
     it("should start server correctly", async () => {
-      const apexLogServer = new ApexLogServer();
-      await apexLogServer.run();
+      runStdioServer();
 
-      expect(StdioServerTransport).toHaveBeenCalled();
-      expect(mockConnect).toHaveBeenCalledWith(mockTransport);
+      expect(serveStdio).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ legacy: "serve" }),
+      );
       expect(mockConsoleError).toHaveBeenCalledWith(
         "Apex Log MCP Server running on stdio",
       );
     });
 
-    it("should connect to stdio transport", async () => {
-      const apexLogServer = new ApexLogServer();
-      await apexLogServer.run();
+    it("builds one server per connection from the factory", async () => {
+      runStdioServer();
 
-      expect(StdioServerTransport).toHaveBeenCalled();
-      expect(mockConnect).toHaveBeenCalledWith(mockTransport);
+      const factory = (serveStdio as jest.Mock).mock.calls[0][0];
+      expect(McpServer).not.toHaveBeenCalled();
+
+      factory();
+      factory();
+
+      expect(McpServer).toHaveBeenCalledTimes(2);
     });
 
     it("should handle SIGINT and close server", async () => {
-      new ApexLogServer();
+      runStdioServer();
 
       // Find the SIGINT handler
       const processOnceCalls = jest.spyOn(process, "once").mock.calls;
@@ -470,14 +468,14 @@ describe("ApexLogServer", () => {
         expect((error as Error).message).toBe("Process exit called");
       }
 
-      expect(mockClose).toHaveBeenCalled();
+      expect(mockHandleClose).toHaveBeenCalled();
       expect(mockExit).toHaveBeenCalledWith(0);
     });
   });
 
   describe("Integration Tests", () => {
     it("should handle complete workflow for apexlog_list_slow_operations", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       // Verify all tools registered
       expect(registeredTools.size).toBe(4);
@@ -496,7 +494,7 @@ describe("ApexLogServer", () => {
     });
 
     it("should handle edge cases with malformed requests", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       (
         listSlowOperations as jest.MockedFunction<
@@ -514,7 +512,7 @@ describe("ApexLogServer", () => {
 
   describe("Type Safety", () => {
     it("should handle typed arguments correctly", async () => {
-      new ApexLogServer();
+      createApexLogServer();
 
       const tool = registeredTools.get("apexlog_list_limit_risks")!;
       const args = {
