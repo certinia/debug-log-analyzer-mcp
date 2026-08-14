@@ -92,6 +92,10 @@ export interface Operation {
    * opposite fixes and read alike from a sum and a count.
    */
   durationSelfMaxNs: number;
+  /**
+   * What the operation and everything it called did. Grouped and never additive
+   * across rows, on the same rule as `durationTotalNs`.
+   */
   soqlCount: number;
   dmlCount: number;
   soslCount: number;
@@ -292,17 +296,20 @@ export function groupOperations(
     }
 
     group.callCount += 1;
-    // A member that ran inside another member of the group is already inside the
-    // group's total.
+    // Every subtree total: a member that ran inside another member of the group
+    // is already inside that ancestor's, so adding it counts the same query,
+    // statement, row or throw once per level of the stack above it. `callCount`
+    // counts calls and `durationSelfNs` excludes children, so both stay plain
+    // sums.
     if (!nestedInGroup(operation, key)) {
       group.durationTotalNs += operation.durationTotalNs;
+      group.soqlCount += operation.soqlCount;
+      group.dmlCount += operation.dmlCount;
+      group.soslCount += operation.soslCount;
+      group.rowCount += operation.rowCount;
+      group.thrownCount += operation.thrownCount;
     }
     group.durationSelfNs += operation.durationSelfNs;
-    group.soqlCount += operation.soqlCount;
-    group.dmlCount += operation.dmlCount;
-    group.soslCount += operation.soslCount;
-    group.rowCount += operation.rowCount;
-    group.thrownCount += operation.thrownCount;
 
     // The row names the slowest call, which is the one a caller opens first.
     if (operation.durationSelfNs > group.durationSelfMaxNs) {
