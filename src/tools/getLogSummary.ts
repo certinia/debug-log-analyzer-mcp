@@ -63,7 +63,7 @@ interface KindRow {
 interface LogSummaryResult {
   fileSizeBytes: number;
   durationTotalMs: number;
-  /** True when the log ran out before the transaction ended, so it is partial. */
+  /** True when the log is partial, so every figure in it is a floor, not a total. */
   truncated: boolean;
   parsingErrorCount: number;
   namespaces: string[];
@@ -114,18 +114,26 @@ export async function getLogSummary(args: LogSummaryArgs) {
   };
 }
 
+/** The log issues the parser raises for a section of log it never saw. */
+const TRUNCATION_ISSUES = new Set(["Skipped-Lines", "Max-Size-reached"]);
+
 /**
- * Whether the log ran out before the transaction ended.
+ * Whether part of the transaction is missing from the log.
  *
- * The parser marks the line that lost its exit event, not the log: the root is
- * a pseudo node it never terminates, so `apexLog.isTruncated` is always false.
- * Truncation propagates up to a top-level line, so those are what is tested.
+ * Two shapes, and neither implies the other. The log ran out: the parser marks
+ * the line that lost its exit event, not the log — the root is a pseudo node it
+ * never terminates, so `apexLog.isTruncated` is always false, and truncation
+ * propagates up to a top-level line, so those are what is tested. Or a section
+ * was skipped: the events can still pair up around the gap, leaving no node
+ * marked, and only the log issue says the gap is there.
  */
 function isTruncated(apexLog: ApexLog): boolean {
   // isTruncated is declared on Method, a subclass, so it is read off the node
   // rather than tested with instanceof. A line without one cannot be truncated.
-  return apexLog.children.some(
-    (child) => (child as LogLine & { isTruncated?: boolean }).isTruncated,
+  return (
+    apexLog.children.some(
+      (child) => (child as LogLine & { isTruncated?: boolean }).isTruncated,
+    ) || apexLog.logIssues.some((issue) => TRUNCATION_ISSUES.has(issue.summary))
   );
 }
 

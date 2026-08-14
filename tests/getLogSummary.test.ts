@@ -197,6 +197,56 @@ describe("getLogSummary", () => {
       expect(summary.truncated).toBe(true);
     });
 
+    it("should say when a section of the log was skipped", async () => {
+      // The events pair up around the gap, so no node is marked and only the
+      // log issue says part of the transaction is missing.
+      const summary = await summaryOf({
+        children: [node({ subCategory: "Method" })],
+        logIssues: [
+          {
+            summary: "Skipped-Lines",
+            description: "*** Skipped 1,000 bytes of detailed log",
+            type: "skip",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.truncated).toBe(true);
+    });
+
+    it("should say when the log hit the maximum size", async () => {
+      const summary = await summaryOf({
+        children: [node({ subCategory: "Method" })],
+        logIssues: [
+          {
+            summary: "Max-Size-reached",
+            description: "The maximum log size has been reached.",
+            type: "skip",
+            startTime: 9000,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.truncated).toBe(true);
+    });
+
+    it("should call a whole log whole when its issues are not about missing log", async () => {
+      const summary = await summaryOf({
+        children: [node({ subCategory: "Method" })],
+        logIssues: [
+          {
+            summary: "CPU time exceeded",
+            description: "Maximum CPU time limit exceeded",
+            type: "error",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.truncated).toBe(false);
+    });
+
     it("should report every log category and its level", async () => {
       // The levels tie log content to log configuration: what was captured, and
       // what is missing because a category was switched off.

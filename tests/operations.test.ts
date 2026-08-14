@@ -237,6 +237,54 @@ describe("groupOperations", () => {
     });
   });
 
+  it("counts a nested call's queries, DML, searches, rows and throws once", () => {
+    const call = (children: NodeSpec[] = []): NodeSpec => ({
+      type: "METHOD_ENTRY",
+      subCategory: "Method",
+      text: "A.run",
+      totalNs: 100_000_000,
+      selfNs: 40_000_000,
+      soqlCount: 1,
+      dmlCount: 1,
+      soslCount: 1,
+      soqlRowCount: 5,
+      dmlRowCount: 2,
+      soslRowCount: 1,
+      thrownCount: 1,
+      children,
+    });
+    const operations = listOperations(logOf(call([call()])));
+
+    expect(groupOperations(operations, "name")[0]).toMatchObject({
+      callCount: 2,
+      soqlCount: 1,
+      dmlCount: 1,
+      soslCount: 1,
+      rowCount: 8,
+      thrownCount: 1,
+    });
+  });
+
+  it("counts a query once, not once per method above it in the stack", () => {
+    const method = (text: string, children: NodeSpec[] = []): NodeSpec => ({
+      type: "METHOD_ENTRY",
+      subCategory: "Method",
+      text,
+      namespace: "Custom",
+      totalNs: 100_000_000,
+      selfNs: 10_000_000,
+      soqlCount: 1,
+      children,
+    });
+    const operations = listOperations(
+      logOf(method("A.run", [method("B.run", [method("C.run")])])),
+    );
+
+    expect(
+      groupOperations(operations, "namespace").find((o) => o.kind === "method"),
+    ).toMatchObject({ callCount: 3, soqlCount: 1 });
+  });
+
   /**
    * The shape a `namespace` filter reaches: the two inner code units share a
    * calling namespace with the code unit above them, which the filter drops.
