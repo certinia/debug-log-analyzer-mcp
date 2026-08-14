@@ -54,7 +54,6 @@ type NodeSpec = {
   subCategory?: string;
   text?: string | null;
   namespace?: string;
-  lineNumber?: number | string | null;
   totalNs?: number;
   selfNs?: number;
   soqlCount?: number;
@@ -74,7 +73,6 @@ function node(spec: NodeSpec): unknown {
     ...(spec.subCategory && { subCategory: spec.subCategory }),
     text: spec.text ?? null,
     namespace: spec.namespace ?? "default",
-    lineNumber: spec.lineNumber ?? null,
     duration: { total, self: spec.selfNs ?? total },
     soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
     dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
@@ -184,7 +182,6 @@ describe("listSlowOperations", () => {
           kind: "method",
           name: "A.run",
           namespace: "default",
-          lineNumber: null,
           callCount: 1,
           durationTotalMs: 500,
           durationSelfMs: 500,
@@ -322,8 +319,7 @@ describe("listSlowOperations", () => {
   });
 
   it("folds a repeated query into one row before the self time drops it", async () => {
-    const repeat = () =>
-      query({ text: "SELECT Id", lineNumber: 12, totalNs: 100 * MS });
+    const repeat = () => query({ text: "SELECT Id", totalNs: 100 * MS });
     mockLog(1000 * MS, repeat(), repeat(), repeat());
 
     expect(
@@ -334,7 +330,6 @@ describe("listSlowOperations", () => {
         callCount: 3,
         durationSelfMs: 300,
         soqlCount: 3,
-        lineNumber: 12,
       }),
     ]);
   });

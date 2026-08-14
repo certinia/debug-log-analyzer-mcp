@@ -19,7 +19,6 @@ type NodeSpec = {
   subCategory?: string;
   text?: string | null;
   namespace?: string | null;
-  lineNumber?: number | string | null;
   totalNs?: number;
   selfNs?: number;
   soqlCount?: number;
@@ -39,7 +38,6 @@ function node(spec: NodeSpec): unknown {
     ...(spec.subCategory && { subCategory: spec.subCategory }),
     text: spec.text ?? null,
     namespace: spec.namespace ?? "default",
-    lineNumber: spec.lineNumber ?? null,
     duration: { total, self: spec.selfNs ?? total },
     soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
     dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
@@ -169,12 +167,11 @@ describe("listOperations", () => {
 });
 
 describe("groupOperations", () => {
-  const repeatedQuery = (namespace: string, lineNumber: number) => ({
+  const repeatedQuery = (namespace: string) => ({
     type: "SOQL_EXECUTE_BEGIN",
     subCategory: "SOQL",
     text: "SELECT Id FROM Account",
     namespace,
-    lineNumber,
     totalNs: 10_000_000,
     soqlCount: 1,
     soqlRowCount: 5,
@@ -182,7 +179,7 @@ describe("groupOperations", () => {
 
   it("folds a query repeated in a loop into one row carrying its call count", () => {
     const operations = listOperations(
-      logOf(repeatedQuery("default", 12), repeatedQuery("default", 12)),
+      logOf(repeatedQuery("default"), repeatedQuery("default")),
     );
 
     expect(groupOperations(operations, "name")).toEqual([
@@ -196,23 +193,22 @@ describe("groupOperations", () => {
     ]);
   });
 
-  it("names the line of the slowest call, which is the one to open first", () => {
+  it("keeps the self time of the slowest call in the group", () => {
     const operations = listOperations(
-      logOf(repeatedQuery("default", 12), {
-        ...repeatedQuery("default", 34),
+      logOf(repeatedQuery("default"), {
+        ...repeatedQuery("default"),
         totalNs: 90_000_000,
       }),
     );
 
     expect(groupOperations(operations, "name")[0]).toMatchObject({
-      lineNumber: 34,
       durationSelfMaxNs: 90_000_000,
     });
   });
 
   it("keeps one name in two namespaces apart, rather than under the first seen", () => {
     const operations = listOperations(
-      logOf(repeatedQuery("default", 12), repeatedQuery("Custom", 12)),
+      logOf(repeatedQuery("default"), repeatedQuery("Custom")),
     );
 
     expect(
@@ -374,7 +370,7 @@ describe("groupOperations", () => {
 
   it("groups by namespace, and names the row after it", () => {
     const operations = listOperations(
-      logOf(repeatedQuery("default", 1), repeatedQuery("Custom", 2)),
+      logOf(repeatedQuery("default"), repeatedQuery("Custom")),
     );
 
     expect(groupOperations(operations, "namespace")).toEqual([
@@ -418,7 +414,7 @@ describe("groupOperations", () => {
     const operations = listOperations(
       logOf(
         { type: "METHOD_ENTRY", subCategory: "Method", namespace: "Custom" },
-        repeatedQuery("Custom", 3),
+        repeatedQuery("Custom"),
       ),
     );
 

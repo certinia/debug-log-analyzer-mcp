@@ -68,10 +68,10 @@ Every request carries all four tool definitions, whether or not a tool is called
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
 | `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
-| `apexlog_list_slow_operations` | ~382                                | ~247       | +55%     |
+| `apexlog_list_slow_operations` | ~361                                | ~247       | +46%     |
 | `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
 | `apexlog_get_summary`          | ~163                                | ~171       | -5%      |
-| **Total**                      | **~1,158** (0.6% of a 200K context) | **~1,529** | **-24%** |
+| **Total**                      | **~1,137** (0.6% of a 200K context) | **~1,529** | **-26%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -85,8 +85,8 @@ The input side is the same for every analysis tool — a tool name and a log fil
 | ------------------------------ | -------------------- | -------- | ---- | ------ |
 | `apexlog_get_summary`          | `governor-heavy.log` | ~341     | ~293 | +16%   |
 | `apexlog_get_summary`          | `minimal.log`        | ~238     | ~249 | -4%    |
-| `apexlog_list_slow_operations` | `governor-heavy.log` | ~333     | ~408 | -18%   |
-| `apexlog_list_slow_operations` | `minimal.log`        | ~116     | ~190 | -39%   |
+| `apexlog_list_slow_operations` | `governor-heavy.log` | ~320     | ~408 | -22%   |
+| `apexlog_list_slow_operations` | `minimal.log`        | ~111     | ~190 | -42%   |
 | `apexlog_list_limit_risks`     | `governor-heavy.log` | ~39      | ~84  | -54%   |
 | `apexlog_list_limit_risks`     | `minimal.log`        | ~24      | ~30  | -20%   |
 
@@ -106,7 +106,7 @@ All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept 
 
 Rank what an Apex debug log spent its time on by self-execution time — code units, managed packages, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations (in ms), database counts and rows. Best for finding what to optimize.
 
-Rows are `{kind, name, namespace, lineNumber, callCount, durationTotalMs, durationSelfMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs` and the `returnedSelfPercentage` the returned rows account for between them.
+Rows are `{kind, name, namespace, callCount, durationTotalMs, durationSelfMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs` and the `returnedSelfPercentage` the returned rows account for between them.
 
 `kind` is one of `codeUnit`, `managedPackage`, `method`, `systemMethod`, `soql`, `sosl`, `dml`, `flow` or `workflow`. A `managedPackage` row is the time a package spent where the log shows nothing, and is often most of a transaction.
 

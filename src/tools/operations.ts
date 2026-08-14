@@ -130,8 +130,6 @@ export interface Operation {
    * `groupBy: "callerNamespace"` asks the question instead.
    */
   callerNamespace: string;
-  /** Once rows are grouped, the line of the slowest call in the group. */
-  lineNumber: number | string | null;
   /** One, until `groupOperations` folds repeats together. */
   callCount: number;
   /**
@@ -238,7 +236,6 @@ export function listOperations(apexLog: ApexLog): Operation[] {
       name: node.text || node.type || "Unknown",
       namespace: node.namespace || "default",
       callerNamespace: parent?.namespace ?? "default",
-      lineNumber: node.lineNumber,
       callCount: 1,
       durationTotalNs: node.duration.total,
       durationSelfNs: node.duration.self,
@@ -369,11 +366,10 @@ export function groupOperations(
     }
     group.durationSelfNs += operation.durationSelfNs;
 
-    // The row names the slowest call, which is the one a caller opens first.
-    if (operation.durationSelfNs > group.durationSelfMaxNs) {
-      group.durationSelfMaxNs = operation.durationSelfNs;
-      group.lineNumber = operation.lineNumber;
-    }
+    group.durationSelfMaxNs = Math.max(
+      group.durationSelfMaxNs,
+      operation.durationSelfNs,
+    );
   });
 
   return [...groups.values()];

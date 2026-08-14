@@ -112,9 +112,9 @@ const ANSWERABILITY = {
       columns: ["dmlCount", "soqlCount", "soslCount", "rowCount"],
     },
     {
-      question: "Where in the code are they, and whose namespace are they in?",
+      question: "Whose namespace are they in?",
       keys: ["operations"],
-      columns: ["namespace", "lineNumber"],
+      columns: ["namespace"],
     },
     {
       question: "Is it one slow call or many cheap ones?",
@@ -180,8 +180,8 @@ const TOKEN_BUDGET = {
   // #102 added, which say how much of the transaction reached the log at all,
   // and for the `matchedCount` #63 added, which says whether the row cap hid
   // anything the selection matched.
-  "apexlog_list_slow_operations/governor-heavy": 350,
-  "apexlog_list_slow_operations/minimal": 135,
+  "apexlog_list_slow_operations/governor-heavy": 337,
+  "apexlog_list_slow_operations/minimal": 130,
   "apexlog_list_limit_risks/governor-heavy": 41,
   "apexlog_list_limit_risks/minimal": 26,
 };
@@ -220,10 +220,8 @@ const DEFINITION_BUDGET = {
   // them a ranking over every operation kind can only be read whole, and for the
   // warning that a grouped durationTotalMs must not be summed across rows, and
   // for what grouping by default now states about the row it returns, and for
-  // callerNamespace, which needs a clause to say what it attributes, and for
-  // saying what lineNumber points at: an agent that reads it as the callee's
-  // line opens the wrong file.
-  apexlog_list_slow_operations: 401,
+  // callerNamespace, which needs a clause to say what it attributes.
+  apexlog_list_slow_operations: 379,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,
