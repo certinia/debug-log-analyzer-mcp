@@ -44,6 +44,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 ### Fixed
 
+- Report `truncated` from `apexlog_get_summary` on a log a section was skipped from, not only on one that ran out mid-transaction. `*** Skipped` and `MAXIMUM DEBUG LOG SIZE REACHED` leave the events paired up around the gap, so no line was marked and the log read as whole, while every figure in it is a floor and not a total ([#124])
 - Report a grouped `apexlog_list_slow_operations` `durationTotalMs` below the row's own `durationSelfMs`, which is impossible and which no caller can detect. A group counted a member as nested when an operation above it in the log shared the group's key, even where `kind` or `namespace` had excluded that operation from the ranking. Nesting is now tested against the rows being grouped: 114 rows in 111,624 across 124 real logs and every selection ([#101])
 - Declare `apexlog_execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
 - Warn when a caller-given `apexlog_execute_anonymous` `outputDir` resolves outside every root the client declared. The log is still written, and the response names where it went ([#109])
@@ -80,3 +81,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#126]: https://github.com/certinia/debug-log-analyzer-mcp/issues/126
 [#127]: https://github.com/certinia/debug-log-analyzer-mcp/issues/127
 [#131]: https://github.com/certinia/debug-log-analyzer-mcp/issues/131
+[#124]: https://github.com/certinia/debug-log-analyzer-mcp/issues/124
