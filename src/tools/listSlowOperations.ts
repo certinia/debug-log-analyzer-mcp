@@ -15,7 +15,13 @@ import {
   type Operation,
   type OperationKind,
 } from "./operations.js";
-import { NS_TO_MS, roundMs, roundPercent } from "./responseShaping.js";
+import { listQueryPlans, type QueryPlan } from "./queryPlans.js";
+import {
+  NS_TO_MS,
+  omitEmpty,
+  roundMs,
+  roundPercent,
+} from "./responseShaping.js";
 
 export const listSlowOperationsInputSchema = {
   logFilePath: logFilePathSchema,
@@ -44,7 +50,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why.",
+    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
   inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -88,6 +94,17 @@ export interface SlowOperationsResult extends CaptureLevels {
    */
   matchedCount: number;
   operations: SlowOperation[];
+  /**
+   * What the query optimiser decided about the queries among those rows, one
+   * row per query it explained. Absent when it explained none of them: an
+   * explain is emitted at `DB,FINEST` alone, and `dbLevel` says whether the log
+   * could carry one.
+   *
+   * A separate table rather than a column, because `relativeCost` is null on
+   * every row that is not a query, and a table whose rows share no key set
+   * costs more than it says.
+   */
+  queryPlans?: QueryPlan[];
 }
 
 export async function listSlowOperations(args: SlowOperationsArgs) {
@@ -150,6 +167,15 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     thrownCount: operation.thrownCount,
   }));
 
+  // Only the returned rows are explained, so the table qualifies what the
+  // response says rather than ranking a second time; and a log with no query
+  // among its slowest operations pays nothing for the second walk.
+  const queries = ranked.filter((operation) => operation.kind === "soql");
+  const explained = queries.length ? listQueryPlans(apexLog) : undefined;
+  const queryPlans = queries
+    .map((operation) => explained?.get(operation.name))
+    .filter((plan): plan is QueryPlan => plan !== undefined);
+
   const result: SlowOperationsResult = {
     ...captureLevels(apexLog),
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
@@ -158,6 +184,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     ),
     matchedCount: matched.length,
     operations,
+    ...omitEmpty({ queryPlans }),
   };
 
   return {

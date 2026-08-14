@@ -64,11 +64,21 @@ type NodeSpec = {
   soslRowCount?: number;
   thrownCount?: number;
   children?: NodeSpec[];
+  plan?: PlanSpec;
+};
+
+/** What a `SOQL_EXECUTE_EXPLAIN` line carries, as the parser leaves it. */
+type PlanSpec = {
+  leadingOperationType: string | null;
+  relativeCost: number | null;
+  cardinality: number | null;
+  sObjectCardinality: number | null;
 };
 
 function node(spec: NodeSpec): unknown {
   const total = spec.totalNs ?? 0;
   return {
+    ...spec.plan,
     type: spec.type ?? null,
     ...(spec.subCategory && { subCategory: spec.subCategory }),
     text: spec.text ?? null,
@@ -115,6 +125,24 @@ const query = (spec: NodeSpec): NodeSpec => ({
   soqlCount: 1,
   ...spec,
 });
+
+/** A query with the optimiser's explain line beneath it, where the parser puts it. */
+const explainedQuery = (spec: NodeSpec, plan: Partial<PlanSpec>): NodeSpec =>
+  query({
+    ...spec,
+    children: [
+      {
+        type: "SOQL_EXECUTE_EXPLAIN",
+        plan: {
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+          cardinality: 100,
+          sObjectCardinality: 1000,
+          ...plan,
+        },
+      },
+    ],
+  });
 
 async function ranked(
   args: SlowOperationsArgs = ARGS,
@@ -332,6 +360,72 @@ describe("listSlowOperations", () => {
         soqlCount: 3,
       }),
     ]);
+  });
+
+  describe("query plans", () => {
+    it("reports what the optimiser decided about a ranked query", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT Id", totalNs: 500 * MS }, {}),
+      );
+
+      expect((await ranked()).queryPlans).toEqual([
+        {
+          name: "SELECT Id",
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+          cardinality: 100,
+          sObjectCardinality: 1000,
+        },
+      ]);
+    });
+
+    it("keeps the worst plan when one query was explained more than once", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {
+          leadingOperationType: "Index",
+          relativeCost: 0.5,
+        }),
+        explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {}),
+      );
+
+      expect((await ranked()).queryPlans).toEqual([
+        expect.objectContaining({
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+        }),
+      ]);
+    });
+
+    it("explains only the queries the row cap returned", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT Id", totalNs: 500 * MS }, {}),
+        explainedQuery({ text: "SELECT Name", totalNs: 100 * MS }, {}),
+      );
+
+      expect(
+        (await ranked({ ...ARGS, limit: 1 })).queryPlans?.map((p) => p.name),
+      ).toEqual(["SELECT Id"]);
+    });
+
+    it("reports no table when the log explained none of those queries", async () => {
+      mockLog(1000 * MS, query({ text: "SELECT Id", totalNs: 500 * MS }));
+
+      expect(await ranked()).not.toHaveProperty("queryPlans");
+    });
+
+    it("drops a plan the log did not record in full", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT Id", totalNs: 500 * MS }, {
+          relativeCost: null,
+        }),
+      );
+
+      expect(await ranked()).not.toHaveProperty("queryPlans");
+    });
   });
 
   const cheap = () => method({ text: "A.run", totalNs: 30 * MS });
