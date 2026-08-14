@@ -212,6 +212,14 @@ function kindOf(node: LogLine): OperationKind | undefined {
 }
 
 /**
+ * What a row calls an operation. Shared, so a query plan names its query with
+ * the name the ranked row carries and the caller can join the two.
+ */
+export function operationName(node: LogLine): string {
+  return node.text || node.type || "Unknown";
+}
+
+/**
  * Flatten the log into the operations it performed, parents before children.
  *
  * This is the one classification in the server: every tool is a view over this
@@ -233,7 +241,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
 
     const operation: Operation = {
       kind,
-      name: node.text || node.type || "Unknown",
+      name: operationName(node),
       namespace: node.namespace || "default",
       callerNamespace: parent?.namespace ?? "default",
       callCount: 1,

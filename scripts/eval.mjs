@@ -129,6 +129,14 @@ const ANSWERABILITY = {
       question: "Did the row cap hide operations the selection matched?",
       fields: ["matchedCount"],
     },
+    {
+      // Only where a query was ranked and the log recorded a plan for it.
+      // `minimal.log` runs no query, and an absent table is the honest answer.
+      fixture: "governor-heavy",
+      question: "Will the optimizer treat those queries as selective?",
+      keys: ["queryPlans"],
+      columns: ["leadingOperationType", "relativeCost", "sObjectCardinality"],
+    },
   ],
   apexlog_list_limit_risks: [
     {
@@ -179,8 +187,9 @@ const TOKEN_BUDGET = {
   // count and the self time of its slowest call, and for the four capture levels
   // #102 added, which say how much of the transaction reached the log at all,
   // and for the `matchedCount` #63 added, which says whether the row cap hid
-  // anything the selection matched.
-  "apexlog_list_slow_operations/governor-heavy": 337,
+  // anything the selection matched, and for the query plans #120 added, which
+  // say whether the optimizer treats a ranked query as selective.
+  "apexlog_list_slow_operations/governor-heavy": 410,
   "apexlog_list_slow_operations/minimal": 130,
   "apexlog_list_limit_risks/governor-heavy": 41,
   "apexlog_list_limit_risks/minimal": 26,
@@ -220,8 +229,9 @@ const DEFINITION_BUDGET = {
   // them a ranking over every operation kind can only be read whole, and for the
   // warning that a grouped durationTotalMs must not be summed across rows, and
   // for what grouping by default now states about the row it returns, and for
-  // callerNamespace, which needs a clause to say what it attributes.
-  apexlog_list_slow_operations: 379,
+  // callerNamespace, which needs a clause to say what it attributes, and for the
+  // clause #120 added to say the response also carries the query plans.
+  apexlog_list_slow_operations: 392,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,
@@ -383,6 +393,9 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
   const limitRows = tables.get("governorLimits") ?? new Map();
 
   for (const check of ANSWERABILITY[tool]) {
+    // A question only some logs raise is pinned on the fixture that raises it.
+    if (check.fixture && check.fixture !== fixture) continue;
+
     const missing = [];
     for (const field of check.fields ?? []) {
       if (!scalars.has(field)) missing.push(field);
