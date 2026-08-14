@@ -220,8 +220,10 @@ const DEFINITION_BUDGET = {
   // them a ranking over every operation kind can only be read whole, and for the
   // warning that a grouped durationTotalMs must not be summed across rows, and
   // for what grouping by default now states about the row it returns, and for
-  // callerNamespace, which needs a clause to say what it attributes.
-  apexlog_list_slow_operations: 379,
+  // callerNamespace, which needs a clause to say what it attributes, and for
+  // saying what lineNumber points at: an agent that reads it as the callee's
+  // line opens the wrong file.
+  apexlog_list_slow_operations: 401,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,

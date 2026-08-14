@@ -44,7 +44,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why.",
+    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why. lineNumber is where the call was made in the calling file, not a line in what ran.",
   inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -57,7 +57,11 @@ export interface SlowOperation {
   kind: OperationKind;
   name: string;
   namespace: string;
-  /** On a grouped row, the line of the slowest call in the group. */
+  /**
+   * Where the call was made, in the calling file — never a line in the code that
+   * ran. Null on a kind with no Apex call site: a code unit, a flow, a workflow
+   * or a managed package boundary. On a grouped row, the slowest call's line.
+   */
   lineNumber: string | number | null;
   callCount: number;
   /**
