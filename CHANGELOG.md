@@ -32,6 +32,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 ### Added
 
+- Report `matchedCount` from `apexlog_list_slow_operations`: the rows the selection matched before `limit` cut it. Read against the rows returned it says whether the cap hid anything, which nothing else in the response states — a table of ten out of ten and a table of ten out of four hundred read the same today ([#63])
 - Report the level each log category was captured at — `apexCodeLevel`, `systemLevel`, `dbLevel` and `workflowLevel` — from `apexlog_list_slow_operations` and `apexlog_list_limit_risks`. A capture level decides what reaches the log at all, so it qualifies every figure beside it: on a log taken at `APEX_CODE,ERROR` no method entry is emitted, and the work of everything the level hid pools at the nearest logged boundary, which reads as a finding. A category the log's header never declared is left out rather than named at a default, because a level has no zero ([#102])
 - Add `groupBy: "callerNamespace"` to `apexlog_list_slow_operations`, which folds rows by the namespace that called the operation rather than the one it ran in. DML is pinned to `default` however it was reached, so only the caller says which package drove it: on a real log 4 of the 5 DML rows have a different caller, and they carry 934 of the 944 ms. The two agree on 97% of rows, so this is a grouping and not a column — every response that does not ask for it is unchanged ([#127])
 - Add `--allow-production-orgs`, to run against production without confirmation ([#52])
@@ -84,3 +85,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#131]: https://github.com/certinia/debug-log-analyzer-mcp/issues/131
 [#124]: https://github.com/certinia/debug-log-analyzer-mcp/issues/124
 [#102]: https://github.com/certinia/debug-log-analyzer-mcp/issues/102
+[#63]: https://github.com/certinia/debug-log-analyzer-mcp/issues/63

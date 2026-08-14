@@ -84,6 +84,11 @@ export interface SlowOperationsResult extends CaptureLevels {
    * concentrated here — the one thing the table itself does not say.
    */
   returnedSelfPercentage: number;
+  /**
+   * Rows the selection matched, before `limit` cut it. Above the returned count
+   * it says the cap hid rows, which no other figure in the response states.
+   */
+  matchedCount: number;
   operations: SlowOperation[];
 }
 
@@ -113,12 +118,12 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // four hundred times is kept rather than dropped call by call.
   const rows = grouped ? groupOperations(selected, groupBy) : selected;
 
-  const ranked = rows
+  const matched = rows
     // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
     // NaN, which fails both, and such an operation must be dropped, not ranked.
     .filter((operation) => operation.durationSelfNs >= minSelfNs)
-    .sort((a, b) => b.durationSelfNs - a.durationSelfNs)
-    .slice(0, limit);
+    .sort((a, b) => b.durationSelfNs - a.durationSelfNs);
+  const ranked = matched.slice(0, limit);
 
   const selfPercentageOf = (operation: Operation) =>
     durationTotalNs > 0 ? (operation.durationSelfNs / durationTotalNs) * 100 : 0;
@@ -154,6 +159,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     returnedSelfPercentage: roundPercent(
       ranked.reduce((total, operation) => total + selfPercentageOf(operation), 0),
     ),
+    matchedCount: matched.length,
     operations,
   };
 

@@ -125,6 +125,10 @@ const ANSWERABILITY = {
       question: "Was the log captured at a level that hides work inside these rows?",
       keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
     },
+    {
+      question: "Did the row cap hide operations the selection matched?",
+      fields: ["matchedCount"],
+    },
   ],
   apexlog_list_limit_risks: [
     {
@@ -173,9 +177,11 @@ const TOKEN_BUDGET = {
   "apexlog_get_summary/minimal": 249,
   // Raised for the grouped default #126 made: every row now carries its call
   // count and the self time of its slowest call, and for the four capture levels
-  // #102 added, which say how much of the transaction reached the log at all.
-  "apexlog_list_slow_operations/governor-heavy": 345,
-  "apexlog_list_slow_operations/minimal": 130,
+  // #102 added, which say how much of the transaction reached the log at all,
+  // and for the `matchedCount` #63 added, which says whether the row cap hid
+  // anything the selection matched.
+  "apexlog_list_slow_operations/governor-heavy": 350,
+  "apexlog_list_slow_operations/minimal": 135,
   "apexlog_list_limit_risks/governor-heavy": 41,
   "apexlog_list_limit_risks/minimal": 26,
 };
@@ -367,7 +373,6 @@ function inspect(toon) {
     const indented = line.trim();
     const cells = indented.split(",");
     table.set(cells[0], cells);
-    strings.push(indented);
   }
 
   return { scalars, keys, columns, tables, strings };
@@ -443,7 +448,8 @@ function checkNoDuplication({ tool, fixture }, toon, failures) {
 
   // A prose line must not restate a figure that is already a field of its own.
   // This is what the deleted `summary` paragraph did, and what a well-meaning
-  // future one would do again.
+  // future one would do again. Table rows are out of scope: a cell that reads
+  // like a scalar is another measurement of another thing, not a restatement.
   for (const [key, value] of scalars) {
     if (value === 0 || value === 1) continue;
     const rendered = String(value);

@@ -178,6 +178,7 @@ describe("listSlowOperations", () => {
     await expect(ranked()).resolves.toEqual({
       durationTotalMs: 1000,
       returnedSelfPercentage: 50,
+      matchedCount: 1,
       operations: [
         {
           kind: "method",
@@ -211,12 +212,39 @@ describe("listSlowOperations", () => {
     );
   });
 
+  it("counts what the selection matched, not what the cap returned", async () => {
+    mockLog(
+      1000 * MS,
+      method({ text: "A.run", totalNs: 500 * MS }),
+      method({ text: "B.run", totalNs: 200 * MS }),
+      method({ text: "C.run", totalNs: 100 * MS }),
+    );
+
+    const result = await ranked({ ...ARGS, limit: 1 });
+
+    expect(result.matchedCount).toBe(3);
+    expect(result.operations).toHaveLength(1);
+  });
+
+  it("counts the rows the threshold kept, not the calls behind them", async () => {
+    mockLog(
+      1000 * MS,
+      method({ text: "A.run", totalNs: 500 * MS }),
+      method({ text: "A.run", totalNs: 200 * MS }),
+      method({ text: "B.run", totalNs: 1 * MS }),
+    );
+
+    // Grouped, then filtered: two names, and only one clears the threshold.
+    expect((await ranked({ ...ARGS, minSelfMs: 10 })).matchedCount).toBe(1);
+  });
+
   it("returns no prose to restate the table", async () => {
     mockLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
 
     expect(Object.keys(await ranked())).toEqual([
       "durationTotalMs",
       "returnedSelfPercentage",
+      "matchedCount",
       "operations",
     ]);
   });

@@ -4,6 +4,7 @@ dbLevel: FINEST
 workflowLevel: FINE
 durationTotalMs: 24608.108
 returnedSelfPercentage: 100
+matchedCount: 24
 operations[10]{kind,name,namespace,lineNumber,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:
   managedPackage,srm_pkg,srm_pkg,null,2,20489.42,20489.42,20479.388,83.3,0,0,0,0,0
   codeUnit,"Flow:Account",default,null,1,3040.037,3040.037,3040.037,12.4,0,0,0,0,0
