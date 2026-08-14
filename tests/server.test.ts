@@ -234,6 +234,9 @@ describe("createApexLogServer", () => {
           instructions: expect.any(String),
           // Verifies a confirmation before any handler sees it.
           requestState: { verify: expect.any(Function) },
+          cacheHints: {
+            "tools/list": { ttlMs: 3_600_000, cacheScope: "public" },
+          },
         },
       );
     });

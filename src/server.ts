@@ -65,6 +65,10 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },
+      // The tool definitions are fixed for the life of the process and hold
+      // nothing about the caller, so a client may cache them for an hour and a
+      // shared cache may hold one copy for everyone.
+      cacheHints: { "tools/list": { ttlMs: 3_600_000, cacheScope: "public" } },
     },
   );
 
