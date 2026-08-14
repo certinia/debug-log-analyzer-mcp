@@ -23,7 +23,8 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - Make the `apexlog_execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
 - Reduce every tool response with no fact lost: `apexlog_list_slow_operations` by 33% ([#86], [#108]) and `apexlog_execute_anonymous` by 30% ([#86], [#109]). `apexlog_get_summary` costs 16% more on a log that uses its limits, for the two tables it gained ([#62])
 - **Breaking:** move to the MCP TypeScript SDK v2 packages, so the server speaks the 2026-07-28 protocol revision. Clients on the 2025 revisions keep working through the SDK's compatibility layer ([#103])
-- Reduce the standing cost of having the server connected by 29%: `apexlog_execute_anonymous` by 50%, `apexlog_list_limit_risks` by 28% and `apexlog_get_summary` by 5% ([#87], [#108], [#103]). `apexlog_list_slow_operations` costs 28% more, for the five parameters that select what it ranks ([#108])
+- Reduce the standing cost of having the server connected by 27%: `apexlog_execute_anonymous` by 50%, `apexlog_list_limit_risks` by 28% and `apexlog_get_summary` by 5% ([#87], [#108], [#103]). `apexlog_list_slow_operations` costs 39% more, for the five parameters that select what it ranks and for what `groupBy` now states about the grouped total ([#108], [#101])
+- **Breaking:** `durationTotalMs` on a grouped `apexlog_list_slow_operations` row is now what the transaction takes back if the group never runs. A group holds parents and their children alike, and a parent's total already contains its children's, so the old sum counted the same time more than once — 1.6x the transaction on a real log, 3.1x on the test fixture. Only the calls that ran outside every other call in the group now add their total. The figure is not additive across rows, and `durationSelfMs` is unchanged ([#101])
 - Encode responses with TOON v4. No response changed: v4 removes key folding and path expansion, and this server used neither ([#121])
 - Parse a log once rather than once per tool, cached by path, inode, size, modification time and change time, so a summary followed by a deeper tool no longer reads and parses the file again. The parse is dropped after five minutes unused, so a large log is not held for the life of the session ([#88])
 
@@ -71,3 +72,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#103]: https://github.com/certinia/debug-log-analyzer-mcp/issues/103
 [#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109
 [#121]: https://github.com/certinia/debug-log-analyzer-mcp/issues/121
+[#101]: https://github.com/certinia/debug-log-analyzer-mcp/issues/101

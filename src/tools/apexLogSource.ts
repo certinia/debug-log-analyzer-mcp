@@ -147,8 +147,17 @@ export function clearApexLogCache(): void {
   cached = undefined;
 }
 
-/** Visit the node and every node below it, parents first. */
-export function walkLog(node: LogLine, visit: (node: LogLine) => void): void {
-  visit(node);
-  node.children?.forEach((child) => walkLog(child, visit));
+/**
+ * Visit the node and every node below it, parents first.
+ *
+ * What `visit` returns is passed to that node's children, so a visitor can carry
+ * what encloses a node down to it without a second pass.
+ */
+export function walkLog<T>(
+  node: LogLine,
+  visit: (node: LogLine, inherited: T | undefined) => T,
+  inherited?: T,
+): void {
+  const next = visit(node, inherited);
+  node.children?.forEach((child) => walkLog(child, visit, next));
 }

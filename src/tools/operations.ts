@@ -66,6 +66,14 @@ export interface Operation {
   lineNumber: number | string | null;
   /** One, until `groupOperations` folds repeats together. */
   callCount: number;
+  /**
+   * Time in the operation and in everything it called. Once rows are grouped it
+   * is what the transaction takes back if the group never runs: only the members
+   * that ran outside every other member add their total, or time inside a group
+   * would count once for the child and again for every ancestor above it.
+   *
+   * Never additive across rows — one row's callees are another row's calls.
+   */
   durationTotalNs: number;
   durationSelfNs: number;
   soqlCount: number;
@@ -74,6 +82,12 @@ export interface Operation {
   /** Rows the operation touched: queried, searched, or written. */
   rowCount: number;
   thrownCount: number;
+  /**
+   * The operation this one ran inside, or null at the top of the log. It is how
+   * a group tells a nested member from an outer one, and it never reaches a
+   * response.
+   */
+  parent: Operation | null;
 }
 
 /**
@@ -132,13 +146,16 @@ export function listOperations(apexLog: ApexLog): Operation[] {
 
   // The children, not the log: the root is a pseudo node the parser adds, and
   // it holds the whole transaction as its own time.
-  const visit = (node: LogLine) => {
+  //
+  // The visitor hands its children the operation they ran inside, which is the
+  // one it just made, or its own when the node itself is untimed.
+  const visit = (node: LogLine, parent: Operation | undefined) => {
     const kind = kindOf(node);
     if (!kind) {
-      return;
+      return parent;
     }
 
-    operations.push({
+    const operation: Operation = {
       kind,
       name: node.text || node.type || "Unknown",
       namespace: node.namespace || "default",
@@ -154,10 +171,16 @@ export function listOperations(apexLog: ApexLog): Operation[] {
         node.dmlRowCount.total +
         node.soslRowCount.total,
       thrownCount: node.totalThrownCount,
-    });
+      parent: parent ?? null,
+    };
+    operations.push(operation);
+
+    return operation;
   };
 
-  apexLog.children.forEach((child) => walkLog(child, visit));
+  apexLog.children.forEach((child) =>
+    walkLog<Operation | undefined>(child, visit),
+  );
 
   return operations;
 }
@@ -178,23 +201,36 @@ export function groupOperations(
   by: GroupBy,
 ): Operation[] {
   const groups = new Map<string, Operation>();
+  const keyOf = (operation: Operation) =>
+    `${operation.kind} ${by === "name" ? operation.name : operation.namespace}`;
+
+  const nestedInGroup = (operation: Operation, key: string): boolean =>
+    operation.parent !== null &&
+    (keyOf(operation.parent) === key || nestedInGroup(operation.parent, key));
 
   operations.forEach((operation) => {
     const label = by === "name" ? operation.name : operation.namespace;
-    const key = `${operation.kind} ${label}`;
+    const key = keyOf(operation);
     const group = groups.get(key);
 
     if (!group) {
+      // The first member of a group cannot be nested in it: `listOperations`
+      // emits an operation before the ones it called.
       groups.set(key, {
         ...operation,
         name: label,
         lineNumber: by === "name" ? operation.lineNumber : null,
+        parent: null,
       });
       return;
     }
 
     group.callCount += 1;
-    group.durationTotalNs += operation.durationTotalNs;
+    // A member that ran inside another member of the group is already inside the
+    // group's total.
+    if (!nestedInGroup(operation, key)) {
+      group.durationTotalNs += operation.durationTotalNs;
+    }
     group.durationSelfNs += operation.durationSelfNs;
     group.soqlCount += operation.soqlCount;
     group.dmlCount += operation.dmlCount;

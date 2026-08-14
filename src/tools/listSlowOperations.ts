@@ -30,7 +30,7 @@ export const listSlowOperationsInputSchema = {
     .enum(["name", "namespace"])
     .optional()
     .describe(
-      "Fold repeats into one row per name or per namespace, carrying the calls and the summed time. Ungrouped by default, so each call is its own row.",
+      "Fold repeats into one row per name or per namespace, carrying the calls, the summed self time, and a durationTotalMs the transaction takes back if the group never runs — never sum it across rows. Ungrouped by default, so each call is its own row.",
     ),
 };
 
@@ -56,6 +56,10 @@ export interface SlowOperation {
   namespace: string;
   lineNumber: string | number | null;
   callCount: number;
+  /**
+   * On a grouped row, what the transaction takes back if the group never runs.
+   * Never additive across rows — one row's callees are another row's calls.
+   */
   durationTotalMs: number;
   durationSelfMs: number;
   selfPercentage: number;

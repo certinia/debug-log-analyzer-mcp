@@ -195,8 +195,9 @@ const V1_RESPONSE_TOKENS = {
  */
 const DEFINITION_BUDGET = {
   // Raised for the five selection parameters, which the caller acts on: without
-  // them a ranking over every operation kind can only be read whole.
-  apexlog_list_slow_operations: 338,
+  // them a ranking over every operation kind can only be read whole, and for the
+  // warning that a grouped durationTotalMs must not be summed across rows.
+  apexlog_list_slow_operations: 343,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,
