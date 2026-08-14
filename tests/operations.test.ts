@@ -5,6 +5,7 @@
 import type { ApexLog } from "../src/ApexLogParser";
 import { LOG_CATEGORIES } from "../src/salesforce/debugLevels";
 import {
+  captureLevels,
   GROUP_BY,
   groupOperations,
   listOperations,
@@ -425,5 +426,50 @@ describe("groupOperations", () => {
       "method",
       "soql",
     ]);
+  });
+});
+
+describe("captureLevels", () => {
+  const logCapturedAt = (levels: [string, string][]): ApexLog =>
+    ({
+      debugLevels: levels.map(([logCategory, logLevel]) => ({
+        logCategory,
+        logLevel,
+      })),
+    }) as ApexLog;
+
+  it("reports the level of every category that gates a ranked kind", () => {
+    expect(
+      captureLevels(
+        logCapturedAt([
+          ["APEX_CODE", "ERROR"],
+          ["SYSTEM", "FINE"],
+          ["DB", "FINEST"],
+          ["WORKFLOW", "NONE"],
+        ]),
+      ),
+    ).toEqual({
+      apexCodeLevel: "ERROR",
+      systemLevel: "FINE",
+      dbLevel: "FINEST",
+      workflowLevel: "NONE",
+    });
+  });
+
+  it("leaves out a category the header never declared, rather than naming a default", () => {
+    expect(captureLevels(logCapturedAt([["DB", "FINEST"]]))).toEqual({
+      dbLevel: "FINEST",
+    });
+  });
+
+  it("ignores a category no ranked kind is gated by", () => {
+    expect(
+      captureLevels(
+        logCapturedAt([
+          ["APEX_PROFILING", "FINEST"],
+          ["VISUALFORCE", "FINEST"],
+        ]),
+      ),
+    ).toEqual({});
   });
 });

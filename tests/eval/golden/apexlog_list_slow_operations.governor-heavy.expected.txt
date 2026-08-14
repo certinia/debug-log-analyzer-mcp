@@ -1,3 +1,7 @@
+apexCodeLevel: FINE
+systemLevel: FINE
+dbLevel: FINEST
+workflowLevel: FINE
 durationTotalMs: 24608.108
 returnedSelfPercentage: 100
 operations[10]{kind,name,namespace,lineNumber,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:

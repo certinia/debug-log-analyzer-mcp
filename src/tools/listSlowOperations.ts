@@ -6,10 +6,12 @@ import { z } from "zod";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
+  captureLevels,
   GROUP_BY,
   groupOperations,
   listOperations,
   OPERATION_KINDS,
+  type CaptureLevels,
   type Operation,
   type OperationKind,
 } from "./operations.js";
@@ -74,7 +76,7 @@ export interface SlowOperation {
   thrownCount: number;
 }
 
-export interface SlowOperationsResult {
+export interface SlowOperationsResult extends CaptureLevels {
   durationTotalMs: number;
   /**
    * Share of the transaction the returned rows account for between them. A low
@@ -147,6 +149,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   }));
 
   const result: SlowOperationsResult = {
+    ...captureLevels(apexLog),
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
     returnedSelfPercentage: roundPercent(
       ranked.reduce((total, operation) => total + selfPercentageOf(operation), 0),

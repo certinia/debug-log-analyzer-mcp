@@ -91,14 +91,18 @@ function node(spec: NodeSpec): unknown {
 function mockLog(totalNs: number, ...children: NodeSpec[]): void {
   mockFs.stat.mockResolvedValue(mockStats);
   mockFs.readFile.mockResolvedValue("log content");
-  mockParse.mockReturnValue(
-    node({
+  mockParse.mockReturnValue({
+    ...(node({
       type: "EXECUTION_STARTED",
       text: "Root",
       totalNs,
       children,
-    }) as ApexLog,
-  );
+    }) as ApexLog),
+    // A header these cases say nothing about, so no capture level is reported
+    // and the assertions below are about the ranking alone. The eval goldens
+    // cover the levels, against fixtures that carry a real header.
+    debugLevels: [],
+  });
 }
 
 const method = (spec: NodeSpec): NodeSpec => ({

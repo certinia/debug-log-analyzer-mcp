@@ -85,10 +85,10 @@ The input side is the same for every analysis tool — a tool name and a log fil
 | ------------------------------ | -------------------- | -------- | ---- | ------ |
 | `apexlog_get_summary`          | `governor-heavy.log` | ~341     | ~293 | +16%   |
 | `apexlog_get_summary`          | `minimal.log`        | ~238     | ~249 | -4%    |
-| `apexlog_list_slow_operations` | `governor-heavy.log` | ~310     | ~408 | -24%   |
-| `apexlog_list_slow_operations` | `minimal.log`        | ~94      | ~190 | -51%   |
-| `apexlog_list_limit_risks`     | `governor-heavy.log` | ~21      | ~84  | -75%   |
-| `apexlog_list_limit_risks`     | `minimal.log`        | ~6       | ~30  | -80%   |
+| `apexlog_list_slow_operations` | `governor-heavy.log` | ~328     | ~408 | -20%   |
+| `apexlog_list_slow_operations` | `minimal.log`        | ~112     | ~190 | -41%   |
+| `apexlog_list_limit_risks`     | `governor-heavy.log` | ~39      | ~84  | -54%   |
+| `apexlog_list_limit_risks`     | `minimal.log`        | ~24      | ~30  | -20%   |
 
 <!-- token-cost-answers:end -->
 

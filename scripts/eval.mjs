@@ -121,6 +121,10 @@ const ANSWERABILITY = {
       keys: ["operations"],
       columns: ["callCount", "durationSelfMaxMs"],
     },
+    {
+      question: "Was the log captured at a level that hides work inside these rows?",
+      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
+    },
   ],
   apexlog_list_limit_risks: [
     {
@@ -130,6 +134,10 @@ const ANSWERABILITY = {
     {
       question: "How near does a limit have to be to appear here?",
       fields: ["threshold"],
+    },
+    {
+      question: "Was the log captured at a level that hides what consumed a limit?",
+      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
     },
   ],
 };
@@ -164,11 +172,12 @@ const TOKEN_BUDGET = {
   "apexlog_get_summary/governor-heavy": 357,
   "apexlog_get_summary/minimal": 249,
   // Raised for the grouped default #126 made: every row now carries its call
-  // count and the self time of its slowest call.
-  "apexlog_list_slow_operations/governor-heavy": 325,
+  // count and the self time of its slowest call, and for the four capture levels
+  // #102 added, which say how much of the transaction reached the log at all.
+  "apexlog_list_slow_operations/governor-heavy": 345,
   "apexlog_list_slow_operations/minimal": 130,
-  "apexlog_list_limit_risks/governor-heavy": 40,
-  "apexlog_list_limit_risks/minimal": 15,
+  "apexlog_list_limit_risks/governor-heavy": 41,
+  "apexlog_list_limit_risks/minimal": 26,
 };
 
 /**

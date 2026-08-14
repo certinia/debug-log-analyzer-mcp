@@ -1,2 +1,6 @@
+apexCodeLevel: FINE
+systemLevel: DEBUG
+dbLevel: NONE
+workflowLevel: NONE
 threshold: 80
 atRisk: []

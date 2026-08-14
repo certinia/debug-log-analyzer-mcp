@@ -1,3 +1,7 @@
+apexCodeLevel: FINE
+systemLevel: DEBUG
+dbLevel: NONE
+workflowLevel: NONE
 durationTotalMs: 0.561
 returnedSelfPercentage: 97.3
 operations[2]{kind,name,namespace,lineNumber,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:

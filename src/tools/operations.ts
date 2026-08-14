@@ -36,7 +36,7 @@ export type OperationKind = (typeof OPERATION_KINDS)[number];
  * Typed as `LogCategory`, so the spelling here cannot drift from the one the
  * `debugLevels` rows carry — a caller reads `timeByKind` against them.
  */
-const LOG_CATEGORY_BY_KIND: Record<OperationKind, LogCategory> = {
+const LOG_CATEGORY_BY_KIND = {
   codeUnit: "APEX_CODE",
   managedPackage: "APEX_CODE",
   method: "APEX_CODE",
@@ -46,10 +46,68 @@ const LOG_CATEGORY_BY_KIND: Record<OperationKind, LogCategory> = {
   dml: "DB",
   flow: "WORKFLOW",
   workflow: "WORKFLOW",
-};
+  // `satisfies` rather than an annotation: the value type has to stay the four
+  // categories these kinds name, so `LEVEL_FIELD_BY_CATEGORY` covers exactly
+  // them.
+} as const satisfies Record<OperationKind, LogCategory>;
 
 export function logCategoryOf(kind: OperationKind): LogCategory {
   return LOG_CATEGORY_BY_KIND[kind];
+}
+
+/**
+ * The level each gating category was captured at, keyed as the response reports
+ * it. Typed over the categories `LOG_CATEGORY_BY_KIND` produces, so a kind
+ * cannot be added under a category no response states.
+ */
+const LEVEL_FIELD_BY_CATEGORY: Record<
+  (typeof LOG_CATEGORY_BY_KIND)[OperationKind],
+  keyof CaptureLevels
+> = {
+  APEX_CODE: "apexCodeLevel",
+  SYSTEM: "systemLevel",
+  DB: "dbLevel",
+  WORKFLOW: "workflowLevel",
+};
+
+/**
+ * How much of the transaction reached the log at all.
+ *
+ * A field is absent when the log's header declared no level for the category:
+ * a level has no zero, and naming a default would state a value the log never
+ * did. Absent therefore means unstated, not off.
+ */
+export interface CaptureLevels {
+  apexCodeLevel?: string;
+  systemLevel?: string;
+  dbLevel?: string;
+  workflowLevel?: string;
+}
+
+/**
+ * Read the levels that gate the ranked kinds off the log's header.
+ *
+ * They qualify every figure in a response rather than any one row of it — a
+ * self time under `APEX_CODE,ERROR` is the work of everything the capture level
+ * hid, pooled at the nearest logged boundary — so each is a response-level
+ * scalar, stated once.
+ */
+export function captureLevels(apexLog: ApexLog): CaptureLevels {
+  const declared = new Map(
+    apexLog.debugLevels.map(
+      ({ logCategory, logLevel }) => [logCategory, logLevel] as const,
+    ),
+  );
+  const levels: CaptureLevels = {};
+
+  Object.entries(LEVEL_FIELD_BY_CATEGORY).forEach(([category, field]) => {
+    const level = declared.get(category);
+    if (level !== undefined) {
+      levels[field] = level;
+    }
+  });
+
+  return levels;
 }
 
 /**
