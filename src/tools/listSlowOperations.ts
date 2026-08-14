@@ -31,7 +31,7 @@ export const listSlowOperationsInputSchema = {
     .enum([...GROUP_BY, "none"])
     .optional()
     .describe(
-      "Fold repeats into one row, by name (default) or per namespace. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
+      "Fold repeats into one row: by name (default), by namespace, or by callerNamespace, which attributes platform DML to the package that drove it. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
     ),
 };
 

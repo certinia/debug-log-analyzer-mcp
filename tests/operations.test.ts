@@ -247,6 +247,37 @@ describe("groupOperations", () => {
     ]);
   });
 
+  it("groups by the calling namespace, which DML never carries itself", () => {
+    const operations = listOperations(
+      logOf({
+        type: "METHOD_ENTRY",
+        subCategory: "Method",
+        text: "Custom.run",
+        namespace: "Custom",
+        totalNs: 50_000_000,
+        children: [
+          {
+            type: "DML_BEGIN",
+            subCategory: "DML",
+            text: "DML Insert Account",
+            namespace: "default",
+            totalNs: 40_000_000,
+          },
+        ],
+      }),
+    );
+
+    expect(groupOperations(operations, "callerNamespace")).toEqual([
+      // The method itself was called by nothing, so it reports the root.
+      expect.objectContaining({ kind: "method", name: "default" }),
+      expect.objectContaining({
+        kind: "dml",
+        name: "Custom",
+        namespace: "Custom",
+      }),
+    ]);
+  });
+
   it("keeps kinds apart, so every column stays true of every row", () => {
     const operations = listOperations(
       logOf(

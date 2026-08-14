@@ -23,7 +23,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - Make the `apexlog_execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
 - Reduce every tool response with no fact lost: `apexlog_list_slow_operations` by 24% ([#86], [#108]) and `apexlog_execute_anonymous` by 30% ([#86], [#109]). `apexlog_get_summary` costs 16% more on a log that uses its limits, for the two tables it gained ([#62])
 - **Breaking:** move to the MCP TypeScript SDK v2 packages, so the server speaks the 2026-07-28 protocol revision. Clients on the 2025 revisions keep working through the SDK's compatibility layer ([#103])
-- Reduce the standing cost of having the server connected by 27%: `apexlog_execute_anonymous` by 50%, `apexlog_list_limit_risks` by 28% and `apexlog_get_summary` by 5% ([#87], [#108], [#103]). `apexlog_list_slow_operations` costs 36% more, for the five parameters that select what it ranks and for what `groupBy` now states about the grouped row ([#108], [#101], [#126])
+- Reduce the standing cost of having the server connected by 26%: `apexlog_execute_anonymous` by 50%, `apexlog_list_limit_risks` by 28% and `apexlog_get_summary` by 5% ([#87], [#108], [#103]). `apexlog_list_slow_operations` costs 46% more, for the five parameters that select what it ranks and for what `groupBy` now states about the grouped row ([#108], [#101], [#126], [#127])
 - **Breaking:** `durationTotalMs` on a grouped `apexlog_list_slow_operations` row is now what the transaction takes back if the group never runs. A group holds parents and their children alike, and a parent's total already contains its children's, so the old sum counted the same time more than once — 1.6x the transaction on a real log, 3.1x on the test fixture. Only the calls that ran outside every other call in the group now add their total. The figure is not additive across rows, and `durationSelfMs` is unchanged ([#101])
 - **Breaking:** `apexlog_list_slow_operations` now folds repeats into one row by default, where it ranked single calls. A flow element that runs 373 times for 15% of a real transaction was absent from the top ten and is now its second row, and the ten rows returned cover 83% of the self time where they covered 51%. Rows key on kind, namespace and name, so one name in two namespaces stays two rows rather than merging under the first namespace seen. A grouped row adds `durationSelfMaxMs`, the self time of its slowest call — read against `durationSelfMs` it tells one bad call from sheer volume, which need opposite fixes — and `lineNumber` now names that call. Pass `groupBy: "none"` to rank each call on its own ([#126])
 - Encode responses with TOON v4. No response changed: v4 removes key folding and path expansion, and this server used neither ([#121])
@@ -31,6 +31,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 ### Added
 
+- Add `groupBy: "callerNamespace"` to `apexlog_list_slow_operations`, which folds rows by the namespace that called the operation rather than the one it ran in. DML is pinned to `default` however it was reached, so only the caller says which package drove it: on a real log 4 of the 5 DML rows have a different caller, and they carry 934 of the 944 ms. The two agree on 97% of rows, so this is a grouping and not a column — every response that does not ask for it is unchanged ([#127])
 - Add `--allow-production-orgs`, to run against production without confirmation ([#52])
 - Add `--no-apex-execution`, to stop Apex running at all while the log analysis tools keep working ([#52])
 - Add `pnpm run eval`, which gates every change to a tool response against committed fixtures ([#86])
@@ -75,3 +76,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#121]: https://github.com/certinia/debug-log-analyzer-mcp/issues/121
 [#101]: https://github.com/certinia/debug-log-analyzer-mcp/issues/101
 [#126]: https://github.com/certinia/debug-log-analyzer-mcp/issues/126
+[#127]: https://github.com/certinia/debug-log-analyzer-mcp/issues/127

@@ -62,6 +62,16 @@ export interface Operation {
   kind: OperationKind;
   name: string;
   namespace: string;
+  /**
+   * The namespace of the frame that called this one, which is not always the
+   * one the operation runs in: DML is pinned to `default` however it was
+   * reached, so only the caller says which package drove it.
+   *
+   * Internal. The two are the same on all but a few percent of rows, so a
+   * column would cost every response for an answer almost none of them carry;
+   * `groupBy: "callerNamespace"` asks the question instead.
+   */
+  callerNamespace: string;
   /** Once rows are grouped, the line of the slowest call in the group. */
   lineNumber: number | string | null;
   /** One, until `groupOperations` folds repeats together. */
@@ -165,6 +175,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
       kind,
       name: node.text || node.type || "Unknown",
       namespace: node.namespace || "default",
+      callerNamespace: parent?.namespace ?? "default",
       lineNumber: node.lineNumber,
       callCount: 1,
       durationTotalNs: node.duration.total,
@@ -193,25 +204,51 @@ export function listOperations(apexLog: ApexLog): Operation[] {
 }
 
 /** What a fold can key on, so the tool schema cannot drift from this module. */
-export const GROUP_BY = ["name", "namespace"] as const;
+export const GROUP_BY = ["name", "namespace", "callerNamespace"] as const;
 
 export type GroupBy = (typeof GROUP_BY)[number];
+
+/**
+ * What a folded row calls itself, per grouping. A group is keyed on `kind` and
+ * this pair, so no column can be true of one member and false of the next:
+ * folding on a namespace puts it in `name` too, because the calls underneath it
+ * no longer share a name of their own.
+ */
+const IDENTITY_BY_GROUP: Record<
+  GroupBy,
+  (operation: Operation) => { namespace: string; name: string }
+> = {
+  name: (operation) => ({
+    namespace: operation.namespace,
+    name: operation.name,
+  }),
+  namespace: (operation) => ({
+    namespace: operation.namespace,
+    name: operation.namespace,
+  }),
+  callerNamespace: (operation) => ({
+    namespace: operation.callerNamespace,
+    name: operation.callerNamespace,
+  }),
+};
 
 /**
  * Fold repeats together, so that a query run four hundred times in a loop is
  * one row carrying its four hundred calls rather than four hundred rows the
  * ranking pushes apart.
  *
- * `kind` and `namespace` are part of every key. A namespace that runs both
- * queries and methods is two rows rather than one row that has to call itself
- * mixed, and two operations that share a name in different namespaces stay
- * apart rather than merging under whichever namespace was seen first.
+ * `kind` is part of every key, so a namespace that runs both queries and
+ * methods is two rows rather than one that has to call itself mixed. Beside it
+ * sits the identity from `IDENTITY_BY_GROUP`, so two operations that share a
+ * name in different namespaces stay apart rather than merging under whichever
+ * namespace was seen first.
  */
 export function groupOperations(
   operations: Operation[],
   by: GroupBy,
 ): Operation[] {
   const groups = new Map<string, Operation>();
+  const identityOf = IDENTITY_BY_GROUP[by];
 
   // Memoized: the nesting test walks the ancestors of every member, and a deep
   // Apex stack would otherwise rebuild the same key at every level of it.
@@ -222,10 +259,8 @@ export function groupOperations(
       return known;
     }
 
-    const key =
-      by === "name"
-        ? `${operation.kind} ${operation.namespace} ${operation.name}`
-        : `${operation.kind} ${operation.namespace}`;
+    const { namespace, name } = identityOf(operation);
+    const key = `${operation.kind} ${namespace} ${name}`;
     keys.set(operation, key);
     return key;
   };
@@ -235,14 +270,17 @@ export function groupOperations(
     (keyOf(operation.parent) === key || nestedInGroup(operation.parent, key));
 
   operations.forEach((operation) => {
-    const label = by === "name" ? operation.name : operation.namespace;
     const key = keyOf(operation);
     const group = groups.get(key);
 
     if (!group) {
       // The first member of a group cannot be nested in it: `listOperations`
       // emits an operation before the ones it called.
-      groups.set(key, { ...operation, name: label, parent: null });
+      groups.set(key, {
+        ...operation,
+        ...identityOf(operation),
+        parent: null,
+      });
       return;
     }
 

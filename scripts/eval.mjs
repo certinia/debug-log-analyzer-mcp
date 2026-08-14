@@ -204,8 +204,9 @@ const DEFINITION_BUDGET = {
   // Raised for the five selection parameters, which the caller acts on: without
   // them a ranking over every operation kind can only be read whole, and for the
   // warning that a grouped durationTotalMs must not be summed across rows, and
-  // for what grouping by default now states about the row it returns.
-  apexlog_list_slow_operations: 354,
+  // for what grouping by default now states about the row it returns, and for
+  // callerNamespace, which needs a clause to say what it attributes.
+  apexlog_list_slow_operations: 379,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,
