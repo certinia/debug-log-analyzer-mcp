@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { McpServer } from "@modelcontextprotocol/server";
+import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
 import { Connection, StateAggregator } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
@@ -21,6 +21,7 @@ import {
 import {
   authorizeExecution,
   APEX_EXECUTION_DISABLED_MESSAGE,
+  type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
 
 type ApexLogRecord = {
@@ -83,6 +84,7 @@ export type ExecuteAnonymousPolicy = {
   allowProductionOrgs: boolean;
   apexExecutionDisabled: boolean;
   classificationCache: Map<string, OrgClassification>;
+  mintConfirmationState: MintConfirmationState;
 };
 
 const EXECUTE_ANONYMOUS_DESCRIPTION =
@@ -173,6 +175,7 @@ function toolError(text: string) {
 export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
+  ctx: ServerContext,
   policy: ExecuteAnonymousPolicy,
 ) {
   const { apex, targetOrg, debugLevel } = args;
@@ -204,15 +207,21 @@ export async function executeAnonymous(
     policy.classificationCache,
   );
   const decision = await authorizeExecution({
-    server,
+    ctx,
+    mintConfirmationState: policy.mintConfirmationState,
     classification,
+    orgId: org.getOrgId(),
     orgLabel,
     apex,
     allowProductionOrgs: policy.allowProductionOrgs,
     unverifiedReason,
   });
 
-  if (!decision.allowed) {
+  if (decision.outcome === "confirmationRequired") {
+    return decision.result;
+  }
+
+  if (decision.outcome === "refused") {
     return toolError(decision.reason);
   }
 

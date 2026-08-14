@@ -44,10 +44,15 @@ jest.mock("@salesforce/core", () => {
   };
 });
 
-jest.mock("@modelcontextprotocol/server");
-
 import { promises as fs } from "node:fs";
-import { McpServer } from "@modelcontextprotocol/server";
+import { randomBytes } from "node:crypto";
+import {
+  createRequestStateCodec,
+  McpServer,
+  type ElicitRequest,
+  type InputRequiredResult,
+  type ServerContext,
+} from "@modelcontextprotocol/server";
 import { ConfigAggregator, StateAggregator } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import {
@@ -59,6 +64,7 @@ import { getOrCreateDebugLevelId } from "../src/salesforce/debugLevels";
 import { ensureTraceFlag } from "../src/salesforce/traceFlags";
 import { resolveOrg } from "../src/salesforce/connection";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
+import type { ConfirmationState } from "../src/policy/orgExecutionPolicy";
 
 const mockMkdir = fs.mkdir as jest.MockedFunction<typeof fs.mkdir>;
 const mockWriteFile = fs.writeFile as jest.MockedFunction<typeof fs.writeFile>;
@@ -79,6 +85,11 @@ const SANDBOX_ORG_INFO = {
 
 const PRODUCTION_ORG_INFO = { ...SANDBOX_ORG_INFO, IsSandbox: false };
 
+// The real codec, so a retried call only carries state this server minted.
+const codec = createRequestStateCodec<ConfirmationState>({
+  key: randomBytes(32),
+});
+
 function policy(
   overrides: {
     allowProductionOrgs?: boolean;
@@ -90,8 +101,19 @@ function policy(
     allowProductionOrgs: false,
     apexExecutionDisabled: false,
     classificationCache: new Map<string, OrgClassification>(),
+    mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
     ...overrides,
   };
+}
+
+/** A call carrying no confirmation: the first round of any flow. */
+function makeCtx(state?: ConfirmationState, inputResponses?: unknown) {
+  return {
+    mcpReq: {
+      requestState: () => state,
+      inputResponses,
+    },
+  } as unknown as ServerContext;
 }
 
 describe("Execute Anonymous", () => {
@@ -111,20 +133,16 @@ describe("Execute Anonymous", () => {
   let mockFindOne: any;
   let mockOrg: any;
   let mockRetrieveOrgInfo: jest.Mock;
-  let mockElicitInput: jest.Mock;
-  let mockGetClientCapabilities: jest.Mock;
+  let ctx: ServerContext;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockElicitInput = jest.fn();
-    mockGetClientCapabilities = jest.fn(() => ({}));
+    ctx = makeCtx();
 
     mockServer = {
       server: {
         listRoots: jest.fn().mockResolvedValue({ roots: [] }),
-        elicitInput: mockElicitInput,
-        getClientCapabilities: mockGetClientCapabilities,
       },
     } as unknown as McpServer;
 
@@ -199,7 +217,7 @@ describe("Execute Anonymous", () => {
       });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(getUserIdByUsername).toHaveBeenCalledWith(
         mockConnection,
@@ -239,7 +257,7 @@ describe("Execute Anonymous", () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Could not determine username from connection");
 
       expect(getUserIdByUsername).not.toHaveBeenCalled();
@@ -260,7 +278,7 @@ describe("Execute Anonymous", () => {
       });
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow(
         "Apex could not be compiled at line 1, column 5: Unexpected token 'Invalid'",
       );
@@ -275,7 +293,7 @@ describe("Execute Anonymous", () => {
       mockExecuteAnonymous.mockResolvedValue(null);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Cannot read properties of null");
 
       expect(mockSobject).not.toHaveBeenCalled();
@@ -295,7 +313,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockResolvedValue(null);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Could not retrieve log from anonymous execution");
 
       expect(mockRequest).not.toHaveBeenCalled();
@@ -317,7 +335,7 @@ describe("Execute Anonymous", () => {
       });
       mockRequest.mockResolvedValue(testLogBody);
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockFindOne).toHaveBeenCalledWith(
         expect.any(Object),
@@ -347,7 +365,7 @@ describe("Execute Anonymous", () => {
       });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(multiLineApex);
       const decoded = toonDecode(result);
@@ -363,7 +381,7 @@ describe("Execute Anonymous", () => {
       mockGetUserIdByUsername.mockRejectedValue(userError);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("User not found");
 
       expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
@@ -382,7 +400,7 @@ describe("Execute Anonymous", () => {
       mockGetOrCreateDebugLevelId.mockRejectedValue(debugLevelError);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Failed to create debug level");
 
       expect(ensureTraceFlag).not.toHaveBeenCalled();
@@ -399,7 +417,7 @@ describe("Execute Anonymous", () => {
       mockEnsureTraceFlag.mockRejectedValue(traceFlagError);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Failed to create trace flag");
 
       expect(mockExecuteAnonymous).not.toHaveBeenCalled();
@@ -412,7 +430,7 @@ describe("Execute Anonymous", () => {
       mockExecuteAnonymous.mockRejectedValue(executeError);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Tooling API error");
 
       expect(mockSobject).not.toHaveBeenCalled();
@@ -433,7 +451,7 @@ describe("Execute Anonymous", () => {
       mockFindOne.mockRejectedValue(queryError);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Query failed");
 
       expect(mockRequest).not.toHaveBeenCalled();
@@ -457,7 +475,7 @@ describe("Execute Anonymous", () => {
       mockRequest.mockRejectedValue(requestError);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Failed to fetch log body");
     });
 
@@ -483,7 +501,7 @@ describe("Execute Anonymous", () => {
       });
       mockRequest.mockResolvedValue(testLogBody);
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockFindOne).toHaveBeenCalledWith(
         { LogUserId: customUserId },
@@ -510,7 +528,7 @@ describe("Execute Anonymous", () => {
       });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(soqlApex);
       const decoded = toonDecode(result);
@@ -534,7 +552,7 @@ describe("Execute Anonymous", () => {
       });
       mockRequest.mockResolvedValue(testLogBody);
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(dmlApex);
       const decoded = toonDecode(result);
@@ -550,7 +568,7 @@ describe("Execute Anonymous", () => {
       mockResolveOrg.mockRejectedValue(connectError);
 
       await expect(
-        executeAnonymous(mockServer, args, policy()),
+        executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("No default org configured");
 
       expect(getUserIdByUsername).not.toHaveBeenCalled();
@@ -561,8 +579,36 @@ describe("Execute Anonymous", () => {
   });
 
   describe("execution policy", () => {
-    const elicitationCapable = () => ({ elicitation: { form: {} } });
     let consoleError: jest.SpyInstance;
+
+    /** The confirmation the first round asks for. */
+    function confirmRequest(result: InputRequiredResult): ElicitRequest["params"] {
+      const request = result.inputRequests?.["confirm"] as
+        | ElicitRequest
+        | undefined;
+      if (!request) {
+        throw new Error("expected a 'confirm' input request");
+      }
+      return request.params;
+    }
+
+    function assertInputRequired(result: unknown): InputRequiredResult {
+      const required = result as InputRequiredResult;
+      expect(required.resultType).toBe("input_required");
+      return required;
+    }
+
+    /** The call the client re-sends once the user has answered. */
+    async function retryCtx(
+      result: InputRequiredResult,
+      response: unknown,
+    ): Promise<ServerContext> {
+      const state = await codec.verify(
+        result.requestState as string,
+        makeCtx(),
+      );
+      return makeCtx(state, { confirm: response });
+    }
 
     afterEach(() => {
       consoleError.mockRestore();
@@ -588,18 +634,43 @@ describe("Execute Anonymous", () => {
     it("should run against a sandbox without prompting", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
-      expect(mockElicitInput).not.toHaveBeenCalled();
       expect(toonDecode(result).orgType).toBe("sandbox");
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(testApexCode);
     });
 
-    it("should refuse a production org when the client cannot prompt", async () => {
+    it("should ask for confirmation on the first production call", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const result: any = await executeAnonymous(mockServer, args, policy());
+      const result = assertInputRequired(
+        await executeAnonymous(mockServer, args, ctx, policy()),
+      );
+
+      const params = confirmRequest(result);
+      expect(params.message).toContain("PRODUCTION org 'test@example.com'");
+      expect(params.message).toContain(testApexCode);
+      expect(typeof result.requestState).toBe("string");
+    });
+
+    it("should refuse a production call whose client carried no answer", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+      const asked = assertInputRequired(
+        await executeAnonymous(mockServer, args, ctx, policy()),
+      );
+      const state = await codec.verify(
+        asked.requestState as string,
+        makeCtx(),
+      );
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        makeCtx(state, {}),
+        policy(),
+      );
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain(
@@ -612,7 +683,7 @@ describe("Execute Anonymous", () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
@@ -626,85 +697,87 @@ describe("Execute Anonymous", () => {
       const result = await executeAnonymous(
         mockServer,
         args,
+        ctx,
         policy({ allowProductionOrgs: true }),
       );
 
-      expect(mockElicitInput).not.toHaveBeenCalled();
       expect(toonDecode(result).orgType).toBe("production");
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(testApexCode);
     });
 
-    it("should run against production when the user confirms", async () => {
+    it("should run against production when the retry confirms", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      mockGetClientCapabilities.mockReturnValue(elicitationCapable());
-      mockElicitInput.mockResolvedValue({
-        action: "accept",
-        content: { confirm: true },
-      });
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
+      const asked = assertInputRequired(
+        await executeAnonymous(mockServer, args, ctx, policy()),
+      );
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(
+        mockServer,
+        args,
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
 
-      expect(mockElicitInput).toHaveBeenCalledTimes(1);
-      const [params] = mockElicitInput.mock.calls[0];
-      expect(params.message).toContain("PRODUCTION org 'test@example.com'");
-      expect(params.message).toContain(testApexCode);
       expect(toonDecode(result).orgType).toBe("production");
       expect(mockExecuteAnonymous).toHaveBeenCalledWith(testApexCode);
     });
 
-    it("should refuse when the user declines the prompt", async () => {
+    it.each([
+      ["decline", { action: "decline" }],
+      ["cancel", { action: "cancel" }],
+      [
+        "accept with confirm false",
+        { action: "accept", content: { confirm: false } },
+      ],
+    ])("should refuse when the retry answers %s", async (_name, response) => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      mockGetClientCapabilities.mockReturnValue(elicitationCapable());
-      mockElicitInput.mockResolvedValue({ action: "decline" });
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
+      const asked = assertInputRequired(
+        await executeAnonymous(mockServer, args, ctx, policy()),
+      );
 
-      const result: any = await executeAnonymous(mockServer, args, policy());
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        await retryCtx(asked, response),
+        policy(),
+      );
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("User declined");
       expect(mockExecuteAnonymous).not.toHaveBeenCalled();
     });
 
-    it("should refuse when the user cancels the prompt", async () => {
+    it("should refuse a retry that asks for different Apex", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      mockGetClientCapabilities.mockReturnValue(elicitationCapable());
-      mockElicitInput.mockResolvedValue({ action: "cancel" });
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result: any = await executeAnonymous(mockServer, args, policy());
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("User declined");
-    });
-
-    it("should refuse when the user answers confirm: false", async () => {
-      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      mockGetClientCapabilities.mockReturnValue(elicitationCapable());
-      mockElicitInput.mockResolvedValue({
-        action: "accept",
-        content: { confirm: false },
-      });
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result: any = await executeAnonymous(mockServer, args, policy());
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("User declined");
-    });
-
-    it("should refuse when the prompt itself fails", async () => {
-      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      mockGetClientCapabilities.mockReturnValue(elicitationCapable());
-      mockElicitInput.mockRejectedValue(new Error("timed out"));
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result: any = await executeAnonymous(mockServer, args, policy());
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain(
-        "Cannot execute anonymous Apex against production org",
+      const asked = assertInputRequired(
+        await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        ),
       );
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: "delete [SELECT Id FROM Account];" },
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("does not match this call");
+      expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
+      expect(ensureTraceFlag).not.toHaveBeenCalled();
+      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
     });
 
     it("should treat an unverifiable org as production and surface the reason", async () => {
@@ -712,8 +785,20 @@ describe("Execute Anonymous", () => {
         new Error("Unable to refresh session due to: inactive organization"),
       );
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
+      const asked = assertInputRequired(
+        await executeAnonymous(mockServer, args, ctx, policy()),
+      );
+      const state = await codec.verify(
+        asked.requestState as string,
+        makeCtx(),
+      );
 
-      const result: any = await executeAnonymous(mockServer, args, policy());
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        makeCtx(state, {}),
+        policy(),
+      );
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("could not be verified");
@@ -729,8 +814,8 @@ describe("Execute Anonymous", () => {
       const cache = new Map();
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      await executeAnonymous(mockServer, args, policy({ classificationCache: cache }));
-      await executeAnonymous(mockServer, args, policy({ classificationCache: cache }));
+      await executeAnonymous(mockServer, args, ctx, policy({ classificationCache: cache }));
+      await executeAnonymous(mockServer, args, ctx, policy({ classificationCache: cache }));
 
       expect(mockRetrieveOrgInfo).toHaveBeenCalledTimes(1);
     });
@@ -741,6 +826,7 @@ describe("Execute Anonymous", () => {
       const result: any = await executeAnonymous(
         mockServer,
         args,
+        ctx,
         policy({ apexExecutionDisabled: true }),
       );
 
@@ -772,7 +858,7 @@ describe("Execute Anonymous", () => {
     it("should include org username in response when no alias", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(toonDecode(result).org).toBe("test@example.com");
     });
@@ -787,7 +873,7 @@ describe("Execute Anonymous", () => {
 
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(toonDecode(result).org).toBe("test@example.com (myalias)");
     });
@@ -811,7 +897,7 @@ describe("Execute Anonymous", () => {
     it("should create output directory with recursive option", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockMkdir).toHaveBeenCalledWith(
         expect.stringContaining(".apex-log-mcp"),
@@ -822,7 +908,7 @@ describe("Execute Anonymous", () => {
     it("should write log file with logId as filename", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockWriteFile).toHaveBeenCalledWith(
         expect.stringContaining(`${testLogId}.log`),
@@ -837,7 +923,7 @@ describe("Execute Anonymous", () => {
         outputDir: "/custom/output",
       };
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockMkdir).toHaveBeenCalledWith("/custom/output", {
         recursive: true,
@@ -859,7 +945,7 @@ describe("Execute Anonymous", () => {
         outputDir: "logs",
       };
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockMkdir).toHaveBeenCalledWith("/my/project/logs", {
         recursive: true,
@@ -890,6 +976,7 @@ describe("Execute Anonymous", () => {
         return executeAnonymous(
           mockServer,
           { apex: testApexCode, ...(outputDir && { outputDir }) },
+          ctx,
           policy(),
         );
       };
@@ -925,6 +1012,7 @@ describe("Execute Anonymous", () => {
         const result = await executeAnonymous(
           mockServer,
           { apex: testApexCode, outputDir: "/elsewhere/logs" },
+          ctx,
           policy(),
         );
 
@@ -951,7 +1039,7 @@ describe("Execute Anonymous", () => {
 
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      await executeAnonymous(mockServer, args, policy());
+      await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(mockMkdir).toHaveBeenCalledWith("/my/project/.apex-log-mcp", {
         recursive: true,
@@ -963,7 +1051,7 @@ describe("Execute Anonymous", () => {
 
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(toonDecode(result).fileSizeBytes).toBe(2048);
     });
@@ -980,7 +1068,7 @@ describe("Execute Anonymous", () => {
 
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const result = await executeAnonymous(mockServer, args, policy());
+      const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       const decoded = toonDecode(result);
       expect(decoded.succeeded).toBe(false);
@@ -998,7 +1086,7 @@ describe("Execute Anonymous", () => {
       mockMkdir.mockResolvedValueOnce("/project/.apex-log-mcp");
 
       expect(
-        toonDecode(await executeAnonymous(mockServer, args, policy()))
+        toonDecode(await executeAnonymous(mockServer, args, ctx, policy()))
           .outputDirCreated,
       ).toBe(true);
     });
@@ -1009,7 +1097,7 @@ describe("Execute Anonymous", () => {
       mockMkdir.mockResolvedValueOnce(undefined);
 
       expect(
-        toonDecode(await executeAnonymous(mockServer, args, policy()))
+        toonDecode(await executeAnonymous(mockServer, args, ctx, policy()))
           .outputDirCreated,
       ).toBe(false);
     });

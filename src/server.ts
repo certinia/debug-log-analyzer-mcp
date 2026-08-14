@@ -3,7 +3,11 @@
  */
 
 import { parseArgs } from "node:util";
-import { McpServer } from "@modelcontextprotocol/server";
+import { randomBytes } from "node:crypto";
+import {
+  createRequestStateCodec,
+  McpServer,
+} from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import {
   listSlowOperations,
@@ -22,6 +26,7 @@ import {
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
+import type { ConfirmationState } from "./policy/orgExecutionPolicy.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
 
 export type ServerConfig = {
@@ -32,6 +37,14 @@ export type ServerConfig = {
 // An org id maps to one classification for the life of the process, so this
 // outlives the per-connection server built below.
 const classificationCache = new Map<string, OrgClassification>();
+
+// A production-org confirmation travels back through the client, so it is signed
+// here and verified before any handler sees it. The key is per process, which is
+// enough because one process serves every round of a stdio flow, and better than
+// a fixed key: a confirmation cannot outlive the server that asked for it.
+const confirmationCodec = createRequestStateCodec<ConfirmationState>({
+  key: randomBytes(32),
+});
 
 export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const allowProductionOrgs = config.allowProductionOrgs ?? false;
@@ -49,6 +62,9 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       },
       instructions:
         "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.",
+      // Rejects a forged, altered or expired confirmation before the handler
+      // runs, and hands the handler the decoded payload.
+      requestState: { verify: confirmationCodec.verify },
     },
   );
 
@@ -75,11 +91,12 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   server.registerTool(
     "apexlog_execute_anonymous",
     executeAnonymousToolConfig(apexExecutionDisabled),
-    async (args) =>
-      executeAnonymous(server, args as ExecuteAnonymousArgs, {
+    async (args, ctx) =>
+      executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
         allowProductionOrgs,
         apexExecutionDisabled,
         classificationCache,
+        mintConfirmationState: (payload) => confirmationCodec.mint(payload),
       }),
   );
 

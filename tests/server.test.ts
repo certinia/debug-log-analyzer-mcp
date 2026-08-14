@@ -7,6 +7,8 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 
 // Mock the MCP SDK components
 jest.mock("@modelcontextprotocol/server", () => ({
+  // Only the server class is stubbed; the request-state codec stays real.
+  ...jest.requireActual("@modelcontextprotocol/server"),
   McpServer: jest.fn().mockImplementation(() => ({
     registerTool: jest.fn(() => ({
       enable: jest.fn(),
@@ -230,6 +232,8 @@ describe("createApexLogServer", () => {
             tools: {},
           },
           instructions: expect.any(String),
+          // Verifies a confirmation before any handler sees it.
+          requestState: { verify: expect.any(Function) },
         },
       );
     });
@@ -375,11 +379,17 @@ describe("createApexLogServer", () => {
 
       const result = await tool.callback(args, {} as any);
 
-      expect(executeAnonymous).toHaveBeenCalledWith(expect.anything(), args, {
-        allowProductionOrgs: false,
-        apexExecutionDisabled: false,
-        classificationCache: expect.any(Map),
-      });
+      expect(executeAnonymous).toHaveBeenCalledWith(
+        expect.anything(),
+        args,
+        expect.anything(),
+        {
+          allowProductionOrgs: false,
+          apexExecutionDisabled: false,
+          classificationCache: expect.any(Map),
+          mintConfirmationState: expect.any(Function),
+        },
+      );
       expect(result).toEqual(mockExecuteAnonymousResult);
     });
 
@@ -390,6 +400,7 @@ describe("createApexLogServer", () => {
       await tool.callback({ apex: "System.debug('test');" }, {} as any);
 
       expect(executeAnonymous).toHaveBeenCalledWith(
+        expect.anything(),
         expect.anything(),
         expect.anything(),
         expect.objectContaining({ allowProductionOrgs: true }),
@@ -403,6 +414,7 @@ describe("createApexLogServer", () => {
       await tool.callback({ apex: "System.debug('test');" }, {} as any);
 
       expect(executeAnonymous).toHaveBeenCalledWith(
+        expect.anything(),
         expect.anything(),
         expect.anything(),
         expect.objectContaining({ apexExecutionDisabled: true }),
