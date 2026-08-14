@@ -250,6 +250,12 @@ export function groupOperations(
   const groups = new Map<string, Operation>();
   const identityOf = IDENTITY_BY_GROUP[by];
 
+  // `parent` is the log's chain, not this call's. When a caller narrows the
+  // operations by kind or namespace, an ancestor outside the selection can share
+  // a group's key without being in the group, and suppressing on it would report
+  // a total below the row's own self time.
+  const members = new Set(operations);
+
   // Memoized: the nesting test walks the ancestors of every member, and a deep
   // Apex stack would otherwise rebuild the same key at every level of it.
   const keys = new Map<Operation, string>();
@@ -267,7 +273,8 @@ export function groupOperations(
 
   const nestedInGroup = (operation: Operation, key: string): boolean =>
     operation.parent !== null &&
-    (keyOf(operation.parent) === key || nestedInGroup(operation.parent, key));
+    ((members.has(operation.parent) && keyOf(operation.parent) === key) ||
+      nestedInGroup(operation.parent, key));
 
   operations.forEach((operation) => {
     const key = keyOf(operation);
