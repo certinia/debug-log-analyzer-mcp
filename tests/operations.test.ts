@@ -5,6 +5,7 @@
 import type { ApexLog } from "../src/ApexLogParser";
 import { LOG_CATEGORIES } from "../src/salesforce/debugLevels";
 import {
+  GROUP_BY,
   groupOperations,
   listOperations,
   logCategoryOf,
@@ -234,6 +235,92 @@ describe("groupOperations", () => {
       durationTotalNs: 100_000_000,
       durationSelfNs: 80_000_000,
     });
+  });
+
+  /**
+   * The shape a `namespace` filter reaches: the two inner code units share a
+   * calling namespace with the code unit above them, which the filter drops.
+   */
+  const nestedAcrossANamespace = () =>
+    listOperations(
+      logOf({
+        type: "DML_BEGIN",
+        subCategory: "DML",
+        text: "DML Insert Account",
+        namespace: "Custom",
+        totalNs: 100_000_000,
+        selfNs: 0,
+        children: [
+          {
+            type: "CODE_UNIT_STARTED",
+            subCategory: "Code Unit",
+            text: "Outer",
+            namespace: "default",
+            totalNs: 100_000_000,
+            selfNs: 30_000_000,
+            children: [
+              {
+                type: "DML_BEGIN",
+                subCategory: "DML",
+                text: "DML Update Account",
+                namespace: "Custom",
+                totalNs: 70_000_000,
+                selfNs: 0,
+                children: [
+                  {
+                    type: "CODE_UNIT_STARTED",
+                    subCategory: "Code Unit",
+                    text: "Inner",
+                    namespace: "Custom",
+                    totalNs: 40_000_000,
+                  },
+                  {
+                    type: "CODE_UNIT_STARTED",
+                    subCategory: "Code Unit",
+                    text: "Inner",
+                    namespace: "Custom",
+                    totalNs: 30_000_000,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+  it("counts a member whose matching ancestor the caller filtered away", () => {
+    const selected = nestedAcrossANamespace().filter(
+      (operation) => operation.namespace === "Custom",
+    );
+
+    expect(
+      groupOperations(selected, "callerNamespace").find(
+        (operation) => operation.kind === "codeUnit",
+      ),
+    ).toMatchObject({ callCount: 2, durationTotalNs: 70_000_000 });
+  });
+
+  it("never reports a total below the self time it contains", () => {
+    const operations = nestedAcrossANamespace();
+    const namespaces = [undefined, "default", "Custom"];
+
+    namespaces.forEach((namespace) =>
+      GROUP_BY.forEach((by) => {
+        const selected = operations.filter(
+          (operation) => !namespace || operation.namespace === namespace,
+        );
+
+        groupOperations(selected, by).forEach((group) =>
+          expect({
+            namespace,
+            by,
+            name: group.name,
+            impossible: group.durationTotalNs < group.durationSelfNs,
+          }).toMatchObject({ impossible: false }),
+        );
+      }),
+    );
   });
 
   it("groups by namespace, and names the row after it", () => {
