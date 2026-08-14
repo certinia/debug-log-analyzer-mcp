@@ -6,10 +6,12 @@ import { z } from "zod";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
+  captureLevels,
   GROUP_BY,
   groupOperations,
   listOperations,
   OPERATION_KINDS,
+  type CaptureLevels,
   type Operation,
   type OperationKind,
 } from "./operations.js";
@@ -55,8 +57,6 @@ export interface SlowOperation {
   kind: OperationKind;
   name: string;
   namespace: string;
-  /** On a grouped row, the line of the slowest call in the group. */
-  lineNumber: string | number | null;
   callCount: number;
   /**
    * On a grouped row, what the transaction takes back if the group never runs.
@@ -74,7 +74,7 @@ export interface SlowOperation {
   thrownCount: number;
 }
 
-export interface SlowOperationsResult {
+export interface SlowOperationsResult extends CaptureLevels {
   durationTotalMs: number;
   /**
    * Share of the transaction the returned rows account for between them. A low
@@ -82,6 +82,11 @@ export interface SlowOperationsResult {
    * concentrated here — the one thing the table itself does not say.
    */
   returnedSelfPercentage: number;
+  /**
+   * Rows the selection matched, before `limit` cut it. Above the returned count
+   * it says the cap hid rows, which no other figure in the response states.
+   */
+  matchedCount: number;
   operations: SlowOperation[];
 }
 
@@ -111,12 +116,12 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // four hundred times is kept rather than dropped call by call.
   const rows = grouped ? groupOperations(selected, groupBy) : selected;
 
-  const ranked = rows
+  const matched = rows
     // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
     // NaN, which fails both, and such an operation must be dropped, not ranked.
     .filter((operation) => operation.durationSelfNs >= minSelfNs)
-    .sort((a, b) => b.durationSelfNs - a.durationSelfNs)
-    .slice(0, limit);
+    .sort((a, b) => b.durationSelfNs - a.durationSelfNs);
+  const ranked = matched.slice(0, limit);
 
   const selfPercentageOf = (operation: Operation) =>
     durationTotalNs > 0 ? (operation.durationSelfNs / durationTotalNs) * 100 : 0;
@@ -129,7 +134,6 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     kind: operation.kind,
     name: operation.name,
     namespace: operation.namespace,
-    lineNumber: operation.lineNumber,
     callCount: operation.callCount,
     durationTotalMs: roundMs(operation.durationTotalNs / NS_TO_MS),
     durationSelfMs: roundMs(operation.durationSelfNs / NS_TO_MS),
@@ -147,10 +151,12 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   }));
 
   const result: SlowOperationsResult = {
+    ...captureLevels(apexLog),
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
     returnedSelfPercentage: roundPercent(
       ranked.reduce((total, operation) => total + selfPercentageOf(operation), 0),
     ),
+    matchedCount: matched.length,
     operations,
   };
 

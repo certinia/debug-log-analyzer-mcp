@@ -77,6 +77,10 @@ function mockLog(overrides: Partial<Limits> = {}): void {
   mockFs.readFile.mockResolvedValue("log content");
   mockParse.mockReturnValue({
     governorLimits: governorLimits(overrides),
+    // A header these cases say nothing about, so no capture level is reported
+    // and the assertions below are about the selection alone. The eval goldens
+    // cover the levels, against fixtures that carry a real header.
+    debugLevels: [],
   } as unknown as ApexLog);
 }
 

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { encode } from "@toon-format/toon";
 import type { GovernorLimits } from "../ApexLogParser.js";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
+import { captureLevels, type CaptureLevels } from "./operations.js";
 import {
   percentageOf,
   roundPercent,
@@ -36,7 +37,7 @@ export interface LimitRisk {
   usedPercentage: number;
 }
 
-export interface LimitRiskResult {
+export interface LimitRiskResult extends CaptureLevels {
   /**
    * What "at risk" meant for this call. The rows are a selection, so without it
    * an empty table cannot be told apart from a threshold nothing could reach.
@@ -63,6 +64,7 @@ export async function listLimitRisks(args: LimitRisksArgs) {
   const apexLog = await loadApexLog(logFilePath);
 
   const result: LimitRiskResult = {
+    ...captureLevels(apexLog),
     threshold,
     atRisk: atRiskLimits(apexLog.governorLimits, threshold),
   };

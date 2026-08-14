@@ -228,6 +228,31 @@ one-liners.
   - `delimiter` tab or pipe — 2 tokens on a 9,365-token response. Quoting comes from `:` in a name.
   - nested field groups — nothing left to fold; every table is already flat.
 
+### A scalar qualifies the response, a column varies per row
+
+**A fact that qualifies every number in the response is a response-level scalar, stated once; a fact
+that varies per row is a column.** `threshold` on `apexlog_list_limit_risks` follows this rule, and so
+do the four capture levels — `apexCodeLevel`, `systemLevel`, `dbLevel` and `workflowLevel` — that
+`apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header.
+
+They matter because a capture level silently changes what every figure beside it means. On a log
+taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self
+time on a Visualforce page. That is not the page's work — it is everything the level hid, pooled at
+the nearest logged boundary. Without the level the number reads as a finding, and any advice built on
+it is confidently wrong.
+
+Two consequences:
+
+- **A category the header never declared is left out, not defaulted.** A level has no zero, so the
+  usual "report the fixed-schema field anyway" does not apply — naming a default would state a value
+  the log never did. Absent means unstated.
+- **No caveat prose and no magnitude.** The response reports the level and stops. A figure measured
+  once against one org, with the harness not committed, cannot be re-derived by CI and will rot.
+
+`apexlog_get_summary` needs none of them: `timeByKind` already carries a `logCategory` column and
+`debugLevels` lists the level per category, so the join is the caller's to make and restating it
+would break "say it once".
+
 ### When a fact earns a grouping and not a column
 
 `namespace` on an operation is the namespace of the frame, which is not always the namespace that
