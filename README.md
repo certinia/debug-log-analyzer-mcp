@@ -68,10 +68,10 @@ Every request carries all four tool definitions, whether or not a tool is called
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
 | `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
-| `apexlog_list_slow_operations` | ~337                                | ~247       | +36%     |
+| `apexlog_list_slow_operations` | ~361                                | ~247       | +46%     |
 | `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
 | `apexlog_get_summary`          | ~163                                | ~171       | -5%      |
-| **Total**                      | **~1,113** (0.6% of a 200K context) | **~1,529** | **-27%** |
+| **Total**                      | **~1,137** (0.6% of a 200K context) | **~1,529** | **-26%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -110,14 +110,14 @@ Rows are `{kind, name, namespace, lineNumber, callCount, durationTotalMs, durati
 
 `kind` is one of `codeUnit`, `managedPackage`, `method`, `systemMethod`, `soql`, `sosl`, `dml`, `flow` or `workflow`. A `managedPackage` row is the time a package spent where the log shows nothing, and is often most of a transaction.
 
-| Parameter     | Type   | Required | Description                                             |
-| ------------- | ------ | -------- | ------------------------------------------------------- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)         |
-| `kind`        | string | No       | Rank only operations of this kind                       |
-| `namespace`   | string | No       | Rank only this namespace                                |
-| `minSelfMs`   | number | No       | Drop operations below this self time (default: 0)       |
-| `limit`       | number | No       | Rows to return (default: 10)                            |
-| `groupBy`     | string | No       | Fold repeats into one row per `name` or per `namespace` |
+| Parameter     | Type   | Required | Description                                                                            |
+| ------------- | ------ | -------- | -------------------------------------------------------------------------------------- |
+| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                                        |
+| `kind`        | string | No       | Rank only operations of this kind                                                      |
+| `namespace`   | string | No       | Rank only this namespace                                                               |
+| `minSelfMs`   | number | No       | Drop operations below this self time (default: 0)                                      |
+| `limit`       | number | No       | Rows to return (default: 10)                                                           |
+| `groupBy`     | string | No       | Fold repeats into one row by `name` (default), `namespace` or `callerNamespace`; `none` ranks each call |
 
 ### apexlog_get_summary
 

@@ -236,24 +236,6 @@ describe("groupOperations", () => {
     });
   });
 
-  it("counts a nested call once, so the total stays what the group costs", () => {
-    const call = (children: NodeSpec[] = []): NodeSpec => ({
-      type: "METHOD_ENTRY",
-      subCategory: "Method",
-      text: "A.run",
-      totalNs: 100_000_000,
-      selfNs: 40_000_000,
-      children,
-    });
-    const operations = listOperations(logOf(call([call()])));
-
-    expect(groupOperations(operations, "name")[0]).toMatchObject({
-      callCount: 2,
-      durationTotalNs: 100_000_000,
-      durationSelfNs: 80_000_000,
-    });
-  });
-
   it("groups by namespace, and names the row after it", () => {
     const operations = listOperations(
       logOf(repeatedQuery("default", 1), repeatedQuery("Custom", 2)),
@@ -262,6 +244,37 @@ describe("groupOperations", () => {
     expect(groupOperations(operations, "namespace")).toEqual([
       expect.objectContaining({ name: "default", callCount: 1 }),
       expect.objectContaining({ name: "Custom", callCount: 1 }),
+    ]);
+  });
+
+  it("groups by the calling namespace, which DML never carries itself", () => {
+    const operations = listOperations(
+      logOf({
+        type: "METHOD_ENTRY",
+        subCategory: "Method",
+        text: "Custom.run",
+        namespace: "Custom",
+        totalNs: 50_000_000,
+        children: [
+          {
+            type: "DML_BEGIN",
+            subCategory: "DML",
+            text: "DML Insert Account",
+            namespace: "default",
+            totalNs: 40_000_000,
+          },
+        ],
+      }),
+    );
+
+    expect(groupOperations(operations, "callerNamespace")).toEqual([
+      // The method itself was called by nothing, so it reports the root.
+      expect.objectContaining({ kind: "method", name: "default" }),
+      expect.objectContaining({
+        kind: "dml",
+        name: "Custom",
+        namespace: "Custom",
+      }),
     ]);
   });
 

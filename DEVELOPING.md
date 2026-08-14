@@ -228,6 +228,29 @@ one-liners.
   - `delimiter` tab or pipe — 2 tokens on a 9,365-token response. Quoting comes from `:` in a name.
   - nested field groups — nothing left to fold; every table is already flat.
 
+### When a fact earns a grouping and not a column
+
+`namespace` on an operation is the namespace of the frame, which is not always the namespace that
+asked for the work. `DMLBeginLine` pins `namespace = "default"` however the DML was reached, while
+`SOQLExecuteBeginLine` and `SOSLExecuteBeginLine` carry no namespace logic at all and so inherit the
+caller's. The caller is a second fact, and `Operation.callerNamespace` holds it.
+
+It does not earn a column. Measured over two real logs:
+
+| log | rows | caller differs |
+| --- | ---: | ---: |
+| 19 MB, managed packages throughout | 2,469 | 72 (**2.9%**) |
+| 39 MB, every category at `INFO` | 39,415 | 2 (**0.0%**) |
+
+Flows, SOQL, workflow and methods differ on **0%** of rows. The *time* sits entirely in the rows that
+do differ: DML differs on 4 of 5 rows carrying 934 of its 944 ms, and `codeUnit` on 17% of rows
+carrying 10,600 of its 10,904 ms. So the fact matters and the column does not — it would repeat
+`namespace` on 97% of every response.
+
+`groupBy: "callerNamespace"` asks the question instead, for one enum value and the clause that says
+what it attributes. Every response that does not pass it is unchanged. The rule: **a fact worth an
+answer but not worth a column belongs in a parameter that reshapes the rows, not in the rows.**
+
 ### The gate
 
 Output changes are checked by [`pnpm run eval`](tests/eval/README.md), which drives the built server

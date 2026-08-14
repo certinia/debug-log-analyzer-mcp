@@ -413,6 +413,39 @@ describe("listSlowOperations", () => {
     ]);
   });
 
+  it("attributes platform DML to the package that drove it", async () => {
+    mockLog(
+      1000 * MS,
+      method({
+        text: "Custom.run",
+        namespace: "Custom",
+        totalNs: 500 * MS,
+        selfNs: 100 * MS,
+        children: [
+          {
+            type: "DML_BEGIN",
+            subCategory: "DML",
+            text: "DML Insert Account",
+            namespace: "default",
+            totalNs: 400 * MS,
+          },
+        ],
+      }),
+    );
+
+    const operations = (await ranked({ ...ARGS, groupBy: "callerNamespace" }))
+      .operations;
+
+    expect(operations).toContainEqual(
+      expect.objectContaining({
+        kind: "dml",
+        name: "Custom",
+        namespace: "Custom",
+        durationSelfMs: 400,
+      }),
+    );
+  });
+
   it("names the real cause when the log cannot be read", async () => {
     mockFs.stat.mockRejectedValue(
       Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
