@@ -62,7 +62,7 @@ export interface Operation {
   kind: OperationKind;
   name: string;
   namespace: string;
-  /** Null once rows are grouped, because the calls came from several lines. */
+  /** Once rows are grouped, the line of the slowest call in the group. */
   lineNumber: number | string | null;
   /** One, until `groupOperations` folds repeats together. */
   callCount: number;
@@ -76,6 +76,12 @@ export interface Operation {
    */
   durationTotalNs: number;
   durationSelfNs: number;
+  /**
+   * The self time of the slowest single call in the group. Read against
+   * `durationSelfNs` it separates one bad call from sheer volume, which need
+   * opposite fixes and read alike from a sum and a count.
+   */
+  durationSelfMaxNs: number;
   soqlCount: number;
   dmlCount: number;
   soslCount: number;
@@ -163,6 +169,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
       callCount: 1,
       durationTotalNs: node.duration.total,
       durationSelfNs: node.duration.self,
+      durationSelfMaxNs: node.duration.self,
       soqlCount: node.soqlCount.total,
       dmlCount: node.dmlCount.total,
       soslCount: node.soslCount.total,
@@ -185,24 +192,43 @@ export function listOperations(apexLog: ApexLog): Operation[] {
   return operations;
 }
 
-export type GroupBy = "name" | "namespace";
+/** What a fold can key on, so the tool schema cannot drift from this module. */
+export const GROUP_BY = ["name", "namespace"] as const;
+
+export type GroupBy = (typeof GROUP_BY)[number];
 
 /**
  * Fold repeats together, so that a query run four hundred times in a loop is
  * one row carrying its four hundred calls rather than four hundred rows the
  * ranking pushes apart.
  *
- * `kind` is part of every key. A namespace that runs both queries and methods
- * is two rows rather than one row that has to call itself mixed, and every
- * column stays true of every row in it.
+ * `kind` and `namespace` are part of every key. A namespace that runs both
+ * queries and methods is two rows rather than one row that has to call itself
+ * mixed, and two operations that share a name in different namespaces stay
+ * apart rather than merging under whichever namespace was seen first.
  */
 export function groupOperations(
   operations: Operation[],
   by: GroupBy,
 ): Operation[] {
   const groups = new Map<string, Operation>();
-  const keyOf = (operation: Operation) =>
-    `${operation.kind} ${by === "name" ? operation.name : operation.namespace}`;
+
+  // Memoized: the nesting test walks the ancestors of every member, and a deep
+  // Apex stack would otherwise rebuild the same key at every level of it.
+  const keys = new Map<Operation, string>();
+  const keyOf = (operation: Operation): string => {
+    const known = keys.get(operation);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const key =
+      by === "name"
+        ? `${operation.kind} ${operation.namespace} ${operation.name}`
+        : `${operation.kind} ${operation.namespace}`;
+    keys.set(operation, key);
+    return key;
+  };
 
   const nestedInGroup = (operation: Operation, key: string): boolean =>
     operation.parent !== null &&
@@ -216,12 +242,7 @@ export function groupOperations(
     if (!group) {
       // The first member of a group cannot be nested in it: `listOperations`
       // emits an operation before the ones it called.
-      groups.set(key, {
-        ...operation,
-        name: label,
-        lineNumber: by === "name" ? operation.lineNumber : null,
-        parent: null,
-      });
+      groups.set(key, { ...operation, name: label, parent: null });
       return;
     }
 
@@ -237,9 +258,12 @@ export function groupOperations(
     group.soslCount += operation.soslCount;
     group.rowCount += operation.rowCount;
     group.thrownCount += operation.thrownCount;
-    // The calls came from several lines, and naming one of them would say the
-    // repeats all happened there.
-    group.lineNumber = null;
+
+    // The row names the slowest call, which is the one a caller opens first.
+    if (operation.durationSelfNs > group.durationSelfMaxNs) {
+      group.durationSelfMaxNs = operation.durationSelfNs;
+      group.lineNumber = operation.lineNumber;
+    }
   });
 
   return [...groups.values()];

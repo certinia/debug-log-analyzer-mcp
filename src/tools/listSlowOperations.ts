@@ -6,6 +6,7 @@ import { z } from "zod";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
+  GROUP_BY,
   groupOperations,
   listOperations,
   OPERATION_KINDS,
@@ -27,10 +28,10 @@ export const listSlowOperationsInputSchema = {
     .describe("Drop operations below this self time (default: 0)"),
   limit: z.number().optional().describe("Rows to return (default: 10)"),
   groupBy: z
-    .enum(["name", "namespace"])
+    .enum([...GROUP_BY, "none"])
     .optional()
     .describe(
-      "Fold repeats into one row per name or per namespace, carrying the calls, the summed self time, and a durationTotalMs the transaction takes back if the group never runs — never sum it across rows. Ungrouped by default, so each call is its own row.",
+      "Fold repeats into one row, by name (default) or per namespace. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
     ),
 };
 
@@ -54,6 +55,7 @@ export interface SlowOperation {
   kind: OperationKind;
   name: string;
   namespace: string;
+  /** On a grouped row, the line of the slowest call in the group. */
   lineNumber: string | number | null;
   callCount: number;
   /**
@@ -62,6 +64,8 @@ export interface SlowOperation {
    */
   durationTotalMs: number;
   durationSelfMs: number;
+  /** Absent on an ungrouped row, where it is `durationSelfMs` again. */
+  durationSelfMaxMs?: number;
   selfPercentage: number;
   soqlCount: number;
   dmlCount: number;
@@ -88,7 +92,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     namespace,
     minSelfMs = 0,
     limit = 10,
-    groupBy,
+    groupBy = "name",
   } = args;
 
   const apexLog = await loadApexLog(logFilePath);
@@ -101,9 +105,11 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
       (!namespace || operation.namespace === namespace),
   );
 
+  const grouped = groupBy !== "none";
+
   // Grouped before the threshold, so a query that is slow only because it runs
   // four hundred times is kept rather than dropped call by call.
-  const rows = groupBy ? groupOperations(selected, groupBy) : selected;
+  const rows = grouped ? groupOperations(selected, groupBy) : selected;
 
   const ranked = rows
     // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
@@ -127,6 +133,11 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     callCount: operation.callCount,
     durationTotalMs: roundMs(operation.durationTotalNs / NS_TO_MS),
     durationSelfMs: roundMs(operation.durationSelfNs / NS_TO_MS),
+    // On an ungrouped row the slowest call is the row itself, and a response
+    // states each figure once.
+    ...(grouped && {
+      durationSelfMaxMs: roundMs(operation.durationSelfMaxNs / NS_TO_MS),
+    }),
     selfPercentage: roundPercent(selfPercentageOf(operation)),
     soqlCount: operation.soqlCount,
     dmlCount: operation.dmlCount,
