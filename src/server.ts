@@ -46,6 +46,18 @@ const confirmationCodec = createRequestStateCodec<ConfirmationState>({
   key: randomBytes(32),
 });
 
+/**
+ * Whether this server's configuration reaches the tool definitions.
+ *
+ * Two servers that answer `tools/list` differently must not share a cached
+ * answer, so extend this whenever a new option changes a name, a schema or a
+ * description. `--no-apex-execution` does: it stamps a disabled marker into
+ * `apexlog_execute_anonymous`.
+ */
+function definitionsVaryByConfig(config: Required<ServerConfig>): boolean {
+  return config.apexExecutionDisabled;
+}
+
 export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const allowProductionOrgs = config.allowProductionOrgs ?? false;
   const apexExecutionDisabled = config.apexExecutionDisabled ?? false;
@@ -65,10 +77,21 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },
-      // The tool definitions are fixed for the life of the process and hold
-      // nothing about the caller, so a client may cache them for an hour and a
-      // shared cache may hold one copy for everyone.
-      cacheHints: { "tools/list": { ttlMs: 3_600_000, cacheScope: "public" } },
+      // The tool definitions are fixed for the life of the process, so an hour
+      // is safe whatever they say. "public" additionally claims one copy serves
+      // every caller, which holds only while the definitions are a pure
+      // function of the code — see definitionsVaryByConfig.
+      cacheHints: {
+        "tools/list": {
+          ttlMs: 3_600_000,
+          cacheScope: definitionsVaryByConfig({
+            allowProductionOrgs,
+            apexExecutionDisabled,
+          })
+            ? "private"
+            : "public",
+        },
+      },
     },
   );
 

@@ -241,6 +241,19 @@ describe("createApexLogServer", () => {
       );
     });
 
+    it("should not offer the definitions to a shared cache when a flag changed them", async () => {
+      createApexLogServer({ apexExecutionDisabled: true });
+
+      expect(McpServer).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          cacheHints: {
+            "tools/list": { ttlMs: 3_600_000, cacheScope: "private" },
+          },
+        }),
+      );
+    });
+
     it("should setup error handling", async () => {
       runStdioServer();
 
