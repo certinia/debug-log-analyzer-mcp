@@ -6,13 +6,20 @@ import { Connection, StateAggregator } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
-  getOrCreateDebugLevelId,
+  ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
   LOG_LEVELS,
   TRACE_CATEGORIES,
   type DebugLevelInput,
+  type TraceConfig,
 } from "../salesforce/debugLevels.js";
+import {
+  executeAnonymousWithLog,
+  levelsWereOverridden,
+} from "../salesforce/anonymousApex.js";
 import { ensureTraceFlag } from "../salesforce/traceFlags.js";
+import { loadApexLog } from "./apexLogSource.js";
+import { NS_TO_MS, roundMs } from "./responseShaping.js";
 import { resolveOrg } from "../salesforce/connection.js";
 import {
   classifyOrg,
@@ -24,10 +31,8 @@ import {
   type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
 
-type ApexLogRecord = {
-  Id: string;
-  DurationMilliseconds: number;
-};
+/** Connect, set the trace flag, execute, write. */
+const PROGRESS_STEPS = 4;
 
 const logLevelSchema = z.enum(LOG_LEVELS);
 
@@ -186,9 +191,11 @@ export async function executeAnonymous(
     return toolError(APEX_EXECUTION_DISABLED_MESSAGE);
   }
 
+  const report = progressReporter(ctx);
   const rootPaths = await getRootPaths(server);
   const projectPath = rootPaths[0];
 
+  await report("Connecting to the org");
   const org = await resolveOrg(projectPath, targetOrg);
   const connection = org.getConnection();
 
@@ -225,33 +232,20 @@ export async function executeAnonymous(
     return toolError(decision.reason);
   }
 
+  await report("Setting the trace flag");
   const userId = await getUserIdByUsername(connection, username);
-  await validateTraceFlag(connection, userId, debugLevel);
+  const levels = await ensureTracing(connection, userId, debugLevel);
 
-  const apexResult = await connection.tooling.executeAnonymous(apex);
+  await report("Executing the Apex");
+  const apexResult = await executeAnonymousWithLog(connection, apex, levels);
 
-  if (!apexResult || !apexResult.compiled) {
+  if (!apexResult.compiled) {
     throw new Error(
       `Apex could not be compiled at line ${apexResult.line}, column ${apexResult.column}: ${apexResult.compileProblem}`,
     );
   }
 
-  // Note: There's no way to get the specific log ID from executeAnonymous.
-  // We retrieve the most recent log for this user, which could be incorrect
-  // if another process creates a log between execution and this query.
-  // Future enhancement: present a list of recent logs for user selection.
-  const logRecord = (await connection
-    .sobject("ApexLog")
-    .findOne({ LogUserId: userId }, ["Id", "DurationMilliseconds"], {
-      sort: { StartTime: -1 },
-    })) as ApexLogRecord | null;
-
-  if (!logRecord) {
-    throw new Error(`Could not retrieve log from anonymous execution.`);
-  }
-
-  const logId = logRecord.Id;
-  const logBody = await connection.request(`/sobjects/ApexLog/${logId}/Body/`);
+  await report("Writing the debug log");
 
   // Absolute, because `filePath` below goes straight back to the analysis
   // tools, which refuse a relative path. A relative `outputDir` anchors to the
@@ -264,9 +258,14 @@ export async function executeAnonymous(
   // Resolves to the first directory created, or undefined when it already existed.
   const createdDir = await fs.mkdir(outputDir, { recursive: true });
 
-  const filePath = path.join(outputDir, `${logId}.log`);
-  await fs.writeFile(filePath, logBody as string, "utf-8");
+  const logId = await findStoredLogId(connection, userId, apexResult.debugLog);
+  const filePath = path.join(outputDir, `${logId ?? `apex-${Date.now()}`}.log`);
+  await fs.writeFile(filePath, apexResult.debugLog, "utf-8");
   const stats = await fs.stat(filePath);
+  // The log itself is the one source of its duration, so this figure and
+  // `apexlog_get_summary.durationTotalMs` are the same number. Parsing it here
+  // also warms the cache the analysis tools read.
+  const parsedLog = await loadApexLog(filePath);
 
   // Only for a caller-given directory: the default is inside the project root
   // by construction, so checking it could only ever say the obvious.
@@ -284,11 +283,15 @@ export async function executeAnonymous(
           fileSizeBytes: stats.size,
           org: orgLabel,
           orgType: classification,
-          succeeded: apexResult.success,
+          succeeded: apexResult.succeeded,
           ...(apexResult.exceptionMessage && {
             exceptionMessage: apexResult.exceptionMessage,
           }),
-          durationMs: logRecord.DurationMilliseconds,
+          durationMs: roundMs(parsedLog.duration.total / NS_TO_MS),
+          // True when a Developer Console trace flag outranked the levels asked
+          // for, which is the one thing that can silently change what was
+          // captured. Reported either way, for the same reason as below.
+          levelsOverridden: levelsWereOverridden(levels, apexResult.debugLog),
           // A fact about this run, not advice about it: the directory is new, so
           // nothing yet ignores it. Reported either way, because an absent field
           // cannot be told apart from one this server never worked out.
@@ -299,11 +302,68 @@ export async function executeAnonymous(
   };
 }
 
-async function validateTraceFlag(
+/**
+ * Keep the org's trace flag current and report the levels it carries.
+ *
+ * The flag governs every other transaction this user runs; this call's own log
+ * comes from the debug header, which asks for the same levels.
+ */
+async function ensureTracing(
   connection: Connection,
   userId: string,
   debugLevel?: DebugLevelInput,
-) {
-  const debugLevelId = await getOrCreateDebugLevelId(connection, debugLevel);
-  await ensureTraceFlag(connection, userId, debugLevelId);
+): Promise<Required<TraceConfig>> {
+  const { id, levels } = await ensureDebugLevel(connection, debugLevel);
+  await ensureTraceFlag(connection, userId, id);
+  return levels;
+}
+
+/**
+ * The id Salesforce filed this log under, matched on its byte length.
+ *
+ * Salesforce hands out no log id for anonymous Apex, so this only names the
+ * file the way `sf` names it. A miss costs a filename and nothing else, which
+ * is why the length is matched rather than the newest row taken, and why a
+ * failed query is reported and stepped over: the log is already in hand and
+ * cannot be fetched again.
+ */
+async function findStoredLogId(
+  connection: Connection,
+  userId: string,
+  debugLog: string,
+): Promise<string | undefined> {
+  try {
+    const record = (await connection
+      .sobject("ApexLog")
+      .findOne(
+        { LogUserId: userId, LogLength: Buffer.byteLength(debugLog, "utf-8") },
+        ["Id"],
+        { sort: { StartTime: -1 } },
+      )) as { Id: string } | null;
+    return record?.Id;
+  } catch (error) {
+    console.error(
+      `[apex-log-mcp] Could not match the debug log to a stored ApexLog: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Report each step, but only to a caller that asked for progress. The spec
+ * gives a token only when it wants the notifications.
+ */
+function progressReporter(ctx: ServerContext): (step: string) => Promise<void> {
+  const progressToken = ctx.mcpReq._meta?.progressToken;
+  let progress = 0;
+  return async (message: string) => {
+    if (progressToken === undefined) {
+      return;
+    }
+    progress += 1;
+    await ctx.mcpReq.notify({
+      method: "notifications/progress",
+      params: { progressToken, progress, total: PROGRESS_STEPS, message },
+    });
+  };
 }
