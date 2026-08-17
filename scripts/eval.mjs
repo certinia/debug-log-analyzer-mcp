@@ -240,6 +240,15 @@ const DEFINITION_BUDGET = {
 };
 
 /**
+ * What `tools/list` must tell a 2026-07-28 client about caching its answer. The
+ * definitions are fixed for the life of the process and hold nothing about the
+ * caller, so an hour and a shared cache are both safe. Without it the SDK emits
+ * the conservative `{ ttlMs: 0, cacheScope: "private" }` and every client pays
+ * the definition budget again on every turn.
+ */
+const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
+
+/**
  * The whole of `tools/list` must stay under what 1.x charged for it. The per-tool
  * budgets cannot assert this on their own — a fifth tool would pass all four and
  * still put the total back over the baseline.
@@ -269,8 +278,19 @@ const CASES = [
   ["governor-heavy", "minimal"].map((fixture) => ({ tool, fixture })),
 );
 
+/**
+ * What a 2026-07-28 request carries in place of the `initialize` handshake. The
+ * era is per connection, so a client that has initialized stays legacy however a
+ * later request is addressed.
+ */
+const MODERN_ENVELOPE = {
+  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+  "io.modelcontextprotocol/clientCapabilities": {},
+  "io.modelcontextprotocol/clientInfo": { name: "apex-log-mcp-eval", version: "0" },
+};
+
 /** Minimal MCP stdio client: initialize, then one tools/call per case. */
-function createClient() {
+function createClient(era = "legacy") {
   const child = spawn("node", ["--max-old-space-size=8192", SERVER], {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -302,11 +322,16 @@ function createClient() {
     new Promise((resolve) => {
       const id = nextId++;
       pending.set(id, resolve);
-      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+      const addressed =
+        era === "modern" ? { ...params, _meta: MODERN_ENVELOPE } : params;
+      child.stdin.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id, method, params: addressed })}\n`,
+      );
     });
 
   return {
     async start() {
+      if (era === "modern") return;
       await request("initialize", {
         protocolVersion: "2025-06-18",
         capabilities: {},
@@ -316,13 +341,12 @@ function createClient() {
         `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
       );
     },
-    async listTools() {
+    async toolsList() {
       const response = await request("tools/list", {});
-      const tools = response.result?.tools;
-      if (!Array.isArray(tools)) {
+      if (!Array.isArray(response.result?.tools)) {
         throw new Error(`tools/list returned no tools: ${JSON.stringify(response)}`);
       }
-      return tools;
+      return response.result;
     },
     async callTool(name, args) {
       const response = await request("tools/call", { name, arguments: args });
@@ -551,6 +575,17 @@ function checkDefinitionBudget(costs, failures) {
   }
 }
 
+/** Only a 2026-07-28 connection carries the fields, so this needs a modern client. */
+function checkCacheHints(result, failures) {
+  for (const [field, expected] of Object.entries(TOOLS_LIST_CACHE_HINT)) {
+    if (result[field] !== expected) {
+      failures.push(
+        `tools/list: ${field} is ${JSON.stringify(result[field])}, not ${JSON.stringify(expected)}`,
+      );
+    }
+  }
+}
+
 function checkSelectionKeywords(costs, failures) {
   for (const { name, description } of costs) {
     const lowered = description.toLowerCase();
@@ -667,8 +702,8 @@ async function checkReadme(blocks, failures, update) {
 }
 
 /** One server process for the whole run, stopped however the run ends. */
-async function withClient(run) {
-  const client = createClient();
+async function withClient(run, era) {
+  const client = createClient(era);
   await client.start();
   try {
     return await run(client);
@@ -720,7 +755,7 @@ async function main() {
       );
     }
 
-    const costs = definitionCosts(await client.listTools());
+    const costs = definitionCosts((await client.toolsList()).tools);
     checkDefinitionBudget(costs, failures);
     checkSelectionKeywords(costs, failures);
     await checkReadme(renderTokenCost(costs, responses), failures, update);
@@ -729,6 +764,13 @@ async function main() {
       `${update ? "updated" : "checked"} tool definitions — ~${total} tokens across ${costs.length} tools`,
     );
   });
+
+  await withClient(async (client) => {
+    checkCacheHints(await client.toolsList(), failures);
+    console.log(
+      `checked tools/list cache hint — ttlMs ${TOOLS_LIST_CACHE_HINT.ttlMs}, cacheScope ${TOOLS_LIST_CACHE_HINT.cacheScope}`,
+    );
+  }, "modern");
 
   if (failures.length) {
     console.error(`\n${failures.length} eval failure(s):`);
