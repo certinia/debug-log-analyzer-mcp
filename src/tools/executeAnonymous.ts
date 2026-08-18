@@ -28,6 +28,7 @@ import {
 import {
   authorizeExecution,
   APEX_EXECUTION_DISABLED_MESSAGE,
+  type ConsumeConfirmation,
   type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
 
@@ -96,6 +97,7 @@ export type ExecuteAnonymousPolicy = {
   apexExecutionDisabled: boolean;
   classificationCache: Map<string, OrgClassification>;
   mintConfirmationState: MintConfirmationState;
+  consumeConfirmation: ConsumeConfirmation;
 };
 
 const EXECUTE_ANONYMOUS_DESCRIPTION =
@@ -222,6 +224,7 @@ export async function executeAnonymous(
   const decision = await authorizeExecution({
     ctx,
     mintConfirmationState: policy.mintConfirmationState,
+    consumeConfirmation: policy.consumeConfirmation,
     classification,
     orgId: org.getOrgId(),
     orgLabel,

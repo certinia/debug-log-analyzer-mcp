@@ -74,7 +74,10 @@ import { resolveOrg } from "../src/salesforce/connection";
 import { loadApexLog } from "../src/tools/apexLogSource";
 import type { ApexLog } from "../src/ApexLogParser";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
-import type { ConfirmationState } from "../src/policy/orgExecutionPolicy";
+import {
+  createConfirmationLedger,
+  type ConfirmationState,
+} from "../src/policy/orgExecutionPolicy";
 
 const mockMkdir = fs.mkdir as jest.MockedFunction<typeof fs.mkdir>;
 const mockWriteFile = fs.writeFile as jest.MockedFunction<typeof fs.writeFile>;
@@ -146,6 +149,7 @@ function policy(
     apexExecutionDisabled: false,
     classificationCache: new Map<string, OrgClassification>(),
     mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
+    consumeConfirmation: createConfirmationLedger(),
     ...overrides,
   };
 }
