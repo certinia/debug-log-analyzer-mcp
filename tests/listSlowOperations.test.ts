@@ -422,6 +422,34 @@ describe("listSlowOperations", () => {
       expect(await ranked()).not.toHaveProperty("queryPlans");
     });
 
+    it("states one plan per query text however many calls ranked", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {}),
+        explainedQuery({ text: "SELECT Id", totalNs: 200 * MS }, {}),
+      );
+
+      expect(
+        (await ranked({ ...ARGS, groupBy: "none" })).queryPlans,
+      ).toHaveLength(1);
+    });
+
+    it("explains the queries behind a row grouped by namespace", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery(
+          { text: "SELECT Id", namespace: "Custom", totalNs: 500 * MS },
+          {},
+        ),
+      );
+
+      expect(
+        (await ranked({ ...ARGS, groupBy: "namespace" })).queryPlans?.map(
+          (p) => p.name,
+        ),
+      ).toEqual(["SELECT Id"]);
+    });
+
     it("drops a plan the log did not record in full", async () => {
       mockLog(
         1000 * MS,

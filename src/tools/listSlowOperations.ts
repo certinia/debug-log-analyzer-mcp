@@ -10,8 +10,10 @@ import {
   GROUP_BY,
   groupOperations,
   listOperations,
+  operationGroupKey,
   OPERATION_KINDS,
   type CaptureLevels,
+  type GroupBy,
   type Operation,
   type OperationKind,
 } from "./operations.js";
@@ -95,8 +97,9 @@ export interface SlowOperationsResult extends CaptureLevels {
   matchedCount: number;
   operations: SlowOperation[];
   /**
-   * What the query optimiser decided about the queries among those rows, one
-   * row per query it explained. Absent when it explained none of them: an
+   * What the query optimiser decided about the queries behind those rows, one
+   * row per distinct query text it explained — a grouped row can stand for
+   * several. Absent when it explained none of them: an
    * explain is emitted at `DB,FINEST` alone, and `dbLevel` says whether the log
    * could carry one.
    *
@@ -169,11 +172,31 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
 
   // Only the returned rows are explained, so the table qualifies what the
   // response says rather than ranking a second time; and a log with no query
-  // among its slowest operations pays nothing for the second walk.
-  const queries = ranked.filter((operation) => operation.kind === "soql");
-  const explained = queries.length ? listQueryPlans(apexLog) : undefined;
-  const queryPlans = queries
-    .map((operation) => explained?.get(operation.name))
+  // among its slowest operations pays nothing for the second walk. A grouped
+  // row is named after its group, which is the query text under `name` and the
+  // namespace otherwise, so the queries behind it are found by group key. The
+  // set folds the repeats: one query text is one plan however many rows or
+  // calls carry it.
+  const groupKeyBy: GroupBy | null = groupBy === "none" ? null : groupBy;
+  const rankedKeys = new Set(
+    groupKeyBy
+      ? ranked.map((operation) => operationGroupKey(operation, groupKeyBy))
+      : [],
+  );
+  const queryNames = new Set(
+    (groupKeyBy ? selected : ranked)
+      .filter(
+        (operation) =>
+          operation.kind === "soql" &&
+          (!groupKeyBy ||
+            rankedKeys.has(operationGroupKey(operation, groupKeyBy))),
+      )
+      .map((operation) => operation.name),
+  );
+
+  const explained = queryNames.size ? listQueryPlans(apexLog) : undefined;
+  const queryPlans = [...queryNames]
+    .map((name) => explained?.get(name))
     .filter((plan): plan is QueryPlan => plan !== undefined);
 
   const result: SlowOperationsResult = {
