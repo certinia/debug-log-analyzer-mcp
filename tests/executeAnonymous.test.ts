@@ -105,6 +105,9 @@ const TEST_INSTANCE_URL = "https://example.my.salesforce.com";
 const TEST_API_VERSION = "67.0";
 
 /** A log header carrying exactly the levels the DebugLevel record holds. */
+/** The slack `findStoredLogId` allows between this clock and the org's. */
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 const DEFAULT_LOG_HEADER = `${TEST_API_VERSION} APEX_CODE,FINE;APEX_PROFILING,FINE;CALLOUT,DEBUG;DATA_ACCESS,FINEST;DB,FINEST;NBA,INFO;SYSTEM,DEBUG;VALIDATION,DEBUG;VISUALFORCE,FINE;WAVE,INFO;WORKFLOW,FINE`;
 
 /** The same log with APEX_CODE lowered, as a Developer Console flag would. */
@@ -483,10 +486,76 @@ describe("Execute Anonymous", () => {
         {
           LogUserId: customUserId,
           LogLength: Buffer.byteLength(testLogBody, "utf-8"),
+          StartTime: { $gte: expect.any(Date) },
         },
         ["Id"],
         { sort: { StartTime: -1 } },
       );
+    });
+
+    // Without the bound, a log of the same length from any earlier run answers
+    // the query and names this run's file after it.
+    it("matches only logs filed no earlier than this run", async () => {
+      const before = Date.now();
+
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      const { StartTime } = mockFindOne.mock.calls[0][0] as {
+        StartTime: { $gte: Date };
+      };
+      expect(StartTime.$gte.getTime()).toBeGreaterThanOrEqual(
+        before - CLOCK_SKEW_MS,
+      );
+      expect(StartTime.$gte.getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    // The id is matched, not given, so a wrong match must cost a filename
+    // rather than the log an earlier run left there.
+    it("writes elsewhere rather than over a log already filed under the id", async () => {
+      const consoleError = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const exists = Object.assign(new Error("EEXIST"), { code: "EEXIST" });
+      mockWriteFile.mockRejectedValueOnce(exists);
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(mockWriteFile).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining(`${testLogId}.log`),
+        testLogBody,
+        { encoding: "utf-8", flag: "wx" },
+      );
+      expect(toonDecode(result).filePath).toMatch(/apex-\d+\.log$/);
+      consoleError.mockRestore();
+    });
+
+    // An empty file and a zero duration otherwise read as a run that did
+    // nothing rather than a log that was never captured.
+    it("says so when the org returned no debug log", async () => {
+      mockRequest.mockResolvedValue(soapResponse({}, ""));
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      const payload = toonDecode(result);
+      expect(payload.warning).toContain("no debug log");
+      expect(payload.durationMs).toBe(0);
+      expect(mockLoadApexLog).not.toHaveBeenCalled();
     });
 
     it("should handle multi-line Apex code", async () => {
@@ -982,7 +1051,7 @@ describe("Execute Anonymous", () => {
       expect(mockWriteFile).toHaveBeenCalledWith(
         expect.stringContaining(`${testLogId}.log`),
         testLogBody,
-        "utf-8",
+        { encoding: "utf-8", flag: "wx" },
       );
     });
 
@@ -1000,7 +1069,7 @@ describe("Execute Anonymous", () => {
       expect(mockWriteFile).toHaveBeenCalledWith(
         expect.stringMatching(/^\/custom\/output\/.+\.log$/),
         testLogBody,
-        "utf-8",
+        { encoding: "utf-8", flag: "wx" },
       );
     });
 
@@ -1022,7 +1091,7 @@ describe("Execute Anonymous", () => {
       expect(mockWriteFile).toHaveBeenCalledWith(
         expect.stringMatching(/^\/my\/project\/logs\/.+\.log$/),
         testLogBody,
-        "utf-8",
+        { encoding: "utf-8", flag: "wx" },
       );
     });
 

@@ -34,6 +34,12 @@ import {
 /** Connect, set the trace flag, execute, write. */
 const PROGRESS_STEPS = 4;
 
+/** How far this machine's clock and the org's are allowed to differ. */
+const CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+const NO_LOG_CAPTURED_WARNING =
+  "Salesforce returned no debug log for this run, so the saved file is empty and durationMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
+
 const logLevelSchema = z.enum(LOG_LEVELS);
 
 /**
@@ -237,6 +243,7 @@ export async function executeAnonymous(
   const levels = await ensureTracing(connection, userId, debugLevel);
 
   await report("Executing the Apex");
+  const startedAt = new Date();
   const apexResult = await executeAnonymousWithLog(connection, apex, levels);
 
   if (!apexResult.compiled) {
@@ -258,20 +265,32 @@ export async function executeAnonymous(
   // Resolves to the first directory created, or undefined when it already existed.
   const createdDir = await fs.mkdir(outputDir, { recursive: true });
 
-  const logId = await findStoredLogId(connection, userId, apexResult.debugLog);
-  const filePath = path.join(outputDir, `${logId ?? `apex-${Date.now()}`}.log`);
-  await fs.writeFile(filePath, apexResult.debugLog, "utf-8");
+  const logId = await findStoredLogId(
+    connection,
+    userId,
+    apexResult.debugLog,
+    startedAt,
+  );
+  const filePath = await writeDebugLog(outputDir, logId, apexResult.debugLog);
   const stats = await fs.stat(filePath);
   // The log itself is the one source of its duration, so this figure and
   // `apexlog_get_summary.durationTotalMs` are the same number. Parsing it here
-  // also warms the cache the analysis tools read.
-  const parsedLog = await loadApexLog(filePath);
-
-  // Only for a caller-given directory: the default is inside the project root
-  // by construction, so checking it could only ever say the obvious.
-  const warning = args.outputDir
-    ? await warnIfOutsideRoots(outputDir, rootPaths)
+  // also warms the cache the analysis tools read. An empty log is not parsed:
+  // there is no duration to read out of it, and no cache worth warming.
+  const parsedLog = apexResult.debugLog
+    ? await loadApexLog(filePath)
     : undefined;
+
+  const warnings = [
+    // Said outright, because an empty file and a zero duration otherwise read
+    // as a run that did nothing rather than a log that was never captured.
+    apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
+    // Only for a caller-given directory: the default is inside the project root
+    // by construction, so checking it could only ever say the obvious.
+    args.outputDir
+      ? await warnIfOutsideRoots(outputDir, rootPaths)
+      : undefined,
+  ].filter((text): text is string => text !== undefined);
 
   return {
     content: [
@@ -279,7 +298,7 @@ export async function executeAnonymous(
         type: "text" as const,
         text: encode({
           filePath,
-          ...(warning && { warning }),
+          ...(warnings.length && { warning: warnings.join(" ") }),
           fileSizeBytes: stats.size,
           org: orgLabel,
           orgType: classification,
@@ -287,7 +306,9 @@ export async function executeAnonymous(
           ...(apexResult.exceptionMessage && {
             exceptionMessage: apexResult.exceptionMessage,
           }),
-          durationMs: roundMs(parsedLog.duration.total / NS_TO_MS),
+          durationMs: parsedLog
+            ? roundMs(parsedLog.duration.total / NS_TO_MS)
+            : 0,
           // True when a Developer Console trace flag outranked the levels asked
           // for, which is the one thing that can silently change what was
           // captured. Reported either way, for the same reason as below.
@@ -319,24 +340,70 @@ async function ensureTracing(
 }
 
 /**
- * The id Salesforce filed this log under, matched on its byte length.
+ * Write the log out, under the id Salesforce filed it as when there is one,
+ * and never over a file already there: the id is matched rather than given, so
+ * a wrong match must cost a filename and not an earlier run's log.
+ */
+async function writeDebugLog(
+  outputDir: string,
+  logId: string | undefined,
+  debugLog: string,
+): Promise<string> {
+  const fallbackPath = path.join(outputDir, `apex-${Date.now()}.log`);
+  if (logId) {
+    const filePath = path.join(outputDir, `${logId}.log`);
+    try {
+      await fs.writeFile(filePath, debugLog, { encoding: "utf-8", flag: "wx" });
+      return filePath;
+    } catch (error) {
+      if (!isAlreadyExists(error)) {
+        throw error;
+      }
+      console.error(
+        `[apex-log-mcp] ${filePath} already holds a log, so this run was written to ${fallbackPath} instead.`,
+      );
+    }
+  }
+  await fs.writeFile(fallbackPath, debugLog, "utf-8");
+  return fallbackPath;
+}
+
+function isAlreadyExists(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error as NodeJS.ErrnoException).code === "EEXIST"
+  );
+}
+
+/**
+ * The id Salesforce filed this log under, matched on its byte length and on
+ * having been filed no earlier than this run.
  *
  * Salesforce hands out no log id for anonymous Apex, so this only names the
  * file the way `sf` names it. A miss costs a filename and nothing else, which
  * is why the length is matched rather than the newest row taken, and why a
  * failed query is reported and stepped over: the log is already in hand and
- * cannot be fetched again.
+ * cannot be fetched again. Without the time bound, a log of the same length
+ * from any earlier run answers the query.
  */
 async function findStoredLogId(
   connection: Connection,
   userId: string,
   debugLog: string,
+  startedAt: Date,
 ): Promise<string | undefined> {
+  // `StartTime` is org time and `startedAt` is this machine's, so the bound is
+  // slackened by the clock skew the two can carry between them.
+  const since = new Date(startedAt.getTime() - CLOCK_SKEW_MS);
   try {
     const record = (await connection
       .sobject("ApexLog")
       .findOne(
-        { LogUserId: userId, LogLength: Buffer.byteLength(debugLog, "utf-8") },
+        {
+          LogUserId: userId,
+          LogLength: Buffer.byteLength(debugLog, "utf-8"),
+          StartTime: { $gte: since },
+        },
         ["Id"],
         { sort: { StartTime: -1 } },
       )) as { Id: string } | null;
@@ -352,6 +419,10 @@ async function findStoredLogId(
 /**
  * Report each step, but only to a caller that asked for progress. The spec
  * gives a token only when it wants the notifications.
+ *
+ * A failed notification is reported and stepped over. The Apex has already run
+ * by the last step, so a rejected notify must not throw away the log it just
+ * produced.
  */
 function progressReporter(ctx: ServerContext): (step: string) => Promise<void> {
   const progressToken = ctx.mcpReq._meta?.progressToken;
@@ -361,9 +432,15 @@ function progressReporter(ctx: ServerContext): (step: string) => Promise<void> {
       return;
     }
     progress += 1;
-    await ctx.mcpReq.notify({
-      method: "notifications/progress",
-      params: { progressToken, progress, total: PROGRESS_STEPS, message },
-    });
+    try {
+      await ctx.mcpReq.notify({
+        method: "notifications/progress",
+        params: { progressToken, progress, total: PROGRESS_STEPS, message },
+      });
+    } catch (error) {
+      console.error(
+        `[apex-log-mcp] Could not report progress: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   };
 }
