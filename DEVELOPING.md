@@ -260,6 +260,13 @@ asked for the work. `DMLBeginLine` pins `namespace = "default"` however the DML 
 `SOQLExecuteBeginLine` and `SOSLExecuteBeginLine` carry no namespace logic at all and so inherit the
 caller's. The caller is a second fact, and `Operation.callerNamespace` holds it.
 
+It is read off the **direct parent event**, not off the nearest ancestor that ranks as an operation.
+Measured over 298 real logs and 1,178,604 operations the two readings agree on every row, because
+the parser copies a namespace down to every child that has none. The only rows where they could
+diverge are the 289 whose parent is the `EXECUTION_STARTED` frame, and that frame is `default`. So
+the reading is the cheaper one to reason about rather than a different answer: it holds even if the
+set of frames the ranking skips grows.
+
 It does not earn a column. Measured over two real logs:
 
 | log | rows | caller differs |
