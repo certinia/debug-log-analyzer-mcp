@@ -20,7 +20,7 @@ jest.mock("../src/salesforce/users", () => ({
 // real ones, because the input schema is built from them at import time.
 jest.mock("../src/salesforce/debugLevels", () => ({
   ...jest.requireActual("../src/salesforce/debugLevels"),
-  getOrCreateDebugLevelId: jest.fn(),
+  ensureDebugLevel: jest.fn(),
 }));
 
 jest.mock("../src/salesforce/traceFlags", () => ({
@@ -29,6 +29,11 @@ jest.mock("../src/salesforce/traceFlags", () => ({
 
 jest.mock("../src/salesforce/connection", () => ({
   resolveOrg: jest.fn(),
+}));
+
+// The written file is never on disk here, so the parse cannot be the real one.
+jest.mock("../src/tools/apexLogSource", () => ({
+  loadApexLog: jest.fn(),
 }));
 
 jest.mock("@salesforce/core", () => {
@@ -60,9 +65,14 @@ import {
   ExecuteAnonymousArgs,
 } from "../src/tools/executeAnonymous";
 import { getUserIdByUsername } from "../src/salesforce/users";
-import { getOrCreateDebugLevelId } from "../src/salesforce/debugLevels";
+import {
+  ensureDebugLevel,
+  DEFAULT_TRACE_CONFIG,
+} from "../src/salesforce/debugLevels";
 import { ensureTraceFlag } from "../src/salesforce/traceFlags";
 import { resolveOrg } from "../src/salesforce/connection";
+import { loadApexLog } from "../src/tools/apexLogSource";
+import type { ApexLog } from "../src/ApexLogParser";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
 import type { ConfirmationState } from "../src/policy/orgExecutionPolicy";
 
@@ -71,6 +81,10 @@ const mockWriteFile = fs.writeFile as jest.MockedFunction<typeof fs.writeFile>;
 const mockStat = fs.stat as jest.MockedFunction<typeof fs.stat>;
 
 const mockResolveOrg = resolveOrg as jest.MockedFunction<typeof resolveOrg>;
+const mockEnsureDebugLevel = ensureDebugLevel as jest.MockedFunction<
+  typeof ensureDebugLevel
+>;
+const mockLoadApexLog = loadApexLog as jest.MockedFunction<typeof loadApexLog>;
 const mockConfigAggregatorCreate = ConfigAggregator.create as jest.Mock;
 const mockStateAggregatorGetInstance = StateAggregator.getInstance as jest.Mock;
 
@@ -84,6 +98,33 @@ const SANDBOX_ORG_INFO = {
 };
 
 const PRODUCTION_ORG_INFO = { ...SANDBOX_ORG_INFO, IsSandbox: false };
+
+const TEST_ORG_ID = "00D000000000001";
+const TEST_SESSION_ID = `${TEST_ORG_ID}!sessionpart`;
+const TEST_INSTANCE_URL = "https://example.my.salesforce.com";
+const TEST_API_VERSION = "67.0";
+
+/** A log header carrying exactly the levels the DebugLevel record holds. */
+const DEFAULT_LOG_HEADER = `${TEST_API_VERSION} APEX_CODE,FINE;APEX_PROFILING,FINE;CALLOUT,DEBUG;DATA_ACCESS,FINEST;DB,FINEST;NBA,INFO;SYSTEM,DEBUG;VALIDATION,DEBUG;VISUALFORCE,FINE;WAVE,INFO;WORKFLOW,FINE`;
+
+/** The same log with APEX_CODE lowered, as a Developer Console flag would. */
+const OVERRIDDEN_LOG_HEADER = DEFAULT_LOG_HEADER.replace(
+  "APEX_CODE,FINE",
+  "APEX_CODE,ERROR",
+);
+
+const XML_ESCAPES: Record<string, string> = {
+  "<": "&lt;",
+  ">": "&gt;",
+  "&": "&amp;",
+  "'": "&apos;",
+  '"': "&quot;",
+};
+
+/** The Apex as the envelope has to carry it. */
+function xmlEscaped(value: string): string {
+  return value.replace(/[<>&'"]/g, (char) => XML_ESCAPES[char] ?? char);
+}
 
 // The real codec, so a retried call only carries state this server minted.
 const codec = createRequestStateCodec<ConfirmationState>({
@@ -107,11 +148,16 @@ function policy(
 }
 
 /** A call carrying no confirmation: the first round of any flow. */
-function makeCtx(state?: ConfirmationState, inputResponses?: unknown) {
+function makeCtx(
+  state?: ConfirmationState,
+  inputResponses?: unknown,
+  extra: { _meta?: unknown; notify?: jest.Mock } = {},
+) {
   return {
     mcpReq: {
       requestState: () => state,
       inputResponses,
+      ...extra,
     },
   } as unknown as ServerContext;
 }
@@ -120,13 +166,11 @@ describe("Execute Anonymous", () => {
   const testUserId = "005000000000001";
   const testDebugLevelId = "07L000000000001";
   const testLogId = "07L000000000002";
-  const testLogBody = "APEX DEBUG LOG CONTENT HERE";
+  const testLogBody = `${DEFAULT_LOG_HEADER}\nAPEX DEBUG LOG CONTENT HERE\n`;
   const testApexCode = "System.debug('Hello World');";
 
   let mockServer: McpServer;
   let mockConnection: any;
-  let mockTooling: any;
-  let mockExecuteAnonymous: any;
   let mockRequest: any;
   let mockGetUsername: any;
   let mockSobject: any;
@@ -134,6 +178,41 @@ describe("Execute Anonymous", () => {
   let mockOrg: any;
   let mockRetrieveOrgInfo: jest.Mock;
   let ctx: ServerContext;
+
+  /** The parsed SOAP envelope `conn.request` hands back. */
+  function soapResponse(
+    result: Record<string, string> = {},
+    debugLog: string = testLogBody,
+  ) {
+    return {
+      "soapenv:Envelope": {
+        "soapenv:Header": { DebuggingInfo: { debugLog } },
+        "soapenv:Body": {
+          executeAnonymousResponse: {
+            result: {
+              compiled: "true",
+              success: "true",
+              line: "-1",
+              column: "-1",
+              ...result,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  /** The envelope body of the one POST this call made. */
+  function postedEnvelope(): string {
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+    return mockRequest.mock.calls[0][0].body as string;
+  }
+
+  function expectPostedApex(apex: string): void {
+    expect(postedEnvelope()).toContain(
+      `<apexcode>${xmlEscaped(apex)}</apexcode>`,
+    );
+  }
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -146,22 +225,19 @@ describe("Execute Anonymous", () => {
       },
     } as unknown as McpServer;
 
-    mockExecuteAnonymous = jest.fn();
-    mockRequest = jest.fn();
+    mockRequest = jest.fn().mockResolvedValue(soapResponse());
     mockGetUsername = jest.fn().mockReturnValue("test@example.com");
 
-    mockFindOne = jest.fn();
+    mockFindOne = jest.fn().mockResolvedValue({ Id: testLogId });
     mockSobject = jest.fn().mockReturnValue({ findOne: mockFindOne });
 
-    mockTooling = {
-      executeAnonymous: mockExecuteAnonymous,
-    };
-
     mockConnection = {
-      tooling: mockTooling,
       sobject: mockSobject,
       request: mockRequest,
       getUsername: mockGetUsername,
+      accessToken: TEST_SESSION_ID,
+      instanceUrl: TEST_INSTANCE_URL,
+      version: TEST_API_VERSION,
       userInfo: {
         id: testUserId,
       },
@@ -170,7 +246,7 @@ describe("Execute Anonymous", () => {
     mockRetrieveOrgInfo = jest.fn().mockResolvedValue(SANDBOX_ORG_INFO);
     mockOrg = {
       getConnection: jest.fn(() => mockConnection),
-      getOrgId: jest.fn(() => "00D000000000001"),
+      getOrgId: jest.fn(() => TEST_ORG_ID),
       retrieveOrganizationInformation: mockRetrieveOrgInfo,
     };
 
@@ -190,32 +266,21 @@ describe("Execute Anonymous", () => {
     (
       getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
     ).mockResolvedValue(testUserId);
-    (
-      getOrCreateDebugLevelId as jest.MockedFunction<
-        typeof getOrCreateDebugLevelId
-      >
-    ).mockResolvedValue(testDebugLevelId);
+    mockEnsureDebugLevel.mockResolvedValue({
+      id: testDebugLevelId,
+      levels: DEFAULT_TRACE_CONFIG,
+    });
     (
       ensureTraceFlag as jest.MockedFunction<typeof ensureTraceFlag>
     ).mockResolvedValue();
+    mockLoadApexLog.mockResolvedValue({
+      duration: { total: 150_000_000 },
+    } as ApexLog);
   });
 
   describe("executeAnonymous", () => {
     it("should successfully execute Apex and return log", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
 
       const result = await executeAnonymous(mockServer, args, ctx, policy());
 
@@ -223,25 +288,14 @@ describe("Execute Anonymous", () => {
         mockConnection,
         "test@example.com",
       );
-      expect(getOrCreateDebugLevelId).toHaveBeenCalledWith(
-        mockConnection,
-        undefined,
-      );
+      expect(ensureDebugLevel).toHaveBeenCalledWith(mockConnection, undefined);
       expect(ensureTraceFlag).toHaveBeenCalledWith(
         mockConnection,
         testUserId,
         testDebugLevelId,
       );
-      expect(mockExecuteAnonymous).toHaveBeenCalledWith(testApexCode);
+      expectPostedApex(testApexCode);
       expect(mockSobject).toHaveBeenCalledWith("ApexLog");
-      expect(mockFindOne).toHaveBeenCalledWith(
-        { LogUserId: testUserId },
-        ["Id", "DurationMilliseconds"],
-        { sort: { StartTime: -1 } },
-      );
-      expect(mockRequest).toHaveBeenCalledWith(
-        `/sobjects/ApexLog/${testLogId}/Body/`,
-      );
 
       const decoded = toonDecode(result);
       expect(decoded.filePath).toContain(`${testLogId}.log`);
@@ -249,7 +303,84 @@ describe("Execute Anonymous", () => {
       expect(decoded.org).toBe("test@example.com");
       expect(decoded.succeeded).toBe(true);
       expect(decoded.exceptionMessage).toBeUndefined();
-      expect(decoded.durationMs).toBe(150);
+      expect(decoded.levelsOverridden).toBe(false);
+    });
+
+    // The log is the one source of its own duration, so this figure and
+    // apexlog_get_summary.durationTotalMs are the same number.
+    it("reports the duration the written log parses to", async () => {
+      mockLoadApexLog.mockResolvedValue({
+        duration: { total: 2_500_000 },
+      } as ApexLog);
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(mockLoadApexLog).toHaveBeenCalledWith(
+        expect.stringContaining(`${testLogId}.log`),
+      );
+      expect(toonDecode(result).durationMs).toBe(2.5);
+    });
+
+    it("posts the SOAP envelope to the org id path segment", async () => {
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: "POST",
+          url: `${TEST_INSTANCE_URL}/services/Soap/s/${TEST_API_VERSION}/${TEST_ORG_ID}`,
+          headers: {
+            "content-type": "text/xml",
+            soapaction: "executeAnonymous",
+          },
+        }),
+      );
+    });
+
+    it("asks for every category at the level the DebugLevel record carries", async () => {
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      const envelope = postedEnvelope();
+      expect(envelope).toContain(
+        `<apex:sessionId>${TEST_SESSION_ID}</apex:sessionId>`,
+      );
+      // SOAP spells both halves in title case — DB is Db, FINEST is Finest.
+      expect(envelope).toContain(
+        "<apex:category>Apex_code</apex:category><apex:level>Fine</apex:level>",
+      );
+      expect(envelope).toContain(
+        "<apex:category>Db</apex:category><apex:level>Finest</apex:level>",
+      );
+      expect(envelope).not.toContain("Data_access");
+    });
+
+    it("reports levelsOverridden when the log came back at other levels", async () => {
+      mockRequest.mockResolvedValue(
+        soapResponse({}, `${OVERRIDDEN_LOG_HEADER}\nCONTENT\n`),
+      );
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(toonDecode(result).levelsOverridden).toBe(true);
     });
 
     it("should throw error when connection username cannot be determined", async () => {
@@ -261,21 +392,23 @@ describe("Execute Anonymous", () => {
       ).rejects.toThrow("Could not determine username from connection");
 
       expect(getUserIdByUsername).not.toHaveBeenCalled();
-      expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should throw error when Apex compilation fails", async () => {
       const args: ExecuteAnonymousArgs = { apex: "Invalid Apex;" };
 
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: false,
-        success: false,
-        line: 1,
-        column: 5,
-        compileProblem: "Unexpected token 'Invalid'",
-      });
+      mockRequest.mockResolvedValue(
+        soapResponse({
+          compiled: "false",
+          success: "false",
+          line: "1",
+          column: "5",
+          compileProblem: "Unexpected token 'Invalid'",
+        }),
+      );
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
@@ -284,62 +417,74 @@ describe("Execute Anonymous", () => {
       );
 
       expect(mockSobject).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockWriteFile).not.toHaveBeenCalled();
     });
 
-    it("should throw error when apexResult is null", async () => {
+    it("should throw error when the response carries no result", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      mockExecuteAnonymous.mockResolvedValue(null);
+      mockRequest.mockResolvedValue({});
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Cannot read properties of null");
+      ).rejects.toThrow("Apex could not be compiled");
 
-      expect(mockSobject).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockWriteFile).not.toHaveBeenCalled();
     });
 
-    it("should throw error when no log is found", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-
+    it("names the file with a timestamp when no stored log matches", async () => {
       mockFindOne.mockResolvedValue(null);
 
-      await expect(
-        executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Could not retrieve log from anonymous execution");
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
 
-      expect(mockRequest).not.toHaveBeenCalled();
+      expect(toonDecode(result).filePath).toMatch(/apex-\d+\.log$/);
+      expect(mockWriteFile).toHaveBeenCalled();
     });
 
-    it("should query for most recent log by StartTime", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+    // The log is already in hand and cannot be fetched again, so a failure to
+    // name it must not lose it.
+    it("falls back to a timestamp when the log query fails", async () => {
+      const consoleError = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      mockFindOne.mockRejectedValue(new Error("Query failed"));
 
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
 
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
+      expect(toonDecode(result).filePath).toMatch(/apex-\d+\.log$/);
+      expect(mockWriteFile).toHaveBeenCalled();
+      consoleError.mockRestore();
+    });
 
-      await executeAnonymous(mockServer, args, ctx, policy());
+    it("matches the stored log on its byte length", async () => {
+      const customUserId = "005CUSTOMUSERID";
+      (
+        getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
+      ).mockResolvedValue(customUserId);
+
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
 
       expect(mockFindOne).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.any(Array),
+        {
+          LogUserId: customUserId,
+          LogLength: Buffer.byteLength(testLogBody, "utf-8"),
+        },
+        ["Id"],
         { sort: { StartTime: -1 } },
       );
     });
@@ -350,231 +495,183 @@ describe("Execute Anonymous", () => {
         Integer y = 20;
         System.debug('Sum: ' + (x + y));
       `;
-      const args: ExecuteAnonymousArgs = { apex: multiLineApex };
 
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: multiLineApex },
+        ctx,
+        policy(),
+      );
 
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
-
-      const result = await executeAnonymous(mockServer, args, ctx, policy());
-
-      expect(mockExecuteAnonymous).toHaveBeenCalledWith(multiLineApex);
-      const decoded = toonDecode(result);
-      expect(decoded.filePath).toContain(`${testLogId}.log`);
+      expectPostedApex(multiLineApex);
+      expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
     it("should propagate errors from getUserIdByUsername", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const userError = new Error("User not found");
 
       const mockGetUserIdByUsername =
         getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>;
-      mockGetUserIdByUsername.mockRejectedValue(userError);
+      mockGetUserIdByUsername.mockRejectedValue(new Error("User not found"));
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("User not found");
 
-      expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it("should propagate errors from getOrCreateDebugLevelId", async () => {
+    it("should propagate errors from ensureDebugLevel", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const debugLevelError = new Error("Failed to create debug level");
 
-      const mockGetOrCreateDebugLevelId =
-        getOrCreateDebugLevelId as jest.MockedFunction<
-          typeof getOrCreateDebugLevelId
-        >;
-      mockGetOrCreateDebugLevelId.mockRejectedValue(debugLevelError);
+      mockEnsureDebugLevel.mockRejectedValue(
+        new Error("Failed to create debug level"),
+      );
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Failed to create debug level");
 
       expect(ensureTraceFlag).not.toHaveBeenCalled();
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should propagate errors from ensureTraceFlag", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const traceFlagError = new Error("Failed to create trace flag");
 
       const mockEnsureTraceFlag = ensureTraceFlag as jest.MockedFunction<
         typeof ensureTraceFlag
       >;
-      mockEnsureTraceFlag.mockRejectedValue(traceFlagError);
+      mockEnsureTraceFlag.mockRejectedValue(
+        new Error("Failed to create trace flag"),
+      );
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Failed to create trace flag");
 
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it("should handle errors from tooling.executeAnonymous", async () => {
+    it("should handle errors from the SOAP call", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const executeError = new Error("Tooling API error");
 
-      mockExecuteAnonymous.mockRejectedValue(executeError);
+      mockRequest.mockRejectedValue(new Error("Apex SOAP API error"));
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Tooling API error");
+      ).rejects.toThrow("Apex SOAP API error");
 
       expect(mockSobject).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockWriteFile).not.toHaveBeenCalled();
     });
 
-    it("should handle errors from findOne query", async () => {
+    it("should throw when the connection carries no access token", async () => {
+      mockConnection.accessToken = undefined;
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const queryError = new Error("Query failed");
-
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-
-      mockFindOne.mockRejectedValue(queryError);
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Query failed");
+      ).rejects.toThrow("The org connection carries no access token.");
 
       expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    it("should handle errors from request", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const requestError = new Error("Failed to fetch log body");
-
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockRejectedValue(requestError);
-
-      await expect(
-        executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Failed to fetch log body");
-    });
-
-    it("should use getUserIdByUsername for log query", async () => {
-      const customUserId = "005CUSTOMUSERID";
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      // Mock getUserIdByUsername to return custom user ID
-      (
-        getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
-      ).mockResolvedValue(customUserId);
-
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
-
-      await executeAnonymous(mockServer, args, ctx, policy());
-
-      expect(mockFindOne).toHaveBeenCalledWith(
-        { LogUserId: customUserId },
-        ["Id", "DurationMilliseconds"],
-        expect.any(Object),
-      );
     });
 
     it("should handle SOQL queries in Apex", async () => {
       const soqlApex =
         "List<Account> accounts = [SELECT Id FROM Account LIMIT 10];";
-      const args: ExecuteAnonymousArgs = { apex: soqlApex };
 
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: soqlApex },
+        ctx,
+        policy(),
+      );
 
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
-
-      const result = await executeAnonymous(mockServer, args, ctx, policy());
-
-      expect(mockExecuteAnonymous).toHaveBeenCalledWith(soqlApex);
-      const decoded = toonDecode(result);
-      expect(decoded.filePath).toContain(`${testLogId}.log`);
+      expectPostedApex(soqlApex);
+      expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
     it("should handle DML operations in Apex", async () => {
       const dmlApex = "Account acc = new Account(Name='Test'); insert acc;";
-      const args: ExecuteAnonymousArgs = { apex: dmlApex };
 
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: dmlApex },
+        ctx,
+        policy(),
+      );
 
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
-
-      const result = await executeAnonymous(mockServer, args, ctx, policy());
-
-      expect(mockExecuteAnonymous).toHaveBeenCalledWith(dmlApex);
-      const decoded = toonDecode(result);
-      expect(decoded.filePath).toContain(`${testLogId}.log`);
+      expectPostedApex(dmlApex);
+      expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
     it("should throw error when connect() fails (no default org)", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const connectError = new Error(
-        "No default org configured. Please set a default org using 'sf config set target-org <username>'.",
-      );
 
-      mockResolveOrg.mockRejectedValue(connectError);
+      mockResolveOrg.mockRejectedValue(
+        new Error(
+          "No default org configured. Please set a default org using 'sf config set target-org <username>'.",
+        ),
+      );
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("No default org configured");
 
       expect(getUserIdByUsername).not.toHaveBeenCalled();
-      expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("progress notifications", () => {
+    it("reports every step to a caller that sent a progress token", async () => {
+      const notify = jest.fn().mockResolvedValue(undefined);
+
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        makeCtx(undefined, undefined, {
+          _meta: { progressToken: 7 },
+          notify,
+        }),
+        policy(),
+      );
+
+      expect(notify).toHaveBeenCalledTimes(4);
+      expect(notify).toHaveBeenNthCalledWith(1, {
+        method: "notifications/progress",
+        params: {
+          progressToken: 7,
+          progress: 1,
+          total: 4,
+          message: "Connecting to the org",
+        },
+      });
+      expect(notify.mock.calls[3][0].params).toEqual({
+        progressToken: 7,
+        progress: 4,
+        total: 4,
+        message: "Writing the debug log",
+      });
+    });
+
+    // The spec gives a token only when the client wants the notifications.
+    it("sends nothing when the call carried no token", async () => {
+      const notify = jest.fn().mockResolvedValue(undefined);
+
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        makeCtx(undefined, undefined, { notify }),
+        policy(),
+      );
+
+      expect(notify).not.toHaveBeenCalled();
     });
   });
 
@@ -582,7 +679,9 @@ describe("Execute Anonymous", () => {
     let consoleError: jest.SpyInstance;
 
     /** The confirmation the first round asks for. */
-    function confirmRequest(result: InputRequiredResult): ElicitRequest["params"] {
+    function confirmRequest(
+      result: InputRequiredResult,
+    ): ElicitRequest["params"] {
       const request = result.inputRequests?.["confirm"] as
         | ElicitRequest
         | undefined;
@@ -617,18 +716,6 @@ describe("Execute Anonymous", () => {
     beforeEach(() => {
       // Several of these paths log the underlying failure by design.
       consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
-
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
     });
 
     it("should run against a sandbox without prompting", async () => {
@@ -637,7 +724,7 @@ describe("Execute Anonymous", () => {
       const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(toonDecode(result).orgType).toBe("sandbox");
-      expect(mockExecuteAnonymous).toHaveBeenCalledWith(testApexCode);
+      expectPostedApex(testApexCode);
     });
 
     it("should ask for confirmation on the first production call", async () => {
@@ -685,9 +772,9 @@ describe("Execute Anonymous", () => {
 
       await executeAnonymous(mockServer, args, ctx, policy());
 
-      expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should run against production when --allow-production-orgs is set", async () => {
@@ -702,7 +789,7 @@ describe("Execute Anonymous", () => {
       );
 
       expect(toonDecode(result).orgType).toBe("production");
-      expect(mockExecuteAnonymous).toHaveBeenCalledWith(testApexCode);
+      expectPostedApex(testApexCode);
     });
 
     it("should run against production when the retry confirms", async () => {
@@ -723,7 +810,7 @@ describe("Execute Anonymous", () => {
       );
 
       expect(toonDecode(result).orgType).toBe("production");
-      expect(mockExecuteAnonymous).toHaveBeenCalledWith(testApexCode);
+      expectPostedApex(testApexCode);
     });
 
     it.each([
@@ -749,7 +836,7 @@ describe("Execute Anonymous", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("User declined");
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should refuse a retry that asks for different Apex", async () => {
@@ -775,9 +862,9 @@ describe("Execute Anonymous", () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("does not match this call");
-      expect(getOrCreateDebugLevelId).not.toHaveBeenCalled();
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(ensureTraceFlag).not.toHaveBeenCalled();
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should treat an unverifiable org as production and surface the reason", async () => {
@@ -807,15 +894,25 @@ describe("Execute Anonymous", () => {
         "Reason: Unable to refresh session due to: inactive organization",
       );
       expect(result.content[0].text).toContain("re-authenticate");
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should classify the org once per cache", async () => {
       const cache = new Map();
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      await executeAnonymous(mockServer, args, ctx, policy({ classificationCache: cache }));
-      await executeAnonymous(mockServer, args, ctx, policy({ classificationCache: cache }));
+      await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ classificationCache: cache }),
+      );
+      await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ classificationCache: cache }),
+      );
 
       expect(mockRetrieveOrgInfo).toHaveBeenCalledTimes(1);
     });
@@ -836,25 +933,11 @@ describe("Execute Anonymous", () => {
       );
       expect(mockResolveOrg).not.toHaveBeenCalled();
       expect(mockServer.server.listRoots).not.toHaveBeenCalled();
-      expect(mockExecuteAnonymous).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
   });
 
   describe("org username in response", () => {
-    beforeEach(() => {
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
-    });
-
     it("should include org username in response when no alias", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
@@ -880,20 +963,6 @@ describe("Execute Anonymous", () => {
   });
 
   describe("log file saving", () => {
-    beforeEach(() => {
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: true,
-        line: -1,
-        column: -1,
-      });
-      mockFindOne.mockResolvedValue({
-        Id: testLogId,
-        DurationMilliseconds: 150,
-      });
-      mockRequest.mockResolvedValue(testLogBody);
-    });
-
     it("should create output directory with recursive option", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
@@ -905,7 +974,7 @@ describe("Execute Anonymous", () => {
       );
     });
 
-    it("should write log file with logId as filename", async () => {
+    it("should write the returned log with logId as filename", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
       await executeAnonymous(mockServer, args, ctx, policy());
@@ -1057,14 +1126,13 @@ describe("Execute Anonymous", () => {
     });
 
     it("should include succeeded false and exceptionMessage on runtime failure", async () => {
-      mockExecuteAnonymous.mockResolvedValue({
-        compiled: true,
-        success: false,
-        line: -1,
-        column: -1,
-        exceptionMessage:
-          "System.NullPointerException: Attempt to de-reference a null object",
-      });
+      mockRequest.mockResolvedValue(
+        soapResponse({
+          success: "false",
+          exceptionMessage:
+            "System.NullPointerException: Attempt to de-reference a null object",
+        }),
+      );
 
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
@@ -1110,7 +1178,9 @@ describe("Execute Anonymous", () => {
 
       const config = executeAnonymousToolConfig();
 
-      expect(config.description).toContain("Execute a snippet of anonymous Apex");
+      expect(config.description).toContain(
+        "Execute a snippet of anonymous Apex",
+      );
       expect(config.description).toContain("--allow-production-orgs");
       expect(config.description).not.toContain("[DISABLED");
       expect(config.annotations.destructiveHint).toBe(true);
