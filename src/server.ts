@@ -26,7 +26,11 @@ import {
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymous.js";
-import type { ConfirmationState } from "./policy/orgExecutionPolicy.js";
+import {
+  CONFIRMATION_TTL_SECONDS,
+  createConfirmationLedger,
+  type ConfirmationState,
+} from "./policy/orgExecutionPolicy.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
 
 export type ServerConfig = {
@@ -44,7 +48,16 @@ const classificationCache = new Map<string, OrgClassification>();
 // a fixed key: a confirmation cannot outlive the server that asked for it.
 const confirmationCodec = createRequestStateCodec<ConfirmationState>({
   key: randomBytes(32),
+  ttlSeconds: CONFIRMATION_TTL_SECONDS,
+  // The spec's user-binding MUST for state that decides authorization: a
+  // confirmation given in one session, or for another method, is not this call's
+  // to spend. The tag is HMACed, so the session id never reaches the client.
+  bind: (ctx) => `${ctx.mcpReq.method}\0${ctx.sessionId ?? ""}`,
 });
+
+// One confirmation authorizes one run, so the answers spent are remembered for
+// as long as the signature that carries them stays valid.
+const consumeConfirmation = createConfirmationLedger();
 
 /**
  * Whether this server's configuration reaches the tool definitions.
@@ -123,7 +136,9 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
         allowProductionOrgs,
         apexExecutionDisabled,
         classificationCache,
-        mintConfirmationState: (payload) => confirmationCodec.mint(payload),
+        mintConfirmationState: (payload, ctx) =>
+          confirmationCodec.mint(payload, ctx),
+        consumeConfirmation,
       }),
   );
 

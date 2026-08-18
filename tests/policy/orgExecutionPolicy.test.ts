@@ -11,8 +11,11 @@ import {
 } from "@modelcontextprotocol/server";
 import {
   authorizeExecution,
+  createConfirmationLedger,
   APEX_EXECUTION_DISABLED_MESSAGE,
   type ConfirmationState,
+  type ConsumeConfirmation,
+  type MintConfirmationState,
   type PolicyDecision,
 } from "../../src/policy/orgExecutionPolicy";
 import type { OrgClassification } from "../../src/salesforce/orgClassification";
@@ -28,6 +31,7 @@ describe("authorizeExecution", () => {
   });
 
   let mintConfirmationState: jest.Mock;
+  let consumeConfirmation: ConsumeConfirmation;
 
   function makeCtx(state?: ConfirmationState, inputResponses?: unknown) {
     return {
@@ -46,14 +50,14 @@ describe("authorizeExecution", () => {
       apex?: string;
       orgId?: string;
       unverifiedReason?: string;
+      consumeConfirmation?: ConsumeConfirmation;
     } = {},
   ) {
     return authorizeExecution({
       ctx: overrides.ctx ?? makeCtx(),
       mintConfirmationState:
-        mintConfirmationState as unknown as (
-          payload: ConfirmationState,
-        ) => Promise<string>,
+        mintConfirmationState as unknown as MintConfirmationState,
+      consumeConfirmation: overrides.consumeConfirmation ?? consumeConfirmation,
       classification: overrides.classification ?? "production",
       orgId: overrides.orgId ?? orgId,
       orgLabel,
@@ -118,6 +122,7 @@ describe("authorizeExecution", () => {
     mintConfirmationState = jest.fn((payload: ConfirmationState) =>
       codec.mint(payload),
     );
+    consumeConfirmation = createConfirmationLedger();
   });
 
   describe.each<OrgClassification>(["sandbox", "scratch", "developer", "trial"])(
@@ -176,6 +181,7 @@ describe("authorizeExecution", () => {
       expect(state.apexDigest).toMatch(/^[0-9a-f]{64}$/);
       // Signed, not encrypted: a client can read whatever the state carries.
       expect(state.apexDigest).not.toContain("System.debug");
+      expect(state.nonce).toMatch(/^[0-9a-f]{32}$/);
     });
 
     it("should not claim an unverifiable org is production", async () => {
@@ -219,6 +225,44 @@ describe("authorizeExecution", () => {
     it("should allow when the user confirmed", async () => {
       const result = assertConfirmationRequired(await authorize());
       const ctx = await retryCtx(result, {
+        action: "accept",
+        content: { confirm: true },
+      });
+
+      await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
+    });
+
+    // The signature proves the user was asked, not that the run it authorized
+    // has not happened: without spending it, one answer runs the Apex as often
+    // as the client re-sends the call.
+    it("should refuse a confirmation that already ran", async () => {
+      const result = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(result, {
+        action: "accept",
+        content: { confirm: true },
+      });
+
+      await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
+
+      const decision = await authorize({ ctx });
+      expect(decision).toEqual({
+        outcome: "refused",
+        reason: expect.stringContaining("already been used"),
+      });
+    });
+
+    // Each confirmation is spent on its own, so asking again works.
+    it("should allow a second run the user confirmed again", async () => {
+      const first = assertConfirmationRequired(await authorize());
+      await authorize({
+        ctx: await retryCtx(first, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+      });
+
+      const second = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(second, {
         action: "accept",
         content: { confirm: true },
       });
@@ -372,5 +416,31 @@ describe("APEX_EXECUTION_DISABLED_MESSAGE", () => {
     expect(APEX_EXECUTION_DISABLED_MESSAGE).toContain(
       "log analysis tools remain available",
     );
+  });
+});
+
+describe("createConfirmationLedger", () => {
+  it("spends an answer once", () => {
+    const consume = createConfirmationLedger();
+
+    expect(consume("a")).toBe(true);
+    expect(consume("a")).toBe(false);
+    expect(consume("b")).toBe(true);
+  });
+
+  // Past the signature's own lifetime the codec refuses the state anyway, so
+  // holding the nonce any longer only grows the map.
+  it("forgets an answer its signature can no longer carry", () => {
+    jest.useFakeTimers();
+    try {
+      const consume = createConfirmationLedger(600);
+      expect(consume("a")).toBe(true);
+
+      jest.advanceTimersByTime(600_000);
+
+      expect(consume("a")).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   acceptedContent,
   inputRequired,
@@ -22,16 +22,58 @@ export type PolicyDecision =
 /**
  * What a confirmation is bound to. Signed, not encrypted, so it carries a
  * digest of the Apex rather than the Apex: the client can read it.
+ *
+ * `nonce` names this one confirmation, so the answer can be spent. The rest is
+ * what the re-sent call is checked against.
  */
 export type ConfirmationState = {
   apexDigest: string;
   orgId: string;
+  nonce: string;
 };
 
-/** Mints the signed state that a confirmation round-trips through the client. */
+/** How long a confirmation stays answerable. */
+export const CONFIRMATION_TTL_SECONDS = 600;
+
+/**
+ * Mints the signed state that a confirmation round-trips through the client.
+ * The context is passed on to the codec, which binds the state to it.
+ */
 export type MintConfirmationState = (
   payload: ConfirmationState,
+  ctx: ServerContext,
 ) => Promise<string>;
+
+/** Spends a confirmation. False when this one was spent already. */
+export type ConsumeConfirmation = (nonce: string) => boolean;
+
+/**
+ * One answer authorizes one run.
+ *
+ * The signed state proves the user was asked, not that the run it authorized
+ * has not happened yet: a client that re-sends the same confirmed call runs the
+ * Apex again, as often as it likes until the signature expires. So each answer
+ * is spent on first use, and the ledger holds nothing past the point the codec
+ * refuses the signature anyway.
+ */
+export function createConfirmationLedger(
+  ttlSeconds: number = CONFIRMATION_TTL_SECONDS,
+): ConsumeConfirmation {
+  const spentAt = new Map<string, number>();
+  return (nonce) => {
+    const now = Date.now();
+    for (const [spent, at] of spentAt) {
+      if (now - at >= ttlSeconds * 1000) {
+        spentAt.delete(spent);
+      }
+    }
+    if (spentAt.has(nonce)) {
+      return false;
+    }
+    spentAt.set(nonce, now);
+    return true;
+  };
+}
 
 /** The key this server assigns its one embedded request, and reads back. */
 const CONFIRM_KEY = "confirm";
@@ -120,7 +162,9 @@ function confirmationRequest(
  * runs again on that second call, so this decides afresh both times. The SDK
  * has already proven the state's integrity by the time it reaches here; what it
  * cannot know is whether the retry asks for the same run, which is why the
- * state binds the Apex and the org and is compared against the re-sent call.
+ * state binds the Apex and the org and is compared against the re-sent call,
+ * nor that the run it authorized has not already happened, which is why the
+ * answer is spent on first use.
  */
 export async function authorizeExecution(opts: {
   ctx: ServerContext;
@@ -130,6 +174,7 @@ export async function authorizeExecution(opts: {
   orgLabel: string;
   apex: string;
   allowProductionOrgs: boolean;
+  consumeConfirmation: ConsumeConfirmation;
   unverifiedReason?: string;
 }): Promise<PolicyDecision> {
   const { ctx, classification, orgId, orgLabel, apex, allowProductionOrgs } =
@@ -158,10 +203,14 @@ export async function authorizeExecution(opts: {
         inputRequests: {
           [CONFIRM_KEY]: confirmationRequest(orgLabel, apex, unverifiedReason),
         },
-        requestState: await opts.mintConfirmationState({
-          apexDigest: digestOf(apex),
-          orgId,
-        }),
+        requestState: await opts.mintConfirmationState(
+          {
+            apexDigest: digestOf(apex),
+            orgId,
+            nonce: randomBytes(16).toString("hex"),
+          },
+          ctx,
+        ),
       }),
     };
   }
@@ -188,6 +237,14 @@ export async function authorizeExecution(opts: {
   );
 
   if (answer?.confirm === true) {
+    if (!opts.consumeConfirmation(confirmed.nonce)) {
+      return {
+        outcome: "refused",
+        reason:
+          `The confirmation has already been used, and one confirmation authorizes one run, ` +
+          `so nothing was executed against '${orgLabel}'. Ask again to run this Apex.`,
+      };
+    }
     return { outcome: "allowed" };
   }
 

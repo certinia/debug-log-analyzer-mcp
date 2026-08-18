@@ -404,6 +404,7 @@ describe("createApexLogServer", () => {
           apexExecutionDisabled: false,
           classificationCache: expect.any(Map),
           mintConfirmationState: expect.any(Function),
+          consumeConfirmation: expect.any(Function),
         },
       );
       expect(result).toEqual(mockExecuteAnonymousResult);
