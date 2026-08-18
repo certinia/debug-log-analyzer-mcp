@@ -33,7 +33,8 @@ type NodeSpec = {
 
 function node(spec: NodeSpec): unknown {
   const total = spec.totalNs ?? 0;
-  return {
+  const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
+  const built = {
     type: spec.type ?? null,
     ...(spec.subCategory && { subCategory: spec.subCategory }),
     text: spec.text ?? null,
@@ -46,8 +47,13 @@ function node(spec: NodeSpec): unknown {
     dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
     totalThrownCount: spec.thrownCount ?? 0,
-    children: (spec.children ?? []).map(node),
+    children,
   };
+
+  // The parser links every child to its parent, and `callerNamespace` reads it.
+  children.forEach((child) => (child.parent = built));
+
+  return built;
 }
 
 /** A log whose root is the transaction frame the parser always emits. */
@@ -163,6 +169,41 @@ describe("listOperations", () => {
       name: "METHOD_ENTRY",
       namespace: "default",
     });
+  });
+
+  it("reads the calling namespace off the direct parent, not the nearest ranked one", () => {
+    const operations = listOperations(
+      logOf({
+        type: "METHOD_ENTRY",
+        subCategory: "Method",
+        text: "Custom.run",
+        namespace: "Custom",
+        totalNs: 50_000_000,
+        children: [
+          {
+            // Synthetic: the parser copies a namespace down, so no real log puts
+            // a namespace of its own on an untimed frame. It pins the reading to
+            // the direct parent even so.
+            type: "VARIABLE_ASSIGNMENT",
+            text: "row",
+            namespace: "Other",
+            children: [
+              {
+                type: "DML_BEGIN",
+                subCategory: "DML",
+                text: "DML Insert Account",
+                namespace: "default",
+                totalNs: 40_000_000,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(
+      operations.find((operation) => operation.kind === "dml"),
+    ).toMatchObject({ callerNamespace: "Other" });
   });
 });
 

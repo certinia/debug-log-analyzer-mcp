@@ -77,7 +77,8 @@ type PlanSpec = {
 
 function node(spec: NodeSpec): unknown {
   const total = spec.totalNs ?? 0;
-  return {
+  const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
+  const built = {
     ...spec.plan,
     type: spec.type ?? null,
     ...(spec.subCategory && { subCategory: spec.subCategory }),
@@ -91,8 +92,13 @@ function node(spec: NodeSpec): unknown {
     dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
     totalThrownCount: spec.thrownCount ?? 0,
-    children: (spec.children ?? []).map(node),
+    children,
   };
+
+  // The parser links every child to its parent, and `callerNamespace` reads it.
+  children.forEach((child) => (child.parent = built));
+
+  return built;
 }
 
 /** A log whose root is the transaction frame, and which runs `children`. */

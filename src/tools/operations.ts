@@ -121,9 +121,10 @@ export interface Operation {
   name: string;
   namespace: string;
   /**
-   * The namespace of the frame that called this one, which is not always the
-   * one the operation runs in: DML is pinned to `default` however it was
-   * reached, so only the caller says which package drove it.
+   * The namespace of the frame that called this one, read off the direct parent
+   * event. It is not always the one the operation runs in: DML is pinned to
+   * `default` however it was reached, so only the caller says which package
+   * drove it.
    *
    * Internal. The two are the same on all but a few percent of rows, so a
    * column would cost every response for an answer almost none of them carry;
@@ -243,7 +244,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
       kind,
       name: operationName(node),
       namespace: node.namespace || "default",
-      callerNamespace: parent?.namespace ?? "default",
+      callerNamespace: node.parent?.namespace || "default",
       callCount: 1,
       durationTotalNs: node.duration.total,
       durationSelfNs: node.duration.self,
