@@ -301,6 +301,16 @@ const IDENTITY_BY_GROUP: Record<
 };
 
 /**
+ * The row an operation folds into under a grouping. Two operations share a row
+ * if and only if they share this key, so a caller that has to say which
+ * operations are behind a returned row can ask rather than reproduce the rule.
+ */
+export function operationGroupKey(operation: Operation, by: GroupBy): string {
+  const { namespace, name } = IDENTITY_BY_GROUP[by](operation);
+  return `${operation.kind} ${namespace} ${name}`;
+}
+
+/**
  * Fold repeats together, so that a query run four hundred times in a loop is
  * one row carrying its four hundred calls rather than four hundred rows the
  * ranking pushes apart.
@@ -333,8 +343,7 @@ export function groupOperations(
       return known;
     }
 
-    const { namespace, name } = identityOf(operation);
-    const key = `${operation.kind} ${namespace} ${name}`;
+    const key = operationGroupKey(operation, by);
     keys.set(operation, key);
     return key;
   };
