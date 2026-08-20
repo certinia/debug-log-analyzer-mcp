@@ -21,6 +21,7 @@ import { ensureTraceFlag } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
 import { resolveOrg } from "../salesforce/connection.js";
+import { toDateTimeLiteral } from "../salesforce/soql.js";
 import {
   classifyOrg,
   type OrgClassification,
@@ -405,7 +406,7 @@ async function findStoredLogId(
         {
           LogUserId: userId,
           LogLength: Buffer.byteLength(debugLog, "utf-8"),
-          StartTime: { $gte: since },
+          StartTime: { $gte: toDateTimeLiteral(since) },
         },
         ["Id"],
         { sort: { StartTime: -1 } },

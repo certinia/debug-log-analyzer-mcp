@@ -490,7 +490,7 @@ describe("Execute Anonymous", () => {
         {
           LogUserId: customUserId,
           LogLength: Buffer.byteLength(testLogBody, "utf-8"),
-          StartTime: { $gte: expect.any(Date) },
+          StartTime: { $gte: expect.anything() },
         },
         ["Id"],
         { sort: { StartTime: -1 } },
@@ -510,12 +510,14 @@ describe("Execute Anonymous", () => {
       );
 
       const { StartTime } = mockFindOne.mock.calls[0][0] as {
-        StartTime: { $gte: Date };
+        StartTime: { $gte: { toString(): string } };
       };
-      expect(StartTime.$gte.getTime()).toBeGreaterThanOrEqual(
-        before - CLOCK_SKEW_MS,
-      );
-      expect(StartTime.$gte.getTime()).toBeLessThanOrEqual(Date.now());
+      // The builder renders the bound with `String()`, and only a bare ISO 8601
+      // literal is a date SOQL reads.
+      const bound = String(StartTime.$gte);
+      expect(bound).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+      expect(Date.parse(bound)).toBeGreaterThanOrEqual(before - CLOCK_SKEW_MS);
+      expect(Date.parse(bound)).toBeLessThanOrEqual(Date.now());
     });
 
     // The id is matched, not given, so a wrong match must cost a filename
