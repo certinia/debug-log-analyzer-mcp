@@ -196,6 +196,7 @@ const TOKEN_BUDGET = {
   // level that gates it or a zero cannot be read.
   "apexlog_list_limit_risks/governor-heavy": 46,
   "apexlog_list_limit_risks/minimal": 30,
+  "apexlog_get_summary/heap-heavy": 269,
 };
 
 /**
@@ -273,12 +274,24 @@ const SELECTION_KEYWORDS = {
   apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
 };
 
-const CASES = [
-  "apexlog_get_summary",
-  "apexlog_list_slow_operations",
-  "apexlog_list_limit_risks",
-].flatMap((tool) =>
-  ["governor-heavy", "minimal"].map((fixture) => ({ tool, fixture })),
+/**
+ * Which logs each tool is measured against.
+ *
+ * Declared per tool rather than as a cross product of tools and fixtures. Every
+ * case is a server round trip and a golden file a reviewer has to read, so a
+ * case earns its place only by pinning something the others would miss — and a
+ * cross product spends three cases on a fixture that answers one question.
+ * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool that
+ * publishes a heap figure.
+ */
+const FIXTURES_BY_TOOL = {
+  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy"],
+  apexlog_list_slow_operations: ["governor-heavy", "minimal"],
+  apexlog_list_limit_risks: ["governor-heavy", "minimal"],
+};
+
+const CASES = Object.entries(FIXTURES_BY_TOOL).flatMap(([tool, fixtures]) =>
+  fixtures.map((fixture) => ({ tool, fixture })),
 );
 
 /**

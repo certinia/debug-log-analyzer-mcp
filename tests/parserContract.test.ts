@@ -86,6 +86,39 @@ describe("parser contract", () => {
     });
   });
 
+  describe("heap measures", () => {
+    const heapLog = parse(fixture("heap-heavy"));
+
+    const eventNamed = (name: string): LogEvent => {
+      const event = tree(heapLog).find((node) => node.text === name);
+      if (!event) {
+        throw new Error(`${name} is not in heap-heavy.log`);
+      }
+      return event;
+    };
+
+    // The three do not agree, and #99 ranks operations on them: `churn()` frees
+    // all it takes, so its net is zero and its peak a fifth of its gross. One
+    // of them published as "heap used" would read the path as free.
+    it("keeps net, gross and peak apart", () => {
+      const churn = eventNamed("HeapService.churn()");
+
+      expect(churn.heapAllocated.total).toBe(0);
+      expect(churn.heapGross.total).toBe(200_000);
+      expect(churn.heapPeak).toBe(100_000);
+    });
+
+    // A cumulative block states heap as zero, so the events are the only heap
+    // figure the log gives. `apexlog_get_summary` publishes this as its
+    // `heapSize` row.
+    it("takes the transaction figure from the events, not the limit block", () => {
+      const [snapshot] = heapLog.governorLimits.snapshots;
+
+      expect(snapshot?.limits.heapSize.used).toBe(0);
+      expect(heapLog.governorLimits.peak.heapSize.used).toBe(750_000);
+    });
+  });
+
   describe("LogEvent.category", () => {
     // `kindOf` in tools/operations.ts drops an event with no category before it
     // looks at anything else, so a timed event without one would be ranked
