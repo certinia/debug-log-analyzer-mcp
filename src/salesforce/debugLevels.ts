@@ -10,7 +10,43 @@ export type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
 
 export const LOG_LEVELS = Object.values(LOG_LEVEL);
 
-/** The DebugLevel field names, lower-camel. `toSObjectFields` capitalises them. */
+/**
+ * The Salesforce debug log categories, as the `DebugLevels` keys the parser
+ * reads a log header into. In header order.
+ *
+ * Held here in the shape the parser publishes `LOG_LEVEL` and `LOG_CATEGORY`,
+ * because it publishes nothing for these — its own `debugLevelKeyByToken` is
+ * tree-shaken out of the bundle. When it exports them this becomes an import.
+ */
+export const DEBUG_LEVEL_CATEGORY = {
+  ApexCode: "apexCode",
+  ApexProfiling: "apexProfiling",
+  Callout: "callout",
+  DataAccess: "dataAccess",
+  Database: "database",
+  Nba: "nba",
+  System: "system",
+  Validation: "validation",
+  Visualforce: "visualforce",
+  Wave: "wave",
+  Workflow: "workflow",
+} as const satisfies Record<string, keyof DebugLevels>;
+
+export type DebugLevelCategory =
+  (typeof DEBUG_LEVEL_CATEGORY)[keyof typeof DEBUG_LEVEL_CATEGORY];
+
+/** Readonly array of every category, for iterating and building sets. */
+export const ALL_DEBUG_LEVEL_CATEGORIES: readonly DebugLevelCategory[] =
+  Object.values(DEBUG_LEVEL_CATEGORY);
+
+/**
+ * The categories a `DebugLevel` record can set, lower-camel as its fields are
+ * named. `toSObjectFields` capitalises them.
+ *
+ * A literal and not a filter over `ALL_DEBUG_LEVEL_CATEGORIES`, because the
+ * tool schema needs the tuple: a filtered array would type as every category
+ * and let a caller ask for `dataAccess`, which no field sets.
+ */
 export const TRACE_CATEGORIES = [
   "apexCode",
   "apexProfiling",
@@ -22,7 +58,7 @@ export const TRACE_CATEGORIES = [
   "visualforce",
   "wave",
   "workflow",
-] as const;
+] as const satisfies readonly DebugLevelCategory[];
 
 export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
 
@@ -58,31 +94,30 @@ export type LogCategory = (typeof LOG_CATEGORIES)[number];
  * the same correspondence but does not publish it.
  */
 export const DEBUG_LEVEL_FIELD_BY_CATEGORY = {
-  APEX_CODE: "apexCode",
-  APEX_PROFILING: "apexProfiling",
-  CALLOUT: "callout",
-  DATA_ACCESS: "dataAccess",
-  DB: "database",
-  NBA: "nba",
-  SYSTEM: "system",
-  VALIDATION: "validation",
-  VISUALFORCE: "visualforce",
-  WAVE: "wave",
-  WORKFLOW: "workflow",
+  APEX_CODE: DEBUG_LEVEL_CATEGORY.ApexCode,
+  APEX_PROFILING: DEBUG_LEVEL_CATEGORY.ApexProfiling,
+  CALLOUT: DEBUG_LEVEL_CATEGORY.Callout,
+  DATA_ACCESS: DEBUG_LEVEL_CATEGORY.DataAccess,
+  DB: DEBUG_LEVEL_CATEGORY.Database,
+  NBA: DEBUG_LEVEL_CATEGORY.Nba,
+  SYSTEM: DEBUG_LEVEL_CATEGORY.System,
+  VALIDATION: DEBUG_LEVEL_CATEGORY.Validation,
+  VISUALFORCE: DEBUG_LEVEL_CATEGORY.Visualforce,
+  WAVE: DEBUG_LEVEL_CATEGORY.Wave,
+  WORKFLOW: DEBUG_LEVEL_CATEGORY.Workflow,
 } as const satisfies Record<LogCategory, keyof DebugLevels>;
 
 /** Fails to compile unless `T` is `true`. */
 type Assert<T extends true> = T;
 
 /**
- * Compile guard for the other direction: the `satisfies` above only checks that
- * every category names a real field. A category the parser adds has to be named
- * here too, or `declaredLevels` silently drops it from every response.
+ * Compile guard for the other direction: every `satisfies` above only checks
+ * that what is named exists, never that nothing is missing. A category the
+ * parser adds has to reach `DEBUG_LEVEL_CATEGORY`, or `declaredLevels` drops it
+ * from every response and no other check notices.
  */
 export type EveryDebugLevelCategoryNamed = Assert<
-  keyof DebugLevels extends (typeof DEBUG_LEVEL_FIELD_BY_CATEGORY)[LogCategory]
-    ? true
-    : false
+  keyof DebugLevels extends DebugLevelCategory ? true : false
 >;
 
 /**
