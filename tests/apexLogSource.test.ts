@@ -10,7 +10,8 @@ import {
   logFilePathSchema,
   walkLog,
 } from "../src/tools/apexLogSource";
-import { parse, ApexLog, LogLine } from "../src/ApexLogParser";
+import { parse } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
@@ -30,7 +31,7 @@ jest.mock("fs", () => {
   };
 });
 
-jest.mock("../src/ApexLogParser", () => ({
+jest.mock("@apexdevtools/apex-log-parser", () => ({
   parse: jest.fn(),
 }));
 
@@ -238,7 +239,7 @@ describe("apexLogSource", () => {
       const tree = {
         type: "root",
         children: [{ type: "a", children: [{ type: "a1" }] }, { type: "b" }],
-      } as unknown as LogLine;
+      } as unknown as LogEvent;
 
       const seen: string[] = [];
       walkLog(tree, (node) => seen.push(node.type as string));

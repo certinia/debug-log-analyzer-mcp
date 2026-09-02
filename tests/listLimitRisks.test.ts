@@ -13,7 +13,13 @@ import {
   type LimitRisksArgs,
   type LimitRiskResult,
 } from "../src/tools/listLimitRisks";
-import { parse, ApexLog, Limits, GovernorLimits } from "../src/ApexLogParser";
+import { parse } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import {
+  ALL_LIMIT_METRICS,
+  type GovernorLimits,
+  type Limits,
+} from "@apexdevtools/apex-log-parser/types";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
@@ -33,7 +39,7 @@ jest.mock("fs", () => {
   };
 });
 
-jest.mock("../src/ApexLogParser", () => ({
+jest.mock("@apexdevtools/apex-log-parser", () => ({
   parse: jest.fn(),
 }));
 
@@ -48,39 +54,60 @@ const mockStats = {
 
 const ARGS: LimitRisksArgs = { logFilePath: "/test/file.log" };
 
-function governorLimits(overrides: Partial<Limits> = {}): GovernorLimits {
-  const defaults: Limits = {
-    soqlQueries: { used: 0, limit: 100 },
-    soslQueries: { used: 0, limit: 20 },
-    queryRows: { used: 0, limit: 50000 },
-    dmlStatements: { used: 0, limit: 150 },
-    publishImmediateDml: { used: 0, limit: 10 },
-    dmlRows: { used: 0, limit: 10000 },
-    cpuTime: { used: 0, limit: 10000 },
-    heapSize: { used: 0, limit: 6000000 },
-    callouts: { used: 0, limit: 100 },
-    emailInvocations: { used: 0, limit: 10 },
-    futureCalls: { used: 0, limit: 50 },
-    queueableJobsAddedToQueue: { used: 0, limit: 50 },
-    mobileApexPushCalls: { used: 0, limit: 10 },
-  };
+type LimitUsage = { used: number; limit: number };
+type LimitOverrides = Partial<Record<keyof Limits, LimitUsage>>;
 
+/** The real org ceilings, so a percentage in a case is one a caller would see. */
+const CEILINGS: Record<keyof Limits, number> = {
+  soqlQueries: 100,
+  soslQueries: 20,
+  queryRows: 50000,
+  dmlStatements: 150,
+  publishImmediateDml: 10,
+  dmlRows: 10000,
+  cpuTime: 10000,
+  heapSize: 6000000,
+  callouts: 100,
+  emailInvocations: 10,
+  futureCalls: 50,
+  queueableJobsAddedToQueue: 50,
+  mobileApexPushCalls: 10,
+};
+
+// `percentUsed` is left null: no tool reads it, and a figure here would only
+// let a case prove a scale nothing uses.
+const limitsOf = (used: LimitOverrides): Limits =>
+  Object.fromEntries(
+    ALL_LIMIT_METRICS.map(({ key }) => [
+      key,
+      { used: 0, limit: CEILINGS[key], ...used[key], percentUsed: null },
+    ]),
+  ) as Limits;
+
+function governorLimits(
+  overrides: LimitOverrides = {},
+  peakOverrides: LimitOverrides = overrides,
+): GovernorLimits {
   return {
-    ...defaults,
-    ...overrides,
-    byNamespace: new Map<string, Limits>(),
+    snapshots: [],
+    final: limitsOf(overrides),
+    peak: limitsOf(peakOverrides),
+    byNamespace: new Map(),
   };
 }
 
-function mockLog(overrides: Partial<Limits> = {}): void {
+function mockLog(
+  overrides: LimitOverrides = {},
+  peakOverrides?: LimitOverrides,
+): void {
   mockFs.stat.mockResolvedValue(mockStats);
   mockFs.readFile.mockResolvedValue("log content");
   mockParse.mockReturnValue({
-    governorLimits: governorLimits(overrides),
+    governorLimits: governorLimits(overrides, peakOverrides),
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the selection alone. The eval goldens
     // cover the levels, against fixtures that carry a real header.
-    debugLevels: [],
+    debugLevels: {},
   } as unknown as ApexLog);
 }
 
@@ -114,6 +141,22 @@ describe("listLimitRisks", () => {
 
   it("reports a limit over the threshold, with what it cost", async () => {
     mockLog({ cpuTime: { used: 9500, limit: 10000 } });
+
+    await expect(risks()).resolves.toEqual({
+      threshold: WARNING_THRESHOLD,
+      atRisk: [
+        { limit: "cpuTime", used: 9500, max: 10000, usedPercentage: 95 },
+      ],
+    });
+  });
+
+  it("selects on the peak a limit reached, not where it ended", async () => {
+    // A counter falls when the frame that spent it exits, so the final figure
+    // can sit under a ceiling the transaction had already breached.
+    mockLog(
+      { cpuTime: { used: 100, limit: 10000 } },
+      { cpuTime: { used: 9500, limit: 10000 } },
+    );
 
     await expect(risks()).resolves.toEqual({
       threshold: WARNING_THRESHOLD,

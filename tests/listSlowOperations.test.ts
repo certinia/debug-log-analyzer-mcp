@@ -13,7 +13,8 @@ import {
   type SlowOperationsArgs,
   type SlowOperationsResult,
 } from "../src/tools/listSlowOperations";
-import { parse, type ApexLog } from "../src/ApexLogParser";
+import { parse } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
@@ -33,7 +34,7 @@ jest.mock("fs", () => {
   };
 });
 
-jest.mock("../src/ApexLogParser", () => ({
+jest.mock("@apexdevtools/apex-log-parser", () => ({
   parse: jest.fn(),
 }));
 
@@ -51,7 +52,7 @@ const MS = 1_000_000;
 
 type NodeSpec = {
   type?: string;
-  subCategory?: string;
+  category?: string;
   text?: string | null;
   namespace?: string;
   totalNs?: number;
@@ -81,7 +82,7 @@ function node(spec: NodeSpec): unknown {
   const built = {
     ...spec.plan,
     type: spec.type ?? null,
-    ...(spec.subCategory && { subCategory: spec.subCategory }),
+    ...(spec.category && { category: spec.category }),
     text: spec.text ?? null,
     namespace: spec.namespace ?? "default",
     duration: { total, self: spec.selfNs ?? total },
@@ -91,7 +92,7 @@ function node(spec: NodeSpec): unknown {
     soqlRowCount: { total: spec.soqlRowCount ?? 0, self: 0 },
     dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
-    totalThrownCount: spec.thrownCount ?? 0,
+    thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
     children,
   };
 
@@ -115,19 +116,19 @@ function mockLog(totalNs: number, ...children: NodeSpec[]): void {
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the ranking alone. The eval goldens
     // cover the levels, against fixtures that carry a real header.
-    debugLevels: [],
+    debugLevels: {},
   });
 }
 
 const method = (spec: NodeSpec): NodeSpec => ({
   type: "METHOD_ENTRY",
-  subCategory: "Method",
+  category: "Apex",
   ...spec,
 });
 
 const query = (spec: NodeSpec): NodeSpec => ({
   type: "SOQL_EXECUTE_BEGIN",
-  subCategory: "SOQL",
+  category: "SOQL",
   soqlCount: 1,
   ...spec,
 });
@@ -579,7 +580,7 @@ describe("listSlowOperations", () => {
         children: [
           {
             type: "DML_BEGIN",
-            subCategory: "DML",
+            category: "DML",
             text: "DML Insert Account",
             namespace: "default",
             totalNs: 400 * MS,

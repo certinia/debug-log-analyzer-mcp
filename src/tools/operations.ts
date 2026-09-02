@@ -2,15 +2,22 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog, LogLine, LogSubCategory } from "../ApexLogParser.js";
-import type { LogCategory } from "../salesforce/debugLevels.js";
+import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+// Renamed: the parser's `LogCategory` is a timeline grouping, not the debug log
+// category of the same name in `salesforce/debugLevels.js`.
+import type { LogCategory as TimelineCategory } from "@apexdevtools/apex-log-parser/types";
+import {
+  DEBUG_LEVEL_FIELD_BY_CATEGORY,
+  LOG_CATEGORIES,
+  type LogCategory,
+} from "../salesforce/debugLevels.js";
 import { walkLog } from "./apexLogSource.js";
 
 /**
  * What the log spent time on. Every timed node the parser produces falls into
  * one of these, so a tool that ranks operations can rank all of them.
  *
- * This is not the debug log category: `subCategory` is a timeline grouping, and
+ * This is not the debug log category: `category` is a timeline grouping, and
  * `soql` and `dml` both arrive under `DB`. `logCategoryOf` maps a kind back to
  * the category that controls whether it was logged at all, so that an absence
  * is readable — `soql 0` beside `DB NONE` means "not logged", and beside
@@ -24,6 +31,7 @@ export const OPERATION_KINDS = [
   "soql",
   "sosl",
   "dml",
+  "callout",
   "flow",
   "workflow",
 ] as const;
@@ -44,6 +52,7 @@ const LOG_CATEGORY_BY_KIND = {
   soql: "DB",
   sosl: "DB",
   dml: "DB",
+  callout: "CALLOUT",
   flow: "WORKFLOW",
   workflow: "WORKFLOW",
   // `satisfies` rather than an annotation: the value type has to stay the four
@@ -67,8 +76,14 @@ const LEVEL_FIELD_BY_CATEGORY: Record<
   APEX_CODE: "apexCodeLevel",
   SYSTEM: "systemLevel",
   DB: "dbLevel",
+  CALLOUT: "calloutLevel",
   WORKFLOW: "workflowLevel",
 };
+
+const CAPTURE_LEVEL_FIELDS = Object.entries(LEVEL_FIELD_BY_CATEGORY) as [
+  LogCategory,
+  keyof CaptureLevels,
+][];
 
 /**
  * How much of the transaction reached the log at all.
@@ -81,7 +96,27 @@ export interface CaptureLevels {
   apexCodeLevel?: string;
   systemLevel?: string;
   dbLevel?: string;
+  calloutLevel?: string;
   workflowLevel?: string;
+}
+
+/** One level the log's header declared, as a response reports it. */
+export interface DeclaredLevel {
+  logCategory: LogCategory;
+  level: string;
+}
+
+/**
+ * Every level the log's header declared, in the order the header states them.
+ *
+ * A category the header left out is left out here: a level has no zero, so an
+ * absent row means unstated rather than off.
+ */
+export function declaredLevels({ debugLevels }: ApexLog): DeclaredLevel[] {
+  return LOG_CATEGORIES.flatMap((logCategory) => {
+    const level = debugLevels[DEBUG_LEVEL_FIELD_BY_CATEGORY[logCategory]];
+    return level === undefined ? [] : [{ logCategory, level }];
+  });
 }
 
 /**
@@ -92,16 +127,11 @@ export interface CaptureLevels {
  * hid, pooled at the nearest logged boundary — so each is a response-level
  * scalar, stated once.
  */
-export function captureLevels(apexLog: ApexLog): CaptureLevels {
-  const declared = new Map(
-    apexLog.debugLevels.map(
-      ({ logCategory, logLevel }) => [logCategory, logLevel] as const,
-    ),
-  );
+export function captureLevels({ debugLevels }: ApexLog): CaptureLevels {
   const levels: CaptureLevels = {};
 
-  Object.entries(LEVEL_FIELD_BY_CATEGORY).forEach(([category, field]) => {
-    const level = declared.get(category);
+  CAPTURE_LEVEL_FIELDS.forEach(([category, field]) => {
+    const level = debugLevels[DEBUG_LEVEL_FIELD_BY_CATEGORY[category]];
     if (level !== undefined) {
       levels[field] = level;
     }
@@ -169,18 +199,17 @@ export interface Operation {
 
 /**
  * The transaction frame owns no time of its own: ranking it says only that the
- * transaction took as long as it took. It carries the `Method` sub-category, so
- * a test on sub-category alone counts it as a method and inflates every method
- * total.
+ * transaction took as long as it took. It carries the `Apex` category, so a
+ * test on category alone counts it as a method and inflates every method total.
  */
 const FRAME_TYPES = new Set(["EXECUTION_STARTED"]);
 
 /**
- * Two types the sub-category cannot tell apart.
+ * The types the category cannot tell apart.
  *
- * SOSL shares the `SOQL` sub-category, and a search is not a query: it has its
- * own governor limit and its own fix. A managed package entry carries `Method`,
- * but its self time is the time the package spent where the log shows nothing —
+ * SOSL shares the `SOQL` category, and a search is not a query: it has its own
+ * governor limit and its own fix. A managed package entry carries `Apex`, but
+ * its self time is the time the package spent where the log shows nothing —
  * often most of the transaction, and never a method the caller can open.
  */
 const KIND_BY_TYPE: Record<string, OperationKind> = {
@@ -188,27 +217,59 @@ const KIND_BY_TYPE: Record<string, OperationKind> = {
   ENTERING_MANAGED_PKG: "managedPackage",
 };
 
-const KIND_BY_SUB_CATEGORY: Record<LogSubCategory, OperationKind> = {
-  Method: "method",
-  "System Method": "systemMethod",
+/**
+ * The kind each timeline category ranks as.
+ *
+ * `Validation` is absent because no timed event carries it, so nothing under it
+ * could be ranked. Every other category must appear: an unranked timed event
+ * keeps its own time out of the enclosing method's self time and never becomes
+ * a row of its own, so the time is reported nowhere.
+ */
+const KIND_BY_CATEGORY: Partial<Record<TimelineCategory, OperationKind>> = {
+  Apex: "method",
+  System: "systemMethod",
   "Code Unit": "codeUnit",
   DML: "dml",
   SOQL: "soql",
-  Flow: "flow",
-  Workflow: "workflow",
+  Callout: "callout",
 };
 
-function kindOf(node: LogLine): OperationKind | undefined {
-  if (node.type && FRAME_TYPES.has(node.type)) {
+/**
+ * `Automation` merges what a caller has to keep apart, so the event type splits
+ * flow and workflow back out. A prefix this does not know stays unranked, so a
+ * category the parser widens reads as time missing rather than time filed under
+ * the wrong kind.
+ */
+function automationKind(type: string): OperationKind | undefined {
+  if (type.startsWith("FLOW_") || type.startsWith("EVENT_SERVICE_")) {
+    return "flow";
+  }
+  return type.startsWith("WF_") ? "workflow" : undefined;
+}
+
+function kindOf({
+  type,
+  category,
+  debugCategory,
+}: LogEvent): OperationKind | undefined {
+  // Only a timed event is given a category, and untimed events are most of a
+  // log, so this is both the cheap test and the first one.
+  if (category === "" || (type && FRAME_TYPES.has(type))) {
     return undefined;
   }
 
-  // subCategory is declared on TimedNode, a subclass, so it is read off the
-  // node rather than tested with instanceof. A node without one is untimed.
-  const { subCategory } = node as LogLine & { subCategory?: LogSubCategory };
+  // Next Best Action is filed under `Automation`, and is neither of the two
+  // kinds that category splits into. Ranked where it was before the parser
+  // named a category, so no figure moves; #138 gives it its own.
+  if (debugCategory === "nba") {
+    return "systemMethod";
+  }
+
   return (
-    (node.type ? KIND_BY_TYPE[node.type] : undefined) ??
-    (subCategory ? KIND_BY_SUB_CATEGORY[subCategory] : undefined)
+    (type ? KIND_BY_TYPE[type] : undefined) ??
+    (category === "Automation"
+      ? automationKind(type ?? "")
+      : KIND_BY_CATEGORY[category])
   );
 }
 
@@ -216,7 +277,7 @@ function kindOf(node: LogLine): OperationKind | undefined {
  * What a row calls an operation. Shared, so a query plan names its query with
  * the name the ranked row carries and the caller can join the two.
  */
-export function operationName(node: LogLine): string {
+export function operationName(node: LogEvent): string {
   return node.text || node.type || "Unknown";
 }
 
@@ -234,7 +295,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
   //
   // The visitor hands its children the operation they ran inside, which is the
   // one it just made, or its own when the node itself is untimed.
-  const visit = (node: LogLine, parent: Operation | undefined) => {
+  const visit = (node: LogEvent, parent: Operation | undefined) => {
     const kind = kindOf(node);
     if (!kind) {
       return parent;
@@ -256,7 +317,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
         node.soqlRowCount.total +
         node.dmlRowCount.total +
         node.soslRowCount.total,
-      thrownCount: node.totalThrownCount,
+      thrownCount: node.thrownCount.total,
       parent: parent ?? null,
     };
     operations.push(operation);

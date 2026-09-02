@@ -4,9 +4,10 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
-import type { ApexLog, LogLine } from "../ApexLogParser.js";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
+  declaredLevels,
   listOperations,
   logCategoryOf,
   OPERATION_KINDS,
@@ -94,11 +95,8 @@ export async function getLogSummary(args: LogSummaryArgs) {
     truncated: isTruncated(apexLog),
     parsingErrorCount: apexLog.parsingErrors.length,
     namespaces: apexLog.namespaces,
-    debugLevels: apexLog.debugLevels.map((level) => ({
-      logCategory: level.logCategory,
-      level: level.logLevel,
-    })),
-    governorLimits: toLimitRows(apexLog.governorLimits),
+    debugLevels: declaredLevels(apexLog),
+    governorLimits: toLimitRows(apexLog.governorLimits.peak),
     limitsByNamespace: toNamespaceLimitRows(apexLog.governorLimits.byNamespace),
     timeByKind: timeByKind(listOperations(apexLog), durationTotalNs),
     ...omitEmpty({ logIssues }),
@@ -120,20 +118,16 @@ const TRUNCATION_ISSUES = new Set(["Skipped-Lines", "Max-Size-reached"]);
 /**
  * Whether part of the transaction is missing from the log.
  *
- * Two shapes, and neither implies the other. The log ran out: the parser marks
- * the line that lost its exit event, not the log — the root is a pseudo node it
- * never terminates, so `apexLog.isTruncated` is always false, and truncation
- * propagates up to a top-level line, so those are what is tested. Or a section
- * was skipped: the events can still pair up around the gap, leaving no node
- * marked, and only the log issue says the gap is there.
+ * Two shapes, and neither implies the other: the log ran out mid-frame, which
+ * marks the line that lost its exit event, or a section was skipped, which
+ * leaves the events paired up around the gap so only the log issue says it is
+ * there. The parser now models both on the root, as `truncation.regions` and
+ * `truncatedEvents` — #100 moves this onto them and deletes the walk.
  */
 function isTruncated(apexLog: ApexLog): boolean {
-  // isTruncated is declared on Method, a subclass, so it is read off the node
-  // rather than tested with instanceof. A line without one cannot be truncated.
   return (
-    apexLog.children.some(
-      (child) => (child as LogLine & { isTruncated?: boolean }).isTruncated,
-    ) || apexLog.logIssues.some((issue) => TRUNCATION_ISSUES.has(issue.summary))
+    apexLog.children.some((child) => child.isTruncated) ||
+    apexLog.logIssues.some((issue) => TRUNCATION_ISSUES.has(issue.summary))
   );
 }
 

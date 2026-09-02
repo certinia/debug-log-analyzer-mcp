@@ -11,15 +11,19 @@ import {
 } from "../src/tools/getLogSummary";
 import { clearApexLogCache } from "../src/tools/apexLogSource";
 import { OPERATION_KINDS } from "../src/tools/operations";
-import {
-  parse,
+import { parse } from "@apexdevtools/apex-log-parser";
+import type {
   ApexLog,
-  LogLine,
-  GovernorLimits,
-  Limits,
-  LogIssue,
   ApexLogParser,
-} from "../src/ApexLogParser";
+  LogEvent,
+} from "@apexdevtools/apex-log-parser";
+import {
+  ALL_LIMIT_METRICS,
+  type GovernorLimits,
+  type Limits,
+  type LogIssue,
+  type NamespaceLimits,
+} from "@apexdevtools/apex-log-parser/types";
 import { decode } from "@toon-format/toon";
 
 // Mock the dependencies
@@ -41,7 +45,7 @@ jest.mock("fs", () => {
   };
 });
 
-jest.mock("../src/ApexLogParser", () => ({
+jest.mock("@apexdevtools/apex-log-parser", () => ({
   parse: jest.fn(),
 }));
 
@@ -59,20 +63,20 @@ const counts = { total: 0, self: 0 };
 /** A timed node, as the tools read one: a sub-category and its own time. */
 const node = ({
   type = null,
-  subCategory,
+  category,
   selfNs = 0,
   children = [],
   isTruncated = false,
 }: {
   type?: string | null;
-  subCategory?: string;
+  category?: string;
   selfNs?: number;
-  children?: LogLine[];
+  children?: LogEvent[];
   isTruncated?: boolean;
-}): LogLine =>
+}): LogEvent =>
   ({
     type,
-    subCategory,
+    category,
     children,
     isTruncated,
     text: type ?? "",
@@ -85,8 +89,8 @@ const node = ({
     soqlRowCount: counts,
     dmlRowCount: counts,
     soslRowCount: counts,
-    totalThrownCount: 0,
-  }) as unknown as LogLine;
+    thrownCount: counts,
+  }) as unknown as LogEvent;
 
 describe("getLogSummary", () => {
   beforeEach(() => {
@@ -109,53 +113,56 @@ describe("getLogSummary", () => {
     return decode(result.content[0].text) as any;
   }
 
-  const LIMIT_NAMES: (keyof Limits)[] = [
-    "soqlQueries",
-    "soslQueries",
-    "queryRows",
-    "dmlStatements",
-    "publishImmediateDml",
-    "dmlRows",
-    "cpuTime",
-    "heapSize",
-    "callouts",
-    "emailInvocations",
-    "futureCalls",
-    "queueableJobsAddedToQueue",
-    "mobileApexPushCalls",
-  ];
+  // From the parser, so the set cannot drift from what the tool emits.
+  // `tests/parserContract.test.ts` pins the list itself.
+  const LIMIT_NAMES = ALL_LIMIT_METRICS.map((metric) => metric.key);
 
   const limitsOf = (
     used: Partial<Record<keyof Limits, number>>,
     limit = 100,
   ): Limits =>
     Object.fromEntries(
-      LIMIT_NAMES.map((name) => [name, { used: used[name] ?? 0, limit }]),
+      LIMIT_NAMES.map((name) => [
+        name,
+        { used: used[name] ?? 0, limit, percentUsed: null },
+      ]),
     ) as Limits;
 
-  const governorLimitsOf = (
-    used: Partial<Record<keyof Limits, number>> = {},
-    byNamespace = new Map<string, Limits>(),
-  ): GovernorLimits =>
-    ({ ...limitsOf(used), byNamespace }) as unknown as GovernorLimits;
+  const namespaceLimitsOf = (
+    used: Partial<Record<keyof Limits, number>>,
+    peakUsed = used,
+  ): NamespaceLimits => ({ final: limitsOf(used), peak: limitsOf(peakUsed) });
+
+  const governorLimitsOf = ({
+    used = {},
+    peakUsed = used,
+    byNamespace = new Map<string, NamespaceLimits>(),
+  }: {
+    used?: Partial<Record<keyof Limits, number>>;
+    peakUsed?: Partial<Record<keyof Limits, number>>;
+    byNamespace?: Map<string, NamespaceLimits>;
+  } = {}): GovernorLimits => ({
+    snapshots: [],
+    final: limitsOf(used),
+    peak: limitsOf(peakUsed),
+    byNamespace,
+  });
 
   const createMockApexLog = (overrides: Partial<ApexLog> = {}): ApexLog =>
     ({
       type: null,
       text: "LOG_ROOT",
       size: 15000,
-      debugLevels: [],
+      debugLevels: {},
       namespaces: ["default", "MyNamespace"],
       logIssues: [] as LogIssue[],
       parsingErrors: [] as string[],
       governorLimits: governorLimitsOf({
-        soqlQueries: 5,
-        dmlStatements: 3,
-        cpuTime: 1500,
+        used: { soqlQueries: 5, dmlStatements: 3, cpuTime: 1500 },
       }),
       logParser: {} as ApexLogParser,
       parent: null,
-      children: [] as LogLine[],
+      children: [] as LogEvent[],
       lineNumber: null,
       duration: { total: 12_500_000_000, self: 12_500_000_000 },
       ...overrides,
@@ -191,7 +198,7 @@ describe("getLogSummary", () => {
       // The parser marks the line that lost its exit event. The root is never
       // marked, so reading it there reports every truncated log as whole.
       const summary = await summaryOf({
-        children: [node({ subCategory: "Method", isTruncated: true })],
+        children: [node({ category: "Apex", isTruncated: true })],
       });
 
       expect(summary.truncated).toBe(true);
@@ -201,7 +208,7 @@ describe("getLogSummary", () => {
       // The events pair up around the gap, so no node is marked and only the
       // log issue says part of the transaction is missing.
       const summary = await summaryOf({
-        children: [node({ subCategory: "Method" })],
+        children: [node({ category: "Apex" })],
         logIssues: [
           {
             summary: "Skipped-Lines",
@@ -217,7 +224,7 @@ describe("getLogSummary", () => {
 
     it("should say when the log hit the maximum size", async () => {
       const summary = await summaryOf({
-        children: [node({ subCategory: "Method" })],
+        children: [node({ category: "Apex" })],
         logIssues: [
           {
             summary: "Max-Size-reached",
@@ -233,7 +240,7 @@ describe("getLogSummary", () => {
 
     it("should call a whole log whole when its issues are not about missing log", async () => {
       const summary = await summaryOf({
-        children: [node({ subCategory: "Method" })],
+        children: [node({ category: "Apex" })],
         logIssues: [
           {
             summary: "CPU time exceeded",
@@ -251,15 +258,12 @@ describe("getLogSummary", () => {
       // The levels tie log content to log configuration: what was captured, and
       // what is missing because a category was switched off.
       const summary = await summaryOf({
-        debugLevels: [
-          { logCategory: "Apex_code", logLevel: "DEBUG" },
-          { logCategory: "Db", logLevel: "NONE" },
-        ] as any,
+        debugLevels: { apexCode: "DEBUG", database: "NONE" },
       });
 
       expect(summary.debugLevels).toEqual([
-        { logCategory: "Apex_code", level: "DEBUG" },
-        { logCategory: "Db", level: "NONE" },
+        { logCategory: "APEX_CODE", level: "DEBUG" },
+        { logCategory: "DB", level: "NONE" },
       ]);
     });
 
@@ -302,7 +306,9 @@ describe("getLogSummary", () => {
   describe("governorLimits", () => {
     it("should report every limit as a row, including the ones at zero", async () => {
       const summary = await summaryOf({
-        governorLimits: governorLimitsOf({ cpuTime: 8000, soqlQueries: 50 }),
+        governorLimits: governorLimitsOf({
+          used: { cpuTime: 8000, soqlQueries: 50 },
+        }),
       });
 
       expect(summary.governorLimits).toHaveLength(LIMIT_NAMES.length);
@@ -319,31 +325,54 @@ describe("getLogSummary", () => {
       });
     });
 
-    it("should not report byNamespace as a limit", async () => {
-      const summary = await summaryOf();
+    it("should report the peak a limit reached, not where it ended", async () => {
+      // A counter falls when the frame that spent it exits, so the final figure
+      // understates what the platform enforced.
+      const summary = await summaryOf({
+        governorLimits: governorLimitsOf({
+          used: { cpuTime: 100 },
+          peakUsed: { cpuTime: 8000 },
+        }),
+      });
 
-      expect(
-        summary.governorLimits.map((row: { limit: string }) => row.limit),
-      ).not.toContain("byNamespace");
+      expect(summary.governorLimits).toContainEqual({
+        limit: "cpuTime",
+        used: 8000,
+        max: 100,
+      });
     });
   });
 
   describe("limitsByNamespace", () => {
     it("should report what each namespace consumed", async () => {
       const summary = await summaryOf({
-        governorLimits: governorLimitsOf(
-          { soqlQueries: 6, cpuTime: 1500 },
-          new Map([
-            ["srm_pkg", limitsOf({ soqlQueries: 4, cpuTime: 900 })],
-            ["default", limitsOf({ soqlQueries: 2 })],
+        governorLimits: governorLimitsOf({
+          used: { soqlQueries: 6, cpuTime: 1500 },
+          byNamespace: new Map([
+            ["srm_pkg", namespaceLimitsOf({ soqlQueries: 4, cpuTime: 900 })],
+            ["default", namespaceLimitsOf({ soqlQueries: 2 })],
           ]),
-        ),
+        }),
       });
 
       expect(summary.limitsByNamespace).toEqual([
         { namespace: "srm_pkg", limit: "soqlQueries", used: 4 },
         { namespace: "srm_pkg", limit: "cpuTime", used: 900 },
         { namespace: "default", limit: "soqlQueries", used: 2 },
+      ]);
+    });
+
+    it("should report the peak a namespace reached, not where it ended", async () => {
+      const summary = await summaryOf({
+        governorLimits: governorLimitsOf({
+          byNamespace: new Map([
+            ["srm_pkg", namespaceLimitsOf({ soqlQueries: 1 }, { soqlQueries: 4 })],
+          ]),
+        }),
+      });
+
+      expect(summary.limitsByNamespace).toEqual([
+        { namespace: "srm_pkg", limit: "soqlQueries", used: 4 },
       ]);
     });
 
@@ -366,19 +395,19 @@ describe("getLogSummary", () => {
         children: [
           node({
             type: "METHOD_ENTRY",
-            subCategory: "Method",
+            category: "Apex",
             selfNs: 2_000_000_000,
             children: [
               node({
                 type: "SOQL_EXECUTE_BEGIN",
-                subCategory: "SOQL",
+                category: "SOQL",
                 selfNs: 1_000_000_000,
               }),
             ],
           }),
           node({
             type: "METHOD_ENTRY",
-            subCategory: "Method",
+            category: "Apex",
             selfNs: 500_000_000,
           }),
         ],

@@ -72,7 +72,7 @@ import {
 import { ensureTraceFlag } from "../src/salesforce/traceFlags";
 import { resolveOrg } from "../src/salesforce/connection";
 import { loadApexLog } from "../src/tools/apexLogSource";
-import type { ApexLog } from "../src/ApexLogParser";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
 import {
   createConfirmationLedger,
