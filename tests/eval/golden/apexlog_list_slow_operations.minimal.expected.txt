@@ -1,6 +1,7 @@
 apexCodeLevel: FINE
 systemLevel: DEBUG
 dbLevel: NONE
+calloutLevel: NONE
 workflowLevel: NONE
 durationTotalMs: 0.561
 returnedSelfPercentage: 97.3

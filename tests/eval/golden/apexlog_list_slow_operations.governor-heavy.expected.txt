@@ -1,6 +1,7 @@
 apexCodeLevel: FINE
 systemLevel: FINE
 dbLevel: FINEST
+calloutLevel: FINEST
 workflowLevel: FINE
 durationTotalMs: 24608.108
 returnedSelfPercentage: 100

@@ -1,21 +1,14 @@
 import { Connection } from "@salesforce/core";
+import { LOG_LEVEL } from "@apexdevtools/apex-log-parser/types";
+import type { DebugLevels } from "@apexdevtools/apex-log-parser/types";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
 const DEBUG_LEVEL_NAME = "Apex_Log_MCP_Debug_Level";
 
-/** `as const` so that `z.enum` can consume it — this is the only list of levels. */
-export const LOG_LEVELS = [
-  "NONE",
-  "ERROR",
-  "WARN",
-  "INFO",
-  "DEBUG",
-  "FINE",
-  "FINER",
-  "FINEST",
-] as const;
+/** The parser also admits `""`, for an event that states no level; a request cannot ask for it. */
+export type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
 
-export type LogLevel = (typeof LOG_LEVELS)[number];
+export const LOG_LEVELS = Object.values(LOG_LEVEL);
 
 /** The DebugLevel field names, lower-camel. `toSObjectFields` capitalises them. */
 export const TRACE_CATEGORIES = [
@@ -59,6 +52,40 @@ export const LOG_CATEGORIES = [
 export type LogCategory = (typeof LOG_CATEGORIES)[number];
 
 /**
+ * The `DebugLevels` property each header category is parsed into.
+ *
+ * Header order, which is the order `declaredLevels` reports. The parser holds
+ * the same correspondence but does not publish it.
+ */
+export const DEBUG_LEVEL_FIELD_BY_CATEGORY = {
+  APEX_CODE: "apexCode",
+  APEX_PROFILING: "apexProfiling",
+  CALLOUT: "callout",
+  DATA_ACCESS: "dataAccess",
+  DB: "database",
+  NBA: "nba",
+  SYSTEM: "system",
+  VALIDATION: "validation",
+  VISUALFORCE: "visualforce",
+  WAVE: "wave",
+  WORKFLOW: "workflow",
+} as const satisfies Record<LogCategory, keyof DebugLevels>;
+
+/** Fails to compile unless `T` is `true`. */
+type Assert<T extends true> = T;
+
+/**
+ * Compile guard for the other direction: the `satisfies` above only checks that
+ * every category names a real field. A category the parser adds has to be named
+ * here too, or `declaredLevels` silently drops it from every response.
+ */
+export type EveryDebugLevelCategoryNamed = Assert<
+  keyof DebugLevels extends (typeof DEBUG_LEVEL_FIELD_BY_CATEGORY)[LogCategory]
+    ? true
+    : false
+>;
+
+/**
  * A settable category under the name a debug log header gives it.
  *
  * `DATA_ACCESS` is absent because no `DebugLevel` field sets it, so nothing
@@ -94,10 +121,7 @@ export const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
 export type DebugLevelInput = "default" | LogLevel | TraceConfig;
 
 function isLogLevel(value: DebugLevelInput): value is LogLevel {
-  return (
-    typeof value === "string" &&
-    (LOG_LEVELS as readonly string[]).includes(value)
-  );
+  return typeof value === "string" && (LOG_LEVELS as string[]).includes(value);
 }
 
 function resolveLevels(debugLevel: DebugLevelInput): Record<string, string> {
