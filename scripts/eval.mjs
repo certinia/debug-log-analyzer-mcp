@@ -281,8 +281,11 @@ const SELECTION_KEYWORDS = {
  * case is a server round trip and a golden file a reviewer has to read, so a
  * case earns its place only by pinning something the others would miss — and a
  * cross product spends three cases on a fixture that answers one question.
- * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool that
- * publishes a heap figure.
+ * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool whose
+ * answer its heap changes. `apexlog_list_limit_risks` does read heap, but this
+ * log's heap sits under its risk threshold, and the rows
+ * `apexlog_list_slow_operations` would rank are kinds `governor-heavy` pins
+ * already.
  */
 const FIXTURES_BY_TOOL = {
   apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy"],

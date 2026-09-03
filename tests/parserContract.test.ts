@@ -87,35 +87,49 @@ describe("parser contract", () => {
   });
 
   describe("heap measures", () => {
-    const heapLog = parse(fixture("heap-heavy"));
+    // Allocations chosen so that no two heap figures agree: the pair that is
+    // freed again leaves the net at 500_000, every allocation counted gives a
+    // gross of 950_000, the highest the run ever held is 750_000, and the
+    // limit block states nothing.
+    const log = [
+      HEADER,
+      "09:00:00.1 (1000)|EXECUTION_STARTED",
+      "09:00:00.2 (2000)|HEAP_ALLOCATE|[1]|Bytes:100000",
+      "09:00:00.2 (3000)|HEAP_ALLOCATE|[2]|Bytes:-100000",
+      "09:00:00.3 (4000)|HEAP_ALLOCATE|[1]|Bytes:100000",
+      "09:00:00.3 (5000)|HEAP_ALLOCATE|[2]|Bytes:-100000",
+      "09:00:00.4 (6000)|HEAP_ALLOCATE|[3]|Bytes:250000",
+      "09:00:00.5 (7000)|BULK_HEAP_ALLOCATE|Bytes:250000",
+      "09:00:00.6 (8000)|HEAP_ALLOCATE|[4]|Bytes:250000",
+      "09:00:00.7 (9000)|HEAP_ALLOCATE|[5]|Bytes:-250000",
+      "09:00:00.9 (9500)|CUMULATIVE_LIMIT_USAGE",
+      "09:00:00.9 (9500)|LIMIT_USAGE_FOR_NS|(default)|",
+      "  Maximum heap size: 0 out of 6000000",
+      "",
+      "09:00:00.9 (9500)|CUMULATIVE_LIMIT_USAGE_END",
+      "09:00:01.0 (10000)|EXECUTION_FINISHED",
+      "",
+    ].join("\n");
 
-    const eventNamed = (name: string): LogEvent => {
-      const event = tree(heapLog).find((node) => node.text === name);
-      if (!event) {
-        throw new Error(`${name} is not in heap-heavy.log`);
-      }
-      return event;
-    };
-
-    // The three do not agree, and #99 ranks operations on them: `churn()` frees
-    // all it takes, so its net is zero and its peak a fifth of its gross. One
-    // of them published as "heap used" would read the path as free.
-    it("keeps net, gross and peak apart", () => {
-      const churn = eventNamed("HeapService.churn()");
-
-      expect(churn.heapAllocated.total).toBe(0);
-      expect(churn.heapGross.total).toBe(200_000);
-      expect(churn.heapPeak).toBe(100_000);
-    });
-
-    // A cumulative block states heap as zero, so the events are the only heap
-    // figure the log gives. `apexlog_get_summary` publishes this as its
-    // `heapSize` row.
-    it("takes the transaction figure from the events, not the limit block", () => {
-      const [snapshot] = heapLog.governorLimits.snapshots;
+    // `apexlog_get_summary` publishes `peak.heapSize` as its `heapSize` row.
+    // Nothing else in the log agrees with it: the block states zero and so does
+    // `final`, the net frees back to 500_000, and the gross counts every
+    // allocation at 950_000. 250_000 of the peak arrives as one
+    // `BULK_HEAP_ALLOCATE`, so a parser counting only `HEAP_ALLOCATE` also
+    // reaches 500_000.
+    //
+    // The block is read through `snapshots` and not `final`, which is zero
+    // either way: a parser that stopped reading `LIMIT_USAGE_FOR_NS` has no
+    // snapshot, and only this spelling fails on that.
+    it("reports heap as the events' peak, not the block, net or gross", () => {
+      const { governorLimits, heapAllocated, heapGross } = parse(log);
+      const [snapshot] = governorLimits.snapshots;
 
       expect(snapshot?.limits.heapSize.used).toBe(0);
-      expect(heapLog.governorLimits.peak.heapSize.used).toBe(750_000);
+      expect(governorLimits.final.heapSize.used).toBe(0);
+      expect(heapAllocated.total).toBe(500_000);
+      expect(heapGross.total).toBe(950_000);
+      expect(governorLimits.peak.heapSize.used).toBe(750_000);
     });
   });
 
@@ -123,7 +137,7 @@ describe("parser contract", () => {
     // `kindOf` in tools/operations.ts drops an event with no category before it
     // looks at anything else, so a timed event without one would be ranked
     // nowhere and its time reported nowhere.
-    it.each(["governor-heavy", "minimal"])(
+    it.each(["governor-heavy", "minimal", "heap-heavy"])(
       "is set on every event that carries a duration (%s)",
       (name) => {
         const timed = tree(parse(fixture(name))).filter(
