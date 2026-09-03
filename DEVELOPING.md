@@ -12,10 +12,11 @@ Welcome to the development guide for the **Apex Log MCP Server**. This document 
 2. [Setting Up the Development Environment](#-setting-up-the-development-environment)
 3. [Building](#-building)
 4. [Running the Server Locally](#-running-the-server-locally)
-5. [Shaping Tool Responses](#️-shaping-tool-responses)
-6. [Shaping Tool Definitions](#️-shaping-tool-definitions)
-7. [Testing Your Changes](#-testing-your-changes)
-8. [Releasing](#-releasing)
+5. [Naming Tools and Fields](#-naming-tools-and-fields)
+6. [Shaping Tool Responses](#️-shaping-tool-responses)
+7. [Shaping Tool Definitions](#️-shaping-tool-definitions)
+8. [Testing Your Changes](#-testing-your-changes)
+9. [Releasing](#-releasing)
 
 ## 🔧 Prerequisites
 
@@ -47,7 +48,7 @@ To get started, clone this repository and install the necessary dependencies.
    pnpm i
    ```
 
-4. **Optional: Set a default org (execute_anonymous tool only)**
+4. **Optional: Set a default org (apexlog_execute_anonymous tool only)**
 
    The execute anonymous Apex tool requires a default org to be set using the Salesforce CLI. To do this in a repository that has no `sfdx-project.json` like this one, set your default org globally:
 
@@ -109,6 +110,60 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
 
    To disable Apex execution altogether, use `--no-apex-execution`. See the [README](README.md#production-safety) for the full policy.
 
+## 🔤 Naming Tools and Fields
+
+A name has to be decidable: for any new tool or field, exactly one name follows from these rules. The
+reader is an agent that cannot ask what a name means.
+
+### Prefix every tool with `apexlog_`
+
+Unprefixed names collide across servers. `get_issue` and `list_issues` ship in both the GitHub and the
+Sentry server; `search_files` and `read_file` in both Filesystem and Google Drive. A client with two of
+those loaded cannot tell them apart.
+
+One unbroken unit — `apexlog_`, not `apex_log_`, as `slack_` is — so the boundary between the namespace
+and the verb is visible.
+
+### The verb states the shape of the result
+
+The result is what the caller plans around. The work is invisible to it.
+
+| Verb | The caller gets back |
+| --- | --- |
+| `get_` | exactly one thing, identified by the input |
+| `list_` | a collection; filters, thresholds and ranking are allowed |
+| `search_` | a collection matched to a query the caller supplies |
+| `create_` / `update_` / `delete_` / `write_` | one resource, written |
+| `execute_` / `run_` | an effect outside this server |
+
+A filter does not make it a `search_` — Sentry's `list_issues` and GitHub's `list_pull_requests` both
+take filters. `search_` is for a caller's query string.
+
+Banned: `analyze`, `process`, `handle` and `manage`, because they name work, so two tools can both
+claim them; `find`, `detect`, `check` and `fetch`, because they are synonyms of the verbs above.
+
+The noun states what the result is, in the caller's words: `slow_operations`, not `timed_nodes`.
+
+A bare noun (`apexlog_summary`) is shorter, and `git_status` shows it can work — but only because git's
+subcommands *are* its vocabulary, so `status` reads as a verb there. Ours is not, and a bare noun
+cannot say whether one thing or many come back.
+
+### Fields
+
+1. **Name the fact, not the calculation**: `returnedSelfPercentage`, not `coveredSelfPercentage`.
+2. **Carry the unit** when the type cannot: `durationSelfMs`, `fileSizeBytes`.
+3. **`total` always means "including children", `self` always means "excluding them".** Never "summed
+   across rows". A log's duration *is* its root frame's, so `durationTotalMs` names it at every scope,
+   and the parser's own `duration.total` / `duration.self` reach the wire unrenamed.
+4. **One name per fact, in every tool.** A word may still serve two unrelated facts where position
+   prevents confusion: `limit` is both the input row count and the column naming which governor limit
+   a row is about.
+5. **Counts are `<singularNoun>Count`**: `soqlCount`, `dmlRowCount`. Not `totalX`, not a plural alone.
+6. **lowerCamel, acronyms folded**: `soqlCount`.
+7. **Booleans are bare adjectives that read true**: `truncated`, `succeeded`. No `isX`, no `hasX`.
+8. **An input names what it limits, on the axis it acts on**: `limit`, `minSelfMs`. `minDuration`
+   filtered on total time while the ranking used self time, and the name hid it.
+
 ## ✂️ Shaping Tool Responses
 
 Every token a tool returns is a token the agent cannot spend on reasoning, so responses are kept as
@@ -125,10 +180,16 @@ it, and it costs nothing. Measured on the 13 governor limits of a real 19 MB log
 | --- | --- | --- |
 | Nested objects, all 13 | ~151 | yes |
 | Nested objects, `used > 0` only | ~42 | **no** |
-| **Flat table (`{name, used, limit}`), all 13** | **~84** | yes |
+| **Flat table (`{limit, used, max}`), all 13** | **~84** | yes |
 
 The flat table is 45% cheaper than the nested form *and* complete. Deleting the zero rows buys 42
 more tokens and costs the answer, so we don't. `toLimitRows` is the helper that does this.
+
+Per-namespace usage is the exception that proves the rule. `toNamespaceLimitRows` reports only the
+limits a namespace consumed, because there a row *is* an occurrence: whether a limit was measured at
+all is a property of the transaction, which the whole-log table already answers, so a namespace with
+no row for a limit consumed none of it. It states no ceiling either — the parser keeps one ceiling
+per limit for the whole transaction, and it is already in `governorLimits`.
 
 ### The conventions
 
@@ -138,13 +199,18 @@ one-liners.
 - **A fixed-schema field is always reported, even at zero.** The set of governor limits, debug
   categories and method columns is fixed and known, so a zero is a fact and an absent key is an
   ambiguity — the reader cannot tell "nothing ran" from "never parsed". Report the zero.
-- **Only occurrence lists are omitted when empty** — issues found, recommendations made, errors
+- **Only occurrence lists are omitted when empty** — issues found, errors
   encountered. There, absence is unambiguous: nothing occurred. `omitEmpty` is for these and nothing
   else; never pass a fixed-schema scalar through it. (`false` is *not* empty — it is an answer.)
 - **Say it once.** Never restate in prose a figure that is already in a table, and never report a
-  value in two sections. Recommendations say what to *do*; the numbers stay in the data. Where prose
+  value in two sections. Where prose
   carried a fact the table could not, replace it with a scalar rather than deleting it —
   `topMethodsSelfPercentage` is ~8 tokens where the paragraph it replaced was ~55.
+- **Don't state what the caller can derive.** A sentence earns its tokens only if it carries a fact the
+  numbers do not. "No bottlenecks found" follows from an always-present empty list, so the fix is a
+  complete shape, not a sentence; "High CPU usage — consider optimizing algorithms" follows from the
+  percentage beside it. Advice built from one column and a hardcoded threshold is a worse copy of what
+  the agent does anyway, because the agent reads every column.
 - **Don't echo the input back.** If the caller supplied it (a file path, a flag), it does not belong
   in the response.
 - **Round to the precision someone acts on.** `roundMs` for durations (3dp, keeps microsecond
@@ -152,10 +218,71 @@ one-liners.
   `62.569866677679975`, and every one of those digits is a token nobody reads.
 - **Keep table rows identical in shape.** TOON emits one header plus one line per row only while the
   rows agree on their keys, so a column is either present on every row or on none.
-- **Make conditional information conditional.** A static tip that is only relevant sometimes should
-  be emitted only then.
+- **Report the fact, not the advice.** A tip is a rule applied to a fact the caller cannot see. Report
+  the fact instead and let the agent apply its own rule: `outputDirCreated` is 4 tokens where the
+  ".gitignore" sentence it replaced was ~15, and it answers the question either way.
 - **Say in the tool description what is omitted and when.** Currently that is one sentence per tool,
   because there is one omission per tool.
+- **Encode with the TOON defaults.** Measured, none of the alternatives pay:
+  - `indentSize: 1` — saves 2.4%, but `decode` rejects it without a matching `indentSize`.
+  - keyed tabular (`[n:]`) — costs one character per row, `,` becoming `: `.
+  - `delimiter` tab or pipe — 2 tokens on a 9,365-token response. Quoting comes from `:` in a name.
+  - nested field groups — nothing left to fold; every table is already flat.
+
+### A scalar qualifies the response, a column varies per row
+
+**A fact that qualifies every number in the response is a response-level scalar, stated once; a fact
+that varies per row is a column.** `threshold` on `apexlog_list_limit_risks` follows this rule, and so
+do the four capture levels — `apexCodeLevel`, `systemLevel`, `dbLevel` and `workflowLevel` — that
+`apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header.
+
+They matter because a capture level silently changes what every figure beside it means. On a log
+taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self
+time on a Visualforce page. That is not the page's work — it is everything the level hid, pooled at
+the nearest logged boundary. Without the level the number reads as a finding, and any advice built on
+it is confidently wrong.
+
+Two consequences:
+
+- **A category the header never declared is left out, not defaulted.** A level has no zero, so the
+  usual "report the fixed-schema field anyway" does not apply — naming a default would state a value
+  the log never did. Absent means unstated.
+- **No caveat prose and no magnitude.** The response reports the level and stops. A figure measured
+  once against one org, with the harness not committed, cannot be re-derived by CI and will rot.
+
+`apexlog_get_summary` needs none of them: `timeByKind` already carries a `logCategory` column and
+`debugLevels` lists the level per category, so the join is the caller's to make and restating it
+would break "say it once".
+
+### When a fact earns a grouping and not a column
+
+`namespace` on an operation is the namespace of the frame, which is not always the namespace that
+asked for the work. `DMLBeginLine` pins `namespace = "default"` however the DML was reached, while
+`SOQLExecuteBeginLine` and `SOSLExecuteBeginLine` carry no namespace logic at all and so inherit the
+caller's. The caller is a second fact, and `Operation.callerNamespace` holds it.
+
+It is read off the **direct parent event**, not off the nearest ancestor that ranks as an operation.
+Measured over 298 real logs and 1,178,604 operations the two readings agree on every row, because
+the parser copies a namespace down to every child that has none. The only rows where they could
+diverge are the 289 whose parent is the `EXECUTION_STARTED` frame, and that frame is `default`. So
+the reading is the cheaper one to reason about rather than a different answer: it holds even if the
+set of frames the ranking skips grows.
+
+It does not earn a column. Measured over two real logs:
+
+| log | rows | caller differs |
+| --- | ---: | ---: |
+| 19 MB, managed packages throughout | 2,469 | 72 (**2.9%**) |
+| 39 MB, every category at `INFO` | 39,415 | 2 (**0.0%**) |
+
+Flows, SOQL, workflow and methods differ on **0%** of rows. The *time* sits entirely in the rows that
+do differ: DML differs on 4 of 5 rows carrying 934 of its 944 ms, and `codeUnit` on 17% of rows
+carrying 10,600 of its 10,904 ms. So the fact matters and the column does not — it would repeat
+`namespace` on 97% of every response.
+
+`groupBy: "callerNamespace"` asks the question instead, for one enum value and the clause that says
+what it attributes. Every response that does not pass it is unchanged. The rule: **a fact worth an
+answer but not worth a column belongs in a parameter that reshapes the rows, not in the rows.**
 
 ### The gate
 
@@ -208,7 +335,7 @@ hint quietly coming back.
 
 `destructiveHint` and `idempotentHint` are defined as meaningful only when `readOnlyHint` is false, so
 the three read-only tools declare `readOnlyHint: true` and `openWorldHint: false` and nothing more —
-both differ from the spec default, and both say something. `execute_anonymous` keeps all four hints; it
+both differ from the spec default, and both say something. `apexlog_execute_anonymous` keeps all four hints; it
 is the one tool where a client that misreads a default runs Apex against an org.
 
 ### Know the floor

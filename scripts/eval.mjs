@@ -57,10 +57,9 @@ const estimateTokens = (text) => Math.round(text.length / 4);
  * answer them.
  */
 const ANSWERABILITY = {
-  get_apex_log_summary: [
+  apexlog_get_summary: [
     {
       question: "How many DML statements and SOQL queries were consumed?",
-      fields: ["totalDMLOperations", "totalSOQLQueries"],
       limits: ["dmlStatements", "soqlQueries"],
     },
     {
@@ -68,42 +67,89 @@ const ANSWERABILITY = {
       limits: ["cpuTime", "heapSize", "queryRows", "dmlRows"],
     },
     {
-      question: "How long did the transaction take, and how much code ran?",
-      fields: ["totalExecutionTime", "totalMethods", "size"],
+      question: "Which searches and future calls did it use?",
+      limits: ["soslQueries", "futureCalls"],
+    },
+    {
+      question: "Which namespace consumed the limits?",
+      keys: ["limitsByNamespace"],
+    },
+    {
+      question: "How long did the transaction take, and how big is the log?",
+      fields: ["durationTotalMs", "fileSizeBytes"],
+    },
+    {
+      question: "Where did the time go — methods, queries or a managed package?",
+      keys: ["timeByKind"],
+      columns: ["kind", "operationCount", "durationSelfMs"],
     },
     {
       question: "Is detail missing because a log category was switched off?",
       keys: ["debugLevels"],
+      columns: ["logCategory", "level"],
     },
-    { question: "Did the log parse cleanly?", fields: ["parsingErrors"] },
+    {
+      question: "Did the log parse cleanly, and did it capture the whole run?",
+      fields: ["parsingErrorCount"],
+      keys: ["truncated"],
+    },
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
-  analyze_apex_log_performance: [
-    { question: "Which methods are the slowest?", keys: ["slowestMethods"] },
+  apexlog_list_slow_operations: [
+    { question: "What did the transaction spend its time on?", keys: ["operations"] },
     {
-      question: "What share of the runtime do those methods account for?",
-      fields: ["topMethodsSelfPercentage", "totalExecutionTime"],
-    },
-    { question: "How many methods were considered?", fields: ["totalMethods"] },
-    {
-      question: "Did any of the slowest methods touch the database?",
-      columns: ["dmlCount", "soqlCount", "dmlRows", "soqlRows"],
+      question: "Was it a method, a query, a search or DML?",
+      keys: ["operations"],
+      columns: ["kind", "callCount"],
     },
     {
-      question: "Where in the code are they, and whose namespace are they in?",
-      columns: ["namespace", "lineNumber"],
+      question: "What share of the runtime do those operations account for?",
+      fields: ["returnedSelfPercentage", "durationTotalMs"],
+    },
+    {
+      question: "Did any of them touch the database, and how much did they move?",
+      keys: ["operations"],
+      columns: ["dmlCount", "soqlCount", "soslCount", "rowCount"],
+    },
+    {
+      question: "Whose namespace are they in?",
+      keys: ["operations"],
+      columns: ["namespace"],
+    },
+    {
+      question: "Is it one slow call or many cheap ones?",
+      keys: ["operations"],
+      columns: ["callCount", "durationSelfMaxMs"],
+    },
+    {
+      question: "Was the log captured at a level that hides work inside these rows?",
+      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
+    },
+    {
+      question: "Did the row cap hide operations the selection matched?",
+      fields: ["matchedCount"],
+    },
+    {
+      // Only where a query was ranked and the log recorded a plan for it.
+      // `minimal.log` runs no query, and an absent table is the honest answer.
+      fixture: "governor-heavy",
+      question: "Will the optimizer treat those queries as selective?",
+      keys: ["queryPlans"],
+      columns: ["leadingOperationType", "relativeCost", "sObjectCardinality"],
     },
   ],
-  find_performance_bottlenecks: [
+  apexlog_list_limit_risks: [
     {
-      question: "Is anything over or near a limit, and what should I look at?",
-      anyKey: [
-        "cpuBottlenecks",
-        "databaseBottlenecks",
-        "methodBottlenecks",
-        "governorLimitWarnings",
-        "note",
-      ],
+      question: "Is any governor limit nearly consumed?",
+      keys: ["atRisk"],
+    },
+    {
+      question: "How near does a limit have to be to appear here?",
+      fields: ["threshold"],
+    },
+    {
+      question: "Was the log captured at a level that hides what consumed a limit?",
+      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
     },
   ],
 };
@@ -119,14 +165,8 @@ const ANSWERABILITY = {
  * new limit needs one edit rather than two.
  */
 const MINIMAL_ZEROS = {
-  get_apex_log_summary: {
-    fields: [
-      "totalSOQLQueries",
-      "totalDMLOperations",
-      "totalSOQLRows",
-      "totalDMLRows",
-      "parsingErrors",
-    ],
+  apexlog_get_summary: {
+    fields: ["parsingErrorCount"],
     allLimitsZero: true,
   },
 };
@@ -138,12 +178,24 @@ const MINIMAL_ZEROS = {
  * than a surprise failure.
  */
 const TOKEN_BUDGET = {
-  "get_apex_log_summary/governor-heavy": 230,
-  "get_apex_log_summary/minimal": 185,
-  "analyze_apex_log_performance/governor-heavy": 290,
-  "analyze_apex_log_performance/minimal": 130,
-  "find_performance_bottlenecks/governor-heavy": 85,
-  "find_performance_bottlenecks/minimal": 35,
+  // Raised for the two tables #62 added: what each namespace consumed of the
+  // limits, and where the time went by kind of operation. Both answer questions
+  // the 1.x summary could not.
+  "apexlog_get_summary/governor-heavy": 357,
+  "apexlog_get_summary/minimal": 249,
+  // Raised for the grouped default #126 made: every row now carries its call
+  // count and the self time of its slowest call, and for the four capture levels
+  // #102 added, which say how much of the transaction reached the log at all,
+  // and for the `matchedCount` #63 added, which says whether the row cap hid
+  // anything the selection matched, and for the query plans #120 added, which
+  // say whether the optimizer treats a ranked query as selective.
+  "apexlog_list_slow_operations/governor-heavy": 410,
+  "apexlog_list_slow_operations/minimal": 130,
+  // Raised for the fifth capture level #97 added. A callout is a timed event to
+  // the published parser, so it is ranked, and a ranked kind has to state the
+  // level that gates it or a zero cannot be read.
+  "apexlog_list_limit_risks/governor-heavy": 46,
+  "apexlog_list_limit_risks/minimal": 30,
 };
 
 /**
@@ -153,19 +205,19 @@ const TOKEN_BUDGET = {
  * released figure cannot change.
  */
 const V1_DEFINITION_TOKENS = {
-  analyze_apex_log_performance: 247,
-  get_apex_log_summary: 171,
-  find_performance_bottlenecks: 267,
-  execute_anonymous: 844,
+  apexlog_list_slow_operations: 247,
+  apexlog_get_summary: 171,
+  apexlog_list_limit_risks: 267,
+  apexlog_execute_anonymous: 844,
 };
 
 const V1_RESPONSE_TOKENS = {
-  "get_apex_log_summary/governor-heavy": 293,
-  "get_apex_log_summary/minimal": 249,
-  "analyze_apex_log_performance/governor-heavy": 408,
-  "analyze_apex_log_performance/minimal": 190,
-  "find_performance_bottlenecks/governor-heavy": 84,
-  "find_performance_bottlenecks/minimal": 30,
+  "apexlog_get_summary/governor-heavy": 293,
+  "apexlog_get_summary/minimal": 249,
+  "apexlog_list_slow_operations/governor-heavy": 408,
+  "apexlog_list_slow_operations/minimal": 190,
+  "apexlog_list_limit_risks/governor-heavy": 84,
+  "apexlog_list_limit_risks/minimal": 30,
 };
 
 /**
@@ -176,11 +228,28 @@ const V1_RESPONSE_TOKENS = {
  * not a silent tax on every request.
  */
 const DEFINITION_BUDGET = {
-  analyze_apex_log_performance: 250,
-  get_apex_log_summary: 161,
-  find_performance_bottlenecks: 246,
-  execute_anonymous: 449,
+  // Raised for the five selection parameters, which the caller acts on: without
+  // them a ranking over every operation kind can only be read whole, and for the
+  // warning that a grouped durationTotalMs must not be summed across rows, and
+  // for what grouping by default now states about the row it returns, and for
+  // callerNamespace, which needs a clause to say what it attributes, and for the
+  // clause #120 added to say the response also carries the query plans.
+  apexlog_list_slow_operations: 392,
+  // Raised for the two facts the summary gained: per-namespace limit usage, and
+  // time by kind of operation.
+  apexlog_get_summary: 180,
+  apexlog_list_limit_risks: 210,
+  apexlog_execute_anonymous: 449,
 };
+
+/**
+ * What `tools/list` must tell a 2026-07-28 client about caching its answer. The
+ * definitions are fixed for the life of the process and hold nothing about the
+ * caller, so an hour and a shared cache are both safe. Without it the SDK emits
+ * the conservative `{ ttlMs: 0, cacheScope: "private" }` and every client pays
+ * the definition budget again on every turn.
+ */
+const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
 
 /**
  * The whole of `tools/list` must stay under what 1.x charged for it. The per-tool
@@ -198,22 +267,33 @@ const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
  * longer says "governor limits" is a regression, not a saving.
  */
 const SELECTION_KEYWORDS = {
-  analyze_apex_log_performance: ["self-execution time", "optimize"],
-  get_apex_log_summary: ["summary", "overview"],
-  find_performance_bottlenecks: ["governor limits", "CPU"],
-  execute_anonymous: ["anonymous Apex", "Salesforce org"],
+  apexlog_list_slow_operations: ["self-execution time", "optimize"],
+  apexlog_get_summary: ["summary", "overview"],
+  apexlog_list_limit_risks: ["governor limits", "CPU time"],
+  apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
 };
 
 const CASES = [
-  "get_apex_log_summary",
-  "analyze_apex_log_performance",
-  "find_performance_bottlenecks",
+  "apexlog_get_summary",
+  "apexlog_list_slow_operations",
+  "apexlog_list_limit_risks",
 ].flatMap((tool) =>
   ["governor-heavy", "minimal"].map((fixture) => ({ tool, fixture })),
 );
 
+/**
+ * What a 2026-07-28 request carries in place of the `initialize` handshake. The
+ * era is per connection, so a client that has initialized stays legacy however a
+ * later request is addressed.
+ */
+const MODERN_ENVELOPE = {
+  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+  "io.modelcontextprotocol/clientCapabilities": {},
+  "io.modelcontextprotocol/clientInfo": { name: "apex-log-mcp-eval", version: "0" },
+};
+
 /** Minimal MCP stdio client: initialize, then one tools/call per case. */
-function createClient() {
+function createClient(era = "legacy") {
   const child = spawn("node", ["--max-old-space-size=8192", SERVER], {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -245,11 +325,16 @@ function createClient() {
     new Promise((resolve) => {
       const id = nextId++;
       pending.set(id, resolve);
-      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
+      const addressed =
+        era === "modern" ? { ...params, _meta: MODERN_ENVELOPE } : params;
+      child.stdin.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id, method, params: addressed })}\n`,
+      );
     });
 
   return {
     async start() {
+      if (era === "modern") return;
       await request("initialize", {
         protocolVersion: "2025-06-18",
         capabilities: {},
@@ -259,13 +344,12 @@ function createClient() {
         `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
       );
     },
-    async listTools() {
+    async toolsList() {
       const response = await request("tools/list", {});
-      const tools = response.result?.tools;
-      if (!Array.isArray(tools)) {
+      if (!Array.isArray(response.result?.tools)) {
         throw new Error(`tools/list returned no tools: ${JSON.stringify(response)}`);
       }
-      return tools;
+      return response.result;
     },
     async callTool(name, args) {
       const response = await request("tools/call", { name, arguments: args });
@@ -293,7 +377,7 @@ function createClient() {
 function inspect(toon) {
   const scalars = new Map();
   const keys = [];
-  const columns = new Set();
+  const columns = new Map();
   const tables = new Map();
   const strings = [];
   let table = new Map();
@@ -307,14 +391,17 @@ function inspect(toon) {
       table = new Map();
       tables.set(key, table);
       if (header) {
-        header.split(",").forEach((column) => columns.add(column.trim()));
+        columns.set(
+          key,
+          new Set(header.split(",").map((column) => column.trim())),
+        );
       } else if (value !== "" && !line.endsWith(":")) {
         const numeric = Number(value);
         if (Number.isFinite(numeric) && /^-?[\d.]+$/.test(value)) {
           scalars.set(key, numeric);
         } else {
-          // Prose at the top level — a `note`, a `recommendations` list, or a
-          // reintroduced `summary`. Scanned for restated figures below.
+          // Prose at the top level — a `note`, or a reintroduced `summary`.
+          // Scanned for restated figures below.
           strings.push(value);
         }
       }
@@ -323,7 +410,6 @@ function inspect(toon) {
     const indented = line.trim();
     const cells = indented.split(",");
     table.set(cells[0], cells);
-    strings.push(indented);
   }
 
   return { scalars, keys, columns, tables, strings };
@@ -334,6 +420,9 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
   const limitRows = tables.get("governorLimits") ?? new Map();
 
   for (const check of ANSWERABILITY[tool]) {
+    // A question only some logs raise is pinned on the fixture that raises it.
+    if (check.fixture && check.fixture !== fixture) continue;
+
     const missing = [];
     for (const field of check.fields ?? []) {
       if (!scalars.has(field)) missing.push(field);
@@ -341,8 +430,19 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
     for (const key of check.keys ?? []) {
       if (!keys.includes(key)) missing.push(key);
     }
-    for (const column of check.columns ?? []) {
-      if (!columns.has(column)) missing.push(column);
+    // A column belongs to one table. Pooling every header into one set let a
+    // check pass on a column another table happened to carry.
+    if (check.columns) {
+      const [table, ...rest] = check.keys ?? [];
+      if (!table || rest.length) {
+        throw new Error(
+          `${tool}: a "columns" check names the one table they are in, in "keys" — "${check.question}"`,
+        );
+      }
+      const header = columns.get(table) ?? new Set();
+      for (const column of check.columns) {
+        if (!header.has(column)) missing.push(`${table}.${column}`);
+      }
     }
     for (const limit of check.limits ?? []) {
       if (!limitRows.has(limit)) missing.push(`governorLimits.${limit}`);
@@ -388,7 +488,8 @@ function checkNoDuplication({ tool, fixture }, toon, failures) {
 
   // A prose line must not restate a figure that is already a field of its own.
   // This is what the deleted `summary` paragraph did, and what a well-meaning
-  // future one would do again.
+  // future one would do again. Table rows are out of scope: a cell that reads
+  // like a scalar is another measurement of another thing, not a restatement.
   for (const [key, value] of scalars) {
     if (value === 0 || value === 1) continue;
     const rendered = String(value);
@@ -474,6 +575,17 @@ function checkDefinitionBudget(costs, failures) {
     failures.push(
       `tools/list is ~${total} tokens, over the ${TOTAL_DEFINITION_BUDGET} that 1.x charged for it`,
     );
+  }
+}
+
+/** Only a 2026-07-28 connection carries the fields, so this needs a modern client. */
+function checkCacheHints(result, failures) {
+  for (const [field, expected] of Object.entries(TOOLS_LIST_CACHE_HINT)) {
+    if (result[field] !== expected) {
+      failures.push(
+        `tools/list: ${field} is ${JSON.stringify(result[field])}, not ${JSON.stringify(expected)}`,
+      );
+    }
   }
 }
 
@@ -593,8 +705,8 @@ async function checkReadme(blocks, failures, update) {
 }
 
 /** One server process for the whole run, stopped however the run ends. */
-async function withClient(run) {
-  const client = createClient();
+async function withClient(run, era) {
+  const client = createClient(era);
   await client.start();
   try {
     return await run(client);
@@ -646,7 +758,7 @@ async function main() {
       );
     }
 
-    const costs = definitionCosts(await client.listTools());
+    const costs = definitionCosts((await client.toolsList()).tools);
     checkDefinitionBudget(costs, failures);
     checkSelectionKeywords(costs, failures);
     await checkReadme(renderTokenCost(costs, responses), failures, update);
@@ -655,6 +767,13 @@ async function main() {
       `${update ? "updated" : "checked"} tool definitions — ~${total} tokens across ${costs.length} tools`,
     );
   });
+
+  await withClient(async (client) => {
+    checkCacheHints(await client.toolsList(), failures);
+    console.log(
+      `checked tools/list cache hint — ttlMs ${TOOLS_LIST_CACHE_HINT.ttlMs}, cacheScope ${TOOLS_LIST_CACHE_HINT.cacheScope}`,
+    );
+  }, "modern");
 
   if (failures.length) {
     console.error(`\n${failures.length} eval failure(s):`);

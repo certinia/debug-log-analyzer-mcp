@@ -3,12 +3,25 @@
  */
 
 import { promises as fs, type BigIntStats } from "fs";
-import {
-  parse,
-  ApexLog,
-  LogLine,
-  type LogSubCategory,
-} from "../ApexLogParser.js";
+import { isAbsolute } from "path";
+import { z } from "zod";
+import { parse } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+
+/**
+ * The one declaration of the log path, shared by every tool that takes one, so
+ * all three enforce it the same way.
+ *
+ * A relative path is refused rather than resolved: it would resolve against the
+ * server's working directory, which is where the client happened to spawn us
+ * and not where the caller is. Resolving would read a different file, or none,
+ * and report neither. Refinements do not reach the JSON schema, so this costs
+ * no tokens in the tool definition — `pnpm run eval` holds that to its budget.
+ */
+export const logFilePathSchema = z
+  .string()
+  .refine(isAbsolute, "must be an absolute path")
+  .describe("Absolute path to the Apex debug log file (.log)");
 
 type CachedLog = {
   path: string;
@@ -79,9 +92,18 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
   try {
     handle = await fs.open(logFilePath, "r");
     fingerprint = fingerprintOf(await handle.stat({ bigint: true }));
-  } catch {
+  } catch (error) {
     await handle?.close();
-    throw new Error(`Log file not found: ${logFilePath}`);
+    // A missing file is one of several ways this fails. Reporting all of them
+    // as "not found" sends the caller to look for a file that is there, when
+    // the real cause was a permission, a directory in place of a file, or a
+    // full descriptor table. Name the cause, and keep the original as `cause`.
+    const code = (error as NodeJS.ErrnoException).code ?? String(error);
+    const message =
+      code === "ENOENT"
+        ? `Log file not found: ${logFilePath}`
+        : `Cannot read log file ${logFilePath}: ${code}`;
+    throw new Error(message, { cause: error });
   }
 
   try {
@@ -123,22 +145,16 @@ export function clearApexLogCache(): void {
 }
 
 /**
- * The units the tools count and rank: entry points and the methods below them.
- * Every tool uses this one test, so their method totals agree.
+ * Visit the node and every node below it, parents first.
+ *
+ * What `visit` returns is passed to that node's children, so a visitor can carry
+ * what encloses a node down to it without a second pass.
  */
-export function isMethodNode(node: LogLine): boolean {
-  // subCategory is declared on TimedNode, a subclass, so it is read off the
-  // node rather than tested with instanceof.
-  const { subCategory } = node as LogLine & { subCategory?: LogSubCategory };
-  return (
-    node.type === "CODE_UNIT_STARTED" ||
-    node.type === "METHOD_ENTRY" ||
-    subCategory === "Method"
-  );
-}
-
-/** Visit the node and every node below it, parents first. */
-export function walkLog(node: LogLine, visit: (node: LogLine) => void): void {
-  visit(node);
-  node.children?.forEach((child) => walkLog(child, visit));
+export function walkLog<T>(
+  node: LogEvent,
+  visit: (node: LogEvent, inherited: T | undefined) => T,
+  inherited?: T,
+): void {
+  const next = visit(node, inherited);
+  node.children?.forEach((child) => walkLog(child, visit, next));
 }

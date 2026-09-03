@@ -1,11 +1,8 @@
 import { Connection } from "@salesforce/core";
+import { toDateTimeLiteral } from "./soql.js";
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
 const USER_DEBUG = "USER_DEBUG";
-
-function toDateTimeLiteral(date: Date): { toString(): string } {
-  return { toString: () => date.toISOString() };
-}
 
 type TraceFlag = {
   Id: string;

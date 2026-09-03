@@ -2,8 +2,17 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 import { Connection } from "@salesforce/core";
-import { getOrCreateDebugLevelId } from "../../src/salesforce/debugLevels";
+import {
+  ensureDebugLevel,
+  CATEGORY_LOG_NAMES,
+  DEFAULT_TRACE_CONFIG,
+  LOG_CATEGORIES,
+  TRACE_CATEGORIES,
+} from "../../src/salesforce/debugLevels";
 
 describe("Debug Levels", () => {
   const testId = "000000000000000000";
@@ -51,7 +60,7 @@ describe("Debug Levels", () => {
     Workflow: "FINE",
   };
 
-  describe("getOrCreateDebugLevelId", () => {
+  describe("ensureDebugLevel", () => {
     describe("when no debug level exists", () => {
       beforeEach(() => {
         mockQuery.mockResolvedValue({ records: [] });
@@ -59,9 +68,9 @@ describe("Debug Levels", () => {
       });
 
       it("should create with all defaults when debugLevel is undefined", async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection);
+        const result = await ensureDebugLevel(mockConnection);
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockCreate).toHaveBeenCalledWith({
           DeveloperName: "Apex_Log_MCP_Debug_Level",
           MasterLabel: "Apex_Log_MCP_Debug_Level",
@@ -70,9 +79,9 @@ describe("Debug Levels", () => {
       });
 
       it('should create with all defaults when debugLevel is "default"', async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection, "default");
+        const result = await ensureDebugLevel(mockConnection, "default");
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockCreate).toHaveBeenCalledWith({
           DeveloperName: "Apex_Log_MCP_Debug_Level",
           MasterLabel: "Apex_Log_MCP_Debug_Level",
@@ -81,12 +90,12 @@ describe("Debug Levels", () => {
       });
 
       it("should create with defaults merged with overrides", async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection, {
+        const result = await ensureDebugLevel(mockConnection, {
           apexCode: "FINEST",
           nba: "FINEST",
         });
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockCreate).toHaveBeenCalledWith({
           DeveloperName: "Apex_Log_MCP_Debug_Level",
           MasterLabel: "Apex_Log_MCP_Debug_Level",
@@ -97,9 +106,9 @@ describe("Debug Levels", () => {
       });
 
       it("should create with all categories at specified level when debugLevel is a log level string", async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection, "FINEST");
+        const result = await ensureDebugLevel(mockConnection, "FINEST");
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         const createArg = mockCreate.mock.calls[0][0];
         expect(createArg.ApexCode).toBe("FINEST");
         expect(createArg.ApexProfiling).toBe("FINEST");
@@ -116,9 +125,9 @@ describe("Debug Levels", () => {
       it("should create when existing record has null Id", async () => {
         mockQuery.mockResolvedValue({ records: [{ Id: null }] });
 
-        const result = await getOrCreateDebugLevelId(mockConnection);
+        const result = await ensureDebugLevel(mockConnection);
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockCreate).toHaveBeenCalled();
       });
     });
@@ -130,17 +139,17 @@ describe("Debug Levels", () => {
       });
 
       it("should not update when debugLevel is undefined", async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection);
+        const result = await ensureDebugLevel(mockConnection);
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockUpdate).not.toHaveBeenCalled();
         expect(mockCreate).not.toHaveBeenCalled();
       });
 
       it('should update all categories to defaults when debugLevel is "default"', async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection, "default");
+        const result = await ensureDebugLevel(mockConnection, "default");
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockUpdate).toHaveBeenCalledWith({
           Id: testId,
           ...allDefaults,
@@ -148,11 +157,11 @@ describe("Debug Levels", () => {
       });
 
       it("should only update specified categories", async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection, {
+        const result = await ensureDebugLevel(mockConnection, {
           apexCode: "FINEST",
         });
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockUpdate).toHaveBeenCalledWith({
           Id: testId,
           ApexCode: "FINEST",
@@ -160,9 +169,9 @@ describe("Debug Levels", () => {
       });
 
       it("should update all categories to specified level when debugLevel is a log level string", async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection, "FINEST");
+        const result = await ensureDebugLevel(mockConnection, "FINEST");
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         const updateArg = mockUpdate.mock.calls[0][0];
         expect(updateArg.ApexCode).toBe("FINEST");
         expect(updateArg.ApexProfiling).toBe("FINEST");
@@ -177,18 +186,39 @@ describe("Debug Levels", () => {
       });
 
       it("should update multiple specified categories", async () => {
-        const result = await getOrCreateDebugLevelId(mockConnection, {
+        const result = await ensureDebugLevel(mockConnection, {
           apexCode: "FINEST",
           database: "NONE",
           nba: "FINE",
         });
 
-        expect(result).toBe(testId);
+        expect(result.id).toBe(testId);
         expect(mockUpdate).toHaveBeenCalledWith({
           Id: testId,
           ApexCode: "FINEST",
           Database: "NONE",
           Nba: "FINE",
+        });
+      });
+
+      // The header the log comes back under has to carry the levels the org
+      // will apply, and a partial update leaves the rest as the record has them.
+      it("reports the record's own levels merged with the update", async () => {
+        mockQuery.mockResolvedValue({
+          records: [
+            { Id: testId, ...allDefaults, Database: "NONE", Workflow: "NONE" },
+          ],
+        });
+
+        const result = await ensureDebugLevel(mockConnection, {
+          apexCode: "FINEST",
+        });
+
+        expect(result.levels).toEqual({
+          ...DEFAULT_TRACE_CONFIG,
+          apexCode: "FINEST",
+          database: "NONE",
+          workflow: "NONE",
         });
       });
     });
@@ -198,13 +228,24 @@ describe("Debug Levels", () => {
         mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
         mockUpdate.mockResolvedValue({ success: true });
 
-        await getOrCreateDebugLevelId(mockConnection);
+        await ensureDebugLevel(mockConnection);
 
         const query = mockQuery.mock.calls[0][0] as string;
         expect(query).toContain(
           "WHERE DeveloperName = 'Apex_Log_MCP_Debug_Level'",
         );
         expect(query).toContain("LIMIT 1");
+      });
+
+      it("should select every category field", async () => {
+        mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
+
+        await ensureDebugLevel(mockConnection);
+
+        const query = mockQuery.mock.calls[0][0] as string;
+        Object.keys(allDefaults).forEach((field) =>
+          expect(query).toContain(field),
+        );
       });
     });
 
@@ -216,7 +257,7 @@ describe("Debug Levels", () => {
           errors: ["Creation failed"],
         });
 
-        await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
+        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
           "Failed to create DebugLevel",
         );
       });
@@ -225,7 +266,7 @@ describe("Debug Levels", () => {
         mockQuery.mockResolvedValue({ records: [] });
         mockCreate.mockResolvedValue({ success: true, id: null });
 
-        await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
+        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
           "Failed to create DebugLevel",
         );
       });
@@ -238,14 +279,14 @@ describe("Debug Levels", () => {
         });
 
         await expect(
-          getOrCreateDebugLevelId(mockConnection, "default"),
+          ensureDebugLevel(mockConnection, "default"),
         ).rejects.toThrow("Failed to update DebugLevel");
       });
 
       it("should propagate query errors", async () => {
         mockQuery.mockRejectedValue(new Error("Query failed"));
 
-        await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
+        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
           "Query failed",
         );
       });
@@ -254,10 +295,47 @@ describe("Debug Levels", () => {
         mockQuery.mockResolvedValue({ records: [] });
         mockCreate.mockRejectedValue(new Error("Creation failed"));
 
-        await expect(getOrCreateDebugLevelId(mockConnection)).rejects.toThrow(
+        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
           "Creation failed",
         );
       });
     });
   });
+
+  describe("log categories", () => {
+    const fixtures = path.join(__dirname, "..", "eval", "fixtures");
+
+    it.each(fs.readdirSync(fixtures).filter((name) => name.endsWith(".log")))(
+      "spells every category in %s the way the log header does",
+      (name) => {
+        const header = fs
+          .readFileSync(path.join(fixtures, name), "utf8")
+          .split("\n")[0]!;
+        const categories = header
+          .split(" ")[1]!
+          .split(";")
+          .map((pair) => pair.split(",")[0]!);
+
+        expect(categories.length).toBeGreaterThan(0);
+        categories.forEach((category) =>
+          expect(LOG_CATEGORIES).toContain(category),
+        );
+      },
+    );
+
+    it("gives every settable category a header spelling", () => {
+      TRACE_CATEGORIES.forEach((category) => {
+        const spelling =
+          category === "database" ? "DB" : toScreamingSnake(category);
+
+        expect(LOG_CATEGORIES).toContain(spelling);
+        expect(CATEGORY_LOG_NAMES[category]).toBe(spelling);
+      });
+    });
+  });
 });
+
+/** `apexCode` as a log header spells it: `APEX_CODE`. */
+function toScreamingSnake(category: string): string {
+  return category.replace(/([A-Z])/g, "_$1").toUpperCase();
+}

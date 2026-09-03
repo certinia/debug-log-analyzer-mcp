@@ -1,0 +1,21 @@
+apexCodeLevel: FINE
+systemLevel: FINE
+dbLevel: FINEST
+calloutLevel: FINEST
+workflowLevel: FINE
+durationTotalMs: 24608.108
+returnedSelfPercentage: 100
+matchedCount: 24
+operations[10]{kind,name,namespace,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:
+  managedPackage,srm_pkg,srm_pkg,2,20489.42,20489.42,20479.388,83.3,0,0,0,0,0
+  codeUnit,"Flow:Account",default,1,3040.037,3040.037,3040.037,12.4,0,0,0,0,0
+  dml,"DML Op:Insert Type:Account",default,1,24468.441,765.749,765.749,3.1,1,1,0,300,0
+  managedPackage,core_pkg,core_pkg,3,148.619,148.619,131.423,0.6,0,0,0,0,0
+  codeUnit,execute_anonymous_apex,default,1,24607.193,79.143,79.143,0.3,1,1,0,300,0
+  systemMethod,List<Account>.add(Object),default,29,24522.05,53.589,53.321,0.2,1,1,0,300,0
+  soql,"SELECT Name, Id, core_pkg__group_key__c, (SELECT core_pkg__Value__c FROM core_pkg__Values__r ORDER BY core_pkg__Sort__c ASC NULLS FIRST) FROM core_pkg__Config_Option__c",default,1,24.617,24.617,24.617,0.1,1,0,0,0,0
+  method,AccountService.createAccountsAndContacts(),default,1,24527.816,3.58,3.58,0,1,1,0,300,0
+  method,"System.Math.mod(Integer, Integer)",default,1,1.065,1.065,1.065,0,0,0,0,0,0
+  systemMethod,String.valueOf(Object),default,58,0.682,0.682,0.04,0,0,0,0,0,0
+queryPlans[1]{name,leadingOperationType,relativeCost,cardinality,sObjectCardinality}:
+  "SELECT Name, Id, core_pkg__group_key__c, (SELECT core_pkg__Value__c FROM core_pkg__Values__r ORDER BY core_pkg__Sort__c ASC NULLS FIRST) FROM core_pkg__Config_Option__c",TableScan,0.65,1,1

@@ -12,7 +12,10 @@
  * must be able to answer from the payload.
  */
 
-import type { GovernorLimits, Limits } from "../ApexLogParser.js";
+import type {
+  Limits,
+  NamespaceLimits,
+} from "@apexdevtools/apex-log-parser/types";
 
 /** The parser works in nanoseconds; every reported duration is milliseconds. */
 export const NS_TO_MS = 1_000_000;
@@ -28,11 +31,22 @@ export function roundPercent(percent: number): number {
 }
 
 /**
+ * A part's share of a whole, as a percentage.
+ *
+ * Zero when there is no whole to take a share of, which a log with no stated
+ * duration and a limit with no stated ceiling both produce. Unrounded, because
+ * a caller that sums shares must round the sum and not each term.
+ */
+export function percentageOf(part: number, whole: number): number {
+  return whole > 0 ? (part / whole) * 100 : 0;
+}
+
+/**
  * Drop the lists that nothing was added to.
  *
- * For occurrence lists only — issues found, recommendations made, errors
- * encountered — where an absent key unambiguously means "nothing occurred". The
- * signature takes only lists on purpose: a fixed-schema scalar must never go
+ * For occurrence lists only — issues found, errors encountered — where an
+ * absent key unambiguously means "nothing occurred". The signature takes only
+ * lists on purpose: a fixed-schema scalar must never go
  * through here, because an absent count cannot be told apart from a count that
  * was never parsed, so a zero is reported as a zero.
  */
@@ -45,25 +59,57 @@ export function omitEmpty<T extends Record<string, readonly unknown[]>>(
 }
 
 export interface LimitRow {
-  name: string;
+  limit: string;
+  /**
+   * The highest the limit reached, not where it ended: a counter that falls
+   * mid-log would otherwise read below the figure the platform enforced.
+   */
   used: number;
-  limit: number;
+  /** The ceiling the org allows. Zero when the log did not state one. */
+  max: number;
 }
 
 /**
- * Flatten the parser's governor limits into rows.
+ * Flatten a set of governor limits into rows.
  *
  * All limits are kept, including those at zero — the set is fixed and known, so
  * a missing row would be a question the caller cannot answer. The saving comes
  * from the shape: as rows sharing three keys, TOON emits one header plus one
  * line per limit, which on a real log is a little over half the cost of the same
  * data as thirteen nested objects.
+ *
+ * The one flattener in the server, so no two tools can name a limit differently
+ * or count a different set of them.
  */
-export function toLimitRows(governorLimits: GovernorLimits): LimitRow[] {
-  return Object.entries(governorLimits)
-    .filter(([name]) => name !== "byNamespace")
-    .map(([name, value]) => {
-      const { used, limit } = value as Limits[keyof Limits];
-      return { name, used, limit };
-    });
+export function toLimitRows(limits: Limits): LimitRow[] {
+  return Object.entries(limits).map(([name, value]) => {
+    const { used, limit } = value as Limits[keyof Limits];
+    return { limit: name, used, max: limit };
+  });
+}
+
+export interface NamespaceLimitRow {
+  namespace: string;
+  limit: string;
+  used: number;
+}
+
+/**
+ * What each namespace consumed, one row per limit it used.
+ *
+ * Only the limits a namespace consumed are reported. A row is an occurrence,
+ * and whether a limit was measured at all is a property of the transaction,
+ * which the whole-transaction table already answers — so a namespace with no
+ * row for a limit consumed none of it. The ceiling is not reported either: the
+ * parser keeps one per limit for the whole transaction, and it is in that
+ * table.
+ */
+export function toNamespaceLimitRows(
+  byNamespace: Map<string, NamespaceLimits>,
+): NamespaceLimitRow[] {
+  return [...byNamespace].flatMap(([namespace, limits]) =>
+    toLimitRows(limits.peak)
+      .filter((row) => row.used > 0)
+      .map(({ limit, used }) => ({ namespace, limit, used })),
+  );
 }

@@ -53,9 +53,11 @@
   },
   "homepage": "https://github.com/certinia/debug-log-analyzer-mcp#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@apexdevtools/apex-log-parser": "^0.1.0",
+    "@modelcontextprotocol/client": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@salesforce/core": "^8.32.3",
-    "@toon-format/toon": "^2.3.0",
+    "@toon-format/toon": "^4.1.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

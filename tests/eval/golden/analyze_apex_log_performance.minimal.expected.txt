@@ -1,7 +1,0 @@
-totalMethods: 2
-totalExecutionTime: 0.561
-topMethodsSelfPercentage: 100
-slowestMethods[2]{name,duration,selfDuration,selfPercentage,namespace,lineNumber,dmlCount,soqlCount,dmlRows,soqlRows,thrownCount,soslCount,soslRows}:
-  execute_anonymous_apex,0.546,0.546,97.3,default,null,0,0,0,0,0,0,0
-  EXECUTION_STARTED,0.561,0.015,2.7,default,null,0,0,0,0,0,0,0
-recommendations[1]: "execute_anonymous_apex: dominates self time. Check whether it can be made faster, and how often it is called."

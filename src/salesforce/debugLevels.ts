@@ -1,21 +1,14 @@
 import { Connection } from "@salesforce/core";
+import { LOG_LEVEL } from "@apexdevtools/apex-log-parser/types";
+import type { DebugLevels } from "@apexdevtools/apex-log-parser/types";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
 const DEBUG_LEVEL_NAME = "Apex_Log_MCP_Debug_Level";
 
-/** `as const` so that `z.enum` can consume it — this is the only list of levels. */
-export const LOG_LEVELS = [
-  "NONE",
-  "ERROR",
-  "WARN",
-  "INFO",
-  "DEBUG",
-  "FINE",
-  "FINER",
-  "FINEST",
-] as const;
+/** The parser also admits `""`, for an event that states no level; a request cannot ask for it. */
+export type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
 
-export type LogLevel = (typeof LOG_LEVELS)[number];
+export const LOG_LEVELS = Object.values(LOG_LEVEL);
 
 /** The DebugLevel field names, lower-camel. `toSObjectFields` capitalises them. */
 export const TRACE_CATEGORIES = [
@@ -35,6 +28,82 @@ export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
 
 export type TraceConfig = Partial<Record<TraceCategory, LogLevel>>;
 
+/**
+ * The same categories as a debug log header spells them.
+ *
+ * A log opens with `APEX_CODE,FINE;DB,FINEST;…`, which is what the parser reads
+ * into `debugLevels`, so this is the spelling every response uses. `DATA_ACCESS`
+ * appears there but is not a `DebugLevel` field, so nothing can set it.
+ */
+export const LOG_CATEGORIES = [
+  "APEX_CODE",
+  "APEX_PROFILING",
+  "CALLOUT",
+  "DATA_ACCESS",
+  "DB",
+  "NBA",
+  "SYSTEM",
+  "VALIDATION",
+  "VISUALFORCE",
+  "WAVE",
+  "WORKFLOW",
+] as const;
+
+export type LogCategory = (typeof LOG_CATEGORIES)[number];
+
+/**
+ * The `DebugLevels` property each header category is parsed into.
+ *
+ * Header order, which is the order `declaredLevels` reports. The parser holds
+ * the same correspondence but does not publish it.
+ */
+export const DEBUG_LEVEL_FIELD_BY_CATEGORY = {
+  APEX_CODE: "apexCode",
+  APEX_PROFILING: "apexProfiling",
+  CALLOUT: "callout",
+  DATA_ACCESS: "dataAccess",
+  DB: "database",
+  NBA: "nba",
+  SYSTEM: "system",
+  VALIDATION: "validation",
+  VISUALFORCE: "visualforce",
+  WAVE: "wave",
+  WORKFLOW: "workflow",
+} as const satisfies Record<LogCategory, keyof DebugLevels>;
+
+/** Fails to compile unless `T` is `true`. */
+type Assert<T extends true> = T;
+
+/**
+ * Compile guard for the other direction: the `satisfies` above only checks that
+ * every category names a real field. A category the parser adds has to be named
+ * here too, or `declaredLevels` silently drops it from every response.
+ */
+export type EveryDebugLevelCategoryNamed = Assert<
+  keyof DebugLevels extends (typeof DEBUG_LEVEL_FIELD_BY_CATEGORY)[LogCategory]
+    ? true
+    : false
+>;
+
+/**
+ * A settable category under the name a debug log header gives it.
+ *
+ * `DATA_ACCESS` is absent because no `DebugLevel` field sets it, so nothing
+ * here can ask for it and nothing should expect it back.
+ */
+export const CATEGORY_LOG_NAMES: Record<TraceCategory, LogCategory> = {
+  apexCode: "APEX_CODE",
+  apexProfiling: "APEX_PROFILING",
+  callout: "CALLOUT",
+  database: "DB",
+  nba: "NBA",
+  system: "SYSTEM",
+  validation: "VALIDATION",
+  visualforce: "VISUALFORCE",
+  wave: "WAVE",
+  workflow: "WORKFLOW",
+};
+
 /** The only place the per-category defaults live. */
 export const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
   apexCode: "FINE",
@@ -52,10 +121,7 @@ export const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
 export type DebugLevelInput = "default" | LogLevel | TraceConfig;
 
 function isLogLevel(value: DebugLevelInput): value is LogLevel {
-  return (
-    typeof value === "string" &&
-    (LOG_LEVELS as readonly string[]).includes(value)
-  );
+  return typeof value === "string" && (LOG_LEVELS as string[]).includes(value);
 }
 
 function resolveLevels(debugLevel: DebugLevelInput): Record<string, string> {
@@ -72,9 +138,19 @@ function allCategoriesAt(level: LogLevel) {
 
 type DebugLevelRecord = {
   Id: string;
+} & Record<string, unknown>;
+
+/** A DebugLevel record and the levels it carries after this call. */
+export type EnsuredDebugLevel = {
+  id: string;
+  levels: Required<TraceConfig>;
 };
 
 /** Every DebugLevel field name is the category with its first letter capitalised. */
+function toFieldName(category: TraceCategory): string {
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
 function toSObjectFields(config: TraceConfig): Record<string, string> {
   return Object.fromEntries(
     Object.entries(config)
@@ -86,22 +162,40 @@ function toSObjectFields(config: TraceConfig): Record<string, string> {
   );
 }
 
+function toTraceConfig(fields: Record<string, unknown>): Required<TraceConfig> {
+  return Object.fromEntries(
+    TRACE_CATEGORIES.map((category) => [
+      category,
+      fields[toFieldName(category)] ?? DEFAULT_TRACE_CONFIG[category],
+    ]),
+  ) as Required<TraceConfig>;
+}
+
 function resolveAllDefaults() {
   return toSObjectFields(DEFAULT_TRACE_CONFIG);
 }
 
-export async function getOrCreateDebugLevelId(
+/**
+ * Find or create the server's DebugLevel and report the levels it now carries.
+ *
+ * A partial `debugLevel` leaves the categories it does not name as the record
+ * has them, so only the record itself knows the levels the org will apply.
+ */
+export async function ensureDebugLevel(
   connection: Connection,
   debugLevel?: DebugLevelInput,
-): Promise<string> {
+): Promise<EnsuredDebugLevel> {
   const existing = await findDebugLevel(connection);
 
   if (existing) {
+    const applied = debugLevel === undefined ? {} : resolveLevels(debugLevel);
     if (debugLevel !== undefined) {
-      const levels = resolveLevels(debugLevel);
-      await updateDebugLevel(connection, existing.Id, levels);
+      await updateDebugLevel(connection, existing.Id, applied);
     }
-    return existing.Id;
+    return {
+      id: existing.Id,
+      levels: toTraceConfig({ ...existing, ...applied }),
+    };
   }
 
   const levels =
@@ -110,14 +204,17 @@ export async function getOrCreateDebugLevelId(
       : isLogLevel(debugLevel)
         ? allCategoriesAt(debugLevel)
         : { ...resolveAllDefaults(), ...toSObjectFields(debugLevel) };
-  return await createDebugLevel(connection, levels);
+  return {
+    id: await createDebugLevel(connection, levels),
+    levels: toTraceConfig(levels),
+  };
 }
 
 async function findDebugLevel(
   connection: Connection,
 ): Promise<DebugLevelRecord | null> {
   const result = await connection.tooling.query(
-    `SELECT Id
+    `SELECT Id, ${TRACE_CATEGORIES.map(toFieldName).join(", ")}
      FROM ${DEBUG_LEVEL_SOBJECT}
      WHERE DeveloperName = '${DEBUG_LEVEL_NAME}'
      LIMIT 1`,

@@ -2,33 +2,64 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { randomBytes } from "node:crypto";
+import {
+  createRequestStateCodec,
+  type ElicitRequest,
+  type InputRequiredResult,
+  type ServerContext,
+} from "@modelcontextprotocol/server";
 import {
   authorizeExecution,
+  createConfirmationLedger,
   APEX_EXECUTION_DISABLED_MESSAGE,
+  type ConfirmationState,
+  type ConsumeConfirmation,
+  type MintConfirmationState,
+  type PolicyDecision,
 } from "../../src/policy/orgExecutionPolicy";
 import type { OrgClassification } from "../../src/salesforce/orgClassification";
 
 describe("authorizeExecution", () => {
   const orgLabel = "test@example.com (prod)";
+  const orgId = "00D000000000001EAA";
   const apex = "System.debug('hi');";
 
-  let elicitInput: jest.Mock;
-  let getClientCapabilities: jest.Mock;
-  let server: McpServer;
-  let consoleError: jest.SpyInstance;
+  // The real codec, so a retry only carries state this server actually minted.
+  const codec = createRequestStateCodec<ConfirmationState>({
+    key: randomBytes(32),
+  });
+
+  let mintConfirmationState: jest.Mock;
+  let consumeConfirmation: ConsumeConfirmation;
+
+  function makeCtx(state?: ConfirmationState, inputResponses?: unknown) {
+    return {
+      mcpReq: {
+        requestState: () => state,
+        inputResponses,
+      },
+    } as unknown as ServerContext;
+  }
 
   function authorize(
     overrides: {
+      ctx?: ServerContext;
       classification?: OrgClassification;
       allowProductionOrgs?: boolean;
       apex?: string;
+      orgId?: string;
       unverifiedReason?: string;
+      consumeConfirmation?: ConsumeConfirmation;
     } = {},
   ) {
     return authorizeExecution({
-      server,
+      ctx: overrides.ctx ?? makeCtx(),
+      mintConfirmationState:
+        mintConfirmationState as unknown as MintConfirmationState,
+      consumeConfirmation: overrides.consumeConfirmation ?? consumeConfirmation,
       classification: overrides.classification ?? "production",
+      orgId: overrides.orgId ?? orgId,
       orgLabel,
       apex: overrides.apex ?? apex,
       allowProductionOrgs: overrides.allowProductionOrgs ?? false,
@@ -38,163 +69,93 @@ describe("authorizeExecution", () => {
 
   /** An unknown classification always arrives with a reason from classifyOrg. */
   function authorizeUnknown(
-    overrides: { reason?: string; allowProductionOrgs?: boolean } = {},
+    overrides: {
+      ctx?: ServerContext;
+      reason?: string;
+      allowProductionOrgs?: boolean;
+    } = {},
   ) {
     return authorize({
+      ctx: overrides.ctx,
       classification: "unknown",
       unverifiedReason: overrides.reason ?? "inactive organization",
       allowProductionOrgs: overrides.allowProductionOrgs,
     });
   }
 
-  beforeEach(() => {
-    elicitInput = jest.fn();
-    getClientCapabilities = jest.fn(() => ({}));
-    server = {
-      server: { elicitInput, getClientCapabilities },
-    } as unknown as McpServer;
-    consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
-  });
+  function assertConfirmationRequired(
+    decision: PolicyDecision,
+  ): InputRequiredResult {
+    expect(decision.outcome).toBe("confirmationRequired");
+    if (decision.outcome !== "confirmationRequired") {
+      throw new Error("expected a confirmation");
+    }
+    return decision.result;
+  }
 
-  afterEach(() => {
-    consoleError.mockRestore();
+  function confirmRequest(result: InputRequiredResult): ElicitRequest["params"] {
+    const request = result.inputRequests?.["confirm"] as
+      | ElicitRequest
+      | undefined;
+    if (!request) {
+      throw new Error("expected a 'confirm' input request");
+    }
+    return request.params;
+  }
+
+  /** What the SDK hands the handler on the retry: the verified payload. */
+  async function verifiedState(
+    result: InputRequiredResult,
+  ): Promise<ConfirmationState> {
+    return codec.verify(result.requestState as string, makeCtx());
+  }
+
+  /** The retry a client makes after the user answered the confirmation. */
+  async function retryCtx(
+    result: InputRequiredResult,
+    response: unknown,
+  ): Promise<ServerContext> {
+    return makeCtx(await verifiedState(result), { confirm: response });
+  }
+
+  beforeEach(() => {
+    mintConfirmationState = jest.fn((payload: ConfirmationState) =>
+      codec.mint(payload),
+    );
+    consumeConfirmation = createConfirmationLedger();
   });
 
   describe.each<OrgClassification>(["sandbox", "scratch", "developer", "trial"])(
     "%s orgs",
     (classification) => {
-      it("should be allowed without prompting", async () => {
+      it("should be allowed without confirmation", async () => {
         await expect(authorize({ classification })).resolves.toEqual({
-          allowed: true,
+          outcome: "allowed",
         });
-        expect(elicitInput).not.toHaveBeenCalled();
-        expect(getClientCapabilities).not.toHaveBeenCalled();
+        expect(mintConfirmationState).not.toHaveBeenCalled();
       });
     },
   );
 
   it("should allow production when --allow-production-orgs is set", async () => {
     await expect(authorize({ allowProductionOrgs: true })).resolves.toEqual({
-      allowed: true,
+      outcome: "allowed",
     });
-    expect(elicitInput).not.toHaveBeenCalled();
+    expect(mintConfirmationState).not.toHaveBeenCalled();
   });
 
   it("should allow an unverifiable org when --allow-production-orgs is set", async () => {
     await expect(
       authorizeUnknown({ allowProductionOrgs: true }),
-    ).resolves.toEqual({ allowed: true });
+    ).resolves.toEqual({ outcome: "allowed" });
   });
 
-  it("should refuse production when the client cannot prompt", async () => {
-    const decision = await authorize();
-
-    expect(decision.allowed).toBe(false);
-    expect(elicitInput).not.toHaveBeenCalled();
-    if (!decision.allowed) {
-      expect(decision.reason).toContain(
-        `Cannot execute anonymous Apex against production org '${orgLabel}'`,
+  describe("the first round", () => {
+    it("should ask with the org label, the Apex and a boolean schema", async () => {
+      const params = confirmRequest(
+        assertConfirmationRequired(await authorize()),
       );
-      expect(decision.reason).toContain("--allow-production-orgs");
-      expect(decision.reason).toContain("MCP elicitation");
-    }
-  });
 
-  it("should refuse an unverifiable org, reporting the reason and how to fix it", async () => {
-    const decision = await authorizeUnknown({
-      reason: "Unable to refresh session due to: inactive organization",
-    });
-
-    expect(decision.allowed).toBe(false);
-    if (!decision.allowed) {
-      expect(decision.reason).toContain("could not be verified");
-      expect(decision.reason).toContain("treated as production");
-      // The agent needs the underlying cause to be able to act on it.
-      expect(decision.reason).toContain(
-        "Reason: Unable to refresh session due to: inactive organization",
-      );
-      expect(decision.reason).toContain("re-authenticate");
-      expect(decision.reason).toContain("sf org login web");
-      expect(decision.reason).toContain("--allow-production-orgs");
-    }
-  });
-
-  it("should truncate an excessively long reason", async () => {
-    const decision = await authorizeUnknown({ reason: "x".repeat(1000) });
-
-    expect(decision.allowed).toBe(false);
-    if (!decision.allowed) {
-      expect(decision.reason).toContain("(truncated)");
-      expect(decision.reason.length).toBeLessThan(800);
-    }
-  });
-
-  it("should still refuse if an unknown classification arrives with no reason", async () => {
-    const decision = await authorize({ classification: "unknown" });
-
-    expect(decision.allowed).toBe(false);
-    if (!decision.allowed) {
-      expect(decision.reason).toContain("could not be verified");
-      expect(decision.reason).toContain("Reason: The reason was not reported.");
-    }
-  });
-
-  it("should ignore a stray reason on a verified production org", async () => {
-    const decision = await authorize({
-      classification: "production",
-      unverifiedReason: "should not appear",
-    });
-
-    expect(decision.allowed).toBe(false);
-    if (!decision.allowed) {
-      expect(decision.reason).not.toContain("should not appear");
-      expect(decision.reason).toContain("against production org");
-    }
-  });
-
-  it("should not prompt when the client only supports url elicitation", async () => {
-    getClientCapabilities.mockReturnValue({ elicitation: { url: {} } });
-
-    const decision = await authorize();
-
-    expect(decision.allowed).toBe(false);
-    expect(elicitInput).not.toHaveBeenCalled();
-  });
-
-  it("should prompt a client that declares a bare elicitation capability", async () => {
-    getClientCapabilities.mockReturnValue({ elicitation: {} });
-    elicitInput.mockResolvedValue({
-      action: "accept",
-      content: { confirm: true },
-    });
-
-    await expect(authorize()).resolves.toEqual({ allowed: true });
-    expect(elicitInput).toHaveBeenCalled();
-  });
-
-  describe("with an elicitation-capable client", () => {
-    beforeEach(() => {
-      getClientCapabilities.mockReturnValue({ elicitation: { form: {} } });
-    });
-
-    it("should allow when the user confirms", async () => {
-      elicitInput.mockResolvedValue({
-        action: "accept",
-        content: { confirm: true },
-      });
-
-      await expect(authorize()).resolves.toEqual({ allowed: true });
-    });
-
-    it("should prompt with the org label, the Apex and a boolean schema", async () => {
-      elicitInput.mockResolvedValue({
-        action: "accept",
-        content: { confirm: true },
-      });
-
-      await authorize();
-
-      const [params, options] = elicitInput.mock.calls[0];
       expect(params.message).toContain(`PRODUCTION org '${orgLabel}'`);
       expect(params.message).toContain(apex);
       expect(params.requestedSchema).toEqual({
@@ -210,89 +171,242 @@ describe("authorizeExecution", () => {
         },
         required: ["confirm"],
       });
-      expect(options).toEqual({ timeout: 60_000 });
     });
 
-    it("should not claim an unverifiable org is production in the prompt", async () => {
-      elicitInput.mockResolvedValue({ action: "decline" });
+    it("should bind the state to the Apex and the org, not to the Apex itself", async () => {
+      const result = assertConfirmationRequired(await authorize());
 
-      const decision = await authorizeUnknown({
-        reason: "inactive organization",
-      });
+      const state = await verifiedState(result);
+      expect(state.orgId).toBe(orgId);
+      expect(state.apexDigest).toMatch(/^[0-9a-f]{64}$/);
+      // Signed, not encrypted: a client can read whatever the state carries.
+      expect(state.apexDigest).not.toContain("System.debug");
+      expect(state.nonce).toMatch(/^[0-9a-f]{32}$/);
+    });
 
-      const [params] = elicitInput.mock.calls[0];
+    it("should not claim an unverifiable org is production", async () => {
+      const params = confirmRequest(
+        assertConfirmationRequired(await authorizeUnknown()),
+      );
+
       expect(params.message).toContain("could not be verified");
       expect(params.message).toContain("treated as production");
       expect(params.message).toContain("Reason: inactive organization");
       expect(params.message).not.toContain("PRODUCTION org");
-      // Same template as production, minus the classification we cannot vouch for.
-      expect(params.requestedSchema.properties.confirm.title).toBe(
+      const schema = params.requestedSchema as {
+        properties: { confirm: { title: string } };
+      };
+      expect(schema.properties.confirm.title).toBe(
         `Run against org '${orgLabel}'?`,
       );
-      expect(params.requestedSchema.properties.confirm.title).not.toContain(
-        "production",
+    });
+
+    it("should truncate a long Apex snippet", async () => {
+      const params = confirmRequest(
+        assertConfirmationRequired(await authorize({ apex: "x".repeat(5000) })),
       );
-      expect(decision.allowed).toBe(false);
-      if (!decision.allowed) {
-        // "the production-org execution" would be misleading here.
+
+      expect(params.message).toContain("(truncated)");
+      expect(params.message.length).toBeLessThan(3000);
+    });
+
+    it("should truncate an excessively long reason", async () => {
+      const params = confirmRequest(
+        assertConfirmationRequired(
+          await authorizeUnknown({ reason: "x".repeat(1000) }),
+        ),
+      );
+
+      expect(params.message).toContain("(truncated)");
+    });
+  });
+
+  describe("the retry", () => {
+    it("should allow when the user confirmed", async () => {
+      const result = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(result, {
+        action: "accept",
+        content: { confirm: true },
+      });
+
+      await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
+    });
+
+    // The signature proves the user was asked, not that the run it authorized
+    // has not happened: without spending it, one answer runs the Apex as often
+    // as the client re-sends the call.
+    it("should refuse a confirmation that already ran", async () => {
+      const result = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(result, {
+        action: "accept",
+        content: { confirm: true },
+      });
+
+      await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
+
+      const decision = await authorize({ ctx });
+      expect(decision).toEqual({
+        outcome: "refused",
+        reason: expect.stringContaining("already been used"),
+      });
+    });
+
+    // Each confirmation is spent on its own, so asking again works.
+    it("should allow a second run the user confirmed again", async () => {
+      const first = assertConfirmationRequired(await authorize());
+      await authorize({
+        ctx: await retryCtx(first, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+      });
+
+      const second = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(second, {
+        action: "accept",
+        content: { confirm: true },
+      });
+
+      await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
+    });
+
+    it.each([
+      ["decline", { action: "decline" }],
+      ["cancel", { action: "cancel" }],
+      [
+        "accept with confirm false",
+        { action: "accept", content: { confirm: false } },
+      ],
+      ["accept with no content", { action: "accept" }],
+      [
+        "accept with a non-boolean confirm",
+        { action: "accept", content: { confirm: "yes" } },
+      ],
+    ])("should refuse on %s", async (_name, response) => {
+      const result = assertConfirmationRequired(await authorize());
+      const decision = await authorize({
+        ctx: await retryCtx(result, response),
+      });
+
+      expect(decision.outcome).toBe("refused");
+      if (decision.outcome === "refused") {
+        expect(decision.reason).toBe(
+          `User declined the production-org execution against '${orgLabel}'.`,
+        );
+      }
+    });
+
+    it("should not call an unverifiable org production when the user declines", async () => {
+      const result = assertConfirmationRequired(await authorizeUnknown());
+      const decision = await authorizeUnknown({
+        ctx: await retryCtx(result, { action: "decline" }),
+      });
+
+      expect(decision.outcome).toBe("refused");
+      if (decision.outcome === "refused") {
         expect(decision.reason).toBe(
           `User declined the execution against '${orgLabel}'.`,
         );
       }
     });
 
-    it("should truncate a long Apex snippet in the prompt", async () => {
-      elicitInput.mockResolvedValue({
+    it("should refuse a retry whose Apex differs from the confirmed one", async () => {
+      const result = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(result, {
         action: "accept",
         content: { confirm: true },
       });
 
-      await authorize({ apex: "x".repeat(5000) });
+      const decision = await authorize({
+        ctx,
+        apex: "delete [SELECT Id FROM Account];",
+      });
 
-      const [params] = elicitInput.mock.calls[0];
-      expect(params.message).toContain("(truncated)");
-      expect(params.message.length).toBeLessThan(3000);
-    });
-
-    it.each([
-      ["decline", { action: "decline" }],
-      ["cancel", { action: "cancel" }],
-      ["accept with confirm false", { action: "accept", content: { confirm: false } }],
-      ["accept with no content", { action: "accept" }],
-    ])("should refuse on %s", async (_name, response) => {
-      elicitInput.mockResolvedValue(response);
-
-      const decision = await authorize();
-
-      expect(decision.allowed).toBe(false);
-      if (!decision.allowed) {
-        expect(decision.reason).toContain("User declined");
-        expect(decision.reason).toContain(orgLabel);
+      expect(decision.outcome).toBe("refused");
+      if (decision.outcome === "refused") {
+        expect(decision.reason).toContain("does not match this call");
+        expect(decision.reason).toContain("nothing was executed");
       }
     });
 
-    it("should refuse when the prompt rejects with a non-Error", async () => {
-      elicitInput.mockRejectedValue("boom");
+    it("should refuse a retry aimed at a different org", async () => {
+      const result = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(result, {
+        action: "accept",
+        content: { confirm: true },
+      });
 
-      const decision = await authorize();
+      const decision = await authorize({ ctx, orgId: "00D000000000002EAA" });
 
-      expect(decision.allowed).toBe(false);
-      expect(consoleError).toHaveBeenCalledWith(expect.any(String), "boom");
+      expect(decision.outcome).toBe("refused");
+      if (decision.outcome === "refused") {
+        expect(decision.reason).toContain("does not match this call");
+      }
     });
 
-    it("should refuse with the documented error when the prompt throws", async () => {
-      elicitInput.mockRejectedValue(new Error("Request timed out"));
+    it("should refuse with the two enabling routes when the client carried no answer", async () => {
+      const result = assertConfirmationRequired(await authorize());
+      const decision = await authorize({
+        ctx: makeCtx(await verifiedState(result), {}),
+      });
 
-      const decision = await authorize();
-
-      expect(decision.allowed).toBe(false);
-      if (!decision.allowed) {
+      expect(decision.outcome).toBe("refused");
+      if (decision.outcome === "refused") {
         expect(decision.reason).toContain(
-          "Cannot execute anonymous Apex against production org",
+          `Cannot execute anonymous Apex against production org '${orgLabel}'`,
         );
+        expect(decision.reason).toContain("--allow-production-orgs");
+        expect(decision.reason).toContain("MCP elicitation");
       }
-      expect(consoleError).toHaveBeenCalled();
     });
+
+    it("should report the reason and how to fix it when the org is unverifiable", async () => {
+      const result = assertConfirmationRequired(
+        await authorizeUnknown({
+          reason: "Unable to refresh session due to: inactive organization",
+        }),
+      );
+      const decision = await authorizeUnknown({
+        ctx: makeCtx(await verifiedState(result), {}),
+        reason: "Unable to refresh session due to: inactive organization",
+      });
+
+      expect(decision.outcome).toBe("refused");
+      if (decision.outcome === "refused") {
+        expect(decision.reason).toContain("could not be verified");
+        expect(decision.reason).toContain("treated as production");
+        // The agent needs the underlying cause to be able to act on it.
+        expect(decision.reason).toContain(
+          "Reason: Unable to refresh session due to: inactive organization",
+        );
+        expect(decision.reason).toContain("re-authenticate");
+        expect(decision.reason).toContain("sf org login web");
+        expect(decision.reason).toContain("--allow-production-orgs");
+      }
+    });
+  });
+
+  it("should still ask when an unknown classification arrives with no reason", async () => {
+    const params = confirmRequest(
+      assertConfirmationRequired(await authorize({ classification: "unknown" })),
+    );
+
+    expect(params.message).toContain("could not be verified");
+    expect(params.message).toContain("Reason: The reason was not reported.");
+  });
+
+  it("should ignore a stray reason on a verified production org", async () => {
+    const params = confirmRequest(
+      assertConfirmationRequired(
+        await authorize({
+          classification: "production",
+          unverifiedReason: "should not appear",
+        }),
+      ),
+    );
+
+    expect(params.message).not.toContain("should not appear");
+    expect(params.message).toContain("PRODUCTION org");
   });
 });
 
@@ -302,5 +416,31 @@ describe("APEX_EXECUTION_DISABLED_MESSAGE", () => {
     expect(APEX_EXECUTION_DISABLED_MESSAGE).toContain(
       "log analysis tools remain available",
     );
+  });
+});
+
+describe("createConfirmationLedger", () => {
+  it("spends an answer once", () => {
+    const consume = createConfirmationLedger();
+
+    expect(consume("a")).toBe(true);
+    expect(consume("a")).toBe(false);
+    expect(consume("b")).toBe(true);
+  });
+
+  // Past the signature's own lifetime the codec refuses the state anyway, so
+  // holding the nonce any longer only grows the map.
+  it("forgets an answer its signature can no longer carry", () => {
+    jest.useFakeTimers();
+    try {
+      const consume = createConfirmationLedger(600);
+      expect(consume("a")).toBe(true);
+
+      jest.advanceTimersByTime(600_000);
+
+      expect(consume("a")).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
