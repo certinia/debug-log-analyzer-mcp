@@ -70,11 +70,9 @@ jobs:
       # workflow run that built the tarball. It needs the `id-token: write`
       # granted above, and the `repository` field in package.json, which npm
       # checks against the repository it is building from.
-      # --tag: without it every publish moves `latest`, which is the pointer
-      # `npx` and a bare `npm install` follow. The value is one of four words
-      # the step above picks from a fixed list, so it can carry nothing else
-      # into this command.
       - name: Publish
+        env:
+          DIST_TAG: ${{ steps.release.outputs.dist_tag }}
         run: >-
           pnpm publish --access public --no-git-checks --provenance
-          --tag ${{ steps.release.outputs.dist_tag }}
+          --tag "$DIST_TAG"
