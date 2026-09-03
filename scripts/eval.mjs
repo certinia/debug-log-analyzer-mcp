@@ -179,6 +179,8 @@ const ANSWERABILITY = {
  * without naming them: the golden file is what pins *which* limits exist, so a
  * new limit needs one edit rather than two.
  */
+const MINIMAL_FIXTURE = "minimal";
+
 const MINIMAL_ZEROS = {
   apexlog_get_summary: {
     fields: ["thrownCount"],
@@ -300,8 +302,11 @@ const SELECTION_KEYWORDS = {
  * case is a server round trip and a golden file a reviewer has to read, so a
  * case earns its place only by pinning something the others would miss — and a
  * cross product spends three cases on a fixture that answers one question.
- * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool that
- * publishes a heap figure.
+ * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool whose
+ * answer its heap changes. `apexlog_list_limit_risks` does read heap, but this
+ * log's heap sits under its risk threshold, and the rows
+ * `apexlog_list_slow_operations` would rank are kinds `governor-heavy` pins
+ * already.
  */
 const FIXTURES_BY_TOOL = {
   apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy", "truncated"],
@@ -312,6 +317,71 @@ const FIXTURES_BY_TOOL = {
 const CASES = Object.entries(FIXTURES_BY_TOOL).flatMap(([tool, fixtures]) =>
   fixtures.map((fixture) => ({ tool, fixture })),
 );
+
+const CASE_KEYS = new Set(
+  CASES.map(({ tool, fixture }) => `${tool}/${fixture}`),
+);
+
+/**
+ * Everything declared per case has to name a case the run measures.
+ *
+ * Nothing else notices a case that stops being run: `checkAnswerability` skips
+ * a check whose fixture is not the one in hand and the minimal-zeros block at
+ * its tail returns early off the same test, `checkTokenBudget` only reports a
+ * budget that is missing, and a retired case's golden file simply stops being
+ * read. So dropping a fixture or a tool from `FIXTURES_BY_TOOL` retires every
+ * check scoped to it and the run still passes.
+ *
+ * `SELECTION_KEYWORDS` has the same hole but is keyed by what `tools/list`
+ * returns rather than by a case, so `checkDefinitionBudget` is where it belongs.
+ */
+function checkChecksAreRun(failures) {
+  const notRun = (tool, fixture) => !CASE_KEYS.has(`${tool}/${fixture}`);
+
+  for (const [tool, checks] of Object.entries(ANSWERABILITY)) {
+    if (!FIXTURES_BY_TOOL[tool]?.length) {
+      failures.push(
+        `${tool}: ${checks.length} answerability check(s) declared, but the tool is measured against no fixture`,
+      );
+    }
+    for (const { question, fixture } of checks) {
+      if (fixture && notRun(tool, fixture)) {
+        failures.push(
+          `${tool}: "${question}" is pinned on ${fixture}, which this run does not measure`,
+        );
+      }
+    }
+  }
+
+  for (const tool of Object.keys(MINIMAL_ZEROS)) {
+    if (notRun(tool, MINIMAL_FIXTURE)) {
+      failures.push(
+        `${tool}: the zeros it must report are pinned on ${MINIMAL_FIXTURE}, which this run does not measure`,
+      );
+    }
+  }
+
+  for (const [what, declared] of [
+    ["a token budget", TOKEN_BUDGET],
+    ["a 1.x response cost", V1_RESPONSE_TOKENS],
+  ]) {
+    for (const key of Object.keys(declared)) {
+      if (!CASE_KEYS.has(key)) {
+        failures.push(
+          `${key}: ${what} is declared for a case this run does not measure`,
+        );
+      }
+    }
+  }
+
+  for (const tool of Object.keys(FIXTURES_BY_TOOL)) {
+    if (!ANSWERABILITY[tool]) {
+      failures.push(
+        `${tool}: measured against ${FIXTURES_BY_TOOL[tool].length} fixture(s) with no answerability checks declared`,
+      );
+    }
+  }
+}
 
 /**
  * What a 2026-07-28 request carries in place of the `initialize` handshake. The
@@ -451,7 +521,7 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
   const { scalars, keys, columns, tables } = inspect(toon);
   const limitRows = tables.get("governorLimits") ?? new Map();
 
-  for (const check of ANSWERABILITY[tool]) {
+  for (const check of ANSWERABILITY[tool] ?? []) {
     // A question only some logs raise is pinned on the fixture that raises it.
     if (check.fixture && check.fixture !== fixture) continue;
 
@@ -489,7 +559,7 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
     }
   }
 
-  if (fixture !== "minimal") {
+  if (fixture !== MINIMAL_FIXTURE) {
     return;
   }
   const expectZero = MINIMAL_ZEROS[tool];
@@ -773,6 +843,8 @@ async function main() {
 
   const update = args.includes("--update");
   const failures = [];
+
+  checkChecksAreRun(failures);
 
   const responses = [];
 
