@@ -14,11 +14,20 @@ marker blocks — are generated from the run. See [`scripts/eval.mjs`](../../scr
 | --- | --- | --- |
 | `governor-heavy.log` | Slices of the [Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer) (`sample-app/debug-logs/sample-log.log`): the transaction start, a DML insert, a managed-package section for `core_pkg` and `srm_pkg` with a SOQL query, and the closing limit block. | CPU over its limit, SOQL/DML consumed, three namespaces, a `FATAL_ERROR`, and — because it is a trimmed slice — a non-zero `parsingErrors`. |
 | `minimal.log` | A `System.debug('')` run: the smallest transaction that still emits a limit block. | Everything is zero. This is the fixture that fails if a zero is ever omitted instead of reported, because "no DML statements ran" has to be answerable from the payload. |
+| `heap-heavy.log` | Hand-written: one method allocates and holds, another allocates then frees the same bytes. | Heap. Its limit block states heap as zero where its `HEAP_ALLOCATE` events do not, so it is the fixture that fails if the summary ever reports the block instead of the peak. `apexlog_get_summary` only — see below. |
 
 `governor-heavy.log` is deliberately fragmentary — the whole sample log is 19 MB, and the slices keep
 the fixture at ~40 KB while retaining every fact the tools report. Its `parsingErrors` count is an
 artefact of that slicing, and is useful: it exercises the "did the log parse cleanly?" question with
 a non-zero answer, where `minimal.log` answers it with zero.
+
+`FIXTURES_BY_TOOL` names the logs each tool is measured against, and it is not a cross product. Every
+case is a server round trip and a golden file a reviewer has to read, so add a fixture to a tool only
+where it pins something the other fixtures would miss. `heap-heavy.log` is in the summary alone, the
+one tool whose answer its heap changes. `apexlog_list_limit_risks` does read heap, but this log's
+heap sits under its risk threshold, and the rows `apexlog_list_slow_operations` would rank are kinds
+`governor-heavy` pins already. What the parser's several heap measures mean is pinned in
+`tests/parserContract.test.ts`, on a log of its own, which needs no server.
 
 ## Golden files
 

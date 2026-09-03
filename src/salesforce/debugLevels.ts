@@ -10,7 +10,21 @@ export type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
 
 export const LOG_LEVELS = Object.values(LOG_LEVEL);
 
-/** The DebugLevel field names, lower-camel. `toSObjectFields` capitalises them. */
+/**
+ * One Salesforce debug log category, as the `DebugLevels` key the parser reads
+ * a log header into. The parser's own `DebugCategory` is this plus `""`, which
+ * it uses for an event that states no category.
+ */
+export type DebugLevelCategory = keyof DebugLevels;
+
+/**
+ * The categories a `DebugLevel` record can set, lower-camel as its fields are
+ * named. `toSObjectFields` capitalises them.
+ *
+ * A literal and not a filter over `DebugLevelCategory`, because the tool schema
+ * needs the tuple: a filtered array would type as every category and let a
+ * caller ask for `dataAccess`, which no field sets.
+ */
 export const TRACE_CATEGORIES = [
   "apexCode",
   "apexProfiling",
@@ -22,7 +36,7 @@ export const TRACE_CATEGORIES = [
   "visualforce",
   "wave",
   "workflow",
-] as const;
+] as const satisfies readonly DebugLevelCategory[];
 
 export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
 
@@ -69,18 +83,30 @@ export const DEBUG_LEVEL_FIELD_BY_CATEGORY = {
   VISUALFORCE: "visualforce",
   WAVE: "wave",
   WORKFLOW: "workflow",
-} as const satisfies Record<LogCategory, keyof DebugLevels>;
+} as const satisfies Record<LogCategory, DebugLevelCategory>;
 
 /** Fails to compile unless `T` is `true`. */
 type Assert<T extends true> = T;
 
 /**
- * Compile guard for the other direction: the `satisfies` above only checks that
- * every category names a real field. A category the parser adds has to be named
- * here too, or `declaredLevels` silently drops it from every response.
+ * Compile guard for the other direction: every `satisfies` above only checks
+ * that what is named exists, never that nothing is missing. A category the
+ * parser adds has to reach `LOG_CATEGORIES`, or `declaredLevels` drops it from
+ * every response and no other check notices.
  */
 export type EveryDebugLevelCategoryNamed = Assert<
-  keyof DebugLevels extends (typeof DEBUG_LEVEL_FIELD_BY_CATEGORY)[LogCategory]
+  DebugLevelCategory extends (typeof DEBUG_LEVEL_FIELD_BY_CATEGORY)[LogCategory]
+    ? true
+    : false
+>;
+
+/**
+ * And that a new category is settable, or refused on purpose. Without this a
+ * category the parser adds is silently absent from `TRACE_CATEGORIES`, which
+ * reads the same as `dataAccess` being absent because no field sets it.
+ */
+export type EverySettableCategoryOffered = Assert<
+  Exclude<DebugLevelCategory, "dataAccess"> extends TraceCategory
     ? true
     : false
 >;
