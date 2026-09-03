@@ -70,8 +70,8 @@ Every request carries all four tool definitions, whether or not a tool is called
 | `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
 | `apexlog_list_slow_operations` | ~379                                | ~247       | +53%     |
 | `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
-| `apexlog_get_summary`          | ~163                                | ~171       | -5%      |
-| **Total**                      | **~1,155** (0.6% of a 200K context) | **~1,529** | **-24%** |
+| `apexlog_get_summary`          | ~173                                | ~171       | +1%      |
+| **Total**                      | **~1,165** (0.6% of a 200K context) | **~1,529** | **-24%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -83,9 +83,10 @@ The input side is the same for every analysis tool — a tool name and a log fil
 
 | Tool                           | Log                  | Response | 1.x  | Change |
 | ------------------------------ | -------------------- | -------- | ---- | ------ |
-| `apexlog_get_summary`          | `governor-heavy.log` | ~348     | ~293 | +19%   |
-| `apexlog_get_summary`          | `minimal.log`        | ~244     | ~249 | -2%    |
-| `apexlog_get_summary`          | `heap-heavy.log`     | ~256     | —    | —      |
+| `apexlog_get_summary`          | `governor-heavy.log` | ~379     | ~293 | +29%   |
+| `apexlog_get_summary`          | `minimal.log`        | ~242     | ~249 | -3%    |
+| `apexlog_get_summary`          | `heap-heavy.log`     | ~255     | —    | —      |
+| `apexlog_get_summary`          | `truncated.log`      | ~250     | —    | —      |
 | `apexlog_list_slow_operations` | `governor-heavy.log` | ~395     | ~408 | -3%    |
 | `apexlog_list_slow_operations` | `minimal.log`        | ~116     | ~190 | -39%   |
 | `apexlog_list_limit_risks`     | `governor-heavy.log` | ~45      | ~84  | -46%   |
@@ -101,7 +102,7 @@ All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept 
 - **The leanness comes from shape.** Data that used to be nested objects is returned as flat tables, which TOON encodes as one header plus one line per row.
 - **Nothing is reported twice.** No prose summary restates the numbers in the table alongside it, and no figure appears in two places.
 - **Durations are rounded** to 3 decimal places (ms) and percentages to 1.
-- **Only lists of things that happened are omitted when empty** — log issues. Nothing to report means the key is absent.
+- **Only what did not happen is omitted** — the fatal errors that ended a transaction, and the bytes a partial log lost. Nothing to report means the key is absent; every other field reports its zero.
 
 ### apexlog_list_slow_operations
 
@@ -122,11 +123,13 @@ Rows are `{kind, name, namespace, callCount, durationTotalMs, durationSelfMs, se
 
 ### apexlog_get_summary
 
-Get a high-level summary of an Apex debug log: how long the transaction ran (in ms), where the time went by kind of operation, every governor limit it and each namespace consumed, the debug levels it was logged at, and whether the log is complete. Best for a quick overview before deeper analysis.
+Get a high-level summary of an Apex debug log: how long the transaction ran (in ms), where the time went by kind of operation, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview before deeper analysis.
 
 All thirteen governor limits are listed as `{limit, used, max}` rows, at zero included, so you can ask what a transaction consumed and get an answer either way. `limitsByNamespace` adds `{namespace, limit, used}` rows for each limit a namespace consumed, which is how you see that a managed package spent your CPU time; it names no ceiling, because the parser keeps one ceiling per limit for the whole transaction and it is already in `governorLimits`.
 
 `timeByKind` gives `{kind, logCategory, operationCount, durationSelfMs, selfPercentage}` for every kind `apexlog_list_slow_operations` ranks. `logCategory` is the trace category that decides whether the kind reaches the log at all, so a zero can be read: `soql 0` beside `DB NONE` in `debugLevels`, whose rows are `{logCategory, level}`, means the queries were not logged, and beside `DB FINEST` it means none ran.
+
+`truncated` says whether the platform wrote the whole log, and `skippedBytes` how much it dropped where it did not — every figure in a partial log is a floor, not a total. `thrownCount` is how many exceptions were thrown, at zero included. `fatalErrors` gives `{message, frames}` for each failure that ended a transaction, and is absent when none did; `frames` holds the innermost three stack frames, with a trailing `…` where there were more. It is the only field that says a transaction did not finish, which decides what every other figure means — a fatal error need breach no governor limit, so nothing else in the response reveals one.
 
 | Parameter     | Type   | Required | Description                                     |
 | ------------- | ------ | -------- | ----------------------------------------------- |

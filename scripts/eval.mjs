@@ -89,9 +89,24 @@ const ANSWERABILITY = {
       columns: ["logCategory", "level"],
     },
     {
-      question: "Did the log parse cleanly, and did it capture the whole run?",
-      fields: ["parsingErrorCount"],
+      question: "Did the run fail, and can I trust these numbers?",
+      fields: ["thrownCount"],
       keys: ["truncated"],
+    },
+    {
+      // Only where the run died. `fatalErrors` is the one field that says the
+      // transaction did not finish, and a fatal that breaches no limit is
+      // invisible in every other field.
+      fixture: "governor-heavy",
+      question: "What killed the transaction, and where?",
+      keys: ["fatalErrors"],
+      columns: ["message", "frames"],
+    },
+    {
+      // Only where the platform dropped content, which gates the field.
+      fixture: "truncated",
+      question: "How much of the log is missing?",
+      fields: ["skippedBytes"],
     },
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
@@ -166,7 +181,7 @@ const ANSWERABILITY = {
  */
 const MINIMAL_ZEROS = {
   apexlog_get_summary: {
-    fields: ["parsingErrorCount"],
+    fields: ["thrownCount"],
     allLimitsZero: true,
   },
 };
@@ -180,8 +195,11 @@ const MINIMAL_ZEROS = {
 const TOKEN_BUDGET = {
   // Raised for the two tables #62 added: what each namespace consumed of the
   // limits, and where the time went by kind of operation. Both answer questions
-  // the 1.x summary could not.
-  "apexlog_get_summary/governor-heavy": 357,
+  // the 1.x summary could not. Raised again for the stack frames #100 added to
+  // a fatal: the message names the limit, the frames name the code, and 18 of 42
+  // fatals across a 124-log corpus breach no limit at all, so nothing else in
+  // the response reveals them.
+  "apexlog_get_summary/governor-heavy": 397,
   "apexlog_get_summary/minimal": 249,
   // Raised for the grouped default #126 made: every row now carries its call
   // count and the self time of its slowest call, and for the four capture levels
@@ -197,6 +215,7 @@ const TOKEN_BUDGET = {
   "apexlog_list_limit_risks/governor-heavy": 46,
   "apexlog_list_limit_risks/minimal": 30,
   "apexlog_get_summary/heap-heavy": 269,
+  "apexlog_get_summary/truncated": 252,
 };
 
 /**
@@ -285,7 +304,7 @@ const SELECTION_KEYWORDS = {
  * publishes a heap figure.
  */
 const FIXTURES_BY_TOOL = {
-  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy"],
+  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy", "truncated"],
   apexlog_list_slow_operations: ["governor-heavy", "minimal"],
   apexlog_list_limit_risks: ["governor-heavy", "minimal"],
 };

@@ -210,6 +210,12 @@ one-liners.
   complete shape, not a sentence; "High CPU usage — consider optimizing algorithms" follows from the
   percentage beside it. Advice built from one column and a hardcoded threshold is a worse copy of what
   the agent does anyway, because the agent reads every column.
+- **Take the bounded view, and cap what is still unbounded inside it.** Where the parser offers
+  both, read the deduped one: `logIssues` holds one entry per failure, where `exceptions` holds every
+  occurrence — 4,501 throws in one real log are three messages. Then cap the free text that is left,
+  because its size is the log's to choose and not ours: a fatal states 53 characters of message on
+  the median log and 1,070 on the worst, and one stack runs to 52,009. A field the log controls is a
+  field that will one day fill the caller's context.
 - **Don't echo the input back.** If the caller supplied it (a file path, a flag), it does not belong
   in the response.
 - **Round to the precision someone acts on.** `roundMs` for durations (3dp, keeps microsecond
