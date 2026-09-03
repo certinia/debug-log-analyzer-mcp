@@ -68,10 +68,10 @@ Every request carries all four tool definitions, whether or not a tool is called
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
 | `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
-| `apexlog_list_slow_operations` | ~377                                | ~247       | +53%     |
+| `apexlog_list_slow_operations` | ~379                                | ~247       | +53%     |
 | `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
 | `apexlog_get_summary`          | ~163                                | ~171       | -5%      |
-| **Total**                      | **~1,153** (0.6% of a 200K context) | **~1,529** | **-25%** |
+| **Total**                      | **~1,155** (0.6% of a 200K context) | **~1,529** | **-24%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -83,12 +83,12 @@ The input side is the same for every analysis tool — a tool name and a log fil
 
 | Tool                           | Log                  | Response | 1.x  | Change |
 | ------------------------------ | -------------------- | -------- | ---- | ------ |
-| `apexlog_get_summary`          | `governor-heavy.log` | ~341     | ~293 | +16%   |
-| `apexlog_get_summary`          | `minimal.log`        | ~238     | ~249 | -4%    |
-| `apexlog_list_slow_operations` | `governor-heavy.log` | ~390     | ~408 | -4%    |
-| `apexlog_list_slow_operations` | `minimal.log`        | ~111     | ~190 | -42%   |
-| `apexlog_list_limit_risks`     | `governor-heavy.log` | ~39      | ~84  | -54%   |
-| `apexlog_list_limit_risks`     | `minimal.log`        | ~24      | ~30  | -20%   |
+| `apexlog_get_summary`          | `governor-heavy.log` | ~348     | ~293 | +19%   |
+| `apexlog_get_summary`          | `minimal.log`        | ~244     | ~249 | -2%    |
+| `apexlog_list_slow_operations` | `governor-heavy.log` | ~395     | ~408 | -3%    |
+| `apexlog_list_slow_operations` | `minimal.log`        | ~116     | ~190 | -39%   |
+| `apexlog_list_limit_risks`     | `governor-heavy.log` | ~45      | ~84  | -46%   |
+| `apexlog_list_limit_risks`     | `minimal.log`        | ~29      | ~30  | -3%    |
 
 <!-- token-cost-answers:end -->
 

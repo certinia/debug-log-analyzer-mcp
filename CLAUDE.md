@@ -36,17 +36,16 @@ pnpm start
 
 - **src/tools/apexLogSource.ts**: The one way the three analysis tools get a log — `loadApexLog` (reads and parses, caching the last parse by path and a fingerprint of everything a stat can see — inode, size, and modification and change time in nanoseconds, so a `cp -p` that keeps the modification time still misses; the file is opened once and both the stat and the read go to that handle, so nothing can put a different file at the path between the two; the slot holds the in-flight promise, so concurrent callers share one parse and a failed read is not kept; it is dropped five minutes after its last use, on an `unref`ed timer, because a parsed log holds four to five times the size of the file) and `walkLog`
 
-- **src/ApexLogParser.ts**: Complex log parsing engine (33k+ tokens)
-  - Exports `parse()` function and `ApexLogParser` class
-  - Handles Apex debug log format parsing into structured data
-  - Tracks governor limits, performance metrics, and log issues
+- **`@apexdevtools/apex-log-parser`**: the parser, as a dependency. Nothing here parses a log. Runtime values (`parse`, the event classes for `instanceof`) come from the package root; every type and the const companions (`LOG_LEVEL`, `ALL_LIMIT_METRICS`) come from `@apexdevtools/apex-log-parser/types`. Read `debugCategory` for an event's category, never `category` — that one is a grouping for a UI and is slated for deprecation. `src/tools/operations.ts` still selects on it, which is what #138 moves.
+
+  `tests/parserContract.test.ts` pins the assumptions the tools rest on, against a real parse — no other suite would notice a parser upgrade that broke one. Test expectations derive from the parser's exports wherever it publishes the fact, so the lists are pinned once there and nowhere else. One assumption is a known defect: `ApexLog.size` counts UTF-16 code units despite being documented as bytes, so `fileSizeBytes` under-reads a log that is not ASCII. Fixed upstream in 0.2.0 ([apex-log-parser#70](https://github.com/apex-dev-tools/apex-log-parser/issues/70)), so the upgrade carries it; that case failing is the signal the figure moved.
 
 ### Key Data Structures
 
 - `ApexLog`: Root log structure with duration, governor limits, namespaces
-- `LogLine`: Individual log entries with hierarchical relationships
+- `LogEvent`: One parsed event, with its parent and children
 - `Operation`: One timed thing the transaction did, with its timing and resource usage
-- `GovernorLimits`: Salesforce platform limits tracking
+- `GovernorLimits`: `{ snapshots, final, peak, byNamespace }`. Every tool reports **`peak`** — a counter falls when the frame that spent it exits, so `final` reads below the figure the platform enforced.
 
 ### MCP Integration
 
@@ -70,7 +69,6 @@ This server is designed to integrate with the Apex Log Analyzer VS Code extensio
 src/
   index.ts          # CLI entry point (bin)
   server.ts         # MCP server implementation
-  ApexLogParser.ts  # Log parsing engine
   tools/            # One module per MCP tool
   salesforce/       # Org connection, org classification, debug levels, trace flags, users
   policy/           # Per-call authorization for anonymous Apex execution

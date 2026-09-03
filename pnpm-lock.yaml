@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@apexdevtools/apex-log-parser':
+        specifier: ^0.1.0
+        version: 0.1.0
       '@modelcontextprotocol/client':
         specifier: ^2.0.0
         version: 2.0.0
@@ -59,6 +62,10 @@ importers:
         version: typescript@7.0.2
 
 packages:
+
+  '@apexdevtools/apex-log-parser@0.1.0':
+    resolution: {integrity: sha512-UDIfkvZWJzspW2xvbMo4NEs0o2UfpYLde4O1ShIqM7ZphP8MoYEQ5eriOzNte9SfGZmXaO4l1YKsRltihwGHJA==}
+    engines: {node: '>=20'}
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -2575,6 +2582,8 @@ packages:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
+
+  '@apexdevtools/apex-log-parser@0.1.0': {}
 
   '@babel/code-frame@7.29.0':
     dependencies:

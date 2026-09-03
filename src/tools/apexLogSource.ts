@@ -5,11 +5,8 @@
 import { promises as fs, type BigIntStats } from "fs";
 import { isAbsolute } from "path";
 import { z } from "zod";
-import {
-  parse,
-  ApexLog,
-  LogLine,
-} from "../ApexLogParser.js";
+import { parse } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 
 /**
  * The one declaration of the log path, shared by every tool that takes one, so
@@ -154,8 +151,8 @@ export function clearApexLogCache(): void {
  * what encloses a node down to it without a second pass.
  */
 export function walkLog<T>(
-  node: LogLine,
-  visit: (node: LogLine, inherited: T | undefined) => T,
+  node: LogEvent,
+  visit: (node: LogEvent, inherited: T | undefined) => T,
   inherited?: T,
 ): void {
   const next = visit(node, inherited);

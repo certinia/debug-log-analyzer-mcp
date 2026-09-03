@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
-import type { GovernorLimits } from "../ApexLogParser.js";
+import type { Limits } from "@apexdevtools/apex-log-parser/types";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { captureLevels, type CaptureLevels } from "./operations.js";
 import {
@@ -66,7 +66,7 @@ export async function listLimitRisks(args: LimitRisksArgs) {
   const result: LimitRiskResult = {
     ...captureLevels(apexLog),
     threshold,
-    atRisk: atRiskLimits(apexLog.governorLimits, threshold),
+    atRisk: atRiskLimits(apexLog.governorLimits.peak, threshold),
   };
 
   return {
@@ -85,11 +85,8 @@ export async function listLimitRisks(args: LimitRisksArgs) {
  * A limit with no ceiling is skipped rather than reported at zero: the log did
  * not say what it was, so no share of it can be worked out.
  */
-function atRiskLimits(
-  governorLimits: GovernorLimits,
-  threshold: number,
-): LimitRisk[] {
-  return toLimitRows(governorLimits)
+function atRiskLimits(limits: Limits, threshold: number): LimitRisk[] {
+  return toLimitRows(limits)
     .filter((row) => row.max > 0)
     .map((row) => ({
       ...row,

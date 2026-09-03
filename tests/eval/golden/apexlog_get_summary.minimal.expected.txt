@@ -30,7 +30,7 @@ governorLimits[13]{limit,used,max}:
   queueableJobsAddedToQueue,0,50
   mobileApexPushCalls,0,10
 limitsByNamespace: []
-timeByKind[9]{kind,logCategory,operationCount,durationSelfMs,selfPercentage}:
+timeByKind[10]{kind,logCategory,operationCount,durationSelfMs,selfPercentage}:
   codeUnit,APEX_CODE,1,0.546,97.3
   managedPackage,APEX_CODE,0,0,0
   method,APEX_CODE,0,0,0
@@ -38,5 +38,6 @@ timeByKind[9]{kind,logCategory,operationCount,durationSelfMs,selfPercentage}:
   soql,DB,0,0,0
   sosl,DB,0,0,0
   dml,DB,0,0,0
+  callout,CALLOUT,0,0,0
   flow,WORKFLOW,0,0,0
   workflow,WORKFLOW,0,0,0

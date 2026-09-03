@@ -191,8 +191,11 @@ const TOKEN_BUDGET = {
   // say whether the optimizer treats a ranked query as selective.
   "apexlog_list_slow_operations/governor-heavy": 410,
   "apexlog_list_slow_operations/minimal": 130,
-  "apexlog_list_limit_risks/governor-heavy": 41,
-  "apexlog_list_limit_risks/minimal": 26,
+  // Raised for the fifth capture level #97 added. A callout is a timed event to
+  // the published parser, so it is ranked, and a ranked kind has to state the
+  // level that gates it or a zero cannot be read.
+  "apexlog_list_limit_risks/governor-heavy": 46,
+  "apexlog_list_limit_risks/minimal": 30,
 };
 
 /**

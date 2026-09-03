@@ -12,7 +12,10 @@
  * must be able to answer from the payload.
  */
 
-import type { GovernorLimits, Limits } from "../ApexLogParser.js";
+import type {
+  Limits,
+  NamespaceLimits,
+} from "@apexdevtools/apex-log-parser/types";
 
 /** The parser works in nanoseconds; every reported duration is milliseconds. */
 export const NS_TO_MS = 1_000_000;
@@ -57,6 +60,10 @@ export function omitEmpty<T extends Record<string, readonly unknown[]>>(
 
 export interface LimitRow {
   limit: string;
+  /**
+   * The highest the limit reached, not where it ended: a counter that falls
+   * mid-log would otherwise read below the figure the platform enforced.
+   */
   used: number;
   /** The ceiling the org allows. Zero when the log did not state one. */
   max: number;
@@ -72,16 +79,13 @@ export interface LimitRow {
  * data as thirteen nested objects.
  *
  * The one flattener in the server, so no two tools can name a limit differently
- * or count a different set of them. `byNamespace` is not a limit and is dropped
- * here; `toNamespaceLimitRows` reports it.
+ * or count a different set of them.
  */
-export function toLimitRows(limits: Limits | GovernorLimits): LimitRow[] {
-  return Object.entries(limits)
-    .filter(([name]) => name !== "byNamespace")
-    .map(([name, value]) => {
-      const { used, limit } = value as Limits[keyof Limits];
-      return { limit: name, used, max: limit };
-    });
+export function toLimitRows(limits: Limits): LimitRow[] {
+  return Object.entries(limits).map(([name, value]) => {
+    const { used, limit } = value as Limits[keyof Limits];
+    return { limit: name, used, max: limit };
+  });
 }
 
 export interface NamespaceLimitRow {
@@ -101,10 +105,10 @@ export interface NamespaceLimitRow {
  * table.
  */
 export function toNamespaceLimitRows(
-  byNamespace: Map<string, Limits>,
+  byNamespace: Map<string, NamespaceLimits>,
 ): NamespaceLimitRow[] {
   return [...byNamespace].flatMap(([namespace, limits]) =>
-    toLimitRows(limits)
+    toLimitRows(limits.peak)
       .filter((row) => row.used > 0)
       .map(({ limit, used }) => ({ namespace, limit, used })),
   );

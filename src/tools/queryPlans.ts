@@ -4,9 +4,9 @@
 
 import type {
   ApexLog,
-  LogLine,
+  LogEvent,
   SOQLExecuteExplainLine,
-} from "../ApexLogParser.js";
+} from "@apexdevtools/apex-log-parser";
 import { walkLog } from "./apexLogSource.js";
 import { operationName } from "./operations.js";
 
@@ -34,7 +34,7 @@ export interface QueryPlan {
  * correlated structurally rather than by line number. Its fields are parsed
  * together or not at all, so one unparsed field means no readable plan.
  */
-function planOf(node: LogLine): QueryPlan | undefined {
+function planOf(node: LogEvent): QueryPlan | undefined {
   const explain = node.children?.find(
     (child): child is SOQLExecuteExplainLine =>
       child.type === "SOQL_EXECUTE_EXPLAIN",
