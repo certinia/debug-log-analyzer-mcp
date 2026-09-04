@@ -8,9 +8,8 @@ still holds the keywords clients select on, and both tables in
 [Token Cost](../../README.md#token-cost) — the `token-cost-definitions` and `token-cost-answers`
 marker blocks — are generated from the run. See [`scripts/eval.mjs`](../../scripts/eval.mjs).
 
-The answers table publishes one row per tool, against the one log `PUBLISHED_FIXTURE` names. It is
-keyed on tools and not on cases, so a fixture added to pin a correctness fact does not also add a
-published row.
+The answers table publishes one row per tool, against the one log `PUBLISHED_FIXTURE` names — see
+its comment for why.
 
 ## Fixtures
 
