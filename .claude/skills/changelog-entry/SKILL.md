@@ -58,22 +58,23 @@ was measured does not.
 **A performance entry always carries its number** — a multiple or a percentage, and what it is of.
 "Faster" on its own is not an entry, because the reader cannot tell whether to care.
 
-Already-unreleased work: edit the existing entry. A change nobody has received is not a change.
+Already-unreleased work: edit the existing entry, and drop a fix for a bug that only ever existed
+in it. A change nobody has received is not a change, and nobody met the bug.
 
 No issue fits? File one, then reference it.
 
 ## Wrong, then right
 
-| Wrong | Right |
-| --- | --- |
-| `- Removed destructiveHint from three tools, since the spec says it is meaningless when readOnlyHint is true` | no entry — the user sees no difference |
-| `- Replaced ten per-category properties with one z.partialRecord, cutting ~844 to ~428 tokens` | fold the result into the one user-facing entry |
-| `- Reduced the cost by 31% ([#87](https://.../87))` | `- Reduce the cost by 31% ([#87])`, plus a reference definition |
-| `- Refactor CSV parsing to process dataset arrays asynchronously` | `- Fix the freeze on a large CSV export` |
-| `- Replace webview-ui-toolkit with vscode-elements` | `- Match the host's controls more closely` |
-| a feature with six nested sub-bullets | one headline sentence, plus a docs link |
-| `- Improve search performance` | `- Search a 100MB log 10× faster` |
-| `- Optimise the parser` | `- Cut parse time on a large log by 31%` |
+| Wrong                                                                                                         | Right                                                           |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `- Removed destructiveHint from three tools, since the spec says it is meaningless when readOnlyHint is true` | no entry — the user sees no difference                          |
+| `- Replaced ten per-category properties with one z.partialRecord, cutting ~844 to ~428 tokens`                | fold the result into the one user-facing entry                  |
+| `- Reduced the cost by 31% ([#87](https://.../87))`                                                           | `- Reduce the cost by 31% ([#87])`, plus a reference definition |
+| `- Refactor CSV parsing to process dataset arrays asynchronously`                                             | `- Fix the freeze on a large CSV export`                        |
+| `- Replace webview-ui-toolkit with vscode-elements`                                                           | `- Match the host's controls more closely`                      |
+| a feature with six nested sub-bullets                                                                         | one headline sentence, plus a docs link                         |
+| `- Improve search performance`                                                                                | `- Search a 100MB log 10× faster`                               |
+| `- Optimise the parser`                                                                                       | `- Cut parse time on a large log by 31%`                        |
 
 ## Trim a section nobody will read
 
