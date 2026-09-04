@@ -77,20 +77,17 @@ Every request carries all four tool definitions, whether or not a tool is called
 
 ### Calling a tool
 
-The input side is the same for every analysis tool — a tool name and a log file path, about 15 tokens — so what a call costs is what it returns. Each row is one tool answering one of the logs in [`tests/eval/fixtures/`](tests/eval/fixtures), beside what 1.x returned for the same log — the same facts, in a cheaper shape.
+The input side is the same for every analysis tool — a tool name and a log file path, about 15 tokens — so what a call costs is what it returns. Each row is one tool answering the same log, beside what 1.x returned for it — the same facts, in a cheaper shape.
+
+What a call costs does not scale with the log. The response is bounded by its shape — a fixed table of governor limits, and a row cap on the ranked operations — and not by the bytes parsed. The log measured below is a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log); against the unsliced 19.7 MB original, `apexlog_get_summary` returns ~389 tokens rather than the ~379 below, and `apexlog_list_limit_risks` returns the same ~45.
 
 <!-- token-cost-answers:start -->
 
-| Tool                           | Log                  | Response | 1.x  | Change |
-| ------------------------------ | -------------------- | -------- | ---- | ------ |
-| `apexlog_get_summary`          | `governor-heavy.log` | ~379     | ~293 | +29%   |
-| `apexlog_get_summary`          | `minimal.log`        | ~242     | ~249 | -3%    |
-| `apexlog_get_summary`          | `heap-heavy.log`     | ~255     | —    | —      |
-| `apexlog_get_summary`          | `truncated.log`      | ~250     | —    | —      |
-| `apexlog_list_slow_operations` | `governor-heavy.log` | ~355     | ~408 | -13%   |
-| `apexlog_list_slow_operations` | `minimal.log`        | ~116     | ~190 | -39%   |
-| `apexlog_list_limit_risks`     | `governor-heavy.log` | ~45      | ~84  | -46%   |
-| `apexlog_list_limit_risks`     | `minimal.log`        | ~29      | ~30  | -3%    |
+| Tool                           | Response | 1.x  | Change |
+| ------------------------------ | -------- | ---- | ------ |
+| `apexlog_get_summary`          | ~379     | ~293 | +29%   |
+| `apexlog_list_slow_operations` | ~355     | ~408 | -13%   |
+| `apexlog_list_limit_risks`     | ~45      | ~84  | -46%   |
 
 <!-- token-cost-answers:end -->
 

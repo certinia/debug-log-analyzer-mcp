@@ -322,6 +322,20 @@ const FIXTURES_BY_TOOL = {
   apexlog_list_limit_risks: ["governor-heavy", "minimal"],
 };
 
+/**
+ * The one log the README publishes a cost against.
+ *
+ * The answers table is keyed on tools rather than on cases, so a fixture added
+ * to pin a correctness fact does not also add a published row. `governor-heavy`
+ * is the log every tool is measured against, and the only one with a 1.x
+ * baseline to compare against.
+ *
+ * A bigger log would not move the figures: the response is bounded by its shape
+ * — a fixed table of governor limits, a row cap on the ranked operations — and
+ * not by the bytes parsed.
+ */
+const PUBLISHED_FIXTURE = "governor-heavy";
+
 const CASES = Object.entries(FIXTURES_BY_TOOL).flatMap(([tool, fixtures]) =>
   fixtures.map((fixture) => ({ tool, fixture })),
 );
@@ -386,6 +400,14 @@ function checkChecksAreRun(failures) {
     if (!ANSWERABILITY[tool]) {
       failures.push(
         `${tool}: measured against ${FIXTURES_BY_TOOL[tool].length} fixture(s) with no answerability checks declared`,
+      );
+    }
+    // Nothing else notices a tool dropping out of the published table: the
+    // answers block is rendered from whichever cases match, so a tool that
+    // stops being measured against the published fixture simply loses its row.
+    if (!CASE_KEYS.has(`${tool}/${PUBLISHED_FIXTURE}`)) {
+      failures.push(
+        `${tool}: the README publishes a cost against ${PUBLISHED_FIXTURE}, which this run does not measure it against`,
       );
     }
   }
@@ -767,13 +789,14 @@ function renderTokenCost(costs, responses) {
     {
       id: "token-cost-answers",
       table: renderTable(
-        ["Tool", "Log", "Response", "1.x", "Change"],
-        responses.map(({ tool, fixture, tokens }) => [
-          `\`${tool}\``,
-          `\`${fixture}.log\``,
-          `~${thousands(tokens)}`,
-          ...comparison(V1_RESPONSE_TOKENS[`${tool}/${fixture}`], tokens),
-        ]),
+        ["Tool", "Response", "1.x", "Change"],
+        responses
+          .filter(({ fixture }) => fixture === PUBLISHED_FIXTURE)
+          .map(({ tool, fixture, tokens }) => [
+            `\`${tool}\``,
+            `~${thousands(tokens)}`,
+            ...comparison(V1_RESPONSE_TOKENS[`${tool}/${fixture}`], tokens),
+          ]),
       ),
     },
   ];
