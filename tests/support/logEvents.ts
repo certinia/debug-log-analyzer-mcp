@@ -15,7 +15,7 @@
  * edit here rather than one in each suite.
  */
 
-import type { LogEvent } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 
 /** What a `SOQL_EXECUTE_EXPLAIN` line carries, as the parser leaves it. */
 export type PlanSpec = {
@@ -62,7 +62,10 @@ export type NodeSpec = {
  */
 export function node(spec: NodeSpec): unknown {
   const total = spec.totalNs ?? 0;
-  const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
+  const children = (spec.children ?? []).map(node) as {
+    parent?: unknown;
+    heapAllocated: { total: number };
+  }[];
   const built = {
     ...spec.plan,
     type: spec.type ?? null,
@@ -79,11 +82,15 @@ export function node(spec: NodeSpec): unknown {
     dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
     thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
-    // `total` equals `self` because a spec that sets it is standing in for an
-    // allocation leaf, which is where the parser seeds both.
+    // `self` is the node's own allocations and `total` adds its subtree's, as
+    // the parser aggregates them — so the root's total is the transaction's net
+    // heap without a case having to state it twice.
     heapAllocated: {
-      total: spec.heapSelfNetBytes ?? 0,
       self: spec.heapSelfNetBytes ?? 0,
+      total: children.reduce(
+        (bytes, child) => bytes + child.heapAllocated.total,
+        spec.heapSelfNetBytes ?? 0,
+      ),
     },
     children,
   };
@@ -96,3 +103,16 @@ export function node(spec: NodeSpec): unknown {
 
 /** A node built as the `LogEvent` a tool receives. */
 export const logEvent = (spec: NodeSpec): LogEvent => node(spec) as LogEvent;
+
+/**
+ * A log whose root is the transaction frame the parser always emits, running
+ * `children`. The frame is what `listOperations` skips, so a case's own nodes
+ * are its children and never the root.
+ */
+export const rootLog = (totalNs: number, ...children: NodeSpec[]): ApexLog =>
+  node({
+    type: "EXECUTION_STARTED",
+    text: "Root",
+    totalNs,
+    children,
+  }) as ApexLog;

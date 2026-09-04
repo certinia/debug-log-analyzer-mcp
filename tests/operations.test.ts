@@ -17,17 +17,11 @@ import {
   OPERATION_KINDS,
   type Operation,
 } from "../src/tools/operations";
-import { node, type NodeSpec } from "./support/logEvents";
+import { node, rootLog, type NodeSpec } from "./support/logEvents";
 
-/** A log whose root is the transaction frame the parser always emits. */
-function logOf(...children: NodeSpec[]): ApexLog {
-  return node({
-    type: "EXECUTION_STARTED",
-    text: "Root",
-    totalNs: 1_000_000_000,
-    children,
-  }) as ApexLog;
-}
+/** These cases are about which operations come back, not their share of a log. */
+const logOf = (...children: NodeSpec[]): ApexLog =>
+  rootLog(1_000_000_000, ...children);
 
 const named = (operations: Operation[]) => operations.map((o) => o.name);
 
