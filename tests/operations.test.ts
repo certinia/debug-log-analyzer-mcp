@@ -33,6 +33,7 @@ type NodeSpec = {
   dmlRowCount?: number;
   soslRowCount?: number;
   thrownCount?: number;
+  heapSelfNetBytes?: number;
   children?: NodeSpec[];
 };
 
@@ -53,6 +54,10 @@ function node(spec: NodeSpec): unknown {
     dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
     thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
+    heapAllocated: {
+      total: spec.heapSelfNetBytes ?? 0,
+      self: spec.heapSelfNetBytes ?? 0,
+    },
     children,
   };
 
@@ -389,6 +394,28 @@ describe("groupOperations", () => {
       soslCount: 1,
       rowCount: 8,
       thrownCount: 1,
+    });
+  });
+
+  it("sums each body's own heap, where a subtree total counts a nesting once", () => {
+    const call = (children: NodeSpec[] = []): NodeSpec => ({
+      type: "METHOD_ENTRY",
+      category: "Apex",
+      text: "A.run",
+      totalNs: 100_000_000,
+      selfNs: 40_000_000,
+      soqlCount: 1,
+      heapSelfNetBytes: 500,
+      children,
+    });
+    const operations = listOperations(logOf(call([call()])));
+
+    // Heap is what each body allocated itself, so both calls add theirs. The
+    // query is a subtree total, so the inner call's is already in the outer's.
+    expect(groupOperations(operations, "name")[0]).toMatchObject({
+      callCount: 2,
+      heapSelfNetBytes: 1000,
+      soqlCount: 1,
     });
   });
 

@@ -25,12 +25,13 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - **Breaking:** report a fatal error under its own `fatal` type, summarised as the exception message rather than `FATAL ERROR! cause=…` ([#97])
 - **Breaking:** speak the 2026-07-28 protocol revision. Clients on the 2025 revisions keep working ([#103])
 - Reduce every tool response with no fact lost: `apexlog_list_slow_operations` by 13%, `apexlog_execute_anonymous` by 30%. `apexlog_get_summary` costs 17% more, for the two tables it gained ([#62], [#86], [#97], [#108], [#109], [#120])
-- Reduce the standing cost of having the server connected by 25%. `apexlog_list_slow_operations` is the one tool that costs more, by 53%, for what it now selects and returns ([#87], [#101], [#103], [#108], [#120], [#126], [#127])
+- Reduce the standing cost of having the server connected by 15%. `apexlog_list_slow_operations` is the one tool that costs more, by 108%, for what it now selects, ranks and returns ([#87], [#99], [#101], [#103], [#108], [#120], [#126], [#127])
 - `apexlog_execute_anonymous` reports `durationMs` from the log it wrote, so it now agrees with `apexlog_get_summary.durationTotalMs` for the same log ([#65])
 - Answer a second question about the same log without parsing it again ([#88])
 
 ### Added
 
+- Add `sortBy: "heapSelfNetBytes"` to `apexlog_list_slow_operations`, which ranks the rows by the net heap each one's own code retained and adds that column. On the 40 logs of a 123-log corpus that allocate, a heap top ten holds a median 6 rows of 10 that the self-time top ten never returns ([#99])
 - Report the query optimiser's plan for the queries behind the returned rows, as a `queryPlans` table. Above a `relativeCost` of 1 the optimiser will not treat the query as selective ([#120])
 - Report the level each log category was captured at, which qualifies every figure beside it ([#102])
 - Report `matchedCount` from `apexlog_list_slow_operations`, so a caller can tell whether the page cap hid anything ([#63])
@@ -89,4 +90,6 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#94]: https://github.com/certinia/debug-log-analyzer-mcp/issues/94
 [#65]: https://github.com/certinia/debug-log-analyzer-mcp/issues/65
 [#97]: https://github.com/certinia/debug-log-analyzer-mcp/issues/97
+[#99]: https://github.com/certinia/debug-log-analyzer-mcp/issues/99
 [#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
+[#99]: https://github.com/certinia/debug-log-analyzer-mcp/issues/99
