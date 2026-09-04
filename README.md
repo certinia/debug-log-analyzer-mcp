@@ -79,7 +79,7 @@ Every request carries all four tool definitions, whether or not a tool is called
 
 The input side is the same for every analysis tool — a tool name and a log file path, about 15 tokens — so what a call costs is what it returns. Each row is one tool answering the same log, beside what 1.x returned for it — the same facts, in a cheaper shape.
 
-What a call costs does not scale with the log. The response is bounded by its shape — a fixed table of governor limits, and a row cap on the ranked operations — and not by the bytes parsed. The log measured below is a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log); against the unsliced 19.7 MB original, `apexlog_get_summary` returns ~389 tokens rather than the ~379 below, and `apexlog_list_limit_risks` returns the same ~45.
+What a call costs does not scale with the log. The response is bounded by its shape — a fixed table of governor limits, and a row cap on the ranked operations — and not by the bytes parsed. The log measured below is a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log); against the unsliced 19.7 MB original, `apexlog_get_summary` returns ~374 tokens rather than the ~364 below, and `apexlog_list_limit_risks` returns the same ~39.
 
 <!-- token-cost-answers:start -->
 
