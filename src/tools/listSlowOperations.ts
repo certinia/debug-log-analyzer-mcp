@@ -20,6 +20,7 @@ import {
 } from "./operations.js";
 import {
   listQueryPlans,
+  planOf,
   type QueryPlan,
   type QueryPlanVerdict,
 } from "./queryPlans.js";
@@ -220,7 +221,7 @@ function elide(text: string, maxChars: number): string {
  * the budget's own headroom absorbs, since 60,000 characters is well under the
  * 100,000 a 25,000-token ceiling allows.
  */
-function rowCost(row: SlowOperation): number {
+function rowCost(row: SlowOperation | PlanRow): number {
   return Object.values(row).reduce(
     (total, cell) => total + String(cell).length + 1,
     0,
@@ -238,22 +239,32 @@ function rowCost(row: SlowOperation): number {
  * only the four small figures, never the text.
  *
  * A page with no query among its rows pays nothing for the second walk.
+ *
+ * Where a row is one call — `groupBy: "none"` — the plan comes from that call's
+ * own event, not from the worst plan for its text. The row makes a claim about
+ * one call, and 13 query texts across a 124-log corpus were explained at more
+ * than one `relativeCost`, so the worst would tell those rows a cost the
+ * optimiser did not reach for them. A grouped row stands for every call of the
+ * text, where the worst is the figure to act on.
  */
 function plansForRankedRows(
   ranked: Operation[],
   apexLog: ApexLog,
+  perCall: boolean,
 ): RankedPlan[] {
   if (!ranked.some((operation) => operation.kind === "soql")) {
     return [];
   }
 
-  const explained = listQueryPlans(apexLog);
+  const explained = perCall ? undefined : listQueryPlans(apexLog);
   const plans: RankedPlan[] = [];
   ranked.forEach((operation, index) => {
     if (operation.kind !== "soql") {
       return;
     }
-    const plan = explained.get(operation.name);
+    const plan = explained
+      ? explained.get(operation.name)
+      : planOf(operation.node);
     if (plan) {
       plans.push({ operationRow: index + 1, ...verdictOf(plan) });
     }
@@ -391,10 +402,25 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // ranking each call on its own, both name a query row after the query, so
   // the plan points at the row; grouping by namespace does not, so it looks
   // the queries up by group key and carries the text.
-  const queryPlans: PlanRow[] =
+  const explained: PlanRow[] =
     groupBy === "name" || groupBy === "none"
-      ? plansForRankedRows(ranked, apexLog)
+      ? plansForRankedRows(ranked, apexLog, groupBy === "none")
       : plansForNamespaceRows(selected, ranked, groupBy, apexLog);
+
+  // Out of what the rows left, because the plans are part of the same response.
+  // A namespace grouping reports one plan per distinct query text behind the
+  // rows, each carrying up to `NAME_LIMIT` characters of that text and none of
+  // it bounded by the row cap — 30 such rows were 90% of a real response. The
+  // rows come first: a plan qualifies a row, so a plan without its row says
+  // nothing.
+  const queryPlans: PlanRow[] = [];
+  for (const plan of explained) {
+    spent += rowCost(plan);
+    if (spent > PAGE_CHAR_BUDGET) {
+      break;
+    }
+    queryPlans.push(plan);
+  }
 
   const result: SlowOperationsResult = {
     ...captureLevels(apexLog),

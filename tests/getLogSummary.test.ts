@@ -220,8 +220,11 @@ describe("getLogSummary", () => {
       });
 
       expect(summary.truncated).toBe(true);
-      expect(summary.truncatedBy).toEqual([]);
-      expect(summary.skippedBytes).toBe(0);
+      // Neither is reported: both read the regions the platform's own truncation
+      // fills, and this log has none. Stating 0 skipped bytes under no reason at
+      // all would name a loss the platform never made.
+      expect(summary.truncatedBy).toBeUndefined();
+      expect(summary.skippedBytes).toBeUndefined();
     });
 
     it("should report a zero byte count on a log that hit the maximum size", async () => {
@@ -335,6 +338,24 @@ describe("getLogSummary", () => {
           {
             summary: "System.NullPointerException: Attempt to de-reference null",
             description: ["one", "two", "three"].join("\n"),
+            type: "fatal",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.fatalErrors[0].frames).toBe("one | two | three");
+    });
+
+    it("should not spend a frame on a blank line inside the stack", async () => {
+      // The limit counts real frames. Counting raw lines let a blank one inside
+      // the stack cost a frame and still claim a drop, so a stack that fits read
+      // as one that had been cut.
+      const summary = await summaryOf({
+        logIssues: [
+          {
+            summary: "System.NullPointerException: Attempt to de-reference null",
+            description: ["one", "", "two", "three"].join("\n"),
             type: "fatal",
             startTime: 8000,
           },
