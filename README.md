@@ -67,11 +67,11 @@ Every request carries all four tool definitions, whether or not a tool is called
 
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
-| `apexlog_list_slow_operations` | ~460                                | ~247       | +86%     |
+| `apexlog_list_slow_operations` | ~513                                | ~247       | +108%    |
 | `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
 | `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
 | `apexlog_get_summary`          | ~173                                | ~171       | +1%      |
-| **Total**                      | **~1,246** (0.6% of a 200K context) | **~1,529** | **-19%** |
+| **Total**                      | **~1,299** (0.6% of a 200K context) | **~1,529** | **-15%** |
 
 <!-- token-cost-definitions:end -->
 

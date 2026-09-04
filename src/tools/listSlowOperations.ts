@@ -30,6 +30,34 @@ import {
   roundPercent,
 } from "./responseShaping.js";
 
+/**
+ * What the ranking can be ordered on, named after the column each one orders,
+ * so the enum a caller reads and the header it gets back are the same word.
+ * Those are wire names, which is why this sits here and not beside `GROUP_BY`
+ * in `operations.js` — that module owns `durationSelfNs`, not `durationSelfMs`.
+ */
+const SORT_BY = ["durationSelfMs", "heapSelfNetBytes"] as const;
+
+type SortBy = (typeof SORT_BY)[number];
+
+const bySelfTime = (a: Operation, b: Operation) =>
+  b.durationSelfNs - a.durationSelfNs;
+
+/**
+ * How each key orders the rows: its own figure, then self time to break a tie.
+ *
+ * The tiebreak is what makes a heap sort safe to ask for blind. Most logs
+ * record no allocation at all, and every row of those is a flat zero — without
+ * a second key the ranking would fall back to the order the log states, which
+ * ranks nothing. Calling `bySelfTime` from both entries is what makes "it
+ * degrades to the self-time ranking" true rather than merely intended.
+ */
+const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
+  durationSelfMs: bySelfTime,
+  heapSelfNetBytes: (a, b) =>
+    b.heapSelfNetBytes - a.heapSelfNetBytes || bySelfTime(a, b),
+};
+
 export const listSlowOperationsInputSchema = {
   logFilePath: logFilePathSchema,
   kind: z
@@ -40,7 +68,9 @@ export const listSlowOperationsInputSchema = {
   minSelfMs: z
     .number()
     .optional()
-    .describe("Drop operations below this self time (default: 0)"),
+    .describe(
+      "Drop operations below this self time (default: 0), whichever sortBy is used",
+    ),
   limit: z
     .number()
     .int()
@@ -60,6 +90,12 @@ export const listSlowOperationsInputSchema = {
     .optional()
     .describe(
       "Fold repeats into one row: by name (default), by namespace, or by callerNamespace, which attributes platform DML to the package that drove it. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
+    ),
+  sortBy: z
+    .enum(SORT_BY)
+    .optional()
+    .describe(
+      "Rank on (default: durationSelfMs). heapSelfNetBytes adds that column.",
     ),
 };
 
@@ -91,7 +127,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace grouping.",
+    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace grouping.",
   inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -119,6 +155,20 @@ export interface SlowOperation {
   soslCount: number;
   rowCount: number;
   thrownCount: number;
+  /**
+   * Net heap the row's own code retained: the signed `HEAP_ALLOCATE` bytes, so
+   * a row that released more than it took reads below zero. What counts as a
+   * free, and where a managed package's allocations land, are on
+   * `Operation.heapSelfNetBytes`.
+   *
+   * Present under `sortBy: "heapSelfNetBytes"` alone, because most logs record
+   * no allocation and every other ranking would carry a column of zeros — see
+   * DEVELOPING.md for the corpus behind that. A zero here means none was
+   * retained, and `apexCodeLevel`, where the log's header declared one, says
+   * whether that can be true: nothing below `APEX_CODE,FINER` records an
+   * allocation.
+   */
+  heapSelfNetBytes?: number;
 }
 
 export interface SlowOperationsResult extends CaptureLevels {
@@ -310,6 +360,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     limit = 10,
     offset = 0,
     groupBy = "name",
+    sortBy = "durationSelfMs",
   } = args;
 
   const apexLog = await loadApexLog(logFilePath);
@@ -332,9 +383,9 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
     // NaN, which fails both, and such an operation must be dropped, not ranked.
     .filter((operation) => operation.durationSelfNs >= minSelfNs)
-    // Stable by specification, and the sort key is one number, so a caller
+    // Stable by specification, and every key ends in one number, so a caller
     // walking the ranking with `offset` sees each row once and in one order.
-    .sort((a, b) => b.durationSelfNs - a.durationSelfNs);
+    .sort(COMPARE_BY[sortBy]);
   const page = matched.slice(offset, offset + limit);
 
   const selfPercentageOf = (operation: Operation) =>
@@ -362,6 +413,11 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     soslCount: operation.soslCount,
     rowCount: operation.rowCount,
     thrownCount: operation.thrownCount,
+    // Only where it is the key, so it is the one column a caller asked for
+    // rather than one every ranking pays for.
+    ...(sortBy === "heapSelfNetBytes" && {
+      heapSelfNetBytes: operation.heapSelfNetBytes,
+    }),
   });
 
   // Built and costed in one pass, so a row the budget turns away is never

@@ -18,7 +18,7 @@ published row.
 | --- | --- | --- |
 | `governor-heavy.log` | Slices of the [Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer) (`sample-app/debug-logs/sample-log.log`): the transaction start, a DML insert, a managed-package section for `core_pkg` and `srm_pkg` with a SOQL query, and the closing limit block. | CPU over its limit, SOQL/DML consumed, three namespaces, and a `FATAL_ERROR` — the only fixture that carries one, so it is the only one that reports `fatalErrors`. |
 | `minimal.log` | A `System.debug('')` run: the smallest transaction that still emits a limit block. | Everything is zero. This is the fixture that fails if a zero is ever omitted instead of reported, because "no DML statements ran" has to be answerable from the payload. |
-| `heap-heavy.log` | Hand-written: one method allocates and holds, another allocates then frees the same bytes. | Heap. Its limit block states heap as zero where its `HEAP_ALLOCATE` events do not, so it is the fixture that fails if the summary ever reports the block instead of the peak. `apexlog_get_summary` only — see below. |
+| `heap-heavy.log` | Hand-written: one method allocates and holds, another allocates then frees the same bytes. | Heap. Its limit block states heap as zero where its `HEAP_ALLOCATE` events do not, so it is the fixture that fails if the summary ever reports the block instead of the peak. It is also the only log that ranks under `sortBy: "heapSelfNetBytes"`, where the method that freed what it took reads zero beside the one that kept it. |
 | `truncated.log` | Hand-written: a `*** Skipped N bytes` region mid-log and a `MAXIMUM DEBUG LOG SIZE REACHED` marker at the end. | `truncated` and `skippedBytes`. No other fixture is partial, so without this the flag is unproven either way — and every figure in a partial log is a floor, so reading one as a total is the worst answer the server can give. `apexlog_get_summary` only — see below. |
 
 `governor-heavy.log` is deliberately fragmentary — the whole sample log is 19 MB, and the slices keep
@@ -28,10 +28,14 @@ that it raises an `Unexpected-Exit` while reading `truncated: false`, which no u
 
 `FIXTURES_BY_TOOL` names the logs each tool is measured against, and it is not a cross product. Every
 case is a server round trip and a golden file a reviewer has to read, so add a fixture to a tool only
-where it pins something the other fixtures would miss. `heap-heavy.log` is in the summary alone, the
-one tool whose answer its heap changes. `apexlog_list_limit_risks` does read heap, but this log's
-heap sits under its risk threshold, and the rows `apexlog_list_slow_operations` would rank are kinds
-`governor-heavy` pins already. What the parser's several heap measures mean is pinned in
+where it pins something the other fixtures would miss. `apexlog_list_limit_risks` does read heap, but
+`heap-heavy.log`'s heap sits under its risk threshold, so it earns no case there.
+
+An entry may be `{ fixture, args }` instead of a name, and the arguments reach the `tools/call` beside
+the log path. `heap-heavy.log` is one case under `apexlog_get_summary`, whose answer its heap
+changes, and one under `apexlog_list_slow_operations` carrying `sortBy: "heapSelfNetBytes"` — a
+different answer over the same log, and the only case that reports the heap column at all. Use
+arguments to reach a shape no default response has, not to re-measure one a plain case covers. What the parser's several heap measures mean is pinned in
 `tests/parserContract.test.ts`, on a log of its own, which needs no server. `truncated.log` is there
 on the same rule, and that suite reads it too.
 

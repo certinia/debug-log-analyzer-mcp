@@ -87,6 +87,7 @@ const node = ({
     dmlRowCount: counts,
     soslRowCount: counts,
     thrownCount: counts,
+    heapAllocated: counts,
   }) as unknown as LogEvent;
 
 describe("getLogSummary", () => {

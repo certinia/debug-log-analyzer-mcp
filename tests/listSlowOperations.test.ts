@@ -64,6 +64,7 @@ type NodeSpec = {
   dmlRowCount?: number;
   soslRowCount?: number;
   thrownCount?: number;
+  heapSelfNetBytes?: number;
   children?: NodeSpec[];
   plan?: PlanSpec;
 };
@@ -93,6 +94,10 @@ function node(spec: NodeSpec): unknown {
     dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
     thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
+    heapAllocated: {
+      total: spec.heapSelfNetBytes ?? 0,
+      self: spec.heapSelfNetBytes ?? 0,
+    },
     children,
   };
 
@@ -182,6 +187,7 @@ describe("listSlowOperations", () => {
         "limit",
         "offset",
         "groupBy",
+        "sortBy",
       ]);
     });
 
@@ -693,6 +699,67 @@ describe("listSlowOperations", () => {
         durationSelfMs: 400,
       }),
     );
+  });
+
+  describe("heap ranking", () => {
+    // The fact the whole option rests on: gross churn cannot tell these two
+    // apart, and self time ranks them by how long they took instead.
+    const holds = () =>
+      method({ text: "Holds", totalNs: 10 * MS, heapSelfNetBytes: 900_000 });
+    const frees = () =>
+      method({ text: "Frees", totalNs: 500 * MS, heapSelfNetBytes: 0 });
+
+    it("ranks the code that retained the heap above the code that freed it", async () => {
+      mockLog(1000 * MS, frees(), holds());
+
+      const result = await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" });
+
+      expect(result.operations.map((row) => row.name)).toEqual([
+        "Holds",
+        "Frees",
+      ]);
+      expect(result.operations[0]?.heapSelfNetBytes).toBe(900_000);
+    });
+
+    it("leaves the default ranking as it was, column and all", async () => {
+      mockLog(1000 * MS, frees(), holds());
+
+      const rows = (await ranked()).operations;
+
+      expect(rows.map((row) => row.name)).toEqual(["Frees", "Holds"]);
+      expect(rows[0]).not.toHaveProperty("heapSelfNetBytes");
+    });
+
+    // Most logs record no allocation, so every row is a flat zero and the sort
+    // key decides nothing. Falling back to self time answers the question the
+    // caller could have asked, rather than the log's own order.
+    it("falls back to self time when nothing allocated", async () => {
+      // Stated fastest first, so the log's own order is not the answer and a
+      // sort with no second key could not produce it.
+      mockLog(
+        1000 * MS,
+        method({ text: "Fast", totalNs: 100 * MS }),
+        method({ text: "Slow", totalNs: 500 * MS }),
+      );
+
+      const result = await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" });
+
+      expect(result.operations.map((row) => row.name)).toEqual([
+        "Slow",
+        "Fast",
+      ]);
+      expect(result.operations[0]?.heapSelfNetBytes).toBe(0);
+    });
+
+    it("reports a body that freed more than it allocated below zero", async () => {
+      mockLog(1000 * MS, method({ text: "Frees", heapSelfNetBytes: -400 }));
+
+      expect(
+        (await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" })).operations[0]
+          ?.heapSelfNetBytes,
+      ).toBe(-400);
+    });
+
   });
 
   it("names the real cause when the log cannot be read", async () => {
