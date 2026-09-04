@@ -171,6 +171,104 @@ describe("parser contract", () => {
     });
   });
 
+  describe("logIssues and thrownCount", () => {
+    // Closed, so the only issues are the ones the case is about: a log that
+    // ends mid-frame raises an `Unexpected-End` of its own.
+    const failing = (...lines: string[]): string =>
+      [
+        HEADER,
+        "09:00:00.1 (1000)|EXECUTION_STARTED",
+        ...lines,
+        "09:00:00.1 (9000)|EXECUTION_FINISHED",
+        "",
+      ].join("\n");
+
+    // `apexlog_get_summary.fatalErrors` reads both halves: the message names the
+    // failure and the stack names the code. Both come off one issue.
+    it("states a fatal's message as the summary and its stack as the description", () => {
+      const { logIssues } = parse(
+        failing(
+          "09:00:00.1 (4000)|FATAL_ERROR|System.LimitException: Apex CPU time limit exceeded",
+          "Class.Searcher.search: line 31, column 1",
+          "Class.Service.run: line 102, column 1",
+        ),
+      );
+
+      expect(logIssues).toEqual([
+        {
+          startTime: 4000,
+          eventIndex: 2,
+          summary: "System.LimitException: Apex CPU time limit exceeded",
+          description:
+            "Class.Searcher.search: line 31, column 1\nClass.Service.run: line 102, column 1",
+          type: "fatal",
+        },
+      ]);
+    });
+
+    // This is what makes `fatalErrors` safe to report as a table: one real log
+    // throws 4,501 times for three messages. `exceptions` holds every
+    // occurrence, so a tool reading that would return thousands of rows.
+    it("holds one issue per distinct failure while exceptions holds every one", () => {
+      // On `fatal`, which is the type the summary reads. An `EXCEPTION_THROWN`
+      // raises an issue only when its message names a `System.LimitException`,
+      // so deduping that type would exercise a path no tool looks at.
+      const fatal = "|FATAL_ERROR|System.LimitException: Apex CPU time limit exceeded";
+      const log = parse(
+        failing(`09:00:00.1 (2000)${fatal}`, `09:00:00.1 (3000)${fatal}`),
+      );
+
+      expect(log.logIssues.filter((issue) => issue.type === "fatal")).toHaveLength(1);
+      expect(log.exceptions).toHaveLength(2);
+    });
+
+    // `thrownCount` is the magnitude the summary reports beside `fatalErrors`,
+    // so it must not double-count the fatal that the table already names.
+    it("counts a thrown exception and not the fatal error", () => {
+      const log = parse(
+        failing(
+          "09:00:00.1 (2000)|EXCEPTION_THROWN|[12]|System.DmlException: Update failed",
+          "09:00:00.1 (4000)|FATAL_ERROR|System.DmlException: Update failed",
+        ),
+      );
+
+      expect(log.exceptions.map((event) => event.type)).toEqual([
+        "EXCEPTION_THROWN",
+        "FATAL_ERROR",
+      ]);
+      expect(log.thrownCount.total).toBe(1);
+    });
+  });
+
+  describe("ApexLog.isTruncated", () => {
+    // `apexlog_get_summary.truncated` is this flag, and the figures beside it
+    // are floors when it is set. It follows the regions the platform said it
+    // dropped, so a log that merely ends mid-frame does not raise it.
+    it("is set by a region the platform dropped, not by an unclosed frame", () => {
+      const dropped = parse(fixture("truncated"));
+
+      expect(dropped.truncation.regions.map((region) => region.kind)).toEqual([
+        "skipped-lines",
+        "max-size",
+      ]);
+      expect(dropped.truncation.totalSkippedBytes).toBe(14_680_064);
+      expect(dropped.isTruncated).toBe(true);
+
+      const unclosed = parse(
+        [
+          HEADER,
+          "09:00:00.1 (1000)|EXECUTION_STARTED",
+          "09:00:00.1 (2000)|METHOD_ENTRY|[1]|01pEa00000Never|Never.returns()",
+          "",
+        ].join("\n"),
+      );
+
+      expect(unclosed.truncatedEvents.length).toBeGreaterThan(0);
+      expect(unclosed.truncation.regions).toEqual([]);
+      expect(unclosed.isTruncated).toBe(false);
+    });
+  });
+
   describe("ALL_LIMIT_METRICS", () => {
     // Every tool reports these thirteen as a fixed table, and the suites that
     // check them derive their expectations from this list, so it is pinned once

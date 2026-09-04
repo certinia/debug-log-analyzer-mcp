@@ -89,9 +89,24 @@ const ANSWERABILITY = {
       columns: ["logCategory", "level"],
     },
     {
-      question: "Did the log parse cleanly, and did it capture the whole run?",
-      fields: ["parsingErrorCount"],
+      question: "Did the run fail, and can I trust these numbers?",
+      fields: ["thrownCount"],
       keys: ["truncated"],
+    },
+    {
+      // Only where the run died. `fatalErrors` is the one field that says the
+      // transaction did not finish, and a fatal that breaches no limit is
+      // invisible in every other field.
+      fixture: "governor-heavy",
+      question: "What killed the transaction, and where?",
+      keys: ["fatalErrors"],
+      columns: ["message", "frames"],
+    },
+    {
+      // Only where the platform dropped content, which gates the field.
+      fixture: "truncated",
+      question: "How much of the log is missing?",
+      fields: ["skippedBytes"],
     },
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
@@ -168,7 +183,7 @@ const MINIMAL_FIXTURE = "minimal";
 
 const MINIMAL_ZEROS = {
   apexlog_get_summary: {
-    fields: ["parsingErrorCount"],
+    fields: ["thrownCount"],
     allLimitsZero: true,
   },
 };
@@ -182,8 +197,11 @@ const MINIMAL_ZEROS = {
 const TOKEN_BUDGET = {
   // Raised for the two tables #62 added: what each namespace consumed of the
   // limits, and where the time went by kind of operation. Both answer questions
-  // the 1.x summary could not.
-  "apexlog_get_summary/governor-heavy": 357,
+  // the 1.x summary could not. Raised again for the stack frames #100 added to
+  // a fatal: the message names the limit, the frames name the code, and 18 of 42
+  // fatals across a 124-log corpus breach no limit at all, so nothing else in
+  // the response reveals them.
+  "apexlog_get_summary/governor-heavy": 397,
   "apexlog_get_summary/minimal": 249,
   // Raised for the grouped default #126 made: every row now carries its call
   // count and the self time of its slowest call, and for the four capture levels
@@ -199,6 +217,7 @@ const TOKEN_BUDGET = {
   "apexlog_list_limit_risks/governor-heavy": 46,
   "apexlog_list_limit_risks/minimal": 30,
   "apexlog_get_summary/heap-heavy": 269,
+  "apexlog_get_summary/truncated": 252,
 };
 
 /**
@@ -236,8 +255,16 @@ const DEFINITION_BUDGET = {
   // warning that a grouped durationTotalMs must not be summed across rows, and
   // for what grouping by default now states about the row it returns, and for
   // callerNamespace, which needs a clause to say what it attributes, and for the
-  // clause #120 added to say the response also carries the query plans.
-  apexlog_list_slow_operations: 392,
+  // clause #120 added to say the response also carries the query plans, and
+  // for `offset` beside the whole-number floor on `limit` — a schema that
+  // states `integer` and `minimum` costs tokens, and buys a `limit` of -5 no
+  // longer returning the whole ranking bar its five fastest rows, and for the
+  // clause saying
+  // a plan names its row except under a namespace grouping — an agent that
+  // assumes the query text is always there reads `undefined` — and for telling
+  // a caller to advance `offset` by the rows it got, since the page budget can
+  // return fewer than `limit` and paging by `limit` would then skip rows.
+  apexlog_list_slow_operations: 470,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,
@@ -290,10 +317,24 @@ const SELECTION_KEYWORDS = {
  * already.
  */
 const FIXTURES_BY_TOOL = {
-  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy"],
+  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy", "truncated"],
   apexlog_list_slow_operations: ["governor-heavy", "minimal"],
   apexlog_list_limit_risks: ["governor-heavy", "minimal"],
 };
+
+/**
+ * The one log the README publishes a cost against.
+ *
+ * The answers table is keyed on tools rather than on cases, so a fixture added
+ * to pin a correctness fact does not also add a published row. `governor-heavy`
+ * is the log every tool is measured against, and the only one with a 1.x
+ * baseline to compare against.
+ *
+ * A bigger log would not move the figures: the response is bounded by its shape
+ * — a fixed table of governor limits, a row cap on the ranked operations — and
+ * not by the bytes parsed.
+ */
+const PUBLISHED_FIXTURE = "governor-heavy";
 
 const CASES = Object.entries(FIXTURES_BY_TOOL).flatMap(([tool, fixtures]) =>
   fixtures.map((fixture) => ({ tool, fixture })),
@@ -359,6 +400,14 @@ function checkChecksAreRun(failures) {
     if (!ANSWERABILITY[tool]) {
       failures.push(
         `${tool}: measured against ${FIXTURES_BY_TOOL[tool].length} fixture(s) with no answerability checks declared`,
+      );
+    }
+    // Nothing else notices a tool dropping out of the published table: the
+    // answers block is rendered from whichever cases match, so a tool that
+    // stops being measured against the published fixture simply loses its row.
+    if (!CASE_KEYS.has(`${tool}/${PUBLISHED_FIXTURE}`)) {
+      failures.push(
+        `${tool}: the README publishes a cost against ${PUBLISHED_FIXTURE}, which this run does not measure it against`,
       );
     }
   }
@@ -740,13 +789,14 @@ function renderTokenCost(costs, responses) {
     {
       id: "token-cost-answers",
       table: renderTable(
-        ["Tool", "Log", "Response", "1.x", "Change"],
-        responses.map(({ tool, fixture, tokens }) => [
-          `\`${tool}\``,
-          `\`${fixture}.log\``,
-          `~${thousands(tokens)}`,
-          ...comparison(V1_RESPONSE_TOKENS[`${tool}/${fixture}`], tokens),
-        ]),
+        ["Tool", "Response", "1.x", "Change"],
+        responses
+          .filter(({ fixture }) => fixture === PUBLISHED_FIXTURE)
+          .map(({ tool, fixture, tokens }) => [
+            `\`${tool}\``,
+            `~${thousands(tokens)}`,
+            ...comparison(V1_RESPONSE_TOKENS[`${tool}/${fixture}`], tokens),
+          ]),
       ),
     },
   ];

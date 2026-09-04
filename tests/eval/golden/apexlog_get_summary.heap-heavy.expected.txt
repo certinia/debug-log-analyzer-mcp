@@ -1,7 +1,7 @@
 fileSizeBytes: 2052
 durationTotalMs: 22
 truncated: false
-parsingErrorCount: 0
+thrownCount: 0
 namespaces[1]: default
 debugLevels[11]{logCategory,level}:
   APEX_CODE,FINEST
