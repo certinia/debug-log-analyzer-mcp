@@ -11,6 +11,7 @@ import {
   LOG_CATEGORIES,
   type LogCategory,
 } from "../salesforce/debugLevels.js";
+import type { Assert } from "../compileGuards.js";
 import { walkLog } from "./apexLogSource.js";
 
 /**
@@ -406,10 +407,13 @@ export function operationGroupKey(operation: Operation, by: GroupBy): string {
   return `${operation.kind} ${namespace} ${name}`;
 }
 
-/** Fails to compile unless `T` is `true`. */
-type Assert<T extends true> = T;
-
-/** Every number an `Operation` carries. */
+/**
+ * Every number an `Operation` carries.
+ *
+ * `-?` matters only for a numeric field added as optional: without it such a
+ * field is `number | undefined`, which is not `extends number`, so the guard
+ * below would pass while the fold ignored it.
+ */
 type NumericField = {
   [K in keyof Operation]-?: Operation[K] extends number ? K : never;
 }[keyof Operation];
@@ -452,12 +456,6 @@ type FoldedByHand = "callCount" | "durationSelfMaxNs";
  * forgotten in the fold does not read as zero — the grouped row ships the first
  * member's value, which looks like a plausible figure. No test on another field
  * would notice, which is why this is a compile error and not a review note.
- *
- * The fold walks these lists rather than naming each field, so the rule and the
- * code cannot drift. That costs 41% on `groupOperations` — 44 to 63 ms over
- * 74,960 operations of six real logs, folded twice each — because a keyed read
- * is not a named one. It is paid against a parse of tens to hundreds of
- * milliseconds, and `nestedInGroup` above dominates both figures.
  */
 export type EveryNumberFolded = Assert<
   NumericField extends
@@ -528,6 +526,11 @@ export function groupOperations(
 
     group.callCount += 1;
 
+    // Walked rather than named field by field, so the rule above and the code
+    // cannot drift. That costs 41% here — 44 to 63 ms over 74,960 operations of
+    // six real logs, folded twice each — because a keyed read is not a named
+    // one. It is paid against a parse of tens to hundreds of milliseconds, and
+    // `nestedInGroup` dominates both figures.
     if (!nestedInGroup(operation, key)) {
       for (const field of SUBTREE_SUMMED) {
         group[field] += operation[field];
