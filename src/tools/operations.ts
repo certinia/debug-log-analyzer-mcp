@@ -114,11 +114,44 @@ export interface Operation {
   rowCount: number;
   thrownCount: number;
   /**
+   * Net heap the operation's own body retained, and not what it called.
+   *
+   * The signed `HEAP_ALLOCATE` bytes, so a negative allocation is the free that
+   * brings the figure down and a body that releases more than it took reads
+   * below zero. `HEAP_DEALLOCATE` is *not* counted: the parser reads its bytes
+   * and drops them. No log in the corpus emits one, so nothing under-reads
+   * today, but a log that did would read as retaining what it freed.
+   *
+   * A managed package is the exception to "not what it called". The parser
+   * gives `ENTERING_MANAGED_PKG` no children, so an allocation logged inside
+   * the package window lands in the calling method's own body instead of the
+   * package's row — 3 of the 40 logs that allocate put a heap line there.
+   *
+   * Self and not the subtree, because a subtree net is not an attribution: it
+   * puts the outermost code unit at the top of 39 of the 40 logs in a 123-log
+   * corpus that record an allocation, and there it equals the transaction peak
+   * `apexlog_get_summary` already reports on 36 of them. A self net names a
+   * method on 27 of the 40 and matches that peak on 3.
+   *
+   * A plain sum once grouped, like `durationSelfNs`: one member's own body is
+   * never inside another's, so no member can be counted twice.
+   */
+  heapSelfNetBytes: number;
+  /**
    * The operation this one ran inside, or null at the top of the log. It is how
    * a group tells a nested member from an outer one, and it never reaches a
    * response.
    */
   parent: Operation | null;
+  /**
+   * The event this operation was read from, so a caller can reach what the
+   * operation's own columns do not carry — the query plan under this one call,
+   * rather than the worst plan for its text.
+   *
+   * Internal, and only meaningful on an ungrouped operation: `groupOperations`
+   * folds many events into one row and keeps the first member's node.
+   */
+  node: LogEvent;
 }
 
 /**
@@ -187,7 +220,9 @@ export function listOperations(apexLog: ApexLog): Operation[] {
         node.dmlRowCount.total +
         node.soslRowCount.total,
       thrownCount: node.thrownCount.total,
+      heapSelfNetBytes: node.heapAllocated.self,
       parent: parent ?? null,
+      node,
     };
     operations.push(operation);
 
@@ -355,8 +390,8 @@ export function groupOperations(
     // Every subtree total: a member that ran inside another member of the group
     // is already inside that ancestor's, so adding it counts the same query,
     // statement, row or throw once per level of the stack above it. `callCount`
-    // counts calls and `durationSelfNs` excludes children, so both stay plain
-    // sums.
+    // counts calls, and `durationSelfNs` and `heapSelfNetBytes` both exclude
+    // children, so those three stay plain sums.
     if (!nestedInGroup(operation, key)) {
       group.durationTotalNs += operation.durationTotalNs;
       group.soqlCount += operation.soqlCount;
@@ -366,6 +401,7 @@ export function groupOperations(
       group.thrownCount += operation.thrownCount;
     }
     group.durationSelfNs += operation.durationSelfNs;
+    group.heapSelfNetBytes += operation.heapSelfNetBytes;
 
     group.durationSelfMaxNs = Math.max(
       group.durationSelfMaxNs,

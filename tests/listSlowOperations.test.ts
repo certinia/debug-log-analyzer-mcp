@@ -65,6 +65,7 @@ type NodeSpec = {
   dmlRowCount?: number;
   soslRowCount?: number;
   thrownCount?: number;
+  heapSelfNetBytes?: number;
   children?: NodeSpec[];
   plan?: PlanSpec;
 };
@@ -97,6 +98,10 @@ function node(spec: NodeSpec): unknown {
     dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
     thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
+    heapAllocated: {
+      total: spec.heapSelfNetBytes ?? 0,
+      self: spec.heapSelfNetBytes ?? 0,
+    },
     children,
   };
 
@@ -189,6 +194,7 @@ describe("listSlowOperations", () => {
         "limit",
         "offset",
         "groupBy",
+        "sortBy",
       ]);
     });
 
@@ -450,6 +456,42 @@ describe("listSlowOperations", () => {
     expect(result.matchedCount).toBe(200);
   });
 
+  it("spends the same budget on the plans behind a namespace row", async () => {
+    // A namespace row names the namespace, so every plan under it carries its
+    // own query text. Left outside the budget the table grew without limit: on
+    // one real log 30 such plans were 90% of the response.
+    mockLog(
+      1000 * MS,
+      ...Array.from({ length: 200 }, (_, index) =>
+        explainedQuery(
+          {
+            text: `SELECT f${index},`.padEnd(600, "x"),
+            namespace: "Custom",
+            totalNs: (200 - index) * MS,
+          },
+          {},
+        ),
+      ),
+    );
+
+    const result = await ranked({ ...ARGS, groupBy: "namespace", limit: 200 });
+    const cost = (rows: object[]) =>
+      rows.reduce(
+        (total, row) =>
+          total +
+          Object.values(row).reduce(
+            (cells, cell) => cells + String(cell).length + 1,
+            0,
+          ),
+        0,
+      );
+
+    expect(result.queryPlans?.length).toBeGreaterThan(0);
+    expect(result.queryPlans?.length).toBeLessThan(200);
+    expect(cost([...result.operations, ...(result.queryPlans ?? [])])).
+      toBeLessThanOrEqual(60_000);
+  });
+
   it("returns ten rows when the caller sets no limit", async () => {
     mockLog(
       1000 * MS,
@@ -580,6 +622,38 @@ describe("listSlowOperations", () => {
       expect(
         (await ranked({ ...ARGS, groupBy: "namespace" })).queryPlans?.[0],
       ).toEqual(expect.objectContaining({ name: "SELECT Id" }));
+    });
+
+    // Ungrouped, a row is one call, so it must be told that call's own plan.
+    // The worst-per-text plan is the figure to act on for a group, but here it
+    // would state a cost the optimiser never reached for the row.
+    it("states each call's own plan when every row is one call", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+        }),
+        explainedQuery({ text: "SELECT Id", totalNs: 200 * MS }, {
+          leadingOperationType: "Index",
+          relativeCost: 0.5,
+        }),
+      );
+
+      expect(
+        (await ranked({ ...ARGS, groupBy: "none" })).queryPlans,
+      ).toEqual([
+        expect.objectContaining({
+          operationRow: 1,
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+        }),
+        expect.objectContaining({
+          operationRow: 2,
+          leadingOperationType: "Index",
+          relativeCost: 0.5,
+        }),
+      ]);
     });
 
     it("drops a plan the log did not record in full", async () => {
@@ -772,6 +846,67 @@ describe("listSlowOperations", () => {
         durationSelfMs: 100,
       }),
     ]);
+  });
+
+  describe("heap ranking", () => {
+    // The fact the whole option rests on: gross churn cannot tell these two
+    // apart, and self time ranks them by how long they took instead.
+    const holds = () =>
+      method({ text: "Holds", totalNs: 10 * MS, heapSelfNetBytes: 900_000 });
+    const frees = () =>
+      method({ text: "Frees", totalNs: 500 * MS, heapSelfNetBytes: 0 });
+
+    it("ranks the code that retained the heap above the code that freed it", async () => {
+      mockLog(1000 * MS, frees(), holds());
+
+      const result = await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" });
+
+      expect(result.operations.map((row) => row.name)).toEqual([
+        "Holds",
+        "Frees",
+      ]);
+      expect(result.operations[0]?.heapSelfNetBytes).toBe(900_000);
+    });
+
+    it("leaves the default ranking as it was, column and all", async () => {
+      mockLog(1000 * MS, frees(), holds());
+
+      const rows = (await ranked()).operations;
+
+      expect(rows.map((row) => row.name)).toEqual(["Frees", "Holds"]);
+      expect(rows[0]).not.toHaveProperty("heapSelfNetBytes");
+    });
+
+    // Most logs record no allocation, so every row is a flat zero and the sort
+    // key decides nothing. Falling back to self time answers the question the
+    // caller could have asked, rather than the log's own order.
+    it("falls back to self time when nothing allocated", async () => {
+      // Stated fastest first, so the log's own order is not the answer and a
+      // sort with no second key could not produce it.
+      mockLog(
+        1000 * MS,
+        method({ text: "Fast", totalNs: 100 * MS }),
+        method({ text: "Slow", totalNs: 500 * MS }),
+      );
+
+      const result = await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" });
+
+      expect(result.operations.map((row) => row.name)).toEqual([
+        "Slow",
+        "Fast",
+      ]);
+      expect(result.operations[0]?.heapSelfNetBytes).toBe(0);
+    });
+
+    it("reports a body that freed more than it allocated below zero", async () => {
+      mockLog(1000 * MS, method({ text: "Frees", heapSelfNetBytes: -400 }));
+
+      expect(
+        (await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" })).operations[0]
+          ?.heapSelfNetBytes,
+      ).toBe(-400);
+    });
+
   });
 
   it("names the real cause when the log cannot be read", async () => {

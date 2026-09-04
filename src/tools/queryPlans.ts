@@ -50,7 +50,7 @@ export function canCarryPlan({ type }: { type: string | null }): boolean {
  * correlated structurally rather than by line number. Its fields are parsed
  * together or not at all, so one unparsed field means no readable plan.
  */
-function planOf(node: LogEvent): QueryPlan | undefined {
+export function planOf(node: LogEvent): QueryPlan | undefined {
   const explain = node.children?.find(
     (child): child is SOQLExecuteExplainLine =>
       child.type === "SOQL_EXECUTE_EXPLAIN",

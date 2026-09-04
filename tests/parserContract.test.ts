@@ -134,6 +134,46 @@ describe("parser contract", () => {
       expect(heapGross.total).toBe(950_000);
       expect(governorLimits.peak.heapSize.used).toBe(750_000);
     });
+
+    const nested = [
+      HEADER,
+      "09:00:00.1 (1000)|EXECUTION_STARTED",
+      "09:00:00.1 (2000)|METHOD_ENTRY|[1]|01p000000000000|Outer.run()",
+      "09:00:00.2 (3000)|HEAP_ALLOCATE|[2]|Bytes:100",
+      "09:00:00.3 (4000)|METHOD_ENTRY|[3]|01p000000000001|Inner.run()",
+      "09:00:00.4 (5000)|HEAP_ALLOCATE|[4]|Bytes:900",
+      "09:00:00.5 (6000)|METHOD_EXIT|[3]|Inner.run()",
+      "09:00:00.6 (7000)|METHOD_EXIT|[1]|Outer.run()",
+      "09:00:01.0 (10000)|EXECUTION_FINISHED",
+      "",
+    ].join("\n");
+
+    // What `groupOperations` sums `heapSelfNetBytes` plainly on: an allocation
+    // lands in its direct parent's `self` and in no other node's, so adding the
+    // members of a group counts each allocation once even where one member ran
+    // inside another. Every other suite builds its own nodes, so a parser that
+    // folded a subtree net into `self` would leave jest green and every grouped
+    // row silently doubled.
+    //
+    // The totals are asserted beside the selfs because they are what makes the
+    // reading unambiguous: 1,000 against 100 is the parent counting the child's
+    // allocation in one figure and not the other.
+    it("keeps a method's heap self to its own body, so a group can sum it", () => {
+      const methods = tree(parse(nested)).filter(
+        (node) => node.type === "METHOD_ENTRY",
+      );
+
+      expect(
+        methods.map(({ text, heapAllocated }) => [
+          text,
+          heapAllocated.self,
+          heapAllocated.total,
+        ]),
+      ).toEqual([
+        ["Outer.run()", 100, 1000],
+        ["Inner.run()", 900, 900],
+      ]);
+    });
   });
 
   describe("LogEvent.category and LogEvent.debugCategory", () => {

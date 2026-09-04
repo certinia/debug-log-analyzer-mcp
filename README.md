@@ -65,13 +65,13 @@ Every request carries all four tool definitions, whether or not a tool is called
 
 <!-- token-cost-definitions:start -->
 
-| Tool                           | Tokens                              | 1.x        | Change   |
-| ------------------------------ | ----------------------------------- | ---------- | -------- |
-| `apexlog_list_slow_operations` | ~554                                | ~247       | +124%    |
-| `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
-| `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
-| `apexlog_get_summary`          | ~174                                | ~171       | +2%      |
-| **Total**                      | **~1,341** (0.7% of a 200K context) | **~1,529** | **-12%** |
+| Tool                           | Tokens                              | 1.x        | Change  |
+| ------------------------------ | ----------------------------------- | ---------- | ------- |
+| `apexlog_list_slow_operations` | ~606                                | ~247       | +145%   |
+| `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%    |
+| `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%    |
+| `apexlog_get_summary`          | ~174                                | ~171       | +2%     |
+| **Total**                      | **~1,393** (0.7% of a 200K context) | **~1,529** | **-9%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -99,17 +99,21 @@ All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept 
 - **The leanness comes from shape.** Data that used to be nested objects is returned as flat tables, which TOON encodes as one header plus one line per row.
 - **Nothing is reported twice.** No prose summary restates the numbers in the table alongside it, and no figure appears in two places.
 - **Durations are rounded** to 3 decimal places (ms) and percentages to 1.
-- **Only what did not happen is omitted** — the fatal errors that ended a transaction, and the bytes a partial log lost. Nothing to report means the key is absent; every other field reports its zero.
+- **Only what did not happen is omitted** — the fatal errors that ended a transaction, how a partial log lost content and how much, and the query plans behind the ranked rows. Nothing to report means the key is absent; every other field reports its zero.
 
 ### apexlog_list_slow_operations
 
 Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations (in ms), database counts and rows, beside the query optimizer's plan for the queries among them. Best for finding what to optimize.
 
-Rows are `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` the returned rows account for between them, and `matchedCount`, the rows the selection matched before paging. A grouped row carries `durationSelfMaxMs`, the self time of its slowest single call; an ungrouped row leaves it out, where it is `durationSelfMs` again.
+Rows are `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` the returned rows account for between them, and the `matchedCount` the selection matched before paging cut it. `durationSelfMaxMs` is the self time of the slowest single call in a grouped row — read against `durationSelfMs` it tells one bad call from sheer volume — and is absent when each row is one call already.
 
 Both classification columns come straight from the log. `debugCategory` is the Salesforce debug log category the platform stamped on the event — `apexCode`, `database`, `system`, `visualforce`, `workflow`, and so on — which is the category that decided whether the event was written at all, and the same spelling `apexlog_execute_anonymous` takes as input. `type` is the log's own event type, which is what the category cannot say: `SOQL_EXECUTE_BEGIN`, `SOSL_EXECUTE_BEGIN` and `DML_BEGIN` all sit under `database`, and an `ENTERING_MANAGED_PKG` row — the time a package spent where the log shows nothing, often most of a transaction — sits under `apexCode` beside the methods it hides.
 
 `capturedAt` gives `{debugCategory, level}` for each category among the returned rows, so the levels join to the rows on the same key.
+
+`queryPlans` gives what the query optimizer decided about the queries behind the returned rows — `{leadingOperationType, relativeCost, cardinality, sObjectCardinality}`, where a `relativeCost` above 1 means the optimizer will not treat the query as selective. It is absent when the log explained none of them, which the `database` row of `capturedAt` explains: an explain line is written at `database,FINEST` alone. Each plan names its row as `operationRow`, the 1-based line of `operations` as returned — except under a `namespace`, `callerNamespace` or `debugCategory` grouping, where the row is not named after the query and the plan carries the query text as `name` instead.
+
+A page is bounded by size as well as by `limit`, so you can get fewer rows than you asked for. `matchedCount` above the rows returned is what says so; advance `offset` by the rows you got, not by `limit`.
 
 | Parameter       | Type     | Required | Description                                                                                              |
 | --------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------- |
@@ -130,7 +134,7 @@ All thirteen governor limits are listed as `{limit, used, max}` rows, at zero in
 
 `timeByCategory` gives `{debugCategory, operationCount, durationSelfMs, selfPercentage}` for all eleven debug log categories, at zero included. The category is the one that decided whether an operation was written to the log at all, so a zero can be read against `debugLevels`, whose rows are `{debugCategory, level}`: `database 0` beside `database NONE` means the queries were not logged, and beside `database FINEST` it means none ran. Three categories — `dataAccess`, `wave` and `validation` — can only ever be zero, because no timed event carries them.
 
-`truncated` says whether the platform wrote the whole log, and `skippedBytes` how much it dropped where it did not — every figure in a partial log is a floor, not a total. `thrownCount` is how many exceptions were thrown, at zero included. `fatalErrors` gives `{message, frames}` for each failure that ended a transaction, and is absent when none did; `frames` holds the innermost three stack frames, with a trailing `…` where there were more. It is the only field that says a transaction did not finish, which decides what every other figure means — a fatal error need breach no governor limit, so nothing else in the response reveals one.
+`truncated` says whether the log is complete — every figure in a partial one is a floor, not a total. Where the platform is what cut it, `truncatedBy` names how (`skipped-lines` for a hole in the middle, `max-size` for a tail never written) and `skippedBytes` how much it dropped; both are absent on a log that merely stops mid-frame, which the platform did not cut and states no byte count for. `thrownCount` is how many exceptions were thrown, at zero included. `fatalErrors` gives `{message, frames}` for each failure that ended a transaction, and is absent when none did; `frames` holds the innermost three stack frames, with a trailing `…` where there were more. It is the only field that says a transaction did not finish, which decides what every other figure means — a fatal error need breach no governor limit, so nothing else in the response reveals one.
 
 | Parameter     | Type   | Required | Description                                     |
 | ------------- | ------ | -------- | ----------------------------------------------- |

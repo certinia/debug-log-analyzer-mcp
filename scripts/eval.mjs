@@ -146,6 +146,16 @@ const ANSWERABILITY = {
       fields: ["matchedCount"],
     },
     {
+      // Pinned to the one case that passes `sortBy`, which is what puts the
+      // column on the row — the log's own allocations do not. `FIXTURES_BY_TOOL`
+      // carries those args, and a check can only be pinned by fixture, so this
+      // holds only while `heap-heavy` is the sole heap-ranked case.
+      fixture: "heap-heavy",
+      question: "Which code is holding the heap I need to cut?",
+      keys: ["operations"],
+      columns: ["heapSelfNetBytes"],
+    },
+    {
       // Only where a query was ranked and the log recorded a plan for it.
       // `minimal.log` runs no query, and an absent table is the honest answer.
       fixture: "governor-heavy",
@@ -229,6 +239,10 @@ const TOKEN_BUDGET = {
   // in this response.
   "apexlog_list_limit_risks/governor-heavy": 41,
   "apexlog_list_limit_risks/minimal": 25,
+  // The heap ranking over `heap-heavy`: two ranked bodies and the one extra
+  // column, which only this case asks for. Raised by #138 for the two
+  // classification columns every ranked row now states.
+  "apexlog_list_slow_operations/heap-heavy": 190,
   "apexlog_get_summary/heap-heavy": 256,
   "apexlog_get_summary/truncated": 252,
 };
@@ -276,7 +290,10 @@ const DEFINITION_BUDGET = {
   // a plan names its row except under a namespace grouping — an agent that
   // assumes the query text is always there reads `undefined` — and for telling
   // a caller to advance `offset` by the rows it got, since the page budget can
-  // return fewer than `limit` and paging by `limit` would then skip rows.
+  // return fewer than `limit` and paging by `limit` would then skip rows, and
+  // for `sortBy`, which buys the one question self time cannot answer: on the
+  // 40 logs of a 123-log corpus that record an allocation, a heap ranking's top
+  // ten holds a median six rows the self-time top ten never returns.
   //
   // Raised again by #138, which replaced the one `kind` filter with the two axes
   // the log itself has — `debugCategory` and the event `type` — and widened
@@ -284,7 +301,7 @@ const DEFINITION_BUDGET = {
   // takes free strings and names three examples rather than an enum, for the
   // reason recorded on the field itself. The `groupBy` clause grew by the
   // category fold, which is the one grouping that states no type or name.
-  apexlog_list_slow_operations: 582,
+  apexlog_list_slow_operations: 610,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by category.
   apexlog_get_summary: 180,
@@ -338,15 +355,25 @@ const SELECTION_KEYWORDS = {
  * case is a server round trip and a golden file a reviewer has to read, so a
  * case earns its place only by pinning something the others would miss — and a
  * cross product spends three cases on a fixture that answers one question.
- * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool whose
- * answer its heap changes. `apexlog_list_limit_risks` does read heap, but this
- * log's heap sits under its risk threshold, and the rows
- * `apexlog_list_slow_operations` would rank are ones `governor-heavy` pins
- * already.
+ * `heap-heavy` earns a case wherever heap changes the answer, which is the
+ * summary and the heap ranking. `apexlog_list_limit_risks` does read heap, but
+ * this log's heap sits under its risk threshold, so it earns none there.
+ *
+ * An entry may be `{ fixture, args }`, and the arguments reach the `tools/call`
+ * beside the log path. Use them to reach a shape no default response has, not
+ * to measure one a plain case already covers.
  */
 const FIXTURES_BY_TOOL = {
   apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy", "truncated"],
-  apexlog_list_slow_operations: ["governor-heavy", "minimal"],
+  apexlog_list_slow_operations: [
+    "governor-heavy",
+    "minimal",
+    // The heap ranking is a different answer over the same tool, so it needs a
+    // log that allocates and the argument that asks for it. `heap-heavy` holds
+    // one body that allocates and keeps it beside one that frees what it took,
+    // which is the distinction the ranking exists to make.
+    { fixture: "heap-heavy", args: { sortBy: "heapSelfNetBytes" } },
+  ],
   apexlog_list_limit_risks: ["governor-heavy", "minimal"],
 };
 
@@ -362,7 +389,9 @@ const FIXTURES_BY_TOOL = {
 const PUBLISHED_FIXTURE = "governor-heavy";
 
 const CASES = Object.entries(FIXTURES_BY_TOOL).flatMap(([tool, fixtures]) =>
-  fixtures.map((fixture) => ({ tool, fixture })),
+  fixtures.map((entry) =>
+    typeof entry === "string" ? { tool, fixture: entry } : { tool, ...entry },
+  ),
 );
 
 const CASE_KEYS = new Set(
@@ -388,6 +417,16 @@ const CASE_KEYS = new Set(
  */
 function checkChecksAreRun(failures) {
   const notRun = (tool, fixture) => !CASE_KEYS.has(`${tool}/${fixture}`);
+
+  // Everything else keys a case on its tool and fixture — its golden file, its
+  // token budget, the fixture an answerability check pins on — so two cases
+  // over one pair would share all three, and the arguments of one would decide
+  // what the other is asserted against.
+  if (CASE_KEYS.size !== CASES.length) {
+    failures.push(
+      `${CASES.length - CASE_KEYS.size} case(s) share a tool and fixture with another, which would share one golden file and one budget`,
+    );
+  }
 
   for (const [tool, checks] of Object.entries(ANSWERABILITY)) {
     if (!FIXTURES_BY_TOOL[tool]?.length) {
@@ -514,6 +553,9 @@ function createClient(era = "legacy") {
       const text = response.result?.content?.[0]?.text;
       if (typeof text !== "string") {
         throw new Error(`${name}: no text content in ${JSON.stringify(response)}`);
+      }
+      if (response.result.isError) {
+        throw new Error(`${name}: returned an error result — ${text}`);
       }
       return text;
     },
@@ -911,7 +953,10 @@ async function main() {
   await withClient(async (client) => {
     for (const testCase of CASES) {
       const logFilePath = path.join(FIXTURES, `${testCase.fixture}.log`);
-      const toon = await client.callTool(testCase.tool, { logFilePath });
+      const toon = await client.callTool(testCase.tool, {
+        logFilePath,
+        ...testCase.args,
+      });
       checkAnswerability(testCase, toon, failures);
       checkNoDuplication(testCase, toon, failures);
       const tokens = checkTokenBudget(testCase, toon, failures);
