@@ -216,7 +216,12 @@ one-liners.
   occurrence — 4,501 throws in one real log are three messages. Then cap the free text that is left,
   because its size is the log's to choose and not ours: a fatal states 53 characters of message on
   the median log and 1,070 on the worst, and one stack runs to 52,009. A field the log controls is a
-  field that will one day fill the caller's context.
+  field that will one day fill the caller's context. Where the caller also chooses how many rows come
+  back, cap the payload and not the count: `apexlog_list_slow_operations` elides a row's `name` past
+  400 characters and stops a page at 60,000, because a row cap is a proxy — capping every name still
+  left 5 logs of 124 over a client's ceiling, since a thousand rows cost some 15,000 tokens in their
+  numeric columns alone. Returning fewer rows than were asked for is the honest answer, and the
+  matched count beside them already says the page was cut.
 - **Don't echo the input back.** If the caller supplied it (a file path, a flag), it does not belong
   in the response.
 - **Round to the precision someone acts on.** `roundMs` for durations (3dp, keeps microsecond

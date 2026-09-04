@@ -342,6 +342,43 @@ describe("listSlowOperations", () => {
     expect((await ranked({ ...ARGS, limit: 1 })).operations).toHaveLength(1);
   });
 
+  it("keeps the head and the tail of an over-long name", async () => {
+    const columns = "SELECT ".concat("a__c, ".repeat(200));
+    mockLog(
+      1000 * MS,
+      query({ text: `${columns}FROM Account`, totalNs: 500 * MS }),
+    );
+
+    const name = (await ranked()).operations[0]!.name;
+
+    // A query names its columns first and its object last, so both ends have to
+    // survive or the row cannot be identified.
+    expect(name.startsWith("SELECT a__c,")).toBe(true);
+    expect(name.endsWith("FROM Account")).toBe(true);
+    expect(name).toHaveLength(400);
+  });
+
+  it("returns fewer rows than asked when the page would be too large", async () => {
+    // 400 characters of name each after eliding, so the 60,000-character budget
+    // runs out well before the 200th row.
+    mockLog(
+      1000 * MS,
+      ...Array.from({ length: 200 }, (_, index) =>
+        method({
+          text: `M${index}.`.padEnd(600, "x"),
+          totalNs: (200 - index) * MS,
+        }),
+      ),
+    );
+
+    const result = await ranked({ ...ARGS, limit: 200 });
+
+    expect(result.operations.length).toBeGreaterThan(0);
+    expect(result.operations.length).toBeLessThan(200);
+    // Rows returned read against rows matched is what says the page was cut.
+    expect(result.matchedCount).toBe(200);
+  });
+
   it("returns ten rows when the caller sets no limit", async () => {
     mockLog(
       1000 * MS,
@@ -370,6 +407,23 @@ describe("listSlowOperations", () => {
   });
 
   describe("query plans", () => {
+    // The whole point of the key: the plan has to name the row that carries the
+    // query, not the first row of the table.
+    it("points at the ranked row the query is on", async () => {
+      mockLog(
+        1000 * MS,
+        method({ text: "A.run", totalNs: 500 * MS }),
+        explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {}),
+      );
+
+      const result = await ranked();
+
+      expect(result.operations[1]?.name).toBe("SELECT Id");
+      expect(result.queryPlans?.[0]).toEqual(
+        expect.objectContaining({ operationRow: 2 }),
+      );
+    });
+
     it("reports what the optimiser decided about a ranked query", async () => {
       mockLog(
         1000 * MS,
@@ -378,7 +432,7 @@ describe("listSlowOperations", () => {
 
       expect((await ranked()).queryPlans).toEqual([
         {
-          name: "SELECT Id",
+          operationRow: 1,
           leadingOperationType: "TableScan",
           relativeCost: 2.5,
           cardinality: 100,
@@ -412,9 +466,10 @@ describe("listSlowOperations", () => {
         explainedQuery({ text: "SELECT Name", totalNs: 100 * MS }, {}),
       );
 
-      expect(
-        (await ranked({ ...ARGS, limit: 1 })).queryPlans?.map((p) => p.name),
-      ).toEqual(["SELECT Id"]);
+      const result = await ranked({ ...ARGS, limit: 1 });
+
+      expect(result.operations.map((row) => row.name)).toEqual(["SELECT Id"]);
+      expect(result.queryPlans).toHaveLength(1);
     });
 
     it("reports no table when the log explained none of those queries", async () => {
@@ -423,7 +478,10 @@ describe("listSlowOperations", () => {
       expect(await ranked()).not.toHaveProperty("queryPlans");
     });
 
-    it("states one plan per query text however many calls ranked", async () => {
+    // One plan per ranked row, not per query text. The row is the only thing
+    // naming the query now, so stating the verdict once would leave the second
+    // call of the same query reading as though nothing was explained about it.
+    it("states a plan against every ranked row that carries the query", async () => {
       mockLog(
         1000 * MS,
         explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {}),
@@ -431,10 +489,14 @@ describe("listSlowOperations", () => {
       );
 
       expect(
-        (await ranked({ ...ARGS, groupBy: "none" })).queryPlans,
-      ).toHaveLength(1);
+        (await ranked({ ...ARGS, groupBy: "none" })).queryPlans?.map((plan) =>
+          "operationRow" in plan ? plan.operationRow : plan.name,
+        ),
+      ).toEqual([1, 2]);
     });
 
+    // Grouping by namespace names the row after the namespace, so the query
+    // text is nowhere else in the response and the plan has to carry it.
     it("explains the queries behind a row grouped by namespace", async () => {
       mockLog(
         1000 * MS,
@@ -445,10 +507,8 @@ describe("listSlowOperations", () => {
       );
 
       expect(
-        (await ranked({ ...ARGS, groupBy: "namespace" })).queryPlans?.map(
-          (p) => p.name,
-        ),
-      ).toEqual(["SELECT Id"]);
+        (await ranked({ ...ARGS, groupBy: "namespace" })).queryPlans?.[0],
+      ).toEqual(expect.objectContaining({ name: "SELECT Id" }));
     });
 
     it("drops a plan the log did not record in full", async () => {

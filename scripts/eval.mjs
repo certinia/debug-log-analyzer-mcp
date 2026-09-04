@@ -255,8 +255,11 @@ const DEFINITION_BUDGET = {
   // warning that a grouped durationTotalMs must not be summed across rows, and
   // for what grouping by default now states about the row it returns, and for
   // callerNamespace, which needs a clause to say what it attributes, and for the
-  // clause #120 added to say the response also carries the query plans.
-  apexlog_list_slow_operations: 392,
+  // clause #120 added to say the response also carries the query plans, and
+  // for saying that a plan names its row except under a namespace grouping —
+  // an agent that assumes the query text is always there reads `undefined` —
+  // and that a page can come back shorter than asked for.
+  apexlog_list_slow_operations: 415,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,

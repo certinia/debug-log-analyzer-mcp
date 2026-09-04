@@ -11,20 +11,24 @@ import { walkLog } from "./apexLogSource.js";
 import { operationName } from "./operations.js";
 
 /**
- * What the query optimiser decided about one query.
+ * What the query optimiser decided, without saying which query it decided about.
  *
  * `relativeCost` is the figure and the verdict is the caller's: above 1 the
  * optimiser will not treat the query as selective. `sObjectType` is not
- * reported — it is in the query text the row is named by.
+ * reported — it is in the query text.
  */
-export interface QueryPlan {
-  name: string;
+export interface QueryPlanVerdict {
   leadingOperationType: string;
   relativeCost: number;
   /** Records the leading operation is expected to return. */
   cardinality: number;
   /** Records the object holds, as the optimiser estimates it. */
   sObjectCardinality: number;
+}
+
+/** A verdict beside the query text it was reached for, which keys it. */
+export interface QueryPlan extends QueryPlanVerdict {
+  name: string;
 }
 
 /**
