@@ -32,7 +32,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - Make the `apexlog_execute_anonymous` tool always discoverable, so agents can find it without server flags ([#52])
 - Ask for the production-org confirmation over the 2026-07-28 multi-round-trip flow, where it used to block the call while it asked. The answer is signed, bound to the org and to a digest of the Apex, and authorizes one run ([#93])
 - Reduce every tool response with no fact lost: `apexlog_list_slow_operations` by 13%, `apexlog_execute_anonymous` by 30%. `apexlog_get_summary` costs 17% more, for the two tables it gained ([#86], [#108], [#120], [#109], [#62], [#97])
-- Reduce the standing cost of having the server connected by 25%. `apexlog_list_slow_operations` is the one tool that costs more, by 53%, for what it now selects and returns ([#87], [#108], [#103], [#101], [#126], [#127], [#120])
+- Reduce the standing cost of having the server connected by 15%. `apexlog_list_slow_operations` is the one tool that costs more, by 108%, for what it now selects, ranks and returns ([#87], [#108], [#103], [#101], [#126], [#127], [#120], [#99])
 - `apexlog_execute_anonymous` reports `durationMs` from the log it wrote, so it now agrees with `apexlog_get_summary.durationTotalMs` for the same log ([#65])
 - Parse logs with `@apexdevtools/apex-log-parser` rather than a copy of it kept in this repository, so the parser is versioned, tested and fixed in one place ([#97])
 - Encode responses with TOON v4. No response changed: v4 removes key folding and path expansion, and this server used neither ([#121])
@@ -40,6 +40,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 ### Added
 
+- Add `sortBy: "heapSelfNetBytes"` to `apexlog_list_slow_operations`, which ranks the rows by the net heap each one's own code retained and adds that one column. Heap was the one governor limit nothing attributed: on the 40 logs of a 123-log corpus that allocate, a heap top ten holds a median 6 of 10 rows the self-time top ten never returns, and a different top row on 31 of them. Net and self, because gross churn agrees with net on 10 of the top 10 rows and a subtree net only repeats the transaction peak `apexlog_get_summary` already reports. Rows tie-break on self time, so the 83 logs that record no allocation rank by self time ([#99])
 - Report the query optimiser's plan for the queries behind the returned rows, as a `queryPlans` table keyed on `operationRow`. Above a `relativeCost` of 1 the optimiser will not treat the query as selective ([#120])
 - Report the level each log category was captured at, from `apexlog_list_slow_operations` and `apexlog_list_limit_risks`. A capture level decides what reaches the log, so it qualifies every figure beside it ([#102])
 - Report `matchedCount` from `apexlog_list_slow_operations`: the rows the selection matched before `offset`, `limit` or the page budget cut them, so a caller can tell whether the cap hid anything ([#63])
@@ -109,3 +110,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#65]: https://github.com/certinia/debug-log-analyzer-mcp/issues/65
 [#97]: https://github.com/certinia/debug-log-analyzer-mcp/issues/97
 [#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
+[#99]: https://github.com/certinia/debug-log-analyzer-mcp/issues/99
