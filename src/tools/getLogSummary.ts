@@ -8,12 +8,17 @@ import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
   declaredLevels,
   listOperations,
-  logCategoryOf,
-  OPERATION_KINDS,
+  type DeclaredLevel,
   type Operation,
-  type OperationKind,
 } from "./operations.js";
-import type { LogIssue } from "@apexdevtools/apex-log-parser/types";
+import {
+  DEBUG_CATEGORIES,
+  type DebugLevelCategory,
+} from "../salesforce/debugLevels.js";
+import type {
+  DebugCategory,
+  LogIssue,
+} from "@apexdevtools/apex-log-parser/types";
 import {
   NS_TO_MS,
   omitEmpty,
@@ -37,7 +42,7 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by kind of operation, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview before deeper analysis.",
+    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview before deeper analysis.",
   inputSchema: getLogSummaryInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -46,20 +51,21 @@ export const getLogSummaryToolConfig = {
 };
 
 /**
- * Where the transaction's time went, one row per kind of operation.
+ * Where the transaction's time went, one row per debug log category.
  *
- * `logCategory` is the trace category that decides whether the kind reaches the
- * log at all, so a zero row can be read against `debugLevels`: `soql 0` beside
- * `DB NONE` means the queries were not logged, and beside `DB FINEST` means
- * none ran.
+ * The category is the one that decides whether an operation reaches the log at
+ * all, so a zero row reads against `debugLevels`: `database 0` beside
+ * `database NONE` means the queries were not logged, and beside
+ * `database FINEST` means none ran.
  */
-interface KindRow {
-  kind: OperationKind;
-  logCategory: string;
+interface CategoryRow {
+  debugCategory: DebugLevelCategory;
   operationCount: number;
   durationSelfMs: number;
   selfPercentage: number;
 }
+
+type CategoryTotal = { operationCount: number; selfNs: number };
 
 /** Frames beyond this cost more than they say; one real log states 52,009 characters of stack. */
 const FATAL_FRAME_LIMIT = 3;
@@ -160,10 +166,10 @@ interface LogSummaryResult {
   thrownCount: number;
   fatalErrors?: FatalError[];
   namespaces: string[];
-  debugLevels: { logCategory: string; level: string }[];
+  debugLevels: DeclaredLevel[];
   governorLimits: LimitRow[];
   limitsByNamespace: NamespaceLimitRow[];
-  timeByKind: KindRow[];
+  timeByCategory: CategoryRow[];
 }
 
 export async function getLogSummary(args: LogSummaryArgs) {
@@ -197,7 +203,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
     debugLevels: declaredLevels(apexLog),
     governorLimits: toLimitRows(apexLog.governorLimits.peak),
     limitsByNamespace: toNamespaceLimitRows(apexLog.governorLimits.byNamespace),
-    timeByKind: timeByKind(listOperations(apexLog), durationTotalNs),
+    timeByCategory: timeByCategory(listOperations(apexLog), durationTotalNs),
   };
 
   return {
@@ -210,27 +216,32 @@ export async function getLogSummary(args: LogSummaryArgs) {
   };
 }
 
-function timeByKind(
+function timeByCategory(
   operations: Operation[],
   durationTotalNs: number,
-): KindRow[] {
-  // Seeded with every kind, so the loop only ever adds to a row that is there
-  // and the kinds nothing ran under are still reported, at zero.
-  const totals = Object.fromEntries(
-    OPERATION_KINDS.map((kind) => [kind, { operationCount: 0, selfNs: 0 }]),
-  ) as Record<OperationKind, { operationCount: number; selfNs: number }>;
+): CategoryRow[] {
+  // Seeded with every category, so the loop only ever adds to a row that is
+  // there and the categories nothing ran under are still reported, at zero.
+  // The row set is the parser's `DebugLevels` keys rather than a shorter list of
+  // our own, so a category it starts timing needs no change here.
+  const zero = (): CategoryTotal => ({ operationCount: 0, selfNs: 0 });
+  const totals = new Map<DebugCategory, CategoryTotal>(
+    DEBUG_CATEGORIES.map((category) => [category, zero()]),
+  );
 
-  operations.forEach(({ kind, durationSelfNs }) => {
-    const total = totals[kind];
-    total.operationCount += 1;
-    total.selfNs += durationSelfNs;
+  operations.forEach(({ debugCategory, durationSelfNs }) => {
+    // Only `""` misses, which the parser never stamps on a timed event.
+    const total = totals.get(debugCategory);
+    if (total) {
+      total.operationCount += 1;
+      total.selfNs += durationSelfNs;
+    }
   });
 
-  return OPERATION_KINDS.map((kind) => {
-    const { operationCount, selfNs } = totals[kind];
+  return DEBUG_CATEGORIES.map((debugCategory) => {
+    const { operationCount, selfNs } = totals.get(debugCategory) ?? zero();
     return {
-      kind,
-      logCategory: logCategoryOf(kind),
+      debugCategory,
       operationCount,
       durationSelfMs: roundMs(selfNs / NS_TO_MS),
       selfPercentage: roundPercent(percentageOf(selfNs, durationTotalNs)),

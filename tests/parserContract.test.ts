@@ -134,9 +134,11 @@ describe("parser contract", () => {
   });
 
   describe("LogEvent.category", () => {
-    // `kindOf` in tools/operations.ts drops an event with no category before it
-    // looks at anything else, so a timed event without one would be ranked
-    // nowhere and its time reported nowhere.
+    // `isRankable` in tools/operations.ts reads the timeline category as
+    // nothing but "this event has a duration" — the parser assigns one in the
+    // `DurationLogEvent` constructor alone and publishes no other flag for it.
+    // A timed event without one would be ranked nowhere and its time reported
+    // nowhere.
     it.each(["governor-heavy", "minimal", "heap-heavy"])(
       "is set on every event that carries a duration (%s)",
       (name) => {
@@ -148,26 +150,106 @@ describe("parser contract", () => {
         expect(timed.filter((node) => node.category === "")).toEqual([]);
       },
     );
+  });
 
-    // The two types `KIND_BY_TYPE` places by name are reached after that test,
-    // so each has to carry a category of its own.
-    it("is set on the types this server places by name", () => {
+  describe("LogEvent.debugCategory", () => {
+    // Every response states it: a ranked row's category, a `timeByCategory`
+    // row, and the `capturedAt` level beside them. An event stamped `""` would
+    // reach a row as an empty cell and be counted under no category at all.
+    it.each(["governor-heavy", "minimal", "heap-heavy"])(
+      "is set on every event that carries a duration (%s)",
+      (name) => {
+        const timed = tree(parse(fixture(name))).filter(
+          (node) => node.category !== "",
+        );
+
+        expect(timed.length).toBeGreaterThan(0);
+        expect(timed.filter((node) => node.debugCategory === "")).toEqual([]);
+      },
+    );
+
+    // What lets the group key carry the type alone: keying on it keeps the
+    // category column true of every member of a group. One type stamped with
+    // two categories would make that false, and a folded row would state the
+    // first member's category for all of them.
+    it.each(["governor-heavy", "minimal", "heap-heavy"])(
+      "is one category per event type (%s)",
+      (name) => {
+        const byType = new Map<string, Set<string>>();
+        tree(parse(fixture(name)))
+          .filter((node) => node.category !== "")
+          .forEach((node) => {
+            const type = node.type ?? "Unknown";
+            const seen = byType.get(type) ?? new Set<string>();
+            seen.add(node.debugCategory);
+            byType.set(type, seen);
+          });
+
+        expect(byType.size).toBeGreaterThan(0);
+        expect(
+          [...byType]
+            .filter(([, categories]) => categories.size > 1)
+            .map(([type]) => type),
+        ).toEqual([]);
+      },
+    );
+
+    // The pairs the timeline category gets wrong: reading `category` files a
+    // Visualforce formula under `System` and a cumulative limit block under it
+    // too, which is why selection moved onto this field.
+    it("names the gating category where the timeline category differs", () => {
       const log = parse(
         [
           HEADER,
           "09:00:00.1 (1000)|EXECUTION_STARTED",
-          "09:00:00.1 (2000)|ENTERING_MANAGED_PKG|core_pkg",
-          "09:00:00.1 (3000)|SOSL_EXECUTE_BEGIN|[1]|FIND 'x'",
-          "09:00:00.1 (4000)|SOSL_EXECUTE_END|[1]|Rows:0",
-          "09:00:00.1 (5000)|EXECUTION_FINISHED",
+          "09:00:00.2 (2000)|VF_APEX_CALL_START|[1]|Controller invoke(save)",
+          "09:00:00.3 (3000)|VF_APEX_CALL_END|Controller invoke(save)",
+          "09:00:00.4 (4000)|CUMULATIVE_LIMIT_USAGE",
+          "09:00:00.4 (4000)|CUMULATIVE_LIMIT_USAGE_END",
+          "09:00:00.5 (5000)|EXECUTION_FINISHED",
+          "",
+        ].join("\n"),
+      );
+      const categoriesOf = (type: string) => {
+        const event = tree(log).find((node) => node.type === type);
+        return [event?.category, event?.debugCategory];
+      };
+
+      expect(categoriesOf("VF_APEX_CALL_START")).toEqual([
+        "Apex",
+        "visualforce",
+      ]);
+      expect(categoriesOf("CUMULATIVE_LIMIT_USAGE")).toEqual([
+        "System",
+        "apexProfiling",
+      ]);
+    });
+
+    // `apexlog_list_limit_risks` reports these two levels and no others,
+    // because they are the ones that decide whether a limit figure was written
+    // at all: every limit but heap comes from the cumulative blocks, and heap
+    // from `HEAP_ALLOCATE`.
+    it("gates the limit figures under apexProfiling, and heap under apexCode", () => {
+      const log = parse(
+        [
+          HEADER,
+          "09:00:00.1 (1000)|EXECUTION_STARTED",
+          "09:00:00.2 (2000)|HEAP_ALLOCATE|[1]|Bytes:100",
+          "09:00:00.9 (9000)|CUMULATIVE_LIMIT_USAGE",
+          "09:00:00.9 (9000)|LIMIT_USAGE_FOR_NS|(default)|",
+          "  Number of SOQL queries: 1 out of 100",
+          "",
+          "09:00:00.9 (9000)|CUMULATIVE_LIMIT_USAGE_END",
+          "09:00:01.0 (10000)|EXECUTION_FINISHED",
           "",
         ].join("\n"),
       );
       const categoryOf = (type: string) =>
-        tree(log).find((node) => node.type === type)?.category;
+        tree(log).find((node) => node.type === type)?.debugCategory;
 
-      expect(categoryOf("ENTERING_MANAGED_PKG")).not.toBe("");
-      expect(categoryOf("SOSL_EXECUTE_BEGIN")).not.toBe("");
+      expect(categoryOf("CUMULATIVE_LIMIT_USAGE")).toBe("apexProfiling");
+      expect(categoryOf("LIMIT_USAGE_FOR_NS")).toBe("apexProfiling");
+      expect(categoryOf("HEAP_ALLOCATE")).toBe("apexCode");
     });
   });
 

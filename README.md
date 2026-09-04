@@ -67,11 +67,11 @@ Every request carries all four tool definitions, whether or not a tool is called
 
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
-| `apexlog_list_slow_operations` | ~460                                | ~247       | +86%     |
+| `apexlog_list_slow_operations` | ~518                                | ~247       | +110%    |
 | `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
 | `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
-| `apexlog_get_summary`          | ~173                                | ~171       | +1%      |
-| **Total**                      | **~1,246** (0.6% of a 200K context) | **~1,529** | **-19%** |
+| `apexlog_get_summary`          | ~174                                | ~171       | +2%      |
+| **Total**                      | **~1,305** (0.7% of a 200K context) | **~1,529** | **-15%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -85,9 +85,9 @@ What a call costs does not scale with the log. The response is bounded by its sh
 
 | Tool                           | Response | 1.x  | Change |
 | ------------------------------ | -------- | ---- | ------ |
-| `apexlog_get_summary`          | ~379     | ~293 | +29%   |
-| `apexlog_list_slow_operations` | ~355     | ~408 | -13%   |
-| `apexlog_list_limit_risks`     | ~45      | ~84  | -46%   |
+| `apexlog_get_summary`          | ~364     | ~293 | +24%   |
+| `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
+| `apexlog_list_limit_risks`     | ~39      | ~84  | -54%   |
 
 <!-- token-cost-answers:end -->
 
@@ -105,26 +105,30 @@ All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept 
 
 Rank what an Apex debug log spent its time on by self-execution time — code units, managed packages, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations (in ms), database counts and rows. Best for finding what to optimize.
 
-Rows are `{kind, name, namespace, callCount, durationTotalMs, durationSelfMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs` and the `returnedSelfPercentage` the returned rows account for between them.
+Rows are `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs` and the `returnedSelfPercentage` the returned rows account for between them.
 
-`kind` is one of `codeUnit`, `managedPackage`, `method`, `systemMethod`, `soql`, `sosl`, `dml`, `flow` or `workflow`. A `managedPackage` row is the time a package spent where the log shows nothing, and is often most of a transaction.
+Both classification columns come straight from the log. `debugCategory` is the Salesforce debug log category the platform stamped on the event — `apexCode`, `database`, `system`, `visualforce`, `workflow`, and so on — which is the category that decided whether the event was written at all, and the same spelling `apexlog_execute_anonymous` takes as input. `type` is the log's own event type, which is what the category cannot say: `SOQL_EXECUTE_BEGIN`, `SOSL_EXECUTE_BEGIN` and `DML_BEGIN` all sit under `database`, and an `ENTERING_MANAGED_PKG` row — the time a package spent where the log shows nothing, often most of a transaction — sits under `apexCode` beside the methods it hides.
 
-| Parameter     | Type   | Required | Description                                                                            |
-| ------------- | ------ | -------- | -------------------------------------------------------------------------------------- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                                        |
-| `kind`        | string | No       | Rank only operations of this kind                                                      |
-| `namespace`   | string | No       | Rank only this namespace                                                               |
-| `minSelfMs`   | number | No       | Drop operations below this self time (default: 0)                                      |
-| `limit`       | number | No       | Rows to return (default: 10)                                                           |
-| `groupBy`     | string | No       | Fold repeats into one row by `name` (default), `namespace` or `callerNamespace`; `none` ranks each call |
+`capturedAt` gives `{debugCategory, level}` for each category among the returned rows, so the levels join to the rows on the same key.
+
+| Parameter       | Type     | Required | Description                                                                                              |
+| --------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `logFilePath`   | string   | Yes      | Absolute path to the Apex debug log file (.log)                                                          |
+| `debugCategory` | string[] | No       | Rank only these debug log categories                                                                     |
+| `type`          | string[] | No       | Rank only these log event types, e.g. `SOQL_EXECUTE_BEGIN`, `DML_BEGIN`, `METHOD_ENTRY`                  |
+| `namespace`     | string[] | No       | Rank only these namespaces                                                                               |
+| `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0)                                                        |
+| `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large                                            |
+| `offset`        | number   | No       | Ranked rows to skip (default: 0)                                                                         |
+| `groupBy`       | string   | No       | Fold repeats into one row by `name` (default), `namespace` or `callerNamespace`; `none` ranks each call |
 
 ### apexlog_get_summary
 
-Get a high-level summary of an Apex debug log: how long the transaction ran (in ms), where the time went by kind of operation, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview before deeper analysis.
+Get a high-level summary of an Apex debug log: how long the transaction ran (in ms), where the time went by debug log category, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview before deeper analysis.
 
 All thirteen governor limits are listed as `{limit, used, max}` rows, at zero included, so you can ask what a transaction consumed and get an answer either way. `limitsByNamespace` adds `{namespace, limit, used}` rows for each limit a namespace consumed, which is how you see that a managed package spent your CPU time; it names no ceiling, because the parser keeps one ceiling per limit for the whole transaction and it is already in `governorLimits`.
 
-`timeByKind` gives `{kind, logCategory, operationCount, durationSelfMs, selfPercentage}` for every kind `apexlog_list_slow_operations` ranks. `logCategory` is the trace category that decides whether the kind reaches the log at all, so a zero can be read: `soql 0` beside `DB NONE` in `debugLevels`, whose rows are `{logCategory, level}`, means the queries were not logged, and beside `DB FINEST` it means none ran.
+`timeByCategory` gives `{debugCategory, operationCount, durationSelfMs, selfPercentage}` for all eleven debug log categories, at zero included. The category is the one that decided whether an operation was written to the log at all, so a zero can be read against `debugLevels`, whose rows are `{debugCategory, level}`: `database 0` beside `database NONE` means the queries were not logged, and beside `database FINEST` it means none ran. Three categories — `dataAccess`, `wave` and `validation` — can only ever be zero, because no timed event carries them.
 
 `truncated` says whether the platform wrote the whole log, and `skippedBytes` how much it dropped where it did not — every figure in a partial log is a floor, not a total. `thrownCount` is how many exceptions were thrown, at zero included. `fatalErrors` gives `{message, frames}` for each failure that ended a transaction, and is absent when none did; `frames` holds the innermost three stack frames, with a trailing `…` where there were more. It is the only field that says a transaction did not finish, which decides what every other figure means — a fatal error need breach no governor limit, so nothing else in the response reveals one.
 
@@ -137,6 +141,8 @@ All thirteen governor limits are listed as `{limit, used, max}` rows, at zero in
 List the governor limits an Apex log transaction has nearly consumed — CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote — worst first, with how much of each was used. Best for checking whether a transaction is at risk of failing on a limit.
 
 Rows are `{limit, used, max, usedPercentage}`. The `threshold` that produced them is reported alongside, so an empty table reads as "nothing is that far consumed" rather than as a missing answer.
+
+`capturedAt` gives `{debugCategory, level}` for the two categories that decide whether a limit figure was written at all: `apexProfiling`, which gates the cumulative limit blocks every limit but heap is read from, and `apexCode`, which gates the heap allocations behind `heapSize`.
 
 | Parameter     | Type   | Required | Description                                                      |
 | ------------- | ------ | -------- | ---------------------------------------------------------------- |

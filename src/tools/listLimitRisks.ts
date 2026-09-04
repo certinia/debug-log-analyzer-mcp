@@ -4,10 +4,14 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
-import type { Limits } from "@apexdevtools/apex-log-parser/types";
+import type {
+  DebugCategory,
+  Limits,
+} from "@apexdevtools/apex-log-parser/types";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
-import { captureLevels, type CaptureLevels } from "./operations.js";
+import { capturedAt, type DeclaredLevel } from "./operations.js";
 import {
+  omitEmpty,
   percentageOf,
   roundPercent,
   toLimitRows,
@@ -37,12 +41,31 @@ export interface LimitRisk {
   usedPercentage: number;
 }
 
-export interface LimitRiskResult extends CaptureLevels {
+/**
+ * The categories that decide whether a limit figure reached the log at all.
+ *
+ * Every limit but heap is read from the cumulative blocks, which the parser
+ * stamps `apexProfiling` — `CUMULATIVE_LIMIT_USAGE` at INFO and
+ * `LIMIT_USAGE_FOR_NS` at FINEST. `heapSize` comes from `HEAP_ALLOCATE`, which
+ * is `apexCode` at FINER. So these two levels are what say whether a low or
+ * absent figure is the transaction's or the trace flag's.
+ */
+const LIMIT_GATING_CATEGORIES = [
+  "apexCode",
+  "apexProfiling",
+] as const satisfies readonly DebugCategory[];
+
+export interface LimitRiskResult {
   /**
    * What "at risk" meant for this call. The rows are a selection, so without it
    * an empty table cannot be told apart from a threshold nothing could reach.
    */
   threshold: number;
+  /**
+   * The level each category that gates a limit figure was captured at. Absent
+   * when the header declared neither: a level has no zero.
+   */
+  capturedAt?: DeclaredLevel[];
   /** Worst first. Empty means every limit is under the threshold. */
   atRisk: LimitRisk[];
 }
@@ -64,8 +87,8 @@ export async function listLimitRisks(args: LimitRisksArgs) {
   const apexLog = await loadApexLog(logFilePath);
 
   const result: LimitRiskResult = {
-    ...captureLevels(apexLog),
     threshold,
+    ...omitEmpty({ capturedAt: capturedAt(apexLog, LIMIT_GATING_CATEGORIES) }),
     atRisk: atRiskLimits(apexLog.governorLimits.peak, threshold),
   };
 

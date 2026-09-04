@@ -244,8 +244,11 @@ one-liners.
 
 **A fact that qualifies every number in the response is a response-level scalar, stated once; a fact
 that varies per row is a column.** `threshold` on `apexlog_list_limit_risks` follows this rule, and so
-do the four capture levels — `apexCodeLevel`, `systemLevel`, `dbLevel` and `workflowLevel` — that
-`apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header.
+does `capturedAt` — the level each debug log category was captured at — which
+`apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header. It is a
+table rather than a set of scalars because it is keyed the way the rows are, on `debugCategory`, so
+the two join; and each tool names only the categories its own figures came from, since a level for a
+category nothing here was logged under qualifies nothing.
 
 They matter because a capture level silently changes what every figure beside it means. On a log
 taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self
@@ -261,7 +264,7 @@ Two consequences:
 - **No caveat prose and no magnitude.** The response reports the level and stops. A figure measured
   once against one org, with the harness not committed, cannot be re-derived by CI and will rot.
 
-`apexlog_get_summary` needs none of them: `timeByKind` already carries a `logCategory` column and
+`apexlog_get_summary` needs none of it: `timeByCategory` is keyed on `debugCategory` and
 `debugLevels` lists the level per category, so the join is the caller's to make and restating it
 would break "say it once".
 

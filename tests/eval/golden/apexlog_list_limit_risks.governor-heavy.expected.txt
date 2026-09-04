@@ -1,8 +1,6 @@
-apexCodeLevel: FINE
-systemLevel: FINE
-dbLevel: FINEST
-calloutLevel: FINEST
-workflowLevel: FINE
 threshold: 80
+capturedAt[2]{debugCategory,level}:
+  apexCode,FINE
+  apexProfiling,FINE
 atRisk[1]{limit,used,max,usedPercentage}:
   cpuTime,15163,10000,151.6

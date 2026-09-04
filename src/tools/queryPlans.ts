@@ -32,6 +32,18 @@ export interface QueryPlan extends QueryPlanVerdict {
 }
 
 /**
+ * Whether an event of this type could have been explained.
+ *
+ * `SOQL_EXECUTE_BEGIN` alone, and not every event under `database`: an explain
+ * line is a direct child of that type, so `QUERY_MORE_BEGIN` and
+ * `CURSOR_CREATE_BEGIN` can never carry a plan. Exported so the one module that
+ * reads explain lines is the one that says which type has them.
+ */
+export function canCarryPlan({ type }: { type: string | null }): boolean {
+  return type === "SOQL_EXECUTE_BEGIN";
+}
+
+/**
  * The plan the optimiser explained for a query, if it explained one.
  *
  * The explain line is a direct child of the query it explains, so the two are
@@ -70,9 +82,9 @@ function planOf(node: LogEvent): QueryPlan | undefined {
 /**
  * The query plans the log explained, by the name the ranked rows use.
  *
- * `SOQL_EXECUTE_EXPLAIN` is emitted at `DB,FINEST` alone, so an empty result
- * says nothing about how selective the queries were; the response's `dbLevel`
- * says whether one could have been recorded.
+ * `SOQL_EXECUTE_EXPLAIN` is emitted at `database,FINEST` alone, so an empty
+ * result says nothing about how selective the queries were; the `database` row
+ * of `capturedAt` says whether one could have been recorded.
  *
  * One query text can be explained more than once, and the worst plan is kept:
  * the caller is looking for the query to fix, and a plan that was selective on
@@ -83,7 +95,7 @@ export function listQueryPlans(apexLog: ApexLog): Map<string, QueryPlan> {
 
   apexLog.children.forEach((child) =>
     walkLog<void>(child, (node) => {
-      if (node.type !== "SOQL_EXECUTE_BEGIN") {
+      if (!canCarryPlan(node)) {
         return;
       }
 
