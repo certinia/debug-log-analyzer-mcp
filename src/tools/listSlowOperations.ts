@@ -9,6 +9,7 @@ import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
   capturedAt,
   GROUP_BY,
+  GROUPINGS,
   groupOperations,
   listOperations,
   operationGroupKey,
@@ -66,7 +67,7 @@ export const listSlowOperationsInputSchema = {
     .enum([...GROUP_BY, "none"])
     .optional()
     .describe(
-      "Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
+      "Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
     ),
 };
 
@@ -98,7 +99,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace grouping.",
+    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace or category grouping.",
   inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -110,9 +111,14 @@ export const listSlowOperationsToolConfig = {
 export interface SlowOperation {
   /** The category that decided whether the operation reached the log at all. */
   debugCategory: DebugCategory;
-  /** The log's own event type, e.g. `SOQL_EXECUTE_BEGIN`. */
-  type: string;
-  name: string;
+  /**
+   * The log's own event type. Absent under `groupBy: "debugCategory"`, where the
+   * row folds the types of a category together and naming one would name the
+   * first alone.
+   */
+  type?: string;
+  /** Absent under `groupBy: "debugCategory"`, where the category identifies the row. */
+  name?: string;
   namespace: string;
   callCount: number;
   /**
@@ -278,7 +284,7 @@ function plansForRankedRows(
 }
 
 /**
- * Plans behind the ranked rows that are named after a namespace.
+ * Plans behind the ranked rows that are named after a namespace or a category.
  *
  * The row does not name the query, so the plan has to. One such row can stand
  * for several queries, so the group key is what finds them — and the queries are
@@ -367,10 +373,17 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // build if an `Operation` field is added without deciding whether it belongs
   // on the wire, and so the columns arrive in a readable order. It is a fixed
   // set: a zero SOQL count reads as "none" rather than "not measured".
+  //
+  // Whether the row states the operation itself is the grouping's own answer,
+  // so a grouping added later has to decide it rather than inherit it.
+  const namesRow = groupBy === "none" || GROUPINGS[groupBy].namesRow;
+
   const toRow = (operation: Operation): SlowOperation => ({
     debugCategory: operation.debugCategory,
-    type: operation.type,
-    name: elide(operation.name, NAME_LIMIT),
+    ...(namesRow && {
+      type: operation.type,
+      name: elide(operation.name, NAME_LIMIT),
+    }),
     namespace: operation.namespace,
     callCount: operation.callCount,
     durationTotalMs: roundMs(operation.durationTotalNs / NS_TO_MS),
@@ -413,7 +426,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // Only the returned rows are explained, so the table qualifies what the
   // response says rather than ranking a second time. Grouping by name, and
   // ranking each call on its own, both name a query row after the query, so
-  // the plan points at the row; a namespace fold does not, so it
+  // the plan points at the row; a namespace or category fold does not, so it
   // looks the queries up by group key and carries the text.
   const queryPlans: PlanRow[] =
     groupBy === "name" || groupBy === "none"

@@ -575,6 +575,30 @@ describe("groupOperations", () => {
       ["CONSTRUCTOR_ENTRY", 20_000_000],
     ]);
   });
+
+  it("folds the types of a category together when asked to group by it", () => {
+    const operations = listOperations(
+      logOf(
+        method({ namespace: "Custom", totalNs: 30_000_000 }),
+        constructorCall({ namespace: "Custom", totalNs: 20_000_000 }),
+        repeatedQuery("Custom"),
+      ),
+    );
+
+    expect(groupOperations(operations, "debugCategory")).toEqual([
+      expect.objectContaining({
+        name: "apexCode",
+        namespace: "Custom",
+        callCount: 2,
+        durationSelfNs: 50_000_000,
+      }),
+      expect.objectContaining({
+        name: "database",
+        namespace: "Custom",
+        callCount: 1,
+      }),
+    ]);
+  });
 });
 
 describe("declaredLevels", () => {

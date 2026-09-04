@@ -284,7 +284,8 @@ const DEFINITION_BUDGET = {
   // takes free strings and names three examples instead of an enum: the parser
   // publishes `LogEventType` as a type alone, and its 290 names would cost some
   // 1,450 tokens, more than the whole `tools/list` baseline allows for four
-  // tools.
+  // tools. The `groupBy` clause grew by the category fold, which is the one
+  // grouping that states no type or name.
   apexlog_list_slow_operations: 582,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by category.

@@ -202,7 +202,12 @@ export function listOperations(apexLog: ApexLog): Operation[] {
 }
 
 /** What a fold can key on, so the tool schema cannot drift from this module. */
-export const GROUP_BY = ["name", "namespace", "callerNamespace"] as const;
+export const GROUP_BY = [
+  "name",
+  "namespace",
+  "callerNamespace",
+  "debugCategory",
+] as const;
 
 export type GroupBy = (typeof GROUP_BY)[number];
 
@@ -210,7 +215,8 @@ export type GroupBy = (typeof GROUP_BY)[number];
 interface Grouping {
   /**
    * What a folded row calls itself. Folding on a namespace puts it in `name`
-   * too, because the calls underneath it no longer share a name of their own.
+   * too, because the calls underneath it no longer share a name of their own,
+   * and folding on a category does the same with the category.
    */
   identity: (operation: Operation) => { namespace: string; name: string };
   /**
@@ -219,9 +225,16 @@ interface Grouping {
    *
    * The event `type`, because a row states it. `type` decides `debugCategory` —
    * the parser stamps one category per event class — so keying on the type
-   * keeps both columns true of every member.
+   * keeps both columns true of every member. A category fold is a fold across
+   * types, and its identity already names the category, so it has none.
    */
   discriminator: (operation: Operation) => string;
+  /**
+   * Whether a row states the operation's own `type` and `name`. A fold across
+   * types states neither: one type named would be the first member alone, and
+   * the name would restate the category.
+   */
+  namesRow: boolean;
 }
 
 export const GROUPINGS: Record<GroupBy, Grouping> = {
@@ -231,6 +244,7 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
       name: operation.name,
     }),
     discriminator: (operation) => operation.type,
+    namesRow: true,
   },
   namespace: {
     identity: (operation) => ({
@@ -238,6 +252,7 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
       name: operation.namespace,
     }),
     discriminator: (operation) => operation.type,
+    namesRow: true,
   },
   callerNamespace: {
     identity: (operation) => ({
@@ -245,6 +260,15 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
       name: operation.callerNamespace,
     }),
     discriminator: (operation) => operation.type,
+    namesRow: true,
+  },
+  debugCategory: {
+    identity: (operation) => ({
+      namespace: operation.namespace,
+      name: operation.debugCategory,
+    }),
+    discriminator: () => "",
+    namesRow: false,
   },
 };
 

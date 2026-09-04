@@ -67,11 +67,11 @@ Every request carries all four tool definitions, whether or not a tool is called
 
 | Tool                           | Tokens                              | 1.x        | Change   |
 | ------------------------------ | ----------------------------------- | ---------- | -------- |
-| `apexlog_list_slow_operations` | ~518                                | ~247       | +110%    |
+| `apexlog_list_slow_operations` | ~554                                | ~247       | +124%    |
 | `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
 | `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%     |
 | `apexlog_get_summary`          | ~174                                | ~171       | +2%      |
-| **Total**                      | **~1,305** (0.7% of a 200K context) | **~1,529** | **-15%** |
+| **Total**                      | **~1,341** (0.7% of a 200K context) | **~1,529** | **-12%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -120,7 +120,7 @@ Both classification columns come straight from the log. `debugCategory` is the S
 | `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0)                                                        |
 | `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large                                            |
 | `offset`        | number   | No       | Ranked rows to skip (default: 0)                                                                         |
-| `groupBy`       | string   | No       | Fold repeats into one row by `name` (default), `namespace` or `callerNamespace`; `none` ranks each call |
+| `groupBy`       | string   | No       | Fold repeats into one row by `name` (default), `namespace`, `callerNamespace` or `debugCategory`; `none` ranks each call |
 
 ### apexlog_get_summary
 

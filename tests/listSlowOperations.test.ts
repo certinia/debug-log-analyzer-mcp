@@ -733,6 +733,51 @@ describe("listSlowOperations", () => {
     );
   });
 
+  // The one grouping that folds event types together, so the row states
+  // neither a type nor a name: both would be the first member's alone.
+  it("folds a namespace's categories into one row each when asked", async () => {
+    mockLog(
+      1000 * MS,
+      method({ text: "A.run", namespace: "Custom", totalNs: 300 * MS }),
+      {
+        type: "CONSTRUCTOR_ENTRY",
+        category: "Apex",
+        debugCategory: "apexCode",
+        text: "A.A()",
+        namespace: "Custom",
+        totalNs: 200 * MS,
+      },
+      query({ text: "SELECT Id", namespace: "Custom", totalNs: 100 * MS }),
+    );
+
+    const { operations } = await ranked({
+      ...ARGS,
+      groupBy: "debugCategory",
+    });
+
+    expect(operations).toEqual([
+      {
+        debugCategory: "apexCode",
+        namespace: "Custom",
+        callCount: 2,
+        durationTotalMs: 500,
+        durationSelfMs: 500,
+        durationSelfMaxMs: 300,
+        selfPercentage: 50,
+        soqlCount: 0,
+        dmlCount: 0,
+        soslCount: 0,
+        rowCount: 0,
+        thrownCount: 0,
+      },
+      expect.objectContaining({
+        debugCategory: "database",
+        callCount: 1,
+        durationSelfMs: 100,
+      }),
+    ]);
+  });
+
   it("names the real cause when the log cannot be read", async () => {
     mockFs.stat.mockRejectedValue(
       Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
