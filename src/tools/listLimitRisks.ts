@@ -49,6 +49,10 @@ export interface LimitRisk {
  * `LIMIT_USAGE_FOR_NS` at FINEST. `heapSize` comes from `HEAP_ALLOCATE`, which
  * is `apexCode` at FINER. So these two levels are what say whether a low or
  * absent figure is the transaction's or the trace flag's.
+ *
+ * A union over all thirteen limits, not the ones a call selected: `apexCode` is
+ * reported beside a risk list that holds no `heapSize`. Narrowing it needs a
+ * gating category per limit metric, which the parser does not publish.
  */
 const LIMIT_GATING_CATEGORIES = [
   "apexCode",

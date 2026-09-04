@@ -13,6 +13,7 @@ import {
   groupOperations,
   listOperations,
   operationGroupKey,
+  UNGROUPED,
   type DeclaredLevel,
   type GroupBy,
   type Operation,
@@ -38,6 +39,10 @@ export const listSlowOperationsInputSchema = {
     .array(z.enum(DEBUG_CATEGORIES))
     .optional()
     .describe("Rank only these debug log categories"),
+  // Free strings and three examples rather than an enum: the parser publishes
+  // `LogEventType` as a type alone, and its 290 names would cost some 1,450
+  // tokens in every `tools/list` — more than the four tools together are
+  // allowed. Tightening this to an enum fails the definition budget.
   type: z
     .array(z.string())
     .optional()
@@ -373,14 +378,11 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // build if an `Operation` field is added without deciding whether it belongs
   // on the wire, and so the columns arrive in a readable order. It is a fixed
   // set: a zero SOQL count reads as "none" rather than "not measured".
-  //
-  // Whether the row states the operation itself is the grouping's own answer,
-  // so a grouping added later has to decide it rather than inherit it.
-  const namesRow = groupBy === "none" || GROUPINGS[groupBy].namesRow;
+  const { keysOnType } = groupBy === "none" ? UNGROUPED : GROUPINGS[groupBy];
 
   const toRow = (operation: Operation): SlowOperation => ({
     debugCategory: operation.debugCategory,
-    ...(namesRow && {
+    ...(keysOnType && {
       type: operation.type,
       name: elide(operation.name, NAME_LIMIT),
     }),
@@ -424,12 +426,11 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   const ranked = page.slice(0, operations.length);
 
   // Only the returned rows are explained, so the table qualifies what the
-  // response says rather than ranking a second time. Grouping by name, and
-  // ranking each call on its own, both name a query row after the query, so
-  // the plan points at the row; a namespace or category fold does not, so it
-  // looks the queries up by group key and carries the text.
+  // response says rather than ranking a second time. Where the row names the
+  // query the plan points at it; where it does not, the plan looks the queries
+  // up by group key and carries the text.
   const queryPlans: PlanRow[] =
-    groupBy === "name" || groupBy === "none"
+    groupBy === "none" || GROUPINGS[groupBy].namesOperation
       ? plansForRankedRows(ranked, apexLog)
       : plansForFoldedRows(selected, ranked, groupBy, apexLog);
 

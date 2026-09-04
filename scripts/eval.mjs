@@ -281,11 +281,9 @@ const DEFINITION_BUDGET = {
   // Raised again by #138, which replaced the one `kind` filter with the two axes
   // the log itself has — `debugCategory` and the event `type` — and widened
   // both, and `namespace`, to arrays, so one call can ask for a family. `type`
-  // takes free strings and names three examples instead of an enum: the parser
-  // publishes `LogEventType` as a type alone, and its 290 names would cost some
-  // 1,450 tokens, more than the whole `tools/list` baseline allows for four
-  // tools. The `groupBy` clause grew by the category fold, which is the one
-  // grouping that states no type or name.
+  // takes free strings and names three examples rather than an enum, for the
+  // reason recorded on the field itself. The `groupBy` clause grew by the
+  // category fold, which is the one grouping that states no type or name.
   apexlog_list_slow_operations: 582,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by category.
@@ -343,7 +341,7 @@ const SELECTION_KEYWORDS = {
  * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool whose
  * answer its heap changes. `apexlog_list_limit_risks` does read heap, but this
  * log's heap sits under its risk threshold, and the rows
- * `apexlog_list_slow_operations` would rank are kinds `governor-heavy` pins
+ * `apexlog_list_slow_operations` would rank are ones `governor-heavy` pins
  * already.
  */
 const FIXTURES_BY_TOOL = {

@@ -103,9 +103,9 @@ All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept 
 
 ### apexlog_list_slow_operations
 
-Rank what an Apex debug log spent its time on by self-execution time — code units, managed packages, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations (in ms), database counts and rows. Best for finding what to optimize.
+Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations (in ms), database counts and rows, beside the query optimizer's plan for the queries among them. Best for finding what to optimize.
 
-Rows are `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs` and the `returnedSelfPercentage` the returned rows account for between them.
+Rows are `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` the returned rows account for between them, and `matchedCount`, the rows the selection matched before paging. A grouped row carries `durationSelfMaxMs`, the self time of its slowest single call; an ungrouped row leaves it out, where it is `durationSelfMs` again.
 
 Both classification columns come straight from the log. `debugCategory` is the Salesforce debug log category the platform stamped on the event — `apexCode`, `database`, `system`, `visualforce`, `workflow`, and so on — which is the category that decided whether the event was written at all, and the same spelling `apexlog_execute_anonymous` takes as input. `type` is the log's own event type, which is what the category cannot say: `SOQL_EXECUTE_BEGIN`, `SOSL_EXECUTE_BEGIN` and `DML_BEGIN` all sit under `database`, and an `ENTERING_MANAGED_PKG` row — the time a package spent where the log shows nothing, often most of a transaction — sits under `apexCode` beside the methods it hides.
 

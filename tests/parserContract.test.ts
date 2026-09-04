@@ -27,6 +27,9 @@ const fixture = (name: string): string =>
 const HEADER =
   "64.0 APEX_CODE,FINE;APEX_PROFILING,FINE;CALLOUT,NONE;DATA_ACCESS,NONE;DB,INFO;NBA,NONE;SYSTEM,NONE;VALIDATION,NONE;VISUALFORCE,NONE;WAVE,NONE;WORKFLOW,NONE";
 
+/** The fixtures with a transaction in them, so a per-event sweep has events. */
+const TIMED_FIXTURES = ["governor-heavy", "minimal", "heap-heavy"];
+
 /** Every node the tree holds, which is what `walkLog` reaches. */
 function tree(node: LogEvent, into: LogEvent[] = []): LogEvent[] {
   for (const child of node.children) {
@@ -133,14 +136,16 @@ describe("parser contract", () => {
     });
   });
 
-  describe("LogEvent.category", () => {
+  describe("LogEvent.category and LogEvent.debugCategory", () => {
     // `isRankable` in tools/operations.ts reads the timeline category as
     // nothing but "this event has a duration" — the parser assigns one in the
     // `DurationLogEvent` constructor alone and publishes no other flag for it.
     // A timed event without one would be ranked nowhere and its time reported
-    // nowhere.
-    it.each(["governor-heavy", "minimal", "heap-heavy"])(
-      "is set on every event that carries a duration (%s)",
+    // nowhere. Every response then states `debugCategory`: a ranked row's
+    // category, a `timeByCategory` row, and the `capturedAt` level beside them,
+    // so an event stamped `""` would reach a row as an empty cell.
+    it.each(TIMED_FIXTURES)(
+      "are both set on every event that carries a duration (%s)",
       (name) => {
         const timed = tree(parse(fixture(name))).filter(
           (node) => node.duration.total > 0,
@@ -148,22 +153,6 @@ describe("parser contract", () => {
 
         expect(timed.length).toBeGreaterThan(0);
         expect(timed.filter((node) => node.category === "")).toEqual([]);
-      },
-    );
-  });
-
-  describe("LogEvent.debugCategory", () => {
-    // Every response states it: a ranked row's category, a `timeByCategory`
-    // row, and the `capturedAt` level beside them. An event stamped `""` would
-    // reach a row as an empty cell and be counted under no category at all.
-    it.each(["governor-heavy", "minimal", "heap-heavy"])(
-      "is set on every event that carries a duration (%s)",
-      (name) => {
-        const timed = tree(parse(fixture(name))).filter(
-          (node) => node.category !== "",
-        );
-
-        expect(timed.length).toBeGreaterThan(0);
         expect(timed.filter((node) => node.debugCategory === "")).toEqual([]);
       },
     );
@@ -172,7 +161,7 @@ describe("parser contract", () => {
     // category column true of every member of a group. One type stamped with
     // two categories would make that false, and a folded row would state the
     // first member's category for all of them.
-    it.each(["governor-heavy", "minimal", "heap-heavy"])(
+    it.each(TIMED_FIXTURES)(
       "is one category per event type (%s)",
       (name) => {
         const byType = new Map<string, Set<string>>();

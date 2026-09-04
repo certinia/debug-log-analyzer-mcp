@@ -220,21 +220,22 @@ interface Grouping {
    */
   identity: (operation: Operation) => { namespace: string; name: string };
   /**
-   * The segment every key carries beside that identity, so no column can be
-   * true of one member of a group and false of the next.
+   * Whether the key carries the event `type` beside that identity, which is
+   * also whether a row may state the type and a name of its own: a row can
+   * state only what its key holds true of every member.
    *
-   * The event `type`, because a row states it. `type` decides `debugCategory` —
-   * the parser stamps one category per event class — so keying on the type
-   * keeps both columns true of every member. A category fold is a fold across
-   * types, and its identity already names the category, so it has none.
+   * `type` decides `debugCategory` — the parser stamps one category per event
+   * class — so keying on the type keeps both columns true of every member. A
+   * category fold keys on the category alone, and states neither: one type
+   * named would be the first member's alone, and the name would restate the
+   * category.
    */
-  discriminator: (operation: Operation) => string;
+  keysOnType: boolean;
   /**
-   * Whether a row states the operation's own `type` and `name`. A fold across
-   * types states neither: one type named would be the first member alone, and
-   * the name would restate the category.
+   * Whether that `name` is the operation's own, so a query plan can point at
+   * the row instead of repeating the query text.
    */
-  namesRow: boolean;
+  namesOperation: boolean;
 }
 
 export const GROUPINGS: Record<GroupBy, Grouping> = {
@@ -243,34 +244,43 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
       namespace: operation.namespace,
       name: operation.name,
     }),
-    discriminator: (operation) => operation.type,
-    namesRow: true,
+    keysOnType: true,
+    namesOperation: true,
   },
   namespace: {
     identity: (operation) => ({
       namespace: operation.namespace,
       name: operation.namespace,
     }),
-    discriminator: (operation) => operation.type,
-    namesRow: true,
+    keysOnType: true,
+    namesOperation: false,
   },
   callerNamespace: {
     identity: (operation) => ({
       namespace: operation.callerNamespace,
       name: operation.callerNamespace,
     }),
-    discriminator: (operation) => operation.type,
-    namesRow: true,
+    keysOnType: true,
+    namesOperation: false,
   },
   debugCategory: {
     identity: (operation) => ({
       namespace: operation.namespace,
       name: operation.debugCategory,
     }),
-    discriminator: () => "",
-    namesRow: false,
+    keysOnType: false,
+    namesOperation: false,
   },
 };
+
+/**
+ * Ranking each call on its own, which folds nothing and so states everything.
+ * It has no identity or key of its own: two identical calls stay two rows.
+ */
+export const UNGROUPED = {
+  keysOnType: true,
+  namesOperation: true,
+} as const satisfies Omit<Grouping, "identity">;
 
 /**
  * The row an operation folds into under a grouping. Two operations share a row
@@ -278,9 +288,9 @@ export const GROUPINGS: Record<GroupBy, Grouping> = {
  * operations are behind a returned row can ask rather than reproduce the rule.
  */
 export function operationGroupKey(operation: Operation, by: GroupBy): string {
-  const { identity, discriminator } = GROUPINGS[by];
+  const { identity, keysOnType } = GROUPINGS[by];
   const { namespace, name } = identity(operation);
-  return `${discriminator(operation)} ${namespace} ${name}`;
+  return `${keysOnType ? operation.type : ""} ${namespace} ${name}`;
 }
 
 /**
@@ -288,8 +298,8 @@ export function operationGroupKey(operation: Operation, by: GroupBy): string {
  * one row carrying its four hundred calls rather than four hundred rows the
  * ranking pushes apart.
  *
- * Every key carries the grouping's discriminator, so a namespace that runs both
- * queries and methods is two rows rather than one that has to call itself
+ * A key that carries the event type keeps a namespace that runs both queries
+ * and methods as two rows, rather than one that has to call itself
  * mixed. Beside it sits the grouping's identity, so two operations that share a
  * name in different namespaces stay apart rather than merging under whichever
  * namespace was seen first.

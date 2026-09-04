@@ -115,11 +115,9 @@ describe("listOperations", () => {
     ]);
   });
 
-  // Every timed event is ranked, whatever its type, and it reports the category
-  // the parser stamped. An event left out would keep its own time out of the
-  // enclosing frame's self time without becoming a row of its own, so the time
-  // would be reported nowhere. Which category the parser stamps on which type
-  // is pinned against a real parse in `tests/parserContract.test.ts`.
+  // Every timed event is ranked, whatever its type, and reports the category
+  // the parser stamped. Which category goes with which type is pinned against a
+  // real parse in `tests/parserContract.test.ts`.
   it("ranks a timed event of a type it does not know", () => {
     const operations = listOperations(
       logOf({

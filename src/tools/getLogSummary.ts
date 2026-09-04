@@ -65,8 +65,6 @@ interface CategoryRow {
   selfPercentage: number;
 }
 
-type CategoryTotal = { operationCount: number; selfNs: number };
-
 /** Frames beyond this cost more than they say; one real log states 52,009 characters of stack. */
 const FATAL_FRAME_LIMIT = 3;
 
@@ -184,9 +182,9 @@ export async function getLogSummary(args: LogSummaryArgs) {
   const truncated =
     apexLog.isTruncated || apexLog.truncatedEvents.length > 0;
 
-  // Every limit and every kind is reported, at zero included: the caller has to
-  // be able to say "no DML statements ran" and "DB logging was off, so that
-  // detail is missing" without guessing from what is absent.
+  // Every limit and every category is reported, zeros included: the caller has
+  // to be able to say "no DML statements ran" without guessing from what is
+  // absent.
   const summary: LogSummaryResult = {
     fileSizeBytes: apexLog.size,
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
@@ -220,31 +218,32 @@ function timeByCategory(
   operations: Operation[],
   durationTotalNs: number,
 ): CategoryRow[] {
-  // Seeded with every category, so the loop only ever adds to a row that is
-  // there and the categories nothing ran under are still reported, at zero.
-  // The row set is the parser's `DebugLevels` keys rather than a shorter list of
-  // our own, so a category it starts timing needs no change here.
-  const zero = (): CategoryTotal => ({ operationCount: 0, selfNs: 0 });
-  const totals = new Map<DebugCategory, CategoryTotal>(
-    DEBUG_CATEGORIES.map((category) => [category, zero()]),
+  // One total per category up front, so the categories nothing ran under are
+  // still reported, at zero. The row set is the parser's `DebugLevels` keys
+  // rather than a shorter list of our own, so a category it starts timing needs
+  // no change here.
+  const totals = DEBUG_CATEGORIES.map((debugCategory) => ({
+    debugCategory,
+    operationCount: 0,
+    selfNs: 0,
+  }));
+  const byCategory = new Map<DebugCategory, (typeof totals)[number]>(
+    totals.map((total) => [total.debugCategory, total]),
   );
 
   operations.forEach(({ debugCategory, durationSelfNs }) => {
     // Only `""` misses, which the parser never stamps on a timed event.
-    const total = totals.get(debugCategory);
+    const total = byCategory.get(debugCategory);
     if (total) {
       total.operationCount += 1;
       total.selfNs += durationSelfNs;
     }
   });
 
-  return DEBUG_CATEGORIES.map((debugCategory) => {
-    const { operationCount, selfNs } = totals.get(debugCategory) ?? zero();
-    return {
-      debugCategory,
-      operationCount,
-      durationSelfMs: roundMs(selfNs / NS_TO_MS),
-      selfPercentage: roundPercent(percentageOf(selfNs, durationTotalNs)),
-    };
-  });
+  return totals.map(({ debugCategory, operationCount, selfNs }) => ({
+    debugCategory,
+    operationCount,
+    durationSelfMs: roundMs(selfNs / NS_TO_MS),
+    selfPercentage: roundPercent(percentageOf(selfNs, durationTotalNs)),
+  }));
 }

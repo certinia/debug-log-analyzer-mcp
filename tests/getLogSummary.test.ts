@@ -515,6 +515,12 @@ describe("getLogSummary", () => {
   });
 
   describe("timeByCategory", () => {
+    const rowOf = (
+      summary: { timeByCategory: { debugCategory: string }[] },
+      debugCategory: string,
+    ) =>
+      summary.timeByCategory.find((row) => row.debugCategory === debugCategory);
+
     // `database 0` beside `database NONE` means the queries were not logged;
     // the same row beside `database FINEST` means none ran. Neither reads
     // without the row, so every category is reported.
@@ -554,18 +560,13 @@ describe("getLogSummary", () => {
         ],
       });
 
-      const rowOf = (debugCategory: string) =>
-        summary.timeByCategory.find(
-          (row: { debugCategory: string }) => row.debugCategory === debugCategory,
-        );
-
-      expect(rowOf("apexCode")).toEqual({
+      expect(rowOf(summary, "apexCode")).toEqual({
         debugCategory: "apexCode",
         operationCount: 2,
         durationSelfMs: 2500,
         selfPercentage: 20,
       });
-      expect(rowOf("database")).toEqual({
+      expect(rowOf(summary, "database")).toEqual({
         debugCategory: "database",
         operationCount: 1,
         durationSelfMs: 1000,
@@ -587,16 +588,11 @@ describe("getLogSummary", () => {
         ],
       });
 
-      const rowOf = (debugCategory: string) =>
-        summary.timeByCategory.find(
-          (row: { debugCategory: string }) => row.debugCategory === debugCategory,
-        );
-
-      expect(rowOf("visualforce")).toMatchObject({
+      expect(rowOf(summary, "visualforce")).toMatchObject({
         operationCount: 1,
         durationSelfMs: 6000,
       });
-      expect(rowOf("system")).toMatchObject({
+      expect(rowOf(summary, "system")).toMatchObject({
         operationCount: 0,
         durationSelfMs: 0,
       });
