@@ -13,6 +13,7 @@ import {
   type SlowOperationsArgs,
   type SlowOperationsResult,
 } from "../src/tools/listSlowOperations";
+import { node, type NodeSpec, type PlanSpec } from "./support/logEvents";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
 
@@ -49,63 +50,6 @@ const mockStats = {
 
 const ARGS: SlowOperationsArgs = { logFilePath: "/test/file.log" };
 const MS = 1_000_000;
-
-type NodeSpec = {
-  type?: string;
-  category?: string;
-  text?: string | null;
-  namespace?: string;
-  totalNs?: number;
-  selfNs?: number;
-  soqlCount?: number;
-  dmlCount?: number;
-  soslCount?: number;
-  soqlRowCount?: number;
-  dmlRowCount?: number;
-  soslRowCount?: number;
-  thrownCount?: number;
-  heapSelfNetBytes?: number;
-  children?: NodeSpec[];
-  plan?: PlanSpec;
-};
-
-/** What a `SOQL_EXECUTE_EXPLAIN` line carries, as the parser leaves it. */
-type PlanSpec = {
-  leadingOperationType: string | null;
-  relativeCost: number | null;
-  cardinality: number | null;
-  sObjectCardinality: number | null;
-};
-
-function node(spec: NodeSpec): unknown {
-  const total = spec.totalNs ?? 0;
-  const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
-  const built = {
-    ...spec.plan,
-    type: spec.type ?? null,
-    ...(spec.category && { category: spec.category }),
-    text: spec.text ?? null,
-    namespace: spec.namespace ?? "default",
-    duration: { total, self: spec.selfNs ?? total },
-    soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
-    dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
-    soslCount: { total: spec.soslCount ?? 0, self: 0 },
-    soqlRowCount: { total: spec.soqlRowCount ?? 0, self: 0 },
-    dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
-    soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
-    thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
-    heapAllocated: {
-      total: spec.heapSelfNetBytes ?? 0,
-      self: spec.heapSelfNetBytes ?? 0,
-    },
-    children,
-  };
-
-  // The parser links every child to its parent, and `callerNamespace` reads it.
-  children.forEach((child) => (child.parent = built));
-
-  return built;
-}
 
 /** A log whose root is the transaction frame, and which runs `children`. */
 function mockLog(totalNs: number, ...children: NodeSpec[]): void {

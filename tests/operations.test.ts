@@ -17,55 +17,7 @@ import {
   OPERATION_KINDS,
   type Operation,
 } from "../src/tools/operations";
-
-type NodeSpec = {
-  type?: string | null;
-  category?: string;
-  debugCategory?: string;
-  text?: string | null;
-  namespace?: string | null;
-  totalNs?: number;
-  selfNs?: number;
-  soqlCount?: number;
-  dmlCount?: number;
-  soslCount?: number;
-  soqlRowCount?: number;
-  dmlRowCount?: number;
-  soslRowCount?: number;
-  thrownCount?: number;
-  heapSelfNetBytes?: number;
-  children?: NodeSpec[];
-};
-
-function node(spec: NodeSpec): unknown {
-  const total = spec.totalNs ?? 0;
-  const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
-  const built = {
-    type: spec.type ?? null,
-    ...(spec.category && { category: spec.category }),
-    ...(spec.debugCategory && { debugCategory: spec.debugCategory }),
-    text: spec.text ?? null,
-    namespace: spec.namespace ?? "default",
-    duration: { total, self: spec.selfNs ?? total },
-    soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
-    dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
-    soslCount: { total: spec.soslCount ?? 0, self: 0 },
-    soqlRowCount: { total: spec.soqlRowCount ?? 0, self: 0 },
-    dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
-    soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
-    thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
-    heapAllocated: {
-      total: spec.heapSelfNetBytes ?? 0,
-      self: spec.heapSelfNetBytes ?? 0,
-    },
-    children,
-  };
-
-  // The parser links every child to its parent, and `callerNamespace` reads it.
-  children.forEach((child) => (child.parent = built));
-
-  return built;
-}
+import { node, type NodeSpec } from "./support/logEvents";
 
 /** A log whose root is the transaction frame the parser always emits. */
 function logOf(...children: NodeSpec[]): ApexLog {
