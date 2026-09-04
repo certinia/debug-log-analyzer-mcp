@@ -47,10 +47,8 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 ### Fixed
 
 - Rank the operations of a modern log correctly. An event the parser did not know was dropped, and its children reattached to the wrong parent ([#97])
-- Bound what `apexlog_list_slow_operations` returns by size, not row count: a `name` is elided past 400 characters, a page stops at 60,000 with plans included, and a query text is stated once rather than on both the ranked row and its plan. The worst of 124 real responses falls from 35,520 tokens to 15,511 ([#108], [#120])
+- Bound what `apexlog_list_slow_operations` returns by size, not row count: a `name` is elided past 400 characters and a page stops at 60,000. The worst of 124 real responses falls from 35,520 tokens to 15,511 ([#108])
 - Refuse a `limit` or `offset` that is not a whole number at or above zero. `limit: -5` returned the whole ranking where a page was asked for, undetectably ([#108])
-- Report `truncated` from `apexlog_get_summary` on a log a section was skipped from, not only on one that ran out mid-transaction ([#124])
-- Report a grouped `durationTotalMs` below the row's own `durationSelfMs`, which is impossible ([#101])
 - Return the debug log of the run that produced it, where the newest log for the user could be another process's. A run the org returned no log for now says so ([#65])
 - Declare `apexlog_execute_anonymous` destructive, so clients stop treating it as safe to run unprompted ([#52])
 - Warn when a caller-given `apexlog_execute_anonymous` `outputDir` resolves outside every root the client declared. The log is still written, and the response names where it went ([#109])
@@ -84,7 +82,6 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#126]: https://github.com/certinia/debug-log-analyzer-mcp/issues/126
 [#127]: https://github.com/certinia/debug-log-analyzer-mcp/issues/127
 [#131]: https://github.com/certinia/debug-log-analyzer-mcp/issues/131
-[#124]: https://github.com/certinia/debug-log-analyzer-mcp/issues/124
 [#102]: https://github.com/certinia/debug-log-analyzer-mcp/issues/102
 [#63]: https://github.com/certinia/debug-log-analyzer-mcp/issues/63
 [#120]: https://github.com/certinia/debug-log-analyzer-mcp/issues/120
