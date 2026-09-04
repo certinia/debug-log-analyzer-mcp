@@ -43,8 +43,18 @@ export const listSlowOperationsInputSchema = {
     .describe("Drop operations below this self time (default: 0)"),
   limit: z
     .number()
+    .int()
+    .min(0)
     .optional()
-    .describe("Rows to return (default: 10); fewer if the page would be too large"),
+    .describe("Page size (default: 10); fewer if the page would be too large"),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.",
+    ),
   groupBy: z
     .enum([...GROUP_BY, "none"])
     .optional()
@@ -120,9 +130,9 @@ export interface SlowOperationsResult extends CaptureLevels {
    */
   returnedSelfPercentage: number;
   /**
-   * Rows the selection matched, before `limit` or the page budget cut it. Above
-   * the returned count it says rows were held back, which no other figure in
-   * the response states.
+   * Rows the selection matched, before `offset`, `limit` or the page budget cut
+   * it. Above the returned count it says rows were held back, which no other
+   * figure in the response states.
    */
   matchedCount: number;
   operations: SlowOperation[];
@@ -298,6 +308,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     namespace,
     minSelfMs = 0,
     limit = 10,
+    offset = 0,
     groupBy = "name",
   } = args;
 
@@ -321,8 +332,10 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
     // NaN, which fails both, and such an operation must be dropped, not ranked.
     .filter((operation) => operation.durationSelfNs >= minSelfNs)
+    // Stable by specification, and the sort key is one number, so a caller
+    // walking the ranking with `offset` sees each row once and in one order.
     .sort((a, b) => b.durationSelfNs - a.durationSelfNs);
-  const page = matched.slice(0, limit);
+  const page = matched.slice(offset, offset + limit);
 
   const selfPercentageOf = (operation: Operation) =>
     durationTotalNs > 0 ? (operation.durationSelfNs / durationTotalNs) * 100 : 0;

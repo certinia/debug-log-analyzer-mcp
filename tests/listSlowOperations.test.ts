@@ -180,6 +180,7 @@ describe("listSlowOperations", () => {
         "namespace",
         "minSelfMs",
         "limit",
+        "offset",
         "groupBy",
       ]);
     });
@@ -340,6 +341,38 @@ describe("listSlowOperations", () => {
     );
 
     expect((await ranked({ ...ARGS, limit: 1 })).operations).toHaveLength(1);
+  });
+
+  it("pages the ranking from offset, so a caller can walk past the first page", async () => {
+    mockLog(
+      1000 * MS,
+      method({ text: "A.run", totalNs: 500 * MS }),
+      method({ text: "B.run", totalNs: 400 * MS }),
+      method({ text: "C.run", totalNs: 300 * MS }),
+    );
+
+    const result = await ranked({ ...ARGS, limit: 1, offset: 1 });
+
+    expect(result.operations.map((row) => row.name)).toEqual(["B.run"]);
+    // The rows behind the page are still counted, or a caller cannot tell it
+    // has reached the end.
+    expect(result.matchedCount).toBe(3);
+  });
+
+  // `slice(0, -5)` drops the five fastest rows and returns all the rest, so a
+  // page of ten becomes the whole ranking and no caller can detect it;
+  // `slice(0, 3.7)` is a whole-number cut spelled as a fraction. The schema is
+  // where both stop.
+  it.each([
+    ["negative", -5],
+    ["fractional", 3.7],
+  ])("refuses a %s limit or offset", (_name, value) => {
+    expect(listSlowOperationsInputSchema.limit.safeParse(value).success).toBe(
+      false,
+    );
+    expect(listSlowOperationsInputSchema.offset.safeParse(value).success).toBe(
+      false,
+    );
   });
 
   it("keeps the head and the tail of an over-long name", async () => {

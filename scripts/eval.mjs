@@ -256,10 +256,15 @@ const DEFINITION_BUDGET = {
   // for what grouping by default now states about the row it returns, and for
   // callerNamespace, which needs a clause to say what it attributes, and for the
   // clause #120 added to say the response also carries the query plans, and
-  // for saying that a plan names its row except under a namespace grouping —
-  // an agent that assumes the query text is always there reads `undefined` —
-  // and that a page can come back shorter than asked for.
-  apexlog_list_slow_operations: 415,
+  // for `offset` beside the whole-number floor on `limit` — a schema that
+  // states `integer` and `minimum` costs tokens, and buys a `limit` of -5 no
+  // longer returning the whole ranking bar its five fastest rows, and for the
+  // clause saying
+  // a plan names its row except under a namespace grouping — an agent that
+  // assumes the query text is always there reads `undefined` — and for telling
+  // a caller to advance `offset` by the rows it got, since the page budget can
+  // return fewer than `limit` and paging by `limit` would then skip rows.
+  apexlog_list_slow_operations: 470,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
   // time by kind of operation.
   apexlog_get_summary: 180,
