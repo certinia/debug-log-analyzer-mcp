@@ -27,6 +27,7 @@ import {
 import {
   NS_TO_MS,
   omitEmpty,
+  percentageOf,
   roundMs,
   roundPercent,
 } from "./responseShaping.js";
@@ -180,6 +181,27 @@ export interface SlowOperationsResult extends CaptureLevels {
    * concentrated here — the one thing the table itself does not say.
    */
   returnedSelfPercentage: number;
+  /**
+   * Share of the heap the transaction retained that the returned rows carry
+   * between them, present under `sortBy: "heapSelfNetBytes"` alone — beside the
+   * column it qualifies, and on the one ranking it says anything about.
+   *
+   * The rows do not always hold it: a default page carries a median 98.3% of
+   * the transaction's net heap, but under 90% on 17 of the 40 logs in a corpus
+   * that allocate, and as little as 50%, because one log needs 64 rows to reach
+   * 90%. Nothing else in any response says so — the transaction's *net* heap is
+   * reported nowhere, and `apexlog_get_summary` carries the peak live figure,
+   * which is a different measure and not a denominator for these rows.
+   *
+   * Against the whole log and not the selection, on the same footing as
+   * `returnedSelfPercentage` beside it.
+   *
+   * It can read above 100 where rows outside the page freed more than they
+   * took, since those lower the denominator and not the page. No log in the
+   * corpus does: 0 to 100 across all 123, and a net-negative row has never
+   * reached a top ten.
+   */
+  returnedHeapPercentage?: number;
   /**
    * Rows the selection matched, before `offset`, `limit` or the page budget cut
    * it. Above the returned count it says rows were held back, which no other
@@ -376,6 +398,10 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
 
   const apexLog = await loadApexLog(logFilePath);
   const durationTotalNs = apexLog.duration.total;
+  // The log's own net heap, which the operation rows account for in full: they
+  // carry 100.0% of it on every one of the 40 logs in a corpus that allocate,
+  // min to max, because an allocation lands in the `self` of exactly one node.
+  const heapTotalBytes = apexLog.heapAllocated.total;
   const minSelfNs = minSelfMs * NS_TO_MS;
 
   const selected = listOperations(apexLog).filter(
@@ -400,7 +426,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   const page = matched.slice(offset, offset + limit);
 
   const selfPercentageOf = (operation: Operation) =>
-    durationTotalNs > 0 ? (operation.durationSelfNs / durationTotalNs) * 100 : 0;
+    percentageOf(operation.durationSelfNs, durationTotalNs);
 
   // The column set is spelled out rather than spread, so the compiler fails the
   // build if an `Operation` field is added without deciding whether it belongs
@@ -484,6 +510,14 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     returnedSelfPercentage: roundPercent(
       ranked.reduce((total, operation) => total + selfPercentageOf(operation), 0),
     ),
+    ...(sortBy === "heapSelfNetBytes" && {
+      returnedHeapPercentage: roundPercent(
+        percentageOf(
+          ranked.reduce((bytes, o) => bytes + o.heapSelfNetBytes, 0),
+          heapTotalBytes,
+        ),
+      ),
+    }),
     matchedCount: matched.length,
     operations,
     ...omitEmpty({ queryPlans }),

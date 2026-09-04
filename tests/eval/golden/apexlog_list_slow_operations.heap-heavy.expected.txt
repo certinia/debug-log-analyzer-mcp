@@ -5,6 +5,7 @@ calloutLevel: NONE
 workflowLevel: NONE
 durationTotalMs: 22
 returnedSelfPercentage: 90.9
+returnedHeapPercentage: 100
 matchedCount: 5
 operations[5]{kind,name,namespace,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount,heapSelfNetBytes}:
   method,HeapService.buildRows(),default,1,9,9,9,40.9,0,0,0,0,0,750000

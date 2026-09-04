@@ -13,9 +13,8 @@ import {
   type SlowOperationsArgs,
   type SlowOperationsResult,
 } from "../src/tools/listSlowOperations";
-import { node, type NodeSpec, type PlanSpec } from "./support/logEvents";
+import { rootLog, type NodeSpec, type PlanSpec } from "./support/logEvents";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
@@ -56,12 +55,7 @@ function mockLog(totalNs: number, ...children: NodeSpec[]): void {
   mockFs.stat.mockResolvedValue(mockStats);
   mockFs.readFile.mockResolvedValue("log content");
   mockParse.mockReturnValue({
-    ...(node({
-      type: "EXECUTION_STARTED",
-      text: "Root",
-      totalNs,
-      children,
-    }) as ApexLog),
+    ...rootLog(totalNs, ...children),
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the ranking alone. The eval goldens
     // cover the levels, against fixtures that carry a real header.
@@ -772,6 +766,35 @@ describe("listSlowOperations", () => {
       ).toBe(-400);
     });
 
+    // The one thing the rows cannot say: whether the page holds the heap that
+    // matters. A default page misses more than a tenth of it on 17 of the 40
+    // real logs that allocate.
+    it("says what share of the transaction's heap the returned rows carry", async () => {
+      mockLog(
+        1000 * MS,
+        method({ text: "Holds", heapSelfNetBytes: 750 }),
+        method({ text: "Some", heapSelfNetBytes: 250 }),
+      );
+
+      const result = await ranked({
+        ...ARGS,
+        sortBy: "heapSelfNetBytes",
+        limit: 1,
+      });
+
+      expect(result.returnedHeapPercentage).toBe(75);
+      // Read against the share, this is what says rows were held back.
+      expect(result.matchedCount).toBe(2);
+    });
+
+    it("reports a zero share when the log retained no heap", async () => {
+      mockLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
+
+      expect(
+        (await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" }))
+          .returnedHeapPercentage,
+      ).toBe(0);
+    });
   });
 
   it("names the real cause when the log cannot be read", async () => {

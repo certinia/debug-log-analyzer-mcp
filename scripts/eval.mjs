@@ -155,6 +155,13 @@ const ANSWERABILITY = {
       columns: ["heapSelfNetBytes"],
     },
     {
+      // The rows name the retainers; only this says whether they are most of
+      // the problem. Pinned to the same heap-ranked case.
+      fixture: "heap-heavy",
+      question: "Do those rows account for most of the heap, or is it spread?",
+      fields: ["returnedHeapPercentage"],
+    },
+    {
       // Only where a query was ranked and the log recorded a plan for it.
       // `minimal.log` runs no query, and an absent table is the honest answer.
       fixture: "governor-heavy",
