@@ -412,6 +412,42 @@ describe("listSlowOperations", () => {
     expect(result.matchedCount).toBe(200);
   });
 
+  it("spends the same budget on the plans behind a namespace row", async () => {
+    // A namespace row names the namespace, so every plan under it carries its
+    // own query text. Left outside the budget the table grew without limit: on
+    // one real log 30 such plans were 90% of the response.
+    mockLog(
+      1000 * MS,
+      ...Array.from({ length: 200 }, (_, index) =>
+        explainedQuery(
+          {
+            text: `SELECT f${index},`.padEnd(600, "x"),
+            namespace: "Custom",
+            totalNs: (200 - index) * MS,
+          },
+          {},
+        ),
+      ),
+    );
+
+    const result = await ranked({ ...ARGS, groupBy: "namespace", limit: 200 });
+    const cost = (rows: object[]) =>
+      rows.reduce(
+        (total, row) =>
+          total +
+          Object.values(row).reduce(
+            (cells, cell) => cells + String(cell).length + 1,
+            0,
+          ),
+        0,
+      );
+
+    expect(result.queryPlans?.length).toBeGreaterThan(0);
+    expect(result.queryPlans?.length).toBeLessThan(200);
+    expect(cost([...result.operations, ...(result.queryPlans ?? [])])).
+      toBeLessThanOrEqual(60_000);
+  });
+
   it("returns ten rows when the caller sets no limit", async () => {
     mockLog(
       1000 * MS,
@@ -542,6 +578,38 @@ describe("listSlowOperations", () => {
       expect(
         (await ranked({ ...ARGS, groupBy: "namespace" })).queryPlans?.[0],
       ).toEqual(expect.objectContaining({ name: "SELECT Id" }));
+    });
+
+    // Ungrouped, a row is one call, so it must be told that call's own plan.
+    // The worst-per-text plan is the figure to act on for a group, but here it
+    // would state a cost the optimiser never reached for the row.
+    it("states each call's own plan when every row is one call", async () => {
+      mockLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+        }),
+        explainedQuery({ text: "SELECT Id", totalNs: 200 * MS }, {
+          leadingOperationType: "Index",
+          relativeCost: 0.5,
+        }),
+      );
+
+      expect(
+        (await ranked({ ...ARGS, groupBy: "none" })).queryPlans,
+      ).toEqual([
+        expect.objectContaining({
+          operationRow: 1,
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+        }),
+        expect.objectContaining({
+          operationRow: 2,
+          leadingOperationType: "Index",
+          relativeCost: 0.5,
+        }),
+      ]);
     });
 
     it("drops a plan the log did not record in full", async () => {

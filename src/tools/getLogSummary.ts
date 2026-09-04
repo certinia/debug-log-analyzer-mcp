@@ -124,18 +124,28 @@ function fatalErrors(logIssues: LogIssue[]): FatalError[] {
     }));
 }
 
-/** One frame past the limit is read, and only to know whether to say frames were dropped. */
+/**
+ * Blank lines are dropped before the limit is counted against, not after, so a
+ * description that holds one still reports `FATAL_FRAME_LIMIT` real frames and
+ * says frames were dropped only where a real one was.
+ */
 function innermostFrames(description: string): string {
-  const lines = description.split("\n", FATAL_FRAME_LIMIT + 1);
-  const frames = lines
-    .slice(0, FATAL_FRAME_LIMIT)
-    .map((frame) => frame.trim())
-    .filter((frame) => frame.length > 0);
+  const frames: string[] = [];
+  let dropped = false;
 
-  const shown =
-    lines.length > FATAL_FRAME_LIMIT
-      ? [...frames, "…"].join(" | ")
-      : frames.join(" | ");
+  for (const line of description.split("\n")) {
+    const frame = line.trim();
+    if (frame.length === 0) {
+      continue;
+    }
+    if (frames.length === FATAL_FRAME_LIMIT) {
+      dropped = true;
+      break;
+    }
+    frames.push(frame);
+  }
+
+  const shown = dropped ? [...frames, "…"].join(" | ") : frames.join(" | ");
 
   return clip(shown, FATAL_FRAMES_LIMIT);
 }
@@ -153,8 +163,8 @@ interface LogSummaryResult {
   truncatedBy?: string[];
   /**
    * The bytes the platform said it skipped, which only a `skipped-lines` region
-   * states. Gated on `truncated`, so 0 beside a `max-size` region means the
-   * extent of that loss is unstated rather than nil.
+   * states. Gated on the platform having truncated the log, so 0 beside a
+   * `max-size` region means the extent of that loss is unstated rather than nil.
    */
   skippedBytes?: number;
   thrownCount: number;
@@ -185,7 +195,11 @@ export async function getLogSummary(args: LogSummaryArgs) {
     fileSizeBytes: apexLog.size,
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
     truncated,
-    ...(truncated && {
+    // Both come from `truncation.regions`, which only the platform's own
+    // truncation fills. A log that merely stops mid-frame has none, and
+    // reporting the pair off `truncated` said the platform skipped 0 bytes for
+    // no stated reason, where it had skipped nothing at all.
+    ...(apexLog.isTruncated && {
       truncatedBy: [
         ...new Set(apexLog.truncation.regions.map((region) => region.kind)),
       ],

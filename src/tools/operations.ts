@@ -195,6 +195,15 @@ export interface Operation {
    * response.
    */
   parent: Operation | null;
+  /**
+   * The event this operation was read from, so a caller can reach what the
+   * operation's own columns do not carry — the query plan under this one call,
+   * rather than the worst plan for its text.
+   *
+   * Internal, and only meaningful on an ungrouped operation: `groupOperations`
+   * folds many events into one row and keeps the first member's node.
+   */
+  node: LogEvent;
 }
 
 /**
@@ -319,6 +328,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
         node.soslRowCount.total,
       thrownCount: node.thrownCount.total,
       parent: parent ?? null,
+      node,
     };
     operations.push(operation);
 
