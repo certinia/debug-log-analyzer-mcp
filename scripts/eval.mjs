@@ -328,11 +328,8 @@ const FIXTURES_BY_TOOL = {
  * The answers table is keyed on tools rather than on cases, so a fixture added
  * to pin a correctness fact does not also add a published row. `governor-heavy`
  * is the log every tool is measured against, and the only one with a 1.x
- * baseline to compare against.
- *
- * A bigger log would not move the figures: the response is bounded by its shape
- * — a fixed table of governor limits, a row cap on the ranked operations — and
- * not by the bytes parsed.
+ * baseline to compare against. Why a bigger log would not move the figures is
+ * in the README, beside the table itself.
  */
 const PUBLISHED_FIXTURE = "governor-heavy";
 
@@ -353,6 +350,10 @@ const CASE_KEYS = new Set(
  * budget that is missing, and a retired case's golden file simply stops being
  * read. So dropping a fixture or a tool from `FIXTURES_BY_TOOL` retires every
  * check scoped to it and the run still passes.
+ *
+ * `PUBLISHED_FIXTURE` has the hole too, from the other side: the answers block
+ * renders whichever cases match it, so a tool that stops being measured against
+ * it loses its published row rather than failing.
  *
  * `SELECTION_KEYWORDS` has the same hole but is keyed by what `tools/list`
  * returns rather than by a case, so `checkDefinitionBudget` is where it belongs.
@@ -402,10 +403,7 @@ function checkChecksAreRun(failures) {
         `${tool}: measured against ${FIXTURES_BY_TOOL[tool].length} fixture(s) with no answerability checks declared`,
       );
     }
-    // Nothing else notices a tool dropping out of the published table: the
-    // answers block is rendered from whichever cases match, so a tool that
-    // stops being measured against the published fixture simply loses its row.
-    if (!CASE_KEYS.has(`${tool}/${PUBLISHED_FIXTURE}`)) {
+    if (notRun(tool, PUBLISHED_FIXTURE)) {
       failures.push(
         `${tool}: the README publishes a cost against ${PUBLISHED_FIXTURE}, which this run does not measure it against`,
       );
@@ -792,10 +790,13 @@ function renderTokenCost(costs, responses) {
         ["Tool", "Response", "1.x", "Change"],
         responses
           .filter(({ fixture }) => fixture === PUBLISHED_FIXTURE)
-          .map(({ tool, fixture, tokens }) => [
+          .map(({ tool, tokens }) => [
             `\`${tool}\``,
             `~${thousands(tokens)}`,
-            ...comparison(V1_RESPONSE_TOKENS[`${tool}/${fixture}`], tokens),
+            ...comparison(
+              V1_RESPONSE_TOKENS[`${tool}/${PUBLISHED_FIXTURE}`],
+              tokens,
+            ),
           ]),
       ),
     },
