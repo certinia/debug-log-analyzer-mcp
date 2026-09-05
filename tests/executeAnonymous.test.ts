@@ -16,8 +16,8 @@ jest.mock("../src/salesforce/users", () => ({
   getUserIdByUsername: jest.fn(),
 }));
 
-// Only the network call is mocked — LOG_LEVELS and TRACE_CATEGORIES are the
-// real ones, because the input schema is built from them at import time.
+// Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
+// the tests below assert the levels this tool asks the org for.
 jest.mock("../src/salesforce/debugLevels", () => ({
   ...jest.requireActual("../src/salesforce/debugLevels"),
   ensureDebugLevel: jest.fn(),
@@ -60,10 +60,8 @@ import {
 } from "@modelcontextprotocol/server";
 import { ConfigAggregator, StateAggregator } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
-import {
-  executeAnonymous,
-  ExecuteAnonymousArgs,
-} from "../src/tools/executeAnonymous";
+import { executeAnonymous } from "../src/tools/executeAnonymous";
+import type { ExecuteAnonymousArgs } from "../src/tools/executeAnonymousDefinition";
 import { getUserIdByUsername } from "../src/salesforce/users";
 import {
   ensureDebugLevel,
@@ -1243,56 +1241,6 @@ describe("Execute Anonymous", () => {
         toonDecode(await executeAnonymous(mockServer, args, ctx, policy()))
           .outputDirCreated,
       ).toBe(false);
-    });
-  });
-
-  describe("executeAnonymousToolConfig", () => {
-    it("should have correct tool definition", async () => {
-      const { executeAnonymousToolConfig, executeAnonymousInputSchema } =
-        await import("../src/tools/executeAnonymous");
-
-      const config = executeAnonymousToolConfig();
-
-      expect(config.description).toContain(
-        "Execute a snippet of anonymous Apex",
-      );
-      expect(config.description).toContain("--allow-production-orgs");
-      expect(config.description).not.toContain("[DISABLED");
-      expect(config.annotations.destructiveHint).toBe(true);
-      expect(executeAnonymousInputSchema.apex).toBeDefined();
-      expect(executeAnonymousInputSchema.targetOrg).toBeDefined();
-      expect(executeAnonymousInputSchema.outputDir).toBeDefined();
-      expect(executeAnonymousInputSchema.debugLevel).toBeDefined();
-    });
-
-    it("should accept the three debugLevel forms and reject an unknown category", async () => {
-      const { executeAnonymousInputSchema } = await import(
-        "../src/tools/executeAnonymous"
-      );
-      const debugLevel = executeAnonymousInputSchema.debugLevel;
-
-      expect(debugLevel.safeParse("default").success).toBe(true);
-      expect(debugLevel.safeParse("FINEST").success).toBe(true);
-      expect(
-        debugLevel.safeParse({ apexCode: "FINEST", database: "NONE" }).success,
-      ).toBe(true);
-
-      expect(debugLevel.safeParse("LOUDEST").success).toBe(false);
-      expect(debugLevel.safeParse({ apexCode: "LOUDEST" }).success).toBe(false);
-      expect(debugLevel.safeParse({ notACategory: "FINE" }).success).toBe(
-        false,
-      );
-    });
-
-    it("should flag the tool as disabled in its description when execution is off", async () => {
-      const { executeAnonymousToolConfig } = await import(
-        "../src/tools/executeAnonymous"
-      );
-
-      const config = executeAnonymousToolConfig(true);
-
-      expect(config.description).toContain("[DISABLED on this server]");
-      expect(config.description).toContain("--no-apex-execution");
     });
   });
 

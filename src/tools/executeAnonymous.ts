@@ -1,15 +1,16 @@
+// First, so the guard runs before the SDK below is evaluated. `src/index.ts`
+// guards the `bin` alone, and this module is the entry point of the lazy chunk.
+import "../salesforce/logging.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { z } from "zod";
 import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
-import { Connection, StateAggregator } from "@salesforce/core";
+// This module calls the SDK, so it is reached only through an `await import()`.
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
+import { StateAggregator, type Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   ensureDebugLevel,
-  DEFAULT_TRACE_CONFIG,
-  LOG_LEVELS,
-  TRACE_CATEGORIES,
   type DebugLevelInput,
   type TraceConfig,
 } from "../salesforce/debugLevels.js";
@@ -27,11 +28,13 @@ import {
   type OrgClassification,
 } from "../salesforce/orgClassification.js";
 import {
+  apexExecutionRefusal,
   authorizeExecution,
-  APEX_EXECUTION_DISABLED_MESSAGE,
+  toolError,
   type ConsumeConfirmation,
   type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
+import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */
 const PROGRESS_STEPS = 4;
@@ -42,57 +45,6 @@ const CLOCK_SKEW_MS = 5 * 60 * 1000;
 const NO_LOG_CAPTURED_WARNING =
   "Salesforce returned no debug log for this run, so the saved file is empty and durationMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
 
-const logLevelSchema = z.enum(LOG_LEVELS);
-
-/**
- * The defaults, read from `DEFAULT_TRACE_CONFIG` so the description cannot go
- * stale. Categories are grouped by level to keep the wire text short:
- * "apexCode, workflow FINE; callout DEBUG".
- */
-function defaultLevelsClause(): string {
-  const byLevel = Object.entries(DEFAULT_TRACE_CONFIG).reduce(
-    (acc, [category, level]) =>
-      acc.set(level, [...(acc.get(level) ?? []), category]),
-    new Map<string, string[]>(),
-  );
-
-  return [...byLevel]
-    .map(([level, categories]) => `${categories.join(", ")} ${level}`)
-    .join("; ");
-}
-
-export const executeAnonymousInputSchema = {
-  apex: z.string().describe("The anonymous Apex to be executed"),
-  targetOrg: z
-    .string()
-    .optional()
-    .describe(
-      "Alias or username of the target Salesforce org. Uses the project default if not specified.",
-    ),
-  outputDir: z
-    .string()
-    .optional()
-    .describe(
-      "Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root.",
-    ),
-  // The enums already list the levels and the categories, so the description
-  // says only what they cannot: what each of the three forms does, and the
-  // per-category defaults.
-  debugLevel: z
-    .union([
-      z.enum(["default", ...LOG_LEVELS]),
-      z.partialRecord(z.enum(TRACE_CATEGORIES), logLevelSchema),
-    ])
-    .optional()
-    .describe(
-      `Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: ${defaultLevelsClause()}.`,
-    ),
-};
-
-export type ExecuteAnonymousArgs = z.infer<
-  z.ZodObject<typeof executeAnonymousInputSchema>
->;
-
 export type ExecuteAnonymousPolicy = {
   allowProductionOrgs: boolean;
   apexExecutionDisabled: boolean;
@@ -100,30 +52,6 @@ export type ExecuteAnonymousPolicy = {
   mintConfirmationState: MintConfirmationState;
   consumeConfirmation: ConsumeConfirmation;
 };
-
-const EXECUTE_ANONYMOUS_DESCRIPTION =
-  "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI). Saves the resulting debug log to a local file and returns a summary with the file path, which the analysis tools accept. Production orgs require per-call user confirmation or the --allow-production-orgs server flag.";
-
-/**
- * The tool is always registered so that agents can discover it. When Apex
- * execution is disabled the description says so up front, which saves the agent
- * a call to find out.
- */
-export function executeAnonymousToolConfig(apexExecutionDisabled = false) {
-  return {
-    title: "Execute Anonymous Apex",
-    description: apexExecutionDisabled
-      ? `[DISABLED on this server] ${EXECUTE_ANONYMOUS_DESCRIPTION} ${APEX_EXECUTION_DISABLED_MESSAGE}`
-      : EXECUTE_ANONYMOUS_DESCRIPTION,
-    inputSchema: executeAnonymousInputSchema,
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: false,
-      openWorldHint: true,
-    },
-  };
-}
 
 async function getRootPaths(server: McpServer): Promise<string[]> {
   try {
@@ -179,13 +107,6 @@ async function getAliasForUsername(
   return stateAggregator.aliases.get(username) ?? undefined;
 }
 
-function toolError(text: string) {
-  return {
-    content: [{ type: "text" as const, text }],
-    isError: true,
-  };
-}
-
 export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
@@ -195,9 +116,12 @@ export async function executeAnonymous(
   const { apex, targetOrg, debugLevel } = args;
 
   // Short-circuit before touching the client or the org, so a server running with
-  // --no-apex-execution makes no Salesforce calls at all.
-  if (policy.apexExecutionDisabled) {
-    return toolError(APEX_EXECUTION_DISABLED_MESSAGE);
+  // --no-apex-execution makes no Salesforce calls at all. `src/server.ts` asks
+  // the same question before it loads this module; this stands for a direct
+  // caller.
+  const refused = apexExecutionRefusal(policy.apexExecutionDisabled);
+  if (refused) {
+    return refused;
   }
 
   const report = progressReporter(ctx);

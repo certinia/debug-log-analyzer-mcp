@@ -1,3 +1,8 @@
+// First, so the guard runs before the SDK below is evaluated. Both modules that
+// call the SDK carry it: whichever is reached first must set it.
+import "./logging.js";
+// This module calls the SDK, so it is reached only through an `await import()`.
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import { ConfigAggregator, OrgConfigProperties, Org } from "@salesforce/core";
 
 export async function resolveOrg(
