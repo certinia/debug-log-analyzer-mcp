@@ -797,6 +797,70 @@ function checkCacheHints(result, failures) {
   }
 }
 
+/** How long the server gets to answer `tools/list` under the hook. */
+const STARTUP_PROBE_TIMEOUT_MS = 30_000;
+
+/**
+ * Starting the server and listing its tools must not load the Salesforce SDK.
+ *
+ * Driven against `dist/index.js`, the file that ships, because that is what the
+ * startup figure in the README and the CHANGELOG is measured against. The
+ * ESLint rule and `tests/salesforceCoreIsLazy.test.ts` read `src/`, so neither
+ * sees what `tsc` emitted, the `bin` entry point, or an `await import` added to
+ * a startup path later.
+ *
+ * The hook throws on resolve, so a violation kills the server before it answers
+ * and the message reaches stderr.
+ */
+async function checkNoSdkAtStartup(failures) {
+  const hook = path.join(ROOT, "scripts", "noSalesforceSdkAtStartup.mjs");
+  const child = spawn("node", ["--import", hook, SERVER], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => (stdout += chunk.toString()));
+  child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+
+  const answered = new Promise((resolve) => {
+    child.stdout.on("data", () => {
+      if (stdout.includes('"tools"')) resolve(true);
+    });
+    child.on("exit", () => resolve(false));
+    setTimeout(resolve, STARTUP_PROBE_TIMEOUT_MS, false).unref();
+  });
+
+  child.stdin.write(
+    `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "apex-log-mcp-eval", version: "0" },
+      },
+    })}\n`,
+  );
+  child.stdin.write(
+    `${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} })}\n`,
+  );
+
+  const listed = await answered;
+  child.kill();
+
+  if (!listed) {
+    // The hook's own message, out of the stack Node prints around it.
+    const reason = /^Error: (.+)$/m.exec(stderr)?.[1];
+    failures.push(
+      `startup: ${reason ?? `the server answered no tools/list — ${stderr.trim()}`}`,
+    );
+    return;
+  }
+  console.log("checked startup — the Salesforce SDK is not loaded to list tools");
+}
+
 function checkSelectionKeywords(costs, failures) {
   for (const { name, description } of costs) {
     const lowered = description.toLowerCase();
@@ -955,6 +1019,7 @@ async function main() {
   const failures = [];
 
   checkChecksAreRun(failures);
+  await checkNoSdkAtStartup(failures);
 
   const responses = [];
 

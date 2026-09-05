@@ -15,7 +15,7 @@ describe("the Salesforce SDK", () => {
    *
    * What this does not prove: anything about `dist/`, and anything about an
    * `await import("@salesforce/core")` added inside a hot path later. The
-   * measurement in the pull request covers the built output.
+   * startup check in `scripts/eval.mjs` covers the built output.
    */
   it("is not loaded when the server is built", async () => {
     await expect(import("../src/server")).resolves.toBeDefined();
