@@ -298,15 +298,20 @@ carrying 10,600 of its 10,904 ms. So the fact matters and the column does not â€
 what it attributes. Every response that does not pass it is unchanged. The rule: **a fact worth an
 answer but not worth a column belongs in a parameter that reshapes the rows, not in the rows.**
 
-Heap goes one step further and earns a **sort key, plus a column only that key carries**. On the 40
-logs of a 123-log corpus that record an allocation, a ranking by the net heap each row's own code
-retained holds a median 6 of 10 rows the self-time ranking never returns, and a different top row on
-31 of the 40, so the answer is not derivable from the default response. But only 1 of the 103 logs
-that state a heap limit passes half of it, so a permanent column would be all zeros on two thirds
-of responses for a one-in-a-hundred question.
-`sortBy: "heapSelfNetBytes"` asks for the ranking and the column together, and `durationSelfMaxMs`
-under `groupBy` is the same shape. This is the boundary of the fixed-schema rule: **a column the
-caller's own parameter turns on is not an omission, because the parameter says which it is.**
+Heap goes one step further and earns a **sort key, plus the column and scalar only that key carries**.
+On the 40 logs of a 123-log corpus that record an allocation, a ranking by the net heap each row's own
+code retained holds a median 6 of 10 rows the self-time ranking never returns, and a different top row
+on 31 of the 40, so the answer is not derivable from the default response. But only 1 of the 103 logs
+that state a heap limit passes half of it, so permanent fields would be zeros on two thirds of
+responses for a one-in-a-hundred question. `sortBy: "heapSelfNetBytes"` asks for all three together,
+and `durationSelfMaxMs` under `groupBy` is the same shape. This is the boundary of the fixed-schema
+rule: **a field the caller's own parameter turns on is not an omission, because the parameter says
+which it is.**
+
+The scalar it turns on, `returnedHeapPercentage`, follows the rule two sections above: a share the
+returned rows carry qualifies the whole response rather than any one row. It earns its place because
+neither the rows nor another tool can imply it â€” the figures are on the field itself in
+[`listSlowOperations.ts`](src/tools/listSlowOperations.ts).
 
 ### The gate
 

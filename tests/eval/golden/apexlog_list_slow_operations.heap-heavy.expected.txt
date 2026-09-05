@@ -1,5 +1,6 @@
 durationTotalMs: 22
 returnedSelfPercentage: 90.9
+returnedHeapPercentage: 100
 matchedCount: 5
 capturedAt[2]{debugCategory,level}:
   apexCode,FINEST

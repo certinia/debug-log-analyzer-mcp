@@ -13,69 +13,11 @@ import {
   listOperations,
   type Operation,
 } from "../src/tools/operations";
+import { node, rootLog, type NodeSpec } from "./support/logEvents";
 
-type NodeSpec = {
-  type?: string | null;
-  category?: string;
-  debugCategory?: string;
-  text?: string | null;
-  namespace?: string | null;
-  totalNs?: number;
-  selfNs?: number;
-  soqlCount?: number;
-  dmlCount?: number;
-  soslCount?: number;
-  soqlRowCount?: number;
-  dmlRowCount?: number;
-  soslRowCount?: number;
-  thrownCount?: number;
-  heapSelfNetBytes?: number;
-  children?: NodeSpec[];
-};
-
-function node(spec: NodeSpec): unknown {
-  const total = spec.totalNs ?? 0;
-  const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
-  const built = {
-    type: spec.type ?? null,
-    // Both default to the empty string the parser leaves on an untimed event,
-    // because that is what says "this event has no duration".
-    category: spec.category ?? "",
-    debugCategory: spec.debugCategory ?? "",
-    text: spec.text ?? null,
-    namespace: spec.namespace ?? "default",
-    duration: { total, self: spec.selfNs ?? total },
-    soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
-    dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
-    soslCount: { total: spec.soslCount ?? 0, self: 0 },
-    soqlRowCount: { total: spec.soqlRowCount ?? 0, self: 0 },
-    dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
-    soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
-    thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
-    heapAllocated: {
-      total: spec.heapSelfNetBytes ?? 0,
-      self: spec.heapSelfNetBytes ?? 0,
-    },
-    children,
-  };
-
-  // The parser links every child to its parent, and `callerNamespace` reads it.
-  children.forEach((child) => (child.parent = built));
-
-  return built;
-}
-
-/** A log whose root is the transaction frame the parser always emits. */
-function logOf(...children: NodeSpec[]): ApexLog {
-  return node({
-    type: "EXECUTION_STARTED",
-    category: "Apex",
-    debugCategory: "apexCode",
-    text: "Root",
-    totalNs: 1_000_000_000,
-    children,
-  }) as ApexLog;
-}
+/** These cases are about which operations come back, not their share of a log. */
+const logOf = (...children: NodeSpec[]): ApexLog =>
+  rootLog(1_000_000_000, ...children);
 
 const named = (operations: Operation[]) => operations.map((o) => o.name);
 

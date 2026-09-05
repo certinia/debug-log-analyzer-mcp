@@ -1,6 +1,7 @@
 import { Connection } from "@salesforce/core";
 import { LOG_LEVEL } from "@apexdevtools/apex-log-parser/types";
 import type { DebugLevels } from "@apexdevtools/apex-log-parser/types";
+import type { Assert } from "../compileGuards.js";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
 const DEBUG_LEVEL_NAME = "Apex_Log_MCP_Debug_Level";
@@ -94,9 +95,6 @@ export const LOG_CATEGORIES = [
 ] as const;
 
 export type LogCategory = (typeof LOG_CATEGORIES)[number];
-
-/** Fails to compile unless `T` is `true`. */
-type Assert<T extends true> = T;
 
 /**
  * Compile guard for the other direction: every `satisfies` above only checks
