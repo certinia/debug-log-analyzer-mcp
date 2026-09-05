@@ -109,6 +109,8 @@ Rows are `{debugCategory, type, name, namespace, callCount, durationTotalMs, dur
 
 Both classification columns come straight from the log. `debugCategory` is the Salesforce debug log category the platform stamped on the event — `apexCode`, `database`, `system`, `visualforce`, `workflow`, and so on — which is the category that decided whether the event was written at all, and the same spelling `apexlog_execute_anonymous` takes as input. `type` is the log's own event type, which is what the category cannot say: `SOQL_EXECUTE_BEGIN`, `SOSL_EXECUTE_BEGIN` and `DML_BEGIN` all sit under `database`, and an `ENTERING_MANAGED_PKG` row — the time a package spent where the log shows nothing, often most of a transaction — sits under `apexCode` beside the methods it hides.
 
+`sortBy: "heapSelfNetBytes"` ranks by the heap each row's own code retained instead of by time, adding a `heapSelfNetBytes` column and a `returnedHeapPercentage` scalar — the share of the transaction's retained heap the returned rows carry, which the rows cannot imply and no other tool reports. Both are absent from a ranking that did not ask for them. The figure is the signed `HEAP_ALLOCATE` bytes, so a row that released more than it took reads below zero, and an allocation reaches the log only at `APEX_CODE,FINER` and above — the `apexCode` row of `capturedAt` says whether a zero can be real.
+
 `capturedAt` gives `{debugCategory, level}` for each category among the returned rows, so the levels join to the rows on the same key.
 
 `queryPlans` gives what the query optimizer decided about the queries behind the returned rows — `{leadingOperationType, relativeCost, cardinality, sObjectCardinality}`, where a `relativeCost` above 1 means the optimizer will not treat the query as selective. It is absent when the log explained none of them, which the `database` row of `capturedAt` explains: an explain line is written at `database,FINEST` alone. Each plan names its row as `operationRow`, the 1-based line of `operations` as returned — except under a `namespace`, `callerNamespace` or `debugCategory` grouping, where the row is not named after the query and the plan carries the query text as `name` instead.
@@ -125,6 +127,7 @@ A page is bounded by size as well as by `limit`, so you can get fewer rows than 
 | `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large                                            |
 | `offset`        | number   | No       | Ranked rows to skip (default: 0)                                                                         |
 | `groupBy`       | string   | No       | Fold repeats into one row by `name` (default), `namespace`, `callerNamespace` or `debugCategory`; `none` ranks each call |
+| `sortBy`        | string   | No       | Rank on `durationSelfMs` (default) or `heapSelfNetBytes`                                                 |
 
 ### apexlog_get_summary
 

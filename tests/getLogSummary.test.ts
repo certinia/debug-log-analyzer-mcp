@@ -9,6 +9,7 @@ import {
   LogSummaryArgs,
   getLogSummaryToolConfig,
 } from "../src/tools/getLogSummary";
+import { logEvent } from "./support/logEvents";
 import { clearApexLogCache } from "../src/tools/apexLogSource";
 import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
 import { parse } from "@apexdevtools/apex-log-parser";
@@ -59,42 +60,6 @@ const mockStats = {
 } as BigIntStats;
 
 const counts = { total: 0, self: 0 };
-
-/**
- * A timed node, as the tools read one: a timeline category, which is what says
- * it has a duration, the debug log category that gates it, and its own time.
- */
-const node = ({
-  type = null,
-  category = "",
-  debugCategory = "",
-  selfNs = 0,
-  children = [],
-}: {
-  type?: string | null;
-  category?: string;
-  debugCategory?: string;
-  selfNs?: number;
-  children?: LogEvent[];
-}): LogEvent =>
-  ({
-    type,
-    category,
-    debugCategory,
-    children,
-    text: type ?? "",
-    namespace: "default",
-    lineNumber: null,
-    duration: { total: selfNs, self: selfNs },
-    soqlCount: counts,
-    dmlCount: counts,
-    soslCount: counts,
-    soqlRowCount: counts,
-    dmlRowCount: counts,
-    soslRowCount: counts,
-    thrownCount: counts,
-    heapAllocated: counts,
-  }) as unknown as LogEvent;
 
 describe("getLogSummary", () => {
   beforeEach(() => {
@@ -223,7 +188,7 @@ describe("getLogSummary", () => {
       // log cut off by an interrupted download states no region at all, and
       // nothing else in the response would say its figures are floors.
       const summary = await summaryOf({
-        truncatedEvents: [node({ type: "METHOD_ENTRY", category: "Apex" })],
+        truncatedEvents: [logEvent({ type: "METHOD_ENTRY", category: "Apex" })],
       });
 
       expect(summary.truncated).toBe(true);
@@ -559,25 +524,25 @@ describe("getLogSummary", () => {
     it("should count the operations of a category and sum their self time", async () => {
       const summary = await summaryOf({
         children: [
-          node({
+          logEvent({
             type: "METHOD_ENTRY",
             category: "Apex",
             debugCategory: "apexCode",
-            selfNs: 2_000_000_000,
+            totalNs: 2_000_000_000,
             children: [
-              node({
+              {
                 type: "SOQL_EXECUTE_BEGIN",
                 category: "SOQL",
                 debugCategory: "database",
-                selfNs: 1_000_000_000,
-              }),
+                totalNs: 1_000_000_000,
+              },
             ],
           }),
-          node({
+          logEvent({
             type: "METHOD_ENTRY",
             category: "Apex",
             debugCategory: "apexCode",
-            selfNs: 500_000_000,
+            totalNs: 500_000_000,
           }),
         ],
       });
@@ -601,7 +566,7 @@ describe("getLogSummary", () => {
     it("should file an operation under the category that gates it", async () => {
       const summary = await summaryOf({
         children: [
-          node({
+          logEvent({
             type: "VF_EVALUATE_FORMULA_BEGIN",
             category: "System",
             debugCategory: "visualforce",

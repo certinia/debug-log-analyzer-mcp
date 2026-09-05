@@ -33,7 +33,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 ### Added
 
-- Rank `apexlog_list_slow_operations` rows by the net heap each one's own code retained (`sortBy: "heapSelfNetBytes"`), or fold them by the namespace that called the operation (`groupBy: "callerNamespace"`) or by debug log category (`groupBy: "debugCategory"`). On the 40 logs of a 123-log corpus that allocate, a heap top ten holds a median 6 rows of 10 that the self-time top ten never returns ([#99], [#127], [#138])
+- Rank `apexlog_list_slow_operations` rows by the net heap each one's own code retained (`sortBy: "heapSelfNetBytes"`), with the share of the transaction's heap those rows carry, or fold them by the namespace that called the operation (`groupBy: "callerNamespace"`) or by debug log category (`groupBy: "debugCategory"`). On the 40 logs of a 123-log corpus that allocate, a heap top ten holds a median 6 rows of 10 that the self-time top ten never returns, and misses more than a tenth of the heap on 17 of them ([#99], [#127], [#138])
 - Report the query optimiser's plan for the queries behind the returned rows, as a `queryPlans` table. Above a `relativeCost` of 1 the optimiser will not treat the query as selective ([#120])
 - Report the level each debug log category was captured at, as a `capturedAt` table keyed the way the rows are, so the two join ([#102], [#138])
 - Report `matchedCount` from `apexlog_list_slow_operations`, so a caller can tell whether the page cap hid anything ([#63])

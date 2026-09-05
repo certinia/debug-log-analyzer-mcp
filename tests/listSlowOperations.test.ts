@@ -13,8 +13,8 @@ import {
   type SlowOperationsArgs,
   type SlowOperationsResult,
 } from "../src/tools/listSlowOperations";
+import { rootLog, type NodeSpec, type PlanSpec } from "./support/logEvents";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
@@ -50,78 +50,12 @@ const mockStats = {
 const ARGS: SlowOperationsArgs = { logFilePath: "/test/file.log" };
 const MS = 1_000_000;
 
-type NodeSpec = {
-  type?: string;
-  category?: string;
-  debugCategory?: string;
-  text?: string | null;
-  namespace?: string;
-  totalNs?: number;
-  selfNs?: number;
-  soqlCount?: number;
-  dmlCount?: number;
-  soslCount?: number;
-  soqlRowCount?: number;
-  dmlRowCount?: number;
-  soslRowCount?: number;
-  thrownCount?: number;
-  heapSelfNetBytes?: number;
-  children?: NodeSpec[];
-  plan?: PlanSpec;
-};
-
-/** What a `SOQL_EXECUTE_EXPLAIN` line carries, as the parser leaves it. */
-type PlanSpec = {
-  leadingOperationType: string | null;
-  relativeCost: number | null;
-  cardinality: number | null;
-  sObjectCardinality: number | null;
-};
-
-function node(spec: NodeSpec): unknown {
-  const total = spec.totalNs ?? 0;
-  const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
-  const built = {
-    ...spec.plan,
-    type: spec.type ?? null,
-    // Both default to the empty string the parser leaves on an untimed event,
-    // because that is what says the event has no duration.
-    category: spec.category ?? "",
-    debugCategory: spec.debugCategory ?? "",
-    text: spec.text ?? null,
-    namespace: spec.namespace ?? "default",
-    duration: { total, self: spec.selfNs ?? total },
-    soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
-    dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
-    soslCount: { total: spec.soslCount ?? 0, self: 0 },
-    soqlRowCount: { total: spec.soqlRowCount ?? 0, self: 0 },
-    dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
-    soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
-    thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
-    heapAllocated: {
-      total: spec.heapSelfNetBytes ?? 0,
-      self: spec.heapSelfNetBytes ?? 0,
-    },
-    children,
-  };
-
-  // The parser links every child to its parent, and `callerNamespace` reads it.
-  children.forEach((child) => (child.parent = built));
-
-  return built;
-}
-
 /** A log whose root is the transaction frame, and which runs `children`. */
 function mockLog(totalNs: number, ...children: NodeSpec[]): void {
   mockFs.stat.mockResolvedValue(mockStats);
   mockFs.readFile.mockResolvedValue("log content");
   mockParse.mockReturnValue({
-    ...(node({
-      type: "EXECUTION_STARTED",
-      text: "Root",
-      totalNs,
-      children,
-    }) as ApexLog),
+    ...rootLog(totalNs, ...children),
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the ranking alone. The eval goldens
     // cover the levels, against fixtures that carry a real header.
@@ -907,6 +841,35 @@ describe("listSlowOperations", () => {
       ).toBe(-400);
     });
 
+    // The one thing the rows cannot say: whether the page holds the heap that
+    // matters. A default page misses more than a tenth of it on 17 of the 40
+    // real logs that allocate.
+    it("says what share of the transaction's heap the returned rows carry", async () => {
+      mockLog(
+        1000 * MS,
+        method({ text: "Holds", heapSelfNetBytes: 750 }),
+        method({ text: "Some", heapSelfNetBytes: 250 }),
+      );
+
+      const result = await ranked({
+        ...ARGS,
+        sortBy: "heapSelfNetBytes",
+        limit: 1,
+      });
+
+      expect(result.returnedHeapPercentage).toBe(75);
+      // Read against the share, this is what says rows were held back.
+      expect(result.matchedCount).toBe(2);
+    });
+
+    it("reports a zero share when the log retained no heap", async () => {
+      mockLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
+
+      expect(
+        (await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" }))
+          .returnedHeapPercentage,
+      ).toBe(0);
+    });
   });
 
   it("names the real cause when the log cannot be read", async () => {

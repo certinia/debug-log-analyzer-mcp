@@ -156,6 +156,13 @@ const ANSWERABILITY = {
       columns: ["heapSelfNetBytes"],
     },
     {
+      // The rows name the retainers; only this says whether they are most of
+      // the problem. Pinned to the same heap-ranked case.
+      fixture: "heap-heavy",
+      question: "Do those rows account for most of the heap, or is it spread?",
+      fields: ["returnedHeapPercentage"],
+    },
+    {
       // Only where a query was ranked and the log recorded a plan for it.
       // `minimal.log` runs no query, and an absent table is the honest answer.
       fixture: "governor-heavy",
@@ -241,8 +248,9 @@ const TOKEN_BUDGET = {
   "apexlog_list_limit_risks/minimal": 25,
   // The heap ranking over `heap-heavy`: two ranked bodies and the one extra
   // column, which only this case asks for. Raised by #138 for the two
-  // classification columns every ranked row now states.
-  "apexlog_list_slow_operations/heap-heavy": 190,
+  // classification columns every ranked row now states, and again for the
+  // `returnedHeapPercentage` scalar beside them.
+  "apexlog_list_slow_operations/heap-heavy": 207,
   "apexlog_get_summary/heap-heavy": 256,
   "apexlog_get_summary/truncated": 252,
 };
