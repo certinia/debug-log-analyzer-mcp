@@ -7,18 +7,21 @@ import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
-  captureLevels,
+  capturedAt,
   GROUP_BY,
+  GROUPINGS,
   groupOperations,
   listOperations,
   operationGroupKey,
-  OPERATION_KINDS,
-  type CaptureLevels,
+  UNGROUPED,
+  type DeclaredLevel,
   type GroupBy,
   type Operation,
-  type OperationKind,
 } from "./operations.js";
+import { DEBUG_CATEGORIES } from "../salesforce/debugLevels.js";
+import type { DebugCategory } from "@apexdevtools/apex-log-parser/types";
 import {
+  canCarryPlan,
   listQueryPlans,
   planOf,
   type QueryPlan,
@@ -61,11 +64,21 @@ const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
 
 export const listSlowOperationsInputSchema = {
   logFilePath: logFilePathSchema,
-  kind: z
-    .enum(OPERATION_KINDS)
+  debugCategory: z
+    .array(z.enum(DEBUG_CATEGORIES))
     .optional()
-    .describe("Rank only operations of this kind"),
-  namespace: z.string().optional().describe("Rank only this namespace"),
+    .describe("Rank only these debug log categories"),
+  // Free strings and three examples rather than an enum: the parser publishes
+  // `LogEventType` as a type alone, and its 290 names would cost some 1,450
+  // tokens in every `tools/list` — more than the four tools together are
+  // allowed. Tightening this to an enum fails the definition budget.
+  type: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY",
+    ),
+  namespace: z.array(z.string()).optional().describe("Rank only these namespaces"),
   minSelfMs: z
     .number()
     .optional()
@@ -90,7 +103,7 @@ export const listSlowOperationsInputSchema = {
     .enum([...GROUP_BY, "none"])
     .optional()
     .describe(
-      "Fold repeats into one row: by name (default), by namespace, or by callerNamespace, which attributes platform DML to the package that drove it. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
+      "Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
     ),
   sortBy: z
     .enum(SORT_BY)
@@ -128,7 +141,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace grouping.",
+    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace or category grouping.",
   inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -138,8 +151,16 @@ export const listSlowOperationsToolConfig = {
 
 /** One ranked row, in the units and the order the payload uses. */
 export interface SlowOperation {
-  kind: OperationKind;
-  name: string;
+  /** The category that decided whether the operation reached the log at all. */
+  debugCategory: DebugCategory;
+  /**
+   * The log's own event type. Absent under `groupBy: "debugCategory"`, where the
+   * row folds the types of a category together and naming one would name the
+   * first alone.
+   */
+  type?: string;
+  /** Absent under `groupBy: "debugCategory"`, where the category identifies the row. */
+  name?: string;
   namespace: string;
   callCount: number;
   /**
@@ -172,7 +193,7 @@ export interface SlowOperation {
   heapSelfNetBytes?: number;
 }
 
-export interface SlowOperationsResult extends CaptureLevels {
+export interface SlowOperationsResult {
   durationTotalMs: number;
   /**
    * Share of the transaction the returned rows account for between them. A low
@@ -186,13 +207,19 @@ export interface SlowOperationsResult extends CaptureLevels {
    * figure in the response states.
    */
   matchedCount: number;
+  /**
+   * The level each category among the returned rows was captured at, keyed as
+   * the rows are, so the two join. Absent when the header declared none of
+   * them: a level has no zero.
+   */
+  capturedAt?: DeclaredLevel[];
   operations: SlowOperation[];
   /**
    * What the query optimiser decided about the queries behind those rows, one
    * row per distinct query text it explained — a grouped row can stand for
-   * several. Absent when it explained none of them: an
-   * explain is emitted at `DB,FINEST` alone, and `dbLevel` says whether the log
-   * could carry one.
+   * several. Absent when it explained none of them: an explain is emitted at
+   * `database,FINEST` alone, and the `database` row of `capturedAt` says whether
+   * the log could carry one.
    *
    * A separate table rather than a column, because `relativeCost` is null on
    * every row that is not a query, and a table whose rows share no key set
@@ -302,14 +329,14 @@ function plansForRankedRows(
   apexLog: ApexLog,
   perCall: boolean,
 ): RankedPlan[] {
-  if (!ranked.some((operation) => operation.kind === "soql")) {
+  if (!ranked.some(canCarryPlan)) {
     return [];
   }
 
   const explained = perCall ? undefined : listQueryPlans(apexLog);
   const plans: RankedPlan[] = [];
   ranked.forEach((operation, index) => {
-    if (operation.kind !== "soql") {
+    if (!canCarryPlan(operation)) {
       return;
     }
     const plan = explained
@@ -323,14 +350,14 @@ function plansForRankedRows(
 }
 
 /**
- * Plans behind the ranked rows that are named after a namespace.
+ * Plans behind the ranked rows that are named after a namespace or a category.
  *
- * The row does not name the query, so the plan has to. One namespace row can
- * stand for several queries, so the group key is what finds them — and the
- * queries are looked for in the whole selection rather than the page, because
- * the row is a fold of operations the page does not list.
+ * The row does not name the query, so the plan has to. One such row can stand
+ * for several queries, so the group key is what finds them — and the queries are
+ * looked for in the whole selection rather than the page, because the row is a
+ * fold of operations the page does not list.
  */
-function plansForNamespaceRows(
+function plansForFoldedRows(
   selected: Operation[],
   ranked: Operation[],
   groupBy: GroupBy,
@@ -343,7 +370,7 @@ function plansForNamespaceRows(
     selected
       .filter(
         (operation) =>
-          operation.kind === "soql" &&
+          canCarryPlan(operation) &&
           rankedKeys.has(operationGroupKey(operation, groupBy)),
       )
       .map((operation) => operation.name),
@@ -362,10 +389,16 @@ function plansForNamespaceRows(
     .map((plan) => ({ ...plan, name: elide(plan.name, NAME_LIMIT) }));
 }
 
+/** An empty or absent filter selects everything on that axis. */
+function matches(wanted: string[] | undefined, value: string): boolean {
+  return !wanted?.length || wanted.includes(value);
+}
+
 export async function listSlowOperations(args: SlowOperationsArgs) {
   const {
     logFilePath,
-    kind,
+    debugCategory,
+    type,
     namespace,
     minSelfMs = 0,
     limit = 10,
@@ -380,8 +413,9 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
 
   const selected = listOperations(apexLog).filter(
     (operation) =>
-      (!kind || operation.kind === kind) &&
-      (!namespace || operation.namespace === namespace),
+      matches(debugCategory, operation.debugCategory) &&
+      matches(type, operation.type) &&
+      matches(namespace, operation.namespace),
   );
 
   const grouped = groupBy !== "none";
@@ -406,9 +440,14 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // build if an `Operation` field is added without deciding whether it belongs
   // on the wire, and so the columns arrive in a readable order. It is a fixed
   // set: a zero SOQL count reads as "none" rather than "not measured".
+  const { keysOnType } = groupBy === "none" ? UNGROUPED : GROUPINGS[groupBy];
+
   const toRow = (operation: Operation): SlowOperation => ({
-    kind: operation.kind,
-    name: elide(operation.name, NAME_LIMIT),
+    debugCategory: operation.debugCategory,
+    ...(keysOnType && {
+      type: operation.type,
+      name: elide(operation.name, NAME_LIMIT),
+    }),
     namespace: operation.namespace,
     callCount: operation.callCount,
     durationTotalMs: roundMs(operation.durationTotalNs / NS_TO_MS),
@@ -454,14 +493,13 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   const ranked = page.slice(0, operations.length);
 
   // Only the returned rows are explained, so the table qualifies what the
-  // response says rather than ranking a second time. Grouping by name, and
-  // ranking each call on its own, both name a query row after the query, so
-  // the plan points at the row; grouping by namespace does not, so it looks
-  // the queries up by group key and carries the text.
+  // response says rather than ranking a second time. Where the row names the
+  // query the plan points at it; where it does not, the plan looks the queries
+  // up by group key and carries the text.
   const explained: PlanRow[] =
-    groupBy === "name" || groupBy === "none"
+    groupBy === "none" || GROUPINGS[groupBy].namesOperation
       ? plansForRankedRows(ranked, apexLog, groupBy === "none")
-      : plansForNamespaceRows(selected, ranked, groupBy, apexLog);
+      : plansForFoldedRows(selected, ranked, groupBy, apexLog);
 
   // Out of what the rows left, because the plans are part of the same response.
   // A namespace grouping reports one plan per distinct query text behind the
@@ -479,12 +517,19 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   }
 
   const result: SlowOperationsResult = {
-    ...captureLevels(apexLog),
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
     returnedSelfPercentage: roundPercent(
       ranked.reduce((total, operation) => total + selfPercentageOf(operation), 0),
     ),
     matchedCount: matched.length,
+    // The categories the rows returned came from, and no others: a level for a
+    // category nothing here was logged under would qualify nothing.
+    ...omitEmpty({
+      capturedAt: capturedAt(
+        apexLog,
+        operations.map((row) => row.debugCategory),
+      ),
+    }),
     operations,
     ...omitEmpty({ queryPlans }),
   };

@@ -14,9 +14,11 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 - **Breaking:** prefix every tool `apexlog_` and name it for what comes back, so `analyze_apex_log_performance` is now `apexlog_list_slow_operations`. See [Migrating from 1.x](MIGRATING.md) for the full mapping ([#107])
 - **Breaking:** `apexlog_list_slow_operations` ranks every timed operation by self time in one table, folding repeats into one row, in place of its five 1.x fields and its prose `summary`. `topMethods` and `minDuration` are now `limit` and `minSelfMs`, and `groupBy: "none"` ranks each call on its own ([#86], [#108], [#126])
+- **Breaking:** every ranked row states the debug log category the platform stamped on the event and the log's own event type — `apexCode,METHOD_ENTRY`, `database,SOQL_EXECUTE_BEGIN` — in place of one `kind` this server invented, and `debugCategory`, `type` and `namespace` all take arrays ([#138])
+- **Breaking:** spell every category on the wire as the platform does — `database`, not `DB` — which is the spelling `apexlog_execute_anonymous` already takes as input ([#138])
 - **Breaking:** a grouped row's `durationTotalMs`, `soqlCount`, `dmlCount`, `soslCount`, `rowCount` and `thrownCount` state what the transaction takes back if the group never runs, so they are not additive across rows ([#101], [#131])
-- **Breaking:** rank a callout as its own `callout` kind, taking its wall time out of the calling method's self time, and rank duplicate detection and the match engine as `systemMethod` ([#97])
-- **Breaking:** `apexlog_get_summary` gains `timeByKind` and `limitsByNamespace`, so a managed package that spends your CPU time is visible, and reports all thirteen governor limits as flat `{limit, used, max}` rows including the ones at zero. The five `total*` fields and `file` are gone, and three more are renamed for their units ([#62], [#86], [#108])
+- **Breaking:** rank a callout under its own `callout` category, taking its wall time out of the calling method's self time, and file duplicate detection and the match engine under `system` ([#97], [#138])
+- **Breaking:** `apexlog_get_summary` gains `timeByCategory` and `limitsByNamespace`, so a managed package that spends your CPU time is visible, and reports all thirteen governor limits as flat `{limit, used, max}` rows including the ones at zero. The five `total*` fields and `file` are gone, and three more are renamed for their units ([#62], [#86], [#108])
 - **Breaking:** `apexlog_get_summary` states a failed or partial log as facts a caller can act on: `truncated`, `truncatedBy`, `skippedBytes`, `thrownCount` and `fatalErrors` replace `logIssues` and `parsingErrorCount` ([#100])
 - **Breaking:** report the peak each governor limit reached, not the usage the transaction ended on, which could sit under a ceiling the run had already breached ([#97])
 - **Breaking:** `apexlog_list_limit_risks` returns one `atRisk` table beside the `threshold` that selected it, covering all thirteen limits where its four sections covered six. The `note` and the `analysisType` parameter are gone ([#108])
@@ -24,16 +26,16 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - **Breaking:** `apexlog_execute_anonymous` reports `succeeded` where it reported `success`, and states `outputDirCreated` in place of the prose tip about `.gitignore` ([#109])
 - **Breaking:** report a fatal error under its own `fatal` type, summarised as the exception message rather than `FATAL ERROR! cause=…` ([#97])
 - **Breaking:** speak the 2026-07-28 protocol revision. Clients on the 2025 revisions keep working ([#103])
-- Reduce every tool response with no fact lost: `apexlog_list_slow_operations` by 13%, `apexlog_execute_anonymous` by 30%. `apexlog_get_summary` costs 17% more, for the two tables it gained ([#62], [#86], [#97], [#108], [#109], [#120])
-- Reduce the standing cost of having the server connected by 15%. `apexlog_list_slow_operations` is the one tool that costs more, by 108%, for what it now selects, ranks and returns ([#87], [#99], [#101], [#103], [#108], [#120], [#126], [#127])
+- Reduce every tool response with no fact lost: `apexlog_list_limit_risks` by 54%, `apexlog_execute_anonymous` by 30% and `apexlog_list_slow_operations` by 3%. `apexlog_get_summary` costs 24% more, for the two tables it gained ([#62], [#86], [#97], [#108], [#109], [#120], [#138])
+- Reduce the standing cost of having the server connected by 9%. `apexlog_list_slow_operations` is the one tool that costs more, by 145%, for what it now selects, ranks and returns ([#87], [#99], [#101], [#103], [#108], [#120], [#126], [#127], [#138])
 - `apexlog_execute_anonymous` reports `durationMs` from the log it wrote, so it now agrees with `apexlog_get_summary.durationTotalMs` for the same log ([#65])
 - Answer a second question about the same log without parsing it again ([#88])
 
 ### Added
 
-- Rank `apexlog_list_slow_operations` rows by the net heap each one's own code retained (`sortBy: "heapSelfNetBytes"`), or fold them by the namespace that called the operation (`groupBy: "callerNamespace"`). On the 40 logs of a 123-log corpus that allocate, a heap top ten holds a median 6 rows of 10 that the self-time top ten never returns ([#99], [#127])
+- Rank `apexlog_list_slow_operations` rows by the net heap each one's own code retained (`sortBy: "heapSelfNetBytes"`), or fold them by the namespace that called the operation (`groupBy: "callerNamespace"`) or by debug log category (`groupBy: "debugCategory"`). On the 40 logs of a 123-log corpus that allocate, a heap top ten holds a median 6 rows of 10 that the self-time top ten never returns ([#99], [#127], [#138])
 - Report the query optimiser's plan for the queries behind the returned rows, as a `queryPlans` table. Above a `relativeCost` of 1 the optimiser will not treat the query as selective ([#120])
-- Report the level each log category was captured at, which qualifies every figure beside it ([#102])
+- Report the level each debug log category was captured at, as a `capturedAt` table keyed the way the rows are, so the two join ([#102], [#138])
 - Report `matchedCount` from `apexlog_list_slow_operations`, so a caller can tell whether the page cap hid anything ([#63])
 - Report progress from `apexlog_execute_anonymous` while it connects, sets the trace flag, executes and writes, and `levelsOverridden` when the org logged at levels other than the ones the call asked for ([#65])
 - Add `--no-apex-execution`, to stop Apex running at all while the log analysis tools keep working ([#52])
@@ -85,6 +87,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#102]: https://github.com/certinia/debug-log-analyzer-mcp/issues/102
 [#63]: https://github.com/certinia/debug-log-analyzer-mcp/issues/63
 [#120]: https://github.com/certinia/debug-log-analyzer-mcp/issues/120
+[#138]: https://github.com/certinia/debug-log-analyzer-mcp/issues/138
 [#93]: https://github.com/certinia/debug-log-analyzer-mcp/issues/93
 [#94]: https://github.com/certinia/debug-log-analyzer-mcp/issues/94
 [#65]: https://github.com/certinia/debug-log-analyzer-mcp/issues/65

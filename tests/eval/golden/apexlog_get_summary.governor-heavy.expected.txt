@@ -5,18 +5,18 @@ thrownCount: 0
 fatalErrors[1]{message,frames}:
   "System.LimitException: Apex CPU time limit exceeded","Class.RecursiveSearcher.search: line 31, column 1 | Class.RecursiveSearcher.search: line 23, column 1 | Class.RecursiveSearcher.search: line 23, column 1 | …"
 namespaces[3]: default,core_pkg,srm_pkg
-debugLevels[11]{logCategory,level}:
-  APEX_CODE,FINE
-  APEX_PROFILING,FINE
-  CALLOUT,FINEST
-  DATA_ACCESS,INFO
-  DB,FINEST
-  NBA,FINE
-  SYSTEM,FINE
-  VALIDATION,INFO
-  VISUALFORCE,FINE
-  WAVE,FINE
-  WORKFLOW,FINE
+debugLevels[11]{debugCategory,level}:
+  apexCode,FINE
+  apexProfiling,FINE
+  callout,FINEST
+  dataAccess,INFO
+  database,FINEST
+  nba,FINE
+  system,FINE
+  validation,INFO
+  visualforce,FINE
+  wave,FINE
+  workflow,FINE
 governorLimits[13]{limit,used,max}:
   soqlQueries,6,100
   soslQueries,0,20
@@ -40,14 +40,15 @@ limitsByNamespace[8]{namespace,limit,used}:
   default,heapSize,219591
   core_pkg,soqlQueries,1
   core_pkg,queryRows,2
-timeByKind[10]{kind,logCategory,operationCount,durationSelfMs,selfPercentage}:
-  codeUnit,APEX_CODE,2,3119.179,12.7
-  managedPackage,APEX_CODE,5,20638.038,83.9
-  method,APEX_CODE,5,5.058,0
-  systemMethod,SYSTEM,98,54.552,0.2
-  soql,DB,1,24.617,0.1
-  sosl,DB,0,0,0
-  dml,DB,1,765.749,3.1
-  callout,CALLOUT,0,0,0
-  flow,WORKFLOW,0,0,0
-  workflow,WORKFLOW,0,0,0
+timeByCategory[11]{debugCategory,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,12,23762.275,96.6
+  apexProfiling,2,0,0
+  callout,0,0,0
+  dataAccess,0,0,0
+  database,2,790.366,3.2
+  nba,0,0,0
+  system,96,54.552,0.2
+  validation,0,0,0
+  visualforce,0,0,0
+  wave,0,0,0
+  workflow,0,0,0

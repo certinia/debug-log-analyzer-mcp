@@ -3,18 +3,14 @@
  */
 
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import type { DebugLevels } from "@apexdevtools/apex-log-parser/types";
+import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
 import {
-  ALL_LOG_CATEGORIES,
-  type DebugLevels,
-} from "@apexdevtools/apex-log-parser/types";
-import { LOG_CATEGORIES } from "../src/salesforce/debugLevels";
-import {
-  captureLevels,
+  capturedAt,
+  declaredLevels,
   GROUP_BY,
   groupOperations,
   listOperations,
-  logCategoryOf,
-  OPERATION_KINDS,
   type Operation,
 } from "../src/tools/operations";
 
@@ -42,8 +38,10 @@ function node(spec: NodeSpec): unknown {
   const children = (spec.children ?? []).map(node) as { parent?: unknown }[];
   const built = {
     type: spec.type ?? null,
-    ...(spec.category && { category: spec.category }),
-    ...(spec.debugCategory && { debugCategory: spec.debugCategory }),
+    // Both default to the empty string the parser leaves on an untimed event,
+    // because that is what says "this event has no duration".
+    category: spec.category ?? "",
+    debugCategory: spec.debugCategory ?? "",
     text: spec.text ?? null,
     namespace: spec.namespace ?? "default",
     duration: { total, self: spec.selfNs ?? total },
@@ -71,6 +69,8 @@ function node(spec: NodeSpec): unknown {
 function logOf(...children: NodeSpec[]): ApexLog {
   return node({
     type: "EXECUTION_STARTED",
+    category: "Apex",
+    debugCategory: "apexCode",
     text: "Root",
     totalNs: 1_000_000_000,
     children,
@@ -79,88 +79,74 @@ function logOf(...children: NodeSpec[]): ApexLog {
 
 const named = (operations: Operation[]) => operations.map((o) => o.name);
 
+/**
+ * A log whose header declared these levels. The parser keys them by
+ * `DebugLevels` property, which is the spelling every response uses.
+ */
+const logCapturedAt = (debugLevels: DebugLevels): ApexLog =>
+  ({ debugLevels }) as ApexLog;
+
 describe("listOperations", () => {
   it("ranks a query and a DML alongside methods, not below them", () => {
     const operations = listOperations(
       logOf(
-        { type: "METHOD_ENTRY", category: "Apex", text: "A.run" },
-        { type: "SOQL_EXECUTE_BEGIN", category: "SOQL", text: "SELECT Id" },
-        { type: "DML_BEGIN", category: "DML", text: "DML Insert Account" },
+        {
+          type: "METHOD_ENTRY",
+          category: "Apex",
+          debugCategory: "apexCode",
+          text: "A.run",
+        },
+        {
+          type: "SOQL_EXECUTE_BEGIN",
+          category: "SOQL",
+          debugCategory: "database",
+          text: "SELECT Id",
+        },
+        {
+          type: "DML_BEGIN",
+          category: "DML",
+          debugCategory: "database",
+          text: "DML Insert Account",
+        },
       ),
     );
 
-    expect(operations.map((o) => o.kind)).toEqual(["method", "soql", "dml"]);
+    expect(
+      operations.map((o) => [o.debugCategory, o.type]),
+    ).toEqual([
+      ["apexCode", "METHOD_ENTRY"],
+      ["database", "SOQL_EXECUTE_BEGIN"],
+      ["database", "DML_BEGIN"],
+    ]);
   });
 
-  it.each([
-    ["CODE_UNIT_STARTED", "Code Unit", "codeUnit"],
-    ["ENTERING_MANAGED_PKG", "Apex", "managedPackage"],
-    ["METHOD_ENTRY", "Apex", "method"],
-    ["SYSTEM_METHOD_ENTRY", "System", "systemMethod"],
-    ["SOQL_EXECUTE_BEGIN", "SOQL", "soql"],
-    ["SOSL_EXECUTE_BEGIN", "SOQL", "sosl"],
-    ["DML_BEGIN", "DML", "dml"],
-    ["CALLOUT_REQUEST", "Callout", "callout"],
-    ["FLOW_ELEMENT_BEGIN", "Automation", "flow"],
-    ["EVENT_SERVICE_PUB_BEGIN", "Automation", "flow"],
-    ["WF_RULE_EVAL_BEGIN", "Automation", "workflow"],
-  ])("classifies %s as %s", (type, category, kind) => {
-    const [operation] = listOperations(logOf({ type, category }));
-
-    expect(operation?.kind).toBe(kind);
-  });
-
-  // Next Best Action carries `Automation` and is neither a flow nor a workflow
-  // rule. Ranking it as one would name the wrong thing to fix and the wrong
-  // capture level beside it, so it is placed on its Salesforce category.
-  it.each(["NBA_STRATEGY_BEGIN", "NBA_NODE_BEGIN", "NBA_SOMETHING_NEW"])(
-    "places %s on its Salesforce category, not the timeline one",
-    (type) => {
-      const [operation] = listOperations(
-        logOf({ type, category: "Automation", debugCategory: "nba" }),
-      );
-
-      expect(operation?.kind).toBe("systemMethod");
-    },
-  );
-
-  /**
-   * Every category the parser states, and the kind an event of it ranks as —
-   * `null` where nothing is ranked. Driven by the parser's own list, so a
-   * category it adds fails here rather than going unranked unnoticed.
-   */
-  const KIND_BY_PARSER_CATEGORY: Record<string, OperationKind | null> = {
-    Apex: "method",
-    System: "systemMethod",
-    "Code Unit": "codeUnit",
-    DML: "dml",
-    SOQL: "soql",
-    // Split on the event type instead; the cases above cover it.
-    Automation: null,
-    // No timed event carries it, so there is no time to lose.
-    Validation: null,
-    Callout: "callout",
-  };
-
-  it.each(ALL_LOG_CATEGORIES)("places a %s event", (category) => {
-    const expected = KIND_BY_PARSER_CATEGORY[category];
-
-    expect(expected).toBeDefined();
-    const [operation] = listOperations(
-      logOf({ type: "SOME_UNKNOWN_EVENT", category }),
+  // Every timed event is ranked, whatever its type, and reports the category
+  // the parser stamped. Which category goes with which type is pinned against a
+  // real parse in `tests/parserContract.test.ts`.
+  it("ranks a timed event of a type it does not know", () => {
+    const operations = listOperations(
+      logOf({
+        type: "SOME_UNKNOWN_EVENT",
+        category: "Automation",
+        debugCategory: "nba",
+        totalNs: 5_000_000,
+      }),
     );
 
-    expect(operation?.kind ?? null).toBe(expected);
+    expect(operations).toMatchObject([
+      { type: "SOME_UNKNOWN_EVENT", debugCategory: "nba" },
+    ]);
   });
 
   it("reports the time of a timed event that owns the whole transaction", () => {
     // A callout holds its wall time as self time, and the parser takes that out
-    // of the calling method. Leave the category unranked and the time is
-    // reported nowhere at all.
+    // of the calling method. Leave it unranked and the time is reported nowhere
+    // at all.
     const operations = listOperations(
       logOf({
         type: "CODE_UNIT_STARTED",
         category: "Code Unit",
+        debugCategory: "apexCode",
         text: "Svc.run()",
         totalNs: 904_000_000,
         selfNs: 2_000_000,
@@ -168,6 +154,7 @@ describe("listOperations", () => {
           {
             type: "METHOD_ENTRY",
             category: "Apex",
+            debugCategory: "apexCode",
             text: "Svc.fetch()",
             totalNs: 902_000_000,
             selfNs: 2_000_000,
@@ -175,6 +162,7 @@ describe("listOperations", () => {
               {
                 type: "CALLOUT_REQUEST",
                 category: "Callout",
+                debugCategory: "callout",
                 text: "HttpRequest",
                 totalNs: 900_000_000,
                 selfNs: 900_000_000,
@@ -185,17 +173,10 @@ describe("listOperations", () => {
       }),
     );
 
-    expect(
-      operations.reduce((sum, o) => sum + o.durationSelfNs, 0),
-    ).toBe(904_000_000);
-    expect(operations.map((o) => o.kind)).toContain("callout");
-  });
-
-  it("covers every kind it declares", () => {
-    expect(new Set(OPERATION_KINDS).size).toBe(OPERATION_KINDS.length);
-    OPERATION_KINDS.forEach((kind) =>
-      expect(LOG_CATEGORIES).toContain(logCategoryOf(kind)),
+    expect(operations.reduce((sum, o) => sum + o.durationSelfNs, 0)).toBe(
+      904_000_000,
     );
+    expect(operations.map((o) => o.type)).toContain("CALLOUT_REQUEST");
   });
 
   it("drops the transaction frame, which owns no time of its own", () => {
@@ -203,6 +184,7 @@ describe("listOperations", () => {
       logOf({
         type: "EXECUTION_STARTED",
         category: "Apex",
+        debugCategory: "apexCode",
         text: "Root",
       }),
     );
@@ -214,6 +196,7 @@ describe("listOperations", () => {
     const root = node({
       type: null,
       category: "Apex",
+      debugCategory: "apexCode",
       text: "LOG_ROOT",
       totalNs: 1_000_000_000,
     }) as ApexLog;
@@ -221,7 +204,7 @@ describe("listOperations", () => {
     expect(listOperations(root)).toEqual([]);
   });
 
-  it("drops an untimed node, which has no sub-category", () => {
+  it("drops an untimed node, which the parser leaves with no category", () => {
     expect(listOperations(logOf({ type: "USER_INFO" }))).toEqual([]);
   });
 
@@ -230,9 +213,15 @@ describe("listOperations", () => {
       logOf({
         type: "METHOD_ENTRY",
         category: "Apex",
+        debugCategory: "apexCode",
         text: "A.run",
         children: [
-          { type: "SOQL_EXECUTE_BEGIN", category: "SOQL", text: "SELECT Id" },
+          {
+            type: "SOQL_EXECUTE_BEGIN",
+            category: "SOQL",
+            debugCategory: "database",
+            text: "SELECT Id",
+          },
         ],
       }),
     );
@@ -245,6 +234,7 @@ describe("listOperations", () => {
       logOf({
         type: "METHOD_ENTRY",
         category: "Apex",
+        debugCategory: "apexCode",
         soqlRowCount: 100,
         dmlRowCount: 20,
         soslRowCount: 3,
@@ -256,7 +246,12 @@ describe("listOperations", () => {
 
   it("names an operation by its type when the parser gave it no text", () => {
     const [operation] = listOperations(
-      logOf({ type: "METHOD_ENTRY", category: "Apex", text: null }),
+      logOf({
+        type: "METHOD_ENTRY",
+        category: "Apex",
+        debugCategory: "apexCode",
+        text: null,
+      }),
     );
 
     expect(operation).toMatchObject({
@@ -270,6 +265,7 @@ describe("listOperations", () => {
       logOf({
         type: "METHOD_ENTRY",
         category: "Apex",
+        debugCategory: "apexCode",
         text: "Custom.run",
         namespace: "Custom",
         totalNs: 50_000_000,
@@ -285,6 +281,7 @@ describe("listOperations", () => {
               {
                 type: "DML_BEGIN",
                 category: "DML",
+                debugCategory: "database",
                 text: "DML Insert Account",
                 namespace: "default",
                 totalNs: 40_000_000,
@@ -296,7 +293,7 @@ describe("listOperations", () => {
     );
 
     expect(
-      operations.find((operation) => operation.kind === "dml"),
+      operations.find((operation) => operation.type === "DML_BEGIN"),
     ).toMatchObject({ callerNamespace: "Other" });
   });
 });
@@ -305,11 +302,26 @@ describe("groupOperations", () => {
   const repeatedQuery = (namespace: string) => ({
     type: "SOQL_EXECUTE_BEGIN",
     category: "SOQL",
+    debugCategory: "database",
     text: "SELECT Id FROM Account",
     namespace,
     totalNs: 10_000_000,
     soqlCount: 1,
     soqlRowCount: 5,
+  });
+
+  const method = (spec: Partial<NodeSpec> = {}): NodeSpec => ({
+    type: "METHOD_ENTRY",
+    category: "Apex",
+    debugCategory: "apexCode",
+    text: "A.run",
+    ...spec,
+  });
+
+  /** The same category as `method`, and a different type. */
+  const constructorCall = (spec: Partial<NodeSpec> = {}): NodeSpec => ({
+    ...method({ type: "CONSTRUCTOR_ENTRY", text: "A.A()" }),
+    ...spec,
   });
 
   it("folds a query repeated in a loop into one row carrying its call count", () => {
@@ -346,20 +358,15 @@ describe("groupOperations", () => {
       logOf(repeatedQuery("default"), repeatedQuery("Custom")),
     );
 
-    expect(
-      groupOperations(operations, "name").map((o) => o.namespace),
-    ).toEqual(["default", "Custom"]);
+    expect(groupOperations(operations, "name").map((o) => o.namespace)).toEqual([
+      "default",
+      "Custom",
+    ]);
   });
 
   it("counts a nested call once, so the total stays what the group costs", () => {
-    const call = (children: NodeSpec[] = []): NodeSpec => ({
-      type: "METHOD_ENTRY",
-      category: "Apex",
-      text: "A.run",
-      totalNs: 100_000_000,
-      selfNs: 40_000_000,
-      children,
-    });
+    const call = (children: NodeSpec[] = []): NodeSpec =>
+      method({ totalNs: 100_000_000, selfNs: 40_000_000, children });
     const operations = listOperations(logOf(call([call()])));
 
     expect(groupOperations(operations, "name")[0]).toMatchObject({
@@ -370,21 +377,19 @@ describe("groupOperations", () => {
   });
 
   it("counts a nested call's queries, DML, searches, rows and throws once", () => {
-    const call = (children: NodeSpec[] = []): NodeSpec => ({
-      type: "METHOD_ENTRY",
-      category: "Apex",
-      text: "A.run",
-      totalNs: 100_000_000,
-      selfNs: 40_000_000,
-      soqlCount: 1,
-      dmlCount: 1,
-      soslCount: 1,
-      soqlRowCount: 5,
-      dmlRowCount: 2,
-      soslRowCount: 1,
-      thrownCount: 1,
-      children,
-    });
+    const call = (children: NodeSpec[] = []): NodeSpec =>
+      method({
+        totalNs: 100_000_000,
+        selfNs: 40_000_000,
+        soqlCount: 1,
+        dmlCount: 1,
+        soslCount: 1,
+        soqlRowCount: 5,
+        dmlRowCount: 2,
+        soslRowCount: 1,
+        thrownCount: 1,
+        children,
+      });
     const operations = listOperations(logOf(call([call()])));
 
     expect(groupOperations(operations, "name")[0]).toMatchObject({
@@ -420,22 +425,23 @@ describe("groupOperations", () => {
   });
 
   it("counts a query once, not once per method above it in the stack", () => {
-    const method = (text: string, children: NodeSpec[] = []): NodeSpec => ({
-      type: "METHOD_ENTRY",
-      category: "Apex",
-      text,
-      namespace: "Custom",
-      totalNs: 100_000_000,
-      selfNs: 10_000_000,
-      soqlCount: 1,
-      children,
-    });
+    const nested = (text: string, children: NodeSpec[] = []): NodeSpec =>
+      method({
+        text,
+        namespace: "Custom",
+        totalNs: 100_000_000,
+        selfNs: 10_000_000,
+        soqlCount: 1,
+        children,
+      });
     const operations = listOperations(
-      logOf(method("A.run", [method("B.run", [method("C.run")])])),
+      logOf(nested("A.run", [nested("B.run", [nested("C.run")])])),
     );
 
     expect(
-      groupOperations(operations, "namespace").find((o) => o.kind === "method"),
+      groupOperations(operations, "namespace").find(
+        (o) => o.type === "METHOD_ENTRY",
+      ),
     ).toMatchObject({ callCount: 3, soqlCount: 1 });
   });
 
@@ -448,6 +454,7 @@ describe("groupOperations", () => {
       logOf({
         type: "DML_BEGIN",
         category: "DML",
+        debugCategory: "database",
         text: "DML Insert Account",
         namespace: "Custom",
         totalNs: 100_000_000,
@@ -456,6 +463,7 @@ describe("groupOperations", () => {
           {
             type: "CODE_UNIT_STARTED",
             category: "Code Unit",
+            debugCategory: "apexCode",
             text: "Outer",
             namespace: "default",
             totalNs: 100_000_000,
@@ -464,6 +472,7 @@ describe("groupOperations", () => {
               {
                 type: "DML_BEGIN",
                 category: "DML",
+                debugCategory: "database",
                 text: "DML Update Account",
                 namespace: "Custom",
                 totalNs: 70_000_000,
@@ -472,6 +481,7 @@ describe("groupOperations", () => {
                   {
                     type: "CODE_UNIT_STARTED",
                     category: "Code Unit",
+                    debugCategory: "apexCode",
                     text: "Inner",
                     namespace: "Custom",
                     totalNs: 40_000_000,
@@ -479,6 +489,7 @@ describe("groupOperations", () => {
                   {
                     type: "CODE_UNIT_STARTED",
                     category: "Code Unit",
+                    debugCategory: "apexCode",
                     text: "Inner",
                     namespace: "Custom",
                     totalNs: 30_000_000,
@@ -498,7 +509,7 @@ describe("groupOperations", () => {
 
     expect(
       groupOperations(selected, "callerNamespace").find(
-        (operation) => operation.kind === "codeUnit",
+        (operation) => operation.type === "CODE_UNIT_STARTED",
       ),
     ).toMatchObject({ callCount: 2, durationTotalNs: 70_000_000 });
   });
@@ -538,85 +549,142 @@ describe("groupOperations", () => {
 
   it("groups by the calling namespace, which DML never carries itself", () => {
     const operations = listOperations(
-      logOf({
-        type: "METHOD_ENTRY",
-        category: "Apex",
-        text: "Custom.run",
-        namespace: "Custom",
-        totalNs: 50_000_000,
-        children: [
-          {
-            type: "DML_BEGIN",
-            category: "DML",
-            text: "DML Insert Account",
-            namespace: "default",
-            totalNs: 40_000_000,
-          },
-        ],
-      }),
+      logOf(
+        method({
+          text: "Custom.run",
+          namespace: "Custom",
+          totalNs: 50_000_000,
+          children: [
+            {
+              type: "DML_BEGIN",
+              category: "DML",
+              debugCategory: "database",
+              text: "DML Insert Account",
+              namespace: "default",
+              totalNs: 40_000_000,
+            },
+          ],
+        }),
+      ),
     );
 
     expect(groupOperations(operations, "callerNamespace")).toEqual([
       // The method itself was called by nothing, so it reports the root.
-      expect.objectContaining({ kind: "method", name: "default" }),
+      expect.objectContaining({ type: "METHOD_ENTRY", name: "default" }),
       expect.objectContaining({
-        kind: "dml",
+        type: "DML_BEGIN",
         name: "Custom",
         namespace: "Custom",
       }),
     ]);
   });
 
-  it("keeps kinds apart, so every column stays true of every row", () => {
+  // The case a category key would pass through: both rows are `apexCode`, so
+  // keying on the category alone would fold them into one row stating the first
+  // type for both, and lose the constructor's own figures.
+  it("keeps two types of one category apart under a namespace grouping", () => {
     const operations = listOperations(
       logOf(
-        { type: "METHOD_ENTRY", category: "Apex", namespace: "Custom" },
+        method({ namespace: "Custom", totalNs: 30_000_000 }),
+        constructorCall({ namespace: "Custom", totalNs: 20_000_000 }),
+      ),
+    );
+
+    expect(
+      groupOperations(operations, "namespace").map((o) => [
+        o.type,
+        o.durationSelfNs,
+      ]),
+    ).toEqual([
+      ["METHOD_ENTRY", 30_000_000],
+      ["CONSTRUCTOR_ENTRY", 20_000_000],
+    ]);
+  });
+
+  it("folds the types of a category together when asked to group by it", () => {
+    const operations = listOperations(
+      logOf(
+        method({ namespace: "Custom", totalNs: 30_000_000 }),
+        constructorCall({ namespace: "Custom", totalNs: 20_000_000 }),
         repeatedQuery("Custom"),
       ),
     );
 
-    expect(groupOperations(operations, "namespace").map((o) => o.kind)).toEqual([
-      "method",
-      "soql",
+    expect(groupOperations(operations, "debugCategory")).toEqual([
+      expect.objectContaining({
+        name: "apexCode",
+        namespace: "Custom",
+        callCount: 2,
+        durationSelfNs: 50_000_000,
+      }),
+      expect.objectContaining({
+        name: "database",
+        namespace: "Custom",
+        callCount: 1,
+      }),
     ]);
   });
 });
 
-describe("captureLevels", () => {
-  // The parser keys the header's levels by `DebugLevel` field, so a case names
-  // them the way the parser hands them over.
-  const logCapturedAt = (debugLevels: DebugLevels): ApexLog =>
-    ({ debugLevels }) as ApexLog;
-
-  it("reports the level of every category that gates a ranked kind", () => {
+describe("declaredLevels", () => {
+  it("reports every declared level, in the order a header states them", () => {
     expect(
-      captureLevels(
+      declaredLevels(
+        logCapturedAt({ database: "FINEST", apexCode: "ERROR", wave: "INFO" }),
+      ),
+    ).toEqual([
+      { debugCategory: "apexCode", level: "ERROR" },
+      { debugCategory: "database", level: "FINEST" },
+      { debugCategory: "wave", level: "INFO" },
+    ]);
+  });
+
+  it("leaves out a category the header never declared, rather than naming a default", () => {
+    expect(declaredLevels(logCapturedAt({ database: "FINEST" }))).toEqual([
+      { debugCategory: "database", level: "FINEST" },
+    ]);
+  });
+
+  it("names every category the parser can declare a level for", () => {
+    const everyCategory = Object.fromEntries(
+      DEBUG_CATEGORIES.map((category) => [category, "FINEST"]),
+    ) as DebugLevels;
+
+    expect(declaredLevels(logCapturedAt(everyCategory))).toHaveLength(
+      DEBUG_CATEGORIES.length,
+    );
+  });
+});
+
+describe("capturedAt", () => {
+  it("reports the level of each category the caller names", () => {
+    expect(
+      capturedAt(
         logCapturedAt({
           apexCode: "ERROR",
           system: "FINE",
           database: "FINEST",
-          workflow: "NONE",
         }),
+        ["database", "apexCode"],
       ),
-    ).toEqual({
-      apexCodeLevel: "ERROR",
-      systemLevel: "FINE",
-      dbLevel: "FINEST",
-      workflowLevel: "NONE",
-    });
+    ).toEqual([
+      { debugCategory: "apexCode", level: "ERROR" },
+      { debugCategory: "database", level: "FINEST" },
+    ]);
   });
 
-  it("leaves out a category the header never declared, rather than naming a default", () => {
-    expect(captureLevels(logCapturedAt({ database: "FINEST" }))).toEqual({
-      dbLevel: "FINEST",
-    });
-  });
-
-  it("ignores a category no ranked kind is gated by", () => {
+  it("leaves out a named category the header never declared", () => {
     expect(
-      captureLevels(
-        logCapturedAt({ apexProfiling: "FINEST", visualforce: "FINEST" }),
-      ),
-    ).toEqual({});
+      capturedAt(logCapturedAt({ database: "FINEST" }), [
+        "database",
+        "visualforce",
+      ]),
+    ).toEqual([{ debugCategory: "database", level: "FINEST" }]);
+  });
+
+  it("leaves out a declared category the caller did not name", () => {
+    expect(
+      capturedAt(logCapturedAt({ apexProfiling: "FINEST" }), ["database"]),
+    ).toEqual([]);
   });
 });

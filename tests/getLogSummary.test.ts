@@ -10,7 +10,7 @@ import {
   getLogSummaryToolConfig,
 } from "../src/tools/getLogSummary";
 import { clearApexLogCache } from "../src/tools/apexLogSource";
-import { OPERATION_KINDS } from "../src/tools/operations";
+import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type {
   ApexLog,
@@ -60,21 +60,27 @@ const mockStats = {
 
 const counts = { total: 0, self: 0 };
 
-/** A timed node, as the tools read one: a sub-category and its own time. */
+/**
+ * A timed node, as the tools read one: a timeline category, which is what says
+ * it has a duration, the debug log category that gates it, and its own time.
+ */
 const node = ({
   type = null,
-  category,
+  category = "",
+  debugCategory = "",
   selfNs = 0,
   children = [],
 }: {
   type?: string | null;
   category?: string;
+  debugCategory?: string;
   selfNs?: number;
   children?: LogEvent[];
 }): LogEvent =>
   ({
     type,
     category,
+    debugCategory,
     children,
     text: type ?? "",
     namespace: "default",
@@ -287,8 +293,8 @@ describe("getLogSummary", () => {
       });
 
       expect(summary.debugLevels).toEqual([
-        { logCategory: "APEX_CODE", level: "DEBUG" },
-        { logCategory: "DB", level: "NONE" },
+        { debugCategory: "apexCode", level: "DEBUG" },
+        { debugCategory: "database", level: "NONE" },
       ]);
     });
 
@@ -530,26 +536,39 @@ describe("getLogSummary", () => {
     });
   });
 
-  describe("timeByKind", () => {
-    it("should report a row for every kind, so a zero can be read", async () => {
+  describe("timeByCategory", () => {
+    const rowOf = (
+      summary: { timeByCategory: { debugCategory: string }[] },
+      debugCategory: string,
+    ) =>
+      summary.timeByCategory.find((row) => row.debugCategory === debugCategory);
+
+    // `database 0` beside `database NONE` means the queries were not logged;
+    // the same row beside `database FINEST` means none ran. Neither reads
+    // without the row, so every category is reported.
+    it("should report a row for every category, so a zero can be read", async () => {
       const summary = await summaryOf();
 
-      expect(summary.timeByKind.map((row: { kind: string }) => row.kind)).toEqual(
-        [...OPERATION_KINDS],
-      );
+      expect(
+        summary.timeByCategory.map(
+          (row: { debugCategory: string }) => row.debugCategory,
+        ),
+      ).toEqual([...DEBUG_CATEGORIES]);
     });
 
-    it("should count the operations of a kind and sum their self time", async () => {
+    it("should count the operations of a category and sum their self time", async () => {
       const summary = await summaryOf({
         children: [
           node({
             type: "METHOD_ENTRY",
             category: "Apex",
+            debugCategory: "apexCode",
             selfNs: 2_000_000_000,
             children: [
               node({
                 type: "SOQL_EXECUTE_BEGIN",
                 category: "SOQL",
+                debugCategory: "database",
                 selfNs: 1_000_000_000,
               }),
             ],
@@ -557,40 +576,48 @@ describe("getLogSummary", () => {
           node({
             type: "METHOD_ENTRY",
             category: "Apex",
+            debugCategory: "apexCode",
             selfNs: 500_000_000,
           }),
         ],
       });
 
-      const rowOf = (kind: string) =>
-        summary.timeByKind.find((row: { kind: string }) => row.kind === kind);
-
-      expect(rowOf("method")).toEqual({
-        kind: "method",
-        logCategory: "APEX_CODE",
+      expect(rowOf(summary, "apexCode")).toEqual({
+        debugCategory: "apexCode",
         operationCount: 2,
         durationSelfMs: 2500,
         selfPercentage: 20,
       });
-      expect(rowOf("soql")).toEqual({
-        kind: "soql",
-        logCategory: "DB",
+      expect(rowOf(summary, "database")).toEqual({
+        debugCategory: "database",
         operationCount: 1,
         durationSelfMs: 1000,
         selfPercentage: 8,
       });
     });
 
-    it("should name the trace category that decides whether a kind was logged", async () => {
-      // A `soql 0` row beside `DB NONE` means the queries were not logged; the
-      // same row beside `DB FINEST` means none ran.
-      const summary = await summaryOf();
-      const rowOf = (kind: string) =>
-        summary.timeByKind.find((row: { kind: string }) => row.kind === kind);
+    // A Visualforce formula carries the timeline category `System`, so reading
+    // that would report half a Visualforce transaction as system time.
+    it("should file an operation under the category that gates it", async () => {
+      const summary = await summaryOf({
+        children: [
+          node({
+            type: "VF_EVALUATE_FORMULA_BEGIN",
+            category: "System",
+            debugCategory: "visualforce",
+            selfNs: 6_000_000_000,
+          }),
+        ],
+      });
 
-      expect(rowOf("soql").logCategory).toBe("DB");
-      expect(rowOf("systemMethod").logCategory).toBe("SYSTEM");
-      expect(rowOf("workflow").logCategory).toBe("WORKFLOW");
+      expect(rowOf(summary, "visualforce")).toMatchObject({
+        operationCount: 1,
+        durationSelfMs: 6000,
+      });
+      expect(rowOf(summary, "system")).toMatchObject({
+        operationCount: 0,
+        durationSelfMs: 0,
+      });
     });
 
     it("should report zeros rather than divide by a log that ran no time", async () => {
@@ -600,7 +627,7 @@ describe("getLogSummary", () => {
       });
 
       expect(summary.durationTotalMs).toBe(0);
-      summary.timeByKind.forEach(
+      summary.timeByCategory.forEach(
         (row: { operationCount: number; selfPercentage: number }) => {
           expect(row.operationCount).toBe(0);
           expect(row.selfPercentage).toBe(0);
