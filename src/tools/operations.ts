@@ -408,14 +408,17 @@ export function operationGroupKey(operation: Operation, by: GroupBy): string {
 }
 
 /**
- * Every number an `Operation` carries.
+ * Every number an `Operation` carries, optional ones included.
  *
- * `-?` matters only for a numeric field added as optional: without it such a
- * field is `number | undefined`, which is not `extends number`, so the guard
- * below would pass while the fold ignored it.
+ * `NonNullable` is what reaches an optional field: `Operation[K]` on `f?: number`
+ * is `number | undefined`, which does not extend `number`, so a plain test drops
+ * it from this union and the guard below passes while the fold ignores it.
+ * Stripping `undefined` first keeps the field in, and leaves an optional field of
+ * some other type out — where dropping `-?` instead would fail the guard on any
+ * optional field, numeric or not.
  */
 type NumericField = {
-  [K in keyof Operation]-?: Operation[K] extends number ? K : never;
+  [K in keyof Operation]-?: NonNullable<Operation[K]> extends number ? K : never;
 }[keyof Operation];
 
 /**
