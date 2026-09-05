@@ -66,12 +66,14 @@ function mockLog(totalNs: number, ...children: NodeSpec[]): void {
 const method = (spec: NodeSpec): NodeSpec => ({
   type: "METHOD_ENTRY",
   category: "Apex",
+  debugCategory: "apexCode",
   ...spec,
 });
 
 const query = (spec: NodeSpec): NodeSpec => ({
   type: "SOQL_EXECUTE_BEGIN",
   category: "SOQL",
+  debugCategory: "database",
   soqlCount: 1,
   ...spec,
 });
@@ -119,7 +121,8 @@ describe("listSlowOperations", () => {
     it("takes every axis a caller narrows the ranking on", () => {
       expect(Object.keys(listSlowOperationsInputSchema)).toEqual([
         "logFilePath",
-        "kind",
+        "debugCategory",
+        "type",
         "namespace",
         "minSelfMs",
         "limit",
@@ -144,9 +147,15 @@ describe("listSlowOperations", () => {
       query({ text: "SELECT Id", totalNs: 500 * MS }),
     );
 
-    expect((await ranked()).operations.map((o) => [o.kind, o.name])).toEqual([
-      ["soql", "SELECT Id"],
-      ["method", "A.run"],
+    expect(
+      (await ranked()).operations.map((o) => [
+        o.debugCategory,
+        o.type,
+        o.name,
+      ]),
+    ).toEqual([
+      ["database", "SOQL_EXECUTE_BEGIN", "SELECT Id"],
+      ["apexCode", "METHOD_ENTRY", "A.run"],
     ]);
   });
 
@@ -159,7 +168,8 @@ describe("listSlowOperations", () => {
       matchedCount: 1,
       operations: [
         {
-          kind: "method",
+          debugCategory: "apexCode",
+          type: "METHOD_ENTRY",
           name: "A.run",
           namespace: "default",
           callCount: 1,
@@ -235,19 +245,43 @@ describe("listSlowOperations", () => {
     expect(result.operations[0]?.selfPercentage).toBe(0);
   });
 
-  it("ranks only the kind the caller asked for", async () => {
+  it("ranks only the event types the caller asked for", async () => {
     mockLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       query({ text: "SELECT Id", totalNs: 400 * MS }),
     );
 
-    expect((await ranked({ ...ARGS, kind: "soql" })).operations).toEqual([
-      expect.objectContaining({ name: "SELECT Id" }),
-    ]);
+    expect(
+      (await ranked({ ...ARGS, type: ["SOQL_EXECUTE_BEGIN"] })).operations,
+    ).toEqual([expect.objectContaining({ name: "SELECT Id" })]);
   });
 
-  it("ranks only the namespace the caller asked for", async () => {
+  // The category is what the type cannot say and the type is what the category
+  // cannot: a `database` filter takes the query and the DML together, where a
+  // type filter would have to name both.
+  it("ranks only the categories the caller asked for", async () => {
+    mockLog(
+      1000 * MS,
+      method({ text: "A.run", totalNs: 500 * MS }),
+      query({ text: "SELECT Id", totalNs: 400 * MS }),
+      {
+        type: "DML_BEGIN",
+        category: "DML",
+        debugCategory: "database",
+        text: "DML Insert Account",
+        totalNs: 300 * MS,
+      },
+    );
+
+    expect(
+      (await ranked({ ...ARGS, debugCategory: ["database"] })).operations.map(
+        (o) => o.name,
+      ),
+    ).toEqual(["SELECT Id", "DML Insert Account"]);
+  });
+
+  it("ranks only the namespaces the caller asked for", async () => {
     mockLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
@@ -255,7 +289,7 @@ describe("listSlowOperations", () => {
     );
 
     expect(
-      (await ranked({ ...ARGS, namespace: "Custom" })).operations,
+      (await ranked({ ...ARGS, namespace: ["Custom"] })).operations,
     ).toEqual([expect.objectContaining({ name: "B.run" })]);
   });
 
@@ -699,12 +733,53 @@ describe("listSlowOperations", () => {
 
     expect(operations).toContainEqual(
       expect.objectContaining({
-        kind: "dml",
+        type: "DML_BEGIN",
         name: "Custom",
         namespace: "Custom",
         durationSelfMs: 400,
       }),
     );
+  });
+
+  it("folds a namespace's categories into one row each when asked", async () => {
+    mockLog(
+      1000 * MS,
+      method({ text: "A.run", namespace: "Custom", totalNs: 300 * MS }),
+      method({
+        type: "CONSTRUCTOR_ENTRY",
+        text: "A.A()",
+        namespace: "Custom",
+        totalNs: 200 * MS,
+      }),
+      query({ text: "SELECT Id", namespace: "Custom", totalNs: 100 * MS }),
+    );
+
+    const { operations } = await ranked({
+      ...ARGS,
+      groupBy: "debugCategory",
+    });
+
+    expect(operations).toEqual([
+      {
+        debugCategory: "apexCode",
+        namespace: "Custom",
+        callCount: 2,
+        durationTotalMs: 500,
+        durationSelfMs: 500,
+        durationSelfMaxMs: 300,
+        selfPercentage: 50,
+        soqlCount: 0,
+        dmlCount: 0,
+        soslCount: 0,
+        rowCount: 0,
+        thrownCount: 0,
+      },
+      expect.objectContaining({
+        debugCategory: "database",
+        callCount: 1,
+        durationSelfMs: 100,
+      }),
+    ]);
   });
 
   describe("heap ranking", () => {

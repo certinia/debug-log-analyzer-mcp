@@ -69,8 +69,10 @@ export function node(spec: NodeSpec): unknown {
   const built = {
     ...spec.plan,
     type: spec.type ?? null,
-    ...(spec.category && { category: spec.category }),
-    ...(spec.debugCategory && { debugCategory: spec.debugCategory }),
+    // Both default to the empty string the parser leaves on an untimed event,
+    // because that is what says the event has no duration.
+    category: spec.category ?? "",
+    debugCategory: spec.debugCategory ?? "",
     text: spec.text ?? null,
     namespace: spec.namespace ?? "default",
     lineNumber: null,
@@ -112,6 +114,8 @@ export const logEvent = (spec: NodeSpec): LogEvent => node(spec) as LogEvent;
 export const rootLog = (totalNs: number, ...children: NodeSpec[]): ApexLog =>
   node({
     type: "EXECUTION_STARTED",
+    category: "Apex",
+    debugCategory: "apexCode",
     text: "Root",
     totalNs,
     children,

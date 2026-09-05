@@ -1,11 +1,9 @@
-apexCodeLevel: FINE
-systemLevel: DEBUG
-dbLevel: NONE
-calloutLevel: NONE
-workflowLevel: NONE
 durationTotalMs: 0.561
 returnedSelfPercentage: 97.3
 matchedCount: 2
-operations[2]{kind,name,namespace,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:
-  codeUnit,execute_anonymous_apex,default,1,0.546,0.546,0.546,97.3,0,0,0,0,0
-  systemMethod,CUMULATIVE_LIMIT_USAGE,default,1,0,0,0,0,0,0,0,0,0
+capturedAt[2]{debugCategory,level}:
+  apexCode,FINE
+  apexProfiling,NONE
+operations[2]{debugCategory,type,name,namespace,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:
+  apexCode,CODE_UNIT_STARTED,execute_anonymous_apex,default,1,0.546,0.546,0.546,97.3,0,0,0,0,0
+  apexProfiling,CUMULATIVE_LIMIT_USAGE,CUMULATIVE_LIMIT_USAGE,default,1,0,0,0,0,0,0,0,0,0

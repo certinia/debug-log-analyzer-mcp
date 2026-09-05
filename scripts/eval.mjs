@@ -79,14 +79,14 @@ const ANSWERABILITY = {
       fields: ["durationTotalMs", "fileSizeBytes"],
     },
     {
-      question: "Where did the time go — methods, queries or a managed package?",
-      keys: ["timeByKind"],
-      columns: ["kind", "operationCount", "durationSelfMs"],
+      question: "Where did the time go — Apex, the database or Visualforce?",
+      keys: ["timeByCategory"],
+      columns: ["debugCategory", "operationCount", "durationSelfMs"],
     },
     {
       question: "Is detail missing because a log category was switched off?",
       keys: ["debugLevels"],
-      columns: ["logCategory", "level"],
+      columns: ["debugCategory", "level"],
     },
     {
       question: "Did the run fail, and can I trust these numbers?",
@@ -115,7 +115,7 @@ const ANSWERABILITY = {
     {
       question: "Was it a method, a query, a search or DML?",
       keys: ["operations"],
-      columns: ["kind", "callCount"],
+      columns: ["debugCategory", "type", "callCount"],
     },
     {
       question: "What share of the runtime do those operations account for?",
@@ -138,7 +138,8 @@ const ANSWERABILITY = {
     },
     {
       question: "Was the log captured at a level that hides work inside these rows?",
-      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
+      keys: ["capturedAt"],
+      columns: ["debugCategory", "level"],
     },
     {
       question: "Did the row cap hide operations the selection matched?",
@@ -180,8 +181,12 @@ const ANSWERABILITY = {
       fields: ["threshold"],
     },
     {
-      question: "Was the log captured at a level that hides what consumed a limit?",
-      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
+      // The two categories that gate a limit figure: the cumulative blocks are
+      // `apexProfiling` and the heap allocations behind `heapSize` are
+      // `apexCode`, both pinned in tests/parserContract.test.ts.
+      question: "Was the log captured at a level that hides a limit figure?",
+      keys: ["capturedAt"],
+      columns: ["debugCategory", "level"],
     },
   ],
 };
@@ -213,30 +218,40 @@ const MINIMAL_ZEROS = {
  */
 const TOKEN_BUDGET = {
   // Raised for the two tables #62 added: what each namespace consumed of the
-  // limits, and where the time went by kind of operation. Both answer questions
-  // the 1.x summary could not. Raised again for the stack frames #100 added to
-  // a fatal: the message names the limit, the frames name the code, and 18 of 42
-  // fatals across a 124-log corpus breach no limit at all, so nothing else in
-  // the response reveals them.
-  "apexlog_get_summary/governor-heavy": 397,
-  "apexlog_get_summary/minimal": 249,
+  // limits, and where the time went by category. Both answer questions the 1.x
+  // summary could not. Raised again for the stack frames #100 added to a fatal:
+  // the message names the limit, the frames name the code, and 18 of 42 fatals
+  // across a 124-log corpus breach no limit at all, so nothing else in the
+  // response reveals them. Lowered by #138, which dropped the `logCategory`
+  // column from every row of the time table — the row key is now the category
+  // itself.
+  "apexlog_get_summary/governor-heavy": 382,
+  "apexlog_get_summary/minimal": 245,
   // Raised for the grouped default #126 made: every row now carries its call
-  // count and the self time of its slowest call, and for the four capture levels
+  // count and the self time of its slowest call, and for the capture levels
   // #102 added, which say how much of the transaction reached the log at all,
   // and for the `matchedCount` #63 added, which says whether the row cap hid
   // anything the selection matched, and for the query plans #120 added, which
-  // say whether the optimizer treats a ranked query as selective.
-  "apexlog_list_slow_operations/governor-heavy": 410,
-  "apexlog_list_slow_operations/minimal": 130,
-  // Raised for the fifth capture level #97 added. A callout is a timed event to
-  // the published parser, so it is ranked, and a ranked kind has to state the
-  // level that gates it or a zero cannot be read.
-  "apexlog_list_limit_risks/governor-heavy": 46,
-  "apexlog_list_limit_risks/minimal": 30,
+  // say whether the optimizer treats a ranked query as selective. Raised again
+  // by #138 for the second classification column: a row states the category
+  // that gated it and the log's own event type, where it stated one invented
+  // `kind`. Measured over a 29-log corpus sample that is 41 tokens on a default
+  // ten-row page, and it is what makes `soql` tellable from `dml` inside
+  // `database`.
+  "apexlog_list_slow_operations/governor-heavy": 416,
+  "apexlog_list_slow_operations/minimal": 131,
+  // Lowered by #138: the levels reported are now the two that gate a limit
+  // figure — `apexProfiling` for the cumulative blocks and `apexCode` for the
+  // heap allocations — where five were reported, none of which gated anything
+  // in this response.
+  "apexlog_list_limit_risks/governor-heavy": 41,
+  "apexlog_list_limit_risks/minimal": 25,
   // The heap ranking over `heap-heavy`: two ranked bodies and the one extra
-  // column, which only this case asks for.
-  "apexlog_list_slow_operations/heap-heavy": 178,
-  "apexlog_get_summary/heap-heavy": 269,
+  // column, which only this case asks for. Raised by #138 for the two
+  // classification columns every ranked row now states, and again for the
+  // `returnedHeapPercentage` scalar beside them.
+  "apexlog_list_slow_operations/heap-heavy": 207,
+  "apexlog_get_summary/heap-heavy": 256,
   "apexlog_get_summary/truncated": 252,
 };
 
@@ -287,9 +302,16 @@ const DEFINITION_BUDGET = {
   // for `sortBy`, which buys the one question self time cannot answer: on the
   // 40 logs of a 123-log corpus that record an allocation, a heap ranking's top
   // ten holds a median six rows the self-time top ten never returns.
-  apexlog_list_slow_operations: 530,
+  //
+  // Raised again by #138, which replaced the one `kind` filter with the two axes
+  // the log itself has — `debugCategory` and the event `type` — and widened
+  // both, and `namespace`, to arrays, so one call can ask for a family. `type`
+  // takes free strings and names three examples rather than an enum, for the
+  // reason recorded on the field itself. The `groupBy` clause grew by the
+  // category fold, which is the one grouping that states no type or name.
+  apexlog_list_slow_operations: 610,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
-  // time by kind of operation.
+  // time by category.
   apexlog_get_summary: 180,
   apexlog_list_limit_risks: 210,
   apexlog_execute_anonymous: 449,
@@ -320,7 +342,15 @@ const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
  * longer says "governor limits" is a regression, not a saving.
  */
 const SELECTION_KEYWORDS = {
-  apexlog_list_slow_operations: ["self-execution time", "optimize"],
+  // "queries" and "DML" are the words a caller searching for database work
+  // matches on, and the vocabulary the rows themselves no longer use — the
+  // description is the only place they appear.
+  apexlog_list_slow_operations: [
+    "self-execution time",
+    "optimize",
+    "queries",
+    "DML",
+  ],
   apexlog_get_summary: ["summary", "overview"],
   apexlog_list_limit_risks: ["governor limits", "CPU time"],
   apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],

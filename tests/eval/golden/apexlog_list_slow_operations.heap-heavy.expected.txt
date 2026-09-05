@@ -1,15 +1,13 @@
-apexCodeLevel: FINEST
-systemLevel: NONE
-dbLevel: NONE
-calloutLevel: NONE
-workflowLevel: NONE
 durationTotalMs: 22
 returnedSelfPercentage: 90.9
 returnedHeapPercentage: 100
 matchedCount: 5
-operations[5]{kind,name,namespace,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount,heapSelfNetBytes}:
-  method,HeapService.buildRows(),default,1,9,9,9,40.9,0,0,0,0,0,750000
-  method,HeapService.churn(),default,1,5,5,5,22.7,0,0,0,0,0,0
-  codeUnit,execute_anonymous_apex,default,1,20,3,3,13.6,0,0,0,0,0,0
-  method,HeapService.buildAndChurn(),default,1,17,3,3,13.6,0,0,0,0,0,0
-  systemMethod,CUMULATIVE_LIMIT_USAGE,default,1,0,0,0,0,0,0,0,0,0,0
+capturedAt[2]{debugCategory,level}:
+  apexCode,FINEST
+  apexProfiling,FINEST
+operations[5]{debugCategory,type,name,namespace,callCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount,heapSelfNetBytes}:
+  apexCode,METHOD_ENTRY,HeapService.buildRows(),default,1,9,9,9,40.9,0,0,0,0,0,750000
+  apexCode,METHOD_ENTRY,HeapService.churn(),default,1,5,5,5,22.7,0,0,0,0,0,0
+  apexCode,CODE_UNIT_STARTED,execute_anonymous_apex,default,1,20,3,3,13.6,0,0,0,0,0,0
+  apexCode,METHOD_ENTRY,HeapService.buildAndChurn(),default,1,17,3,3,13.6,0,0,0,0,0,0
+  apexProfiling,CUMULATIVE_LIMIT_USAGE,CUMULATIVE_LIMIT_USAGE,default,1,0,0,0,0,0,0,0,0,0,0
