@@ -1,4 +1,4 @@
-import { Connection } from "@salesforce/core";
+import type { Connection } from "@salesforce/core";
 
 import {
   CATEGORY_LOG_NAMES,
