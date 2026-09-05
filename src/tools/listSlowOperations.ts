@@ -200,6 +200,11 @@ export interface SlowOperationsResult extends CaptureLevels {
    * took, since those lower the denominator and not the page. No log in the
    * corpus does: 0 to 100 across all 123, and a net-negative row has never
    * reached a top ten.
+   *
+   * It reads 0 where the transaction retained no net heap, which is the answer
+   * on the 83 logs that record no allocation — the column of zeros beside it
+   * says the same. A transaction that released more than it took would read 0
+   * as well, where no share is meaningful; none of the 123 does.
    */
   returnedHeapPercentage?: number;
   /**

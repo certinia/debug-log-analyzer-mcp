@@ -107,6 +107,8 @@ Rank what an Apex debug log spent its time on by self-execution time — code un
 
 Rows are `{kind, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` the returned rows account for between them, and the `matchedCount` the selection matched before paging cut it. `durationSelfMaxMs` is the self time of the slowest single call in a grouped row — read against `durationSelfMs` it tells one bad call from sheer volume — and is absent when each row is one call already.
 
+`sortBy: "heapSelfNetBytes"` ranks by the heap each row's own code retained instead of by time, adding a `heapSelfNetBytes` column and a `returnedHeapPercentage` scalar — the share of the transaction's retained heap the returned rows carry, which the rows cannot imply and no other tool reports. Both are absent from a ranking that did not ask for them. The figure is the signed `HEAP_ALLOCATE` bytes, so a row that released more than it took reads below zero, and an allocation reaches the log only at `APEX_CODE,FINER` and above — `apexCodeLevel` says whether a zero can be real.
+
 `kind` is one of `codeUnit`, `managedPackage`, `method`, `systemMethod`, `soql`, `sosl`, `dml`, `flow` or `workflow`. A `managedPackage` row is the time a package spent where the log shows nothing, and is often most of a transaction.
 
 `queryPlans` gives what the query optimizer decided about the queries behind the returned rows — `{leadingOperationType, relativeCost, cardinality, sObjectCardinality}`, where a `relativeCost` above 1 means the optimizer will not treat the query as selective. It is absent when the log explained none of them, which `dbLevel` explains: an explain line is written at `DB,FINEST` alone. Each plan names its row as `operationRow`, the 1-based line of `operations` as returned — except under `groupBy: "namespace"`, where the row is named after the namespace and the plan carries the query text as `name` instead.
@@ -122,6 +124,7 @@ A page is bounded by size as well as by `limit`, so you can get fewer rows than 
 | `limit`       | number | No       | Page size (default: 10); fewer if the page would be too large                          |
 | `offset`      | number | No       | Ranked rows to skip (default: 0)                                                       |
 | `groupBy`     | string | No       | Fold repeats into one row by `name` (default), `namespace` or `callerNamespace`; `none` ranks each call |
+| `sortBy`      | string | No       | Rank on `durationSelfMs` (default) or `heapSelfNetBytes`                               |
 
 ### apexlog_get_summary
 
