@@ -137,8 +137,8 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
         return refused;
       }
       // Loaded here and not at the top of the file: the tool reaches
-      // `@salesforce/core`, which costs about 250 ms to load, and a session
-      // that only reads logs must never pay it.
+      // `@salesforce/core`, and a session that only reads logs must not pay
+      // the 250 ms it costs to load.
       const { executeAnonymous } = await import("./tools/executeAnonymous.js");
       return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
         allowProductionOrgs,

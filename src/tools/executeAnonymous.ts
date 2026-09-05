@@ -1,10 +1,9 @@
-// First, so the guard runs before the SDK below is evaluated. `src/index.ts`
-// guards the `bin` alone, and this module is the entry point of the lazy chunk.
+// This module is the entry point of the lazy chunk, so the guard travels with
+// it — `src/index.ts` covers the `bin` alone.
 import "../salesforce/logging.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
-// This module calls the SDK, so it is reached only through an `await import()`.
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import { StateAggregator, type Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";

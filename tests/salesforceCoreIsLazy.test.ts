@@ -10,14 +10,21 @@ jest.mock("@salesforce/core", () => {
 
 describe("the Salesforce SDK", () => {
   /**
-   * The import must be inside the test: a static one surfaces the throw before
-   * any test runs, and reports it as a suite failure rather than this one.
+   * Both imports must be inside their test: a static one surfaces the throw
+   * before any test runs, and reports it as a suite failure rather than here.
    *
-   * What this does not prove: anything about `dist/`, and anything about an
-   * `await import("@salesforce/core")` added inside a hot path later. The
-   * startup check in `scripts/eval.mjs` covers the built output.
+   * `scripts/eval.mjs` covers what this cannot — the built output, and an
+   * `await import("@salesforce/core")` added inside a hot path later.
    */
   it("is not loaded when the server is built", async () => {
     await expect(import("../src/server")).resolves.toBeDefined();
+  });
+
+  // Without this the test above passes whenever the mock stops being applied,
+  // proving nothing and never failing.
+  it("is loaded by the module that calls it", async () => {
+    await expect(import("../src/salesforce/connection")).rejects.toThrow(
+      "was loaded from the startup graph",
+    );
   });
 });
