@@ -18,8 +18,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       '@salesforce/core':
-        specifier: ^8.32.3
-        version: 8.32.6
+        specifier: ^9.1.0
+        version: 9.1.0
       '@toon-format/toon':
         specifier: ^4.1.1
         version: 4.1.1
@@ -518,16 +518,17 @@ packages:
     resolution: {integrity: sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA==}
     engines: {node: ^14.18.0 || >=16.0.0}
 
-  '@salesforce/core@8.32.6':
-    resolution: {integrity: sha512-ZR973WoqCgi6cR58WhgokbHVZOaADNKHiuM1FAwS5pTLQnC91xYi04i2e/gpAX2AUf7Ya6zjbusYtZNpSyKKAQ==}
-    engines: {node: '>=18.0.0'}
+  '@salesforce/core@9.1.0':
+    resolution: {integrity: sha512-ID9g4YH0yZBeWI0eKJv2IJRRN6ZuNjwpIOjEZm9a79Gzxa3IITsV4PCvD8q7JA3PKqiln57p8yJE458Kn5KW1g==}
+    engines: {node: '>=22.0.0'}
 
-  '@salesforce/kit@3.2.6':
-    resolution: {integrity: sha512-O8S4LWerHa9Zosqh+IoQjgLtpxMOfObRxaRnUdRV4MLtFUi+bQxQiyFvve6eEaBaMP1b1xVDQpvSvQ+PXEDGFQ==}
+  '@salesforce/kit@4.0.0':
+    resolution: {integrity: sha512-VwxhSH/8PQ5YmPAdhmLaJGCgR0n/pOm8T2y+/odMFthd5SA0xsO/kTdaRLFnFQAxxNj1nYtNHRb+BoMuAatzew==}
+    engines: {node: '>=22.0.0'}
 
-  '@salesforce/ts-types@2.0.12':
-    resolution: {integrity: sha512-BIJyduJC18Kc8z+arUm5AZ9VkPRyw1KKAm+Tk+9LT99eOzhNilyfKzhZ4t+tG2lIGgnJpmytZfVDZ0e2kFul8g==}
-    engines: {node: '>=18.0.0'}
+  '@salesforce/ts-types@3.0.1':
+    resolution: {integrity: sha512-NWkveMYT2I3O7EAYwWHi6/ba2YUwp9MFi/zJzA+czK5MVqJfdD6FZbiQrTbALZNvFzgFSdq9BvHm6ygRmtROzw==}
+    engines: {node: '>=22.0.0'}
 
   '@sinclair/typebox@0.34.48':
     resolution: {integrity: sha512-kKJTNuK3AQOrgjjotVxMrCn1sUJwM76wMszfq1kdU4uYVJjvEWuFQ6HgvLt4Xz3fSmZlTOxJ/Ie13KnIcWQXFA==}
@@ -1250,8 +1251,8 @@ packages:
   csv-parse@5.6.0:
     resolution: {integrity: sha512-l3nz3euub2QMg5ouu5U09Ew9Wf6/wQ8I++ch1loQ0ljmzhmfZYrH9fflS22i/PQEvsPvxCwxgz5q7UB8K1JO4Q==}
 
-  csv-stringify@6.8.2:
-    resolution: {integrity: sha512-V0md5rBGlZb5WOfUmBWM8tr1+vvbe00EC2+ZhIYPKypA1GLvGuh0NzWEK0L+yRplocH7r37YGoT9uK0r1TtqBQ==}
+  csv-stringify@6.8.3:
+    resolution: {integrity: sha512-gIeSCvq5F4VtXV3naV3VAewLhBkiZBz+PPhTOA8H3Y8h/ELa+R1ml0GZck/4/Nzo9ep2lvOluilJ6MJlbZsKMA==}
 
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
@@ -3109,7 +3110,7 @@ snapshots:
       '@sindresorhus/is': 4.6.0
       base64url: 3.0.1
       csv-parse: 5.6.0
-      csv-stringify: 6.8.2
+      csv-stringify: 6.8.3
       faye: 1.4.1
       form-data: 4.0.6
       multistream: 3.1.0
@@ -3185,11 +3186,11 @@ snapshots:
 
   '@pkgr/core@0.3.6': {}
 
-  '@salesforce/core@8.32.6':
+  '@salesforce/core@9.1.0':
     dependencies:
       '@jsforce/jsforce-node': 3.10.19
-      '@salesforce/kit': 3.2.6
-      '@salesforce/ts-types': 2.0.12
+      '@salesforce/kit': 4.0.0
+      '@salesforce/ts-types': 3.0.1
       ajv: 8.20.0
       change-case: 4.1.2
       fast-levenshtein: 3.0.0
@@ -3207,11 +3208,11 @@ snapshots:
       ts-retry-promise: 0.8.1
       zod: 4.4.3
 
-  '@salesforce/kit@3.2.6':
+  '@salesforce/kit@4.0.0':
     dependencies:
-      '@salesforce/ts-types': 2.0.12
+      '@salesforce/ts-types': 3.0.1
 
-  '@salesforce/ts-types@2.0.12': {}
+  '@salesforce/ts-types@3.0.1': {}
 
   '@sinclair/typebox@0.34.48': {}
 
@@ -3856,7 +3857,7 @@ snapshots:
 
   csv-parse@5.6.0: {}
 
-  csv-stringify@6.8.2: {}
+  csv-stringify@6.8.3: {}
 
   dateformat@4.6.3: {}
 
