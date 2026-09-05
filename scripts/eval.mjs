@@ -497,6 +497,11 @@ const MODERN_ENVELOPE = {
   "io.modelcontextprotocol/clientInfo": { name: "apex-log-mcp-eval", version: "0" },
 };
 
+/** What a dead server said, out of the stack Node prints around it. */
+function errorLine(stderr) {
+  return /^(?:Uncaught )?Error(?: \[\w+\])?: (.+)$/m.exec(stderr)?.[1];
+}
+
 /** Minimal MCP stdio client: initialize, then one tools/call per case. */
 function createClient(era = "legacy") {
   const child = spawn("node", ["--max-old-space-size=8192", SERVER], {
@@ -504,7 +509,27 @@ function createClient(era = "legacy") {
   });
   const pending = new Map();
   let buffer = "";
+  let stderr = "";
   let nextId = 1;
+  let stopped = false;
+
+  child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+
+  // A server that dies leaves every request unanswered, and an unanswered
+  // promise waits for the CI timeout rather than failing. Say what happened
+  // instead: its stderr carries the reason it could not start.
+  child.on("exit", (code, signal) => {
+    if (stopped) return;
+    const how = signal ? `signal ${signal}` : `code ${code}`;
+    for (const { reject } of pending.values()) {
+      reject(
+        new Error(
+          `the server exited with ${how} — ${errorLine(stderr) ?? stderr.trim()}`,
+        ),
+      );
+    }
+    pending.clear();
+  });
 
   child.stdout.on("data", (chunk) => {
     buffer += chunk.toString();
@@ -518,18 +543,18 @@ function createClient(era = "legacy") {
       } catch {
         continue;
       }
-      const resolve = pending.get(message.id);
-      if (resolve) {
+      const waiting = pending.get(message.id);
+      if (waiting) {
         pending.delete(message.id);
-        resolve(message);
+        waiting.resolve(message);
       }
     }
   });
 
   const request = (method, params) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
       const id = nextId++;
-      pending.set(id, resolve);
+      pending.set(id, { resolve, reject });
       const addressed =
         era === "modern" ? { ...params, _meta: MODERN_ENVELOPE } : params;
       child.stdin.write(
@@ -568,6 +593,7 @@ function createClient(era = "legacy") {
       return text;
     },
     stop() {
+      stopped = true;
       child.kill();
     },
   };
@@ -851,10 +877,8 @@ async function checkNoSdkAtStartup(failures) {
   child.kill();
 
   if (!listed) {
-    // The hook's own message, out of the stack Node prints around it.
-    const reason = /^Error: (.+)$/m.exec(stderr)?.[1];
     failures.push(
-      `startup: ${reason ?? `the server answered no tools/list — ${stderr.trim()}`}`,
+      `startup: ${errorLine(stderr) ?? `the server answered no tools/list — ${stderr.trim()}`}`,
     );
     return;
   }
