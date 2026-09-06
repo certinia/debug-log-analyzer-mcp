@@ -67,6 +67,11 @@ jest.mock("../src/tools/listLimitRisks", () => ({
 
 jest.mock("../src/tools/executeAnonymous", () => ({
   executeAnonymous: jest.fn(),
+}));
+
+// A module of its own in `src/`, so the server can register the tool without
+// loading the handler and the Salesforce SDK behind it.
+jest.mock("../src/tools/executeAnonymousDefinition", () => ({
   executeAnonymousToolConfig: jest.fn((disabled = false) => ({
     title: "Execute Anonymous Apex",
     description: disabled
@@ -424,18 +429,26 @@ describe("createApexLogServer", () => {
       );
     });
 
-    it("should pass --no-apex-execution through to apexlog_execute_anonymous", async () => {
+    it("should refuse apexlog_execute_anonymous under --no-apex-execution, and not load the tool", async () => {
       createApexLogServer({ apexExecutionDisabled: true });
 
       const tool = registeredTools.get("apexlog_execute_anonymous")!;
-      await tool.callback({ apex: "System.debug('test');" }, {} as any);
-
-      expect(executeAnonymous).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.objectContaining({ apexExecutionDisabled: true }),
+      const result = await tool.callback(
+        { apex: "System.debug('test');" },
+        {} as any,
       );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          isError: true,
+          content: [
+            expect.objectContaining({
+              text: expect.stringContaining("--no-apex-execution"),
+            }),
+          ],
+        }),
+      );
+      expect(executeAnonymous).not.toHaveBeenCalled();
     });
 
     it("should reuse one classification cache across calls", async () => {
