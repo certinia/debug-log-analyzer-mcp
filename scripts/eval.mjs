@@ -20,7 +20,7 @@
  * 4. Golden files — the exact payload, committed, so any shape change is a diff
  *    a reviewer can read.
  *
- * Three more are checked once per run:
+ * Four more are checked once per run:
  *
  * 5. Definition budget — what `tools/list` costs on every request, per tool and
  *    in total, measured over the whole wire object the client receives.
@@ -28,6 +28,8 @@
  *    trim that saves tokens cannot quietly cost discovery.
  * 7. README tables — the published figures are generated from this run, so a
  *    change that moves them fails until the README is regenerated with it.
+ * 8. Startup cost — listing the tools must not load the Salesforce SDK, which
+ *    is five times the rest of startup. Only this sees the built output.
  *
  * Usage:
  *   node scripts/eval.mjs            # assert
@@ -497,14 +499,50 @@ const MODERN_ENVELOPE = {
   "io.modelcontextprotocol/clientInfo": { name: "apex-log-mcp-eval", version: "0" },
 };
 
-/** Minimal MCP stdio client: initialize, then one tools/call per case. */
-function createClient(era = "legacy") {
-  const child = spawn("node", ["--max-old-space-size=8192", SERVER], {
+/** How long one request may go unanswered before the run gives up on it. */
+const REQUEST_TIMEOUT_MS = 60_000;
+
+/**
+ * What a dead server said, out of the stack Node prints around it. The bracket
+ * is Node's own error code, as in `Error [ERR_MODULE_NOT_FOUND]:`.
+ */
+function errorLine(stderr) {
+  return /^.*Error(?: \[[^\]]+\])?: (.+)$/m.exec(stderr)?.[1] ?? stderr.trim();
+}
+
+/**
+ * Minimal MCP stdio client: initialize, then one tools/call per case.
+ *
+ * `nodeArgs` is how a check runs the same server under different flags — the
+ * startup guard adds a `--import` hook.
+ */
+function createClient(era = "legacy", nodeArgs = ["--max-old-space-size=8192"]) {
+  const child = spawn("node", [...nodeArgs, SERVER], {
     stdio: ["pipe", "pipe", "pipe"],
   });
   const pending = new Map();
   let buffer = "";
+  let stderr = "";
   let nextId = 1;
+
+  child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+
+  const failPending = (reason) => {
+    for (const { reject } of pending.values()) {
+      reject(new Error(reason));
+    }
+    pending.clear();
+  };
+
+  // A server that dies or never starts leaves every request unanswered, and an
+  // unanswered promise waits for the CI timeout rather than failing. Say what
+  // happened instead: its stderr carries the reason.
+  child.on("exit", (code, signal) => {
+    if (child.killed) return;
+    const how = signal ? `signal ${signal}` : `code ${code}`;
+    failPending(`the server exited with ${how} — ${errorLine(stderr)}`);
+  });
+  child.on("error", (error) => failPending(`the server did not start — ${error.message}`));
 
   child.stdout.on("data", (chunk) => {
     buffer += chunk.toString();
@@ -518,18 +556,25 @@ function createClient(era = "legacy") {
       } catch {
         continue;
       }
-      const resolve = pending.get(message.id);
-      if (resolve) {
+      const waiting = pending.get(message.id);
+      if (waiting) {
         pending.delete(message.id);
-        resolve(message);
+        waiting.resolve(message);
       }
     }
   });
 
   const request = (method, params) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
       const id = nextId++;
-      pending.set(id, resolve);
+      pending.set(id, { resolve, reject });
+      // A server that is alive but silent answers nothing and exits never, so
+      // the exit handler above cannot see it.
+      setTimeout(() => {
+        if (pending.delete(id)) {
+          reject(new Error(`${method} went unanswered for ${REQUEST_TIMEOUT_MS} ms`));
+        }
+      }, REQUEST_TIMEOUT_MS).unref();
       const addressed =
         era === "modern" ? { ...params, _meta: MODERN_ENVELOPE } : params;
       child.stdin.write(
@@ -797,6 +842,27 @@ function checkCacheHints(result, failures) {
   }
 }
 
+/**
+ * Starting the server and listing its tools must not load the Salesforce SDK.
+ *
+ * Driven against `dist/index.js`, the file that ships: the ESLint rule and
+ * `tests/salesforceCoreIsLazy.test.ts` read `src/`, so neither sees what `tsc`
+ * emitted, the `bin` entry point, or an `await import` added to a startup path
+ * later. The hook throws on resolve, so a violation kills the server and the
+ * client reports what its stderr said.
+ */
+async function checkNoSdkAtStartup(failures) {
+  const hook = path.join(ROOT, "scripts", "noSalesforceSdkAtStartup.mjs");
+  try {
+    await withClient((client) => client.toolsList(), "legacy", [
+      "--import",
+      hook,
+    ]);
+  } catch (error) {
+    failures.push(`startup: ${error.message}`);
+  }
+}
+
 function checkSelectionKeywords(costs, failures) {
   for (const { name, description } of costs) {
     const lowered = description.toLowerCase();
@@ -917,8 +983,8 @@ async function checkReadme(blocks, failures, update) {
 }
 
 /** One server process for the whole run, stopped however the run ends. */
-async function withClient(run, era) {
-  const client = createClient(era);
+async function withClient(run, era, nodeArgs) {
+  const client = createClient(era, nodeArgs);
   await client.start();
   try {
     return await run(client);
@@ -955,6 +1021,9 @@ async function main() {
   const failures = [];
 
   checkChecksAreRun(failures);
+
+  await checkNoSdkAtStartup(failures);
+  console.log("checked startup — the Salesforce SDK is not loaded to list tools");
 
   const responses = [];
 
