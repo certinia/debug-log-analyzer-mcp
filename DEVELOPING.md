@@ -322,9 +322,10 @@ budget, and that it matches its golden file. Run it — and `pnpm run eval:updat
 goldens — for any change to a response shape; the golden diff *is* the review of the change.
 
 Two further checks run once per run: the definition budget described in
-[Shaping Tool Definitions](#️-shaping-tool-definitions), and both tables in
-[Token Cost](README.md#token-cost), which are generated from the run — so a change that moves a
-published figure fails until `pnpm run eval:update` regenerates the README with it.
+[Shaping Tool Definitions](#️-shaping-tool-definitions), and the generated README blocks — both
+[Token Cost](README.md#token-cost) tables, each tool's parameter table, and the shape of each
+response. A change that moves any of them fails until `pnpm run eval:update` regenerates the README
+with it, so the prose beside those blocks is the only part you edit by hand.
 
 The unit tests cannot substitute for it: jest maps `@toon-format/toon` to a JSON stand-in, so it
 never sees the real encoding.

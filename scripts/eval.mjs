@@ -26,8 +26,9 @@
  *    in total, measured over the whole wire object the client receives.
  * 6. Selection keywords — the words a client's tool search matches on, so a
  *    trim that saves tokens cannot quietly cost discovery.
- * 7. README tables — the published figures are generated from this run, so a
- *    change that moves them fails until the README is regenerated with it.
+ * 7. README blocks — the published figures, the parameter tables and the shape
+ *    of each response are generated from this run, so a change that moves any
+ *    of them fails until the README is regenerated with it.
  * 8. Startup cost — listing the tools must not load the Salesforce SDK, which
  *    is five times the rest of startup. Only this sees the built output.
  *
@@ -947,9 +948,63 @@ function renderTokenCost(costs, responses) {
   ];
 }
 
+/** How a JSON Schema property reads in the README's Type column. */
+function schemaType(property) {
+  if (property.anyOf) {
+    return [...new Set(property.anyOf.map(schemaType))].join(" \\| ");
+  }
+  if (property.type === "array") {
+    return `${schemaType(property.items)}[]`;
+  }
+  // `integer` is a JSON Schema refinement of number, and the distinction is
+  // not one a caller of these tools acts on.
+  return property.type === "integer" ? "number" : property.type;
+}
+
+/**
+ * The parameter tables, generated from the schema the client is served.
+ *
+ * The `description` cell is the same string the agent reads, so a `.describe()`
+ * edit, a new parameter or a dropped one fails until the README carries it.
+ * `sortBy` shipped in one release and reached the README two later; this is
+ * what stops that.
+ */
+function renderToolParameters(tools) {
+  return tools.map((tool) => ({
+    id: `params-${tool.name}`,
+    table: renderTable(
+      ["Parameter", "Type", "Required", "Description"],
+      Object.entries(tool.inputSchema.properties).map(([name, property]) => [
+        `\`${name}\``,
+        schemaType(property),
+        (tool.inputSchema.required ?? []).includes(name) ? "Yes" : "No",
+        property.description ?? "",
+      ]),
+    ),
+  }));
+}
+
+/**
+ * The columns of each table a response returns, read off the payload itself.
+ *
+ * A README row list drifts silently: one release shipped without
+ * `durationSelfMaxMs` or `matchedCount`, both of which every default response
+ * carries.
+ */
+function renderResponseShapes(toonByTool) {
+  return Object.entries(toonByTool).map(([tool, toon]) => ({
+    id: `shape-${tool}`,
+    table: [...inspect(toon).columns]
+      .map(
+        ([table, columns]) => `- \`${table}\` — \`{${[...columns].join(", ")}}\``,
+      )
+      .join("\n"),
+  }));
+}
+
 async function checkReadme(blocks, failures, update) {
   let readme = await fs.readFile(README, "utf-8");
-  let stale = false;
+  const stale = [];
 
   for (const { id, table } of blocks) {
     const startMarker = `<!-- ${id}:start -->`;
@@ -966,11 +1021,11 @@ async function checkReadme(blocks, failures, update) {
     if (readme.slice(start + startMarker.length, end) === wanted) {
       continue;
     }
-    stale = true;
+    stale.push(id);
     readme = `${readme.slice(0, start + startMarker.length)}${wanted}${readme.slice(end)}`;
   }
 
-  if (!stale) {
+  if (stale.length === 0) {
     return;
   }
   if (update) {
@@ -978,7 +1033,7 @@ async function checkReadme(blocks, failures, update) {
     return;
   }
   failures.push(
-    "README.md: the token cost tables no longer match this run. Run `pnpm run eval:update` and commit the diff.",
+    `README.md: ${stale.join(", ")} no longer matches this run. Run \`pnpm run eval:update\` and commit the diff.`,
   );
 }
 
@@ -1026,6 +1081,7 @@ async function main() {
   console.log("checked startup — the Salesforce SDK is not loaded to list tools");
 
   const responses = [];
+  const publishedToon = {};
 
   await withClient(async (client) => {
     for (const testCase of CASES) {
@@ -1039,15 +1095,29 @@ async function main() {
       const tokens = checkTokenBudget(testCase, toon, failures);
       await checkGolden(testCase, toon, failures, update);
       responses.push({ ...testCase, tokens });
+      // The README states the shape of the response the published figures are
+      // measured against, so it is that fixture's payload it is generated from.
+      if (testCase.fixture === PUBLISHED_FIXTURE) {
+        publishedToon[testCase.tool] = toon;
+      }
       console.log(
         `${update ? "updated" : "checked"} ${testCase.tool}/${testCase.fixture} — ~${tokens} tokens`,
       );
     }
 
-    const costs = definitionCosts((await client.toolsList()).tools);
+    const { tools } = await client.toolsList();
+    const costs = definitionCosts(tools);
     checkDefinitionBudget(costs, failures);
     checkSelectionKeywords(costs, failures);
-    await checkReadme(renderTokenCost(costs, responses), failures, update);
+    await checkReadme(
+      [
+        ...renderTokenCost(costs, responses),
+        ...renderToolParameters(tools),
+        ...renderResponseShapes(publishedToon),
+      ],
+      failures,
+      update,
+    );
     const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
     console.log(
       `${update ? "updated" : "checked"} tool definitions — ~${total} tokens across ${costs.length} tools`,

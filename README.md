@@ -97,56 +97,95 @@ Durations are milliseconds to 3 decimal places, percentages to 1.
 
 Ranks what a log spent its time on by self time — code units, methods, queries, searches, DML, flows and workflows in one table.
 
-Rows are `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`, beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` those rows account for, and the `matchedCount` the selection matched before paging. `durationSelfMaxMs` is the slowest single call in a grouped row — read against `durationSelfMs` it tells one bad call from sheer volume — and is absent when each row is already one call.
+A default response returns:
+
+<!-- shape-apexlog_list_slow_operations:start -->
+
+- `capturedAt` — `{debugCategory, level}`
+- `operations` — `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`
+- `queryPlans` — `{operationRow, leadingOperationType, relativeCost, cardinality, sObjectCardinality}`
+
+<!-- shape-apexlog_list_slow_operations:end -->
+
+beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` those rows account for, and the `matchedCount` the selection matched before paging. `durationSelfMaxMs` is the slowest single call in a grouped row — read against `durationSelfMs` it tells one bad call from sheer volume — and is absent when each row is already one call.
 
 Both classification columns come from the log. `debugCategory` is what Salesforce stamped on the event, which decided whether it was written at all, and is the spelling `apexlog_execute_anonymous` takes as input. `type` is the event type, which is what the category cannot say: `SOQL_EXECUTE_BEGIN`, `SOSL_EXECUTE_BEGIN` and `DML_BEGIN` all sit under `database`, and `ENTERING_MANAGED_PKG` — the time a package spent where the log shows nothing, often most of a transaction — sits under `apexCode` beside the methods it hides.
 
 `sortBy: "heapSelfNetBytes"` ranks by retained heap instead of time, adding that column and a `returnedHeapPercentage` scalar; both are absent otherwise. The figure is signed `HEAP_ALLOCATE` bytes, so a row that released more than it took reads below zero. Allocations reach the log only at `apexCode` FINER and above, so the `apexCode` row of `capturedAt` says whether a zero is real.
 
-`capturedAt` gives `{debugCategory, level}` for the categories among the returned rows, keyed to join with them.
+`capturedAt` covers the categories among the returned rows, keyed to join with them.
 
-`queryPlans` gives `{leadingOperationType, relativeCost, cardinality, sObjectCardinality}` for the queries behind the returned rows. A `relativeCost` above 1 means the optimizer will not treat the query as selective. It is absent when the log explained none, which the `database` row of `capturedAt` explains: explain lines are written at `database` FINEST alone. Each plan names its row as `operationRow`, the 1-based line of `operations` — except under a `namespace`, `callerNamespace` or `debugCategory` grouping, where the row is not named after the query, so the plan carries the query text as `name`.
+`queryPlans` is what the optimizer decided about the queries behind those rows: a `relativeCost` above 1 means it will not treat the query as selective. It is absent when the log explained none, which the `database` row of `capturedAt` explains — explain lines are written at `database` FINEST alone. `operationRow` is the 1-based line of `operations`, except under a `namespace`, `callerNamespace` or `debugCategory` grouping, where the row is not named after the query, so the plan carries the query text as `name`.
 
-A page is bounded by size as well as by `limit`, so you can get fewer rows than you asked for. Advance `offset` by the rows you got, not by `limit`; `matchedCount` says whether any were hidden.
+A page is bounded by size as well as by `limit`, so you can get fewer rows than you asked for; `matchedCount` says whether any were hidden.
 
-| Parameter       | Type     | Required | Description                                                                                              |
-| --------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------- |
-| `logFilePath`   | string   | Yes      | Absolute path to the Apex debug log file (.log)                                                          |
-| `debugCategory` | string[] | No       | Rank only these debug log categories                                                                     |
-| `type`          | string[] | No       | Rank only these log event types, e.g. `SOQL_EXECUTE_BEGIN`, `DML_BEGIN`, `METHOD_ENTRY`                  |
-| `namespace`     | string[] | No       | Rank only these namespaces                                                                               |
-| `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0)                                                        |
-| `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large                                            |
-| `offset`        | number   | No       | Ranked rows to skip (default: 0)                                                                         |
-| `groupBy`       | string   | No       | Fold repeats into one row by `name` (default), `namespace`, `callerNamespace` or `debugCategory`; `none` ranks each call |
-| `sortBy`        | string   | No       | Rank on `durationSelfMs` (default) or `heapSelfNetBytes`                                                 |
+<!-- params-apexlog_list_slow_operations:start -->
+
+| Parameter       | Type     | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `logFilePath`   | string   | Yes      | Absolute path to the Apex debug log file (.log)                                                                                                                                                                                                                                                                                                                                                                          |
+| `debugCategory` | string[] | No       | Rank only these debug log categories                                                                                                                                                                                                                                                                                                                                                                                     |
+| `type`          | string[] | No       | Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY                                                                                                                                                                                                                                                                                                                                        |
+| `namespace`     | string[] | No       | Rank only these namespaces                                                                                                                                                                                                                                                                                                                                                                                               |
+| `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0), whichever sortBy is used                                                                                                                                                                                                                                                                                                                                              |
+| `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large                                                                                                                                                                                                                                                                                                                                                            |
+| `offset`        | number   | No       | Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.                                                                                                                                                                                                                                                                                                                         |
+| `groupBy`       | string   | No       | Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own. |
+| `sortBy`        | string   | No       | Rank on (default: durationSelfMs). heapSelfNetBytes adds that column.                                                                                                                                                                                                                                                                                                                                                    |
+
+<!-- params-apexlog_list_slow_operations:end -->
 
 ### apexlog_get_summary
 
 How long the transaction ran, where the time went, what it consumed, and whether the log is complete. Start here.
 
-All thirteen governor limits are `{limit, used, max}` rows, zeros included. `limitsByNamespace` adds `{namespace, limit, used}` for each limit a namespace consumed — how you see that a managed package spent your CPU time. It names no ceiling, because there is one ceiling per limit for the whole transaction and it is already in `governorLimits`.
+<!-- shape-apexlog_get_summary:start -->
 
-`timeByCategory` gives `{debugCategory, operationCount, durationSelfMs, selfPercentage}` for all eleven categories. Since the category decided whether an operation was logged at all, read a zero against `debugLevels` (`{debugCategory, level}`): `database 0` beside `database NONE` means the queries were not logged; beside `database FINEST` it means none ran. Three categories — `dataAccess`, `wave` and `validation` — can only ever be zero, because no timed event carries them.
+- `fatalErrors` — `{message, frames}`
+- `debugLevels` — `{debugCategory, level}`
+- `governorLimits` — `{limit, used, max}`
+- `limitsByNamespace` — `{namespace, limit, used}`
+- `timeByCategory` — `{debugCategory, operationCount, durationSelfMs, selfPercentage}`
 
-`truncated` says whether the log is complete; every figure in a partial one is a floor. Where the platform cut it, `truncatedBy` names how (`skipped-lines` for a hole, `max-size` for a missing tail) and `skippedBytes` how much went. Both are absent on a log that merely stops mid-frame. `thrownCount` counts exceptions thrown, zero included. `fatalErrors` gives `{message, frames}` per failure that ended a transaction, with the innermost three frames and a trailing `…` where there were more — it is the only field that says a transaction did not finish, and a fatal error need breach no limit, so nothing else in the response reveals one.
+<!-- shape-apexlog_get_summary:end -->
+
+All thirteen governor limits are listed, zeros included. `limitsByNamespace` covers each limit a namespace consumed — how you see that a managed package spent your CPU time. It names no ceiling, because there is one ceiling per limit for the whole transaction and it is already in `governorLimits`.
+
+`timeByCategory` covers all eleven categories. Since the category decided whether an operation was logged at all, read a zero against `debugLevels`: `database 0` beside `database NONE` means the queries were not logged; beside `database FINEST` it means none ran. Three categories — `dataAccess`, `wave` and `validation` — can only ever be zero, because no timed event carries them.
+
+`truncated` says whether the log is complete; every figure in a partial one is a floor. Where the platform cut it, `truncatedBy` names how (`skipped-lines` for a hole, `max-size` for a missing tail) and `skippedBytes` how much went. Both are absent on a log that merely stops mid-frame. `thrownCount` counts exceptions thrown, zero included. `fatalErrors` appears once per failure that ended a transaction, with the innermost three frames and a trailing `…` where there were more — it is the only field that says a transaction did not finish, and a fatal error need breach no limit, so nothing else in the response reveals one.
+
+<!-- params-apexlog_get_summary:start -->
 
 | Parameter     | Type   | Required | Description                                     |
 | ------------- | ------ | -------- | ----------------------------------------------- |
 | `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
 
+<!-- params-apexlog_get_summary:end -->
+
 ### apexlog_list_limit_risks
 
 The governor limits nearest their ceiling, worst first.
 
-Rows are `{limit, used, max, usedPercentage}`, beside the `threshold` that selected them — so an empty table reads as "nothing is that far consumed" rather than as a missing answer.
+<!-- shape-apexlog_list_limit_risks:start -->
 
-`capturedAt` gives `{debugCategory, level}` for the categories gating the limits returned: `apexProfiling` for the cumulative blocks every limit but heap comes from, `apexCode` for the heap allocations behind `heapSize`.
+- `capturedAt` — `{debugCategory, level}`
+- `atRisk` — `{limit, used, max, usedPercentage}`
+
+<!-- shape-apexlog_list_limit_risks:end -->
+
+The `threshold` that selected the rows is reported beside them, so an empty table reads as "nothing is that far consumed" rather than as a missing answer.
+
+`capturedAt` covers the categories gating the limits returned: `apexProfiling` for the cumulative blocks every limit but heap comes from, `apexCode` for the heap allocations behind `heapSize`.
+
+<!-- params-apexlog_list_limit_risks:start -->
 
 | Parameter     | Type   | Required | Description                                                      |
 | ------------- | ------ | -------- | ---------------------------------------------------------------- |
 | `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                  |
 | `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
+
+<!-- params-apexlog_list_limit_risks:end -->
 
 ### apexlog_execute_anonymous
 
@@ -154,12 +193,16 @@ Runs anonymous Apex against an authenticated org, saves the debug log locally, a
 
 The response also gives the org username (and alias, if set), the org type, and an execution summary. Logs go to `.apex-log-mcp/` by default — add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
 
-| Parameter    | Type             | Required | Description                                                                                |
-| ------------ | ---------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `apex`       | string           | Yes      | The anonymous Apex to be executed                                                          |
-| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to `.apex-log-mcp/` in the project root.    |
-| `debugLevel` | string \| object | No       | Trace-flag log levels — see below. Omit to keep the current config.                        |
+<!-- params-apexlog_execute_anonymous:start -->
+
+| Parameter    | Type             | Required | Description                                                                                                                                                                                                                                                                                                |
+| ------------ | ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apex`       | string           | Yes      | The anonymous Apex to be executed                                                                                                                                                                                                                                                                          |
+| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                                                                                 |
+| `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root.                                                                                                                                                                                                                      |
+| `debugLevel` | string \| object | No       | Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
+
+<!-- params-apexlog_execute_anonymous:end -->
 
 `debugLevel` takes `"default"` to reset every category, a level such as `"FINEST"` to set them all, or an object to override some:
 
