@@ -3,7 +3,10 @@
  */
 
 import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
-import type { DebugCategory } from "@apexdevtools/apex-log-parser/types";
+import type {
+  DebugCategory,
+  LogEventType,
+} from "@apexdevtools/apex-log-parser/types";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
@@ -71,8 +74,12 @@ export interface Operation {
    * The log's own event type, e.g. `SOQL_EXECUTE_BEGIN`. It is what the category
    * cannot say: `soql`, `sosl` and `dml` all arrive under `database`, and a
    * managed package entry under `apexCode` beside the methods it hides.
+   *
+   * The parser's own union, so a misspelt literal anywhere downstream fails the
+   * build instead of matching nothing. `"Unknown"` covers the events the parser
+   * leaves untyped.
    */
-  type: string;
+  type: LogEventType | "Unknown";
   name: string;
   namespace: string;
   /**
@@ -160,7 +167,7 @@ export interface Operation {
  * transaction took as long as it took. It is timed and carries `apexCode`, so
  * nothing else holds it out.
  */
-const FRAME_TYPES = new Set(["EXECUTION_STARTED"]);
+const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
 
 /**
  * Whether the event is a thing the transaction spent time on.
