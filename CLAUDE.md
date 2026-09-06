@@ -86,7 +86,7 @@ Decisions worth not undoing: no prose `summary` or `recommendations`; report a t
 
 The tool definitions follow the same rule and are charged on every turn, called or not — see [Shaping Tool Definitions](DEVELOPING.md#️-shaping-tool-definitions). An enum already lists its values, so a `.describe()` must not repeat them; set `title` at the top level only, because `annotations.title` is an alias and is sent twice; anything true of every tool goes in the server `instructions` once.
 
-`pnpm run eval` (`scripts/eval.mjs`, wired into CI) is the gate: it drives the built server over stdio and checks answerability, duplication, token budgets and golden files, which the jest suite cannot do because it swaps TOON for a JSON stand-in. It also regenerates the README token tables, so a change that moves a published figure fails until the README is regenerated with it. Re-record with `pnpm run build && pnpm run eval:update` and read the diff.
+`pnpm run eval` (`scripts/eval.mjs`, wired into CI) is the gate: it drives the built server over stdio and checks answerability, duplication, token budgets, golden files, and that startup loads no Salesforce SDK — none of which the jest suite can do, because it swaps TOON for a JSON stand-in. It also regenerates the README token tables, so a change that moves a published figure fails until the README is regenerated with it. Re-record with `pnpm run build && pnpm run eval:update` and read the diff.
 
 `outputSchema`/`structuredContent` are unimplemented on cost, not on the spec: the schema is charged in `tools/list` every turn, and a client is free to read `structuredContent` instead of our text block, spending the shaping saving. Measure both before implementing — see #66.
 
@@ -95,3 +95,5 @@ The tool definitions follow the same rule and are charged on every turn, called 
 `apexlog_execute_anonymous` writes the debug log under `.apex-log-mcp/`, or `outputDir`, and returns the path beside a summary, the org alias and the detected org type. `debugLevel` sets trace flag levels per category, or all of them at once.
 
 It is always registered so agents can discover it; each call is authorized in `src/policy/orgExecutionPolicy.ts`. A production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation, decided before any `DebugLevel` or `TraceFlag` is written. `--no-apex-execution` refuses every call; the 1.x `--allowed-orgs` is accepted, ignored and warned about.
+
+`@salesforce/core` loads only for this tool: `src/server.ts` reaches it through `await import()`, and `executeAnonymousDefinition.ts` holds the wire definition so registration stays synchronous. Startup is 55 ms, not 290 ms; an ESLint rule, `tests/salesforceCoreIsLazy.test.ts` and the `pnpm run eval` startup check keep it there.

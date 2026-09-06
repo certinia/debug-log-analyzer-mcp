@@ -87,7 +87,7 @@ What a call costs does not scale with the log. The response is bounded by its sh
 | ------------------------------ | -------- | ---- | ------ |
 | `apexlog_get_summary`          | ~364     | ~293 | +24%   |
 | `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
-| `apexlog_list_limit_risks`     | ~39      | ~84  | -54%   |
+| `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
 
 <!-- token-cost-answers:end -->
 

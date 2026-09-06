@@ -1,6 +1,5 @@
 threshold: 80
-capturedAt[2]{debugCategory,level}:
-  apexCode,FINE
+capturedAt[1]{debugCategory,level}:
   apexProfiling,FINE
 atRisk[1]{limit,used,max,usedPercentage}:
   cpuTime,15163,10000,151.6

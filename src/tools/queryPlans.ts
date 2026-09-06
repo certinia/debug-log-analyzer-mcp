@@ -7,6 +7,7 @@ import type {
   LogEvent,
   SOQLExecuteExplainLine,
 } from "@apexdevtools/apex-log-parser";
+import type { LogEventType } from "@apexdevtools/apex-log-parser/types";
 import { walkLog } from "./apexLogSource.js";
 import { operationName } from "./operations.js";
 
@@ -39,7 +40,11 @@ export interface QueryPlan extends QueryPlanVerdict {
  * `CURSOR_CREATE_BEGIN` can never carry a plan. Exported so the one module that
  * reads explain lines is the one that says which type has them.
  */
-export function canCarryPlan({ type }: { type: string | null }): boolean {
+export function canCarryPlan({
+  type,
+}: {
+  type: LogEventType | "Unknown" | null;
+}): boolean {
   return type === "SOQL_EXECUTE_BEGIN";
 }
 
