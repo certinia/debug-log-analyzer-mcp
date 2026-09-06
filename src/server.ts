@@ -21,6 +21,7 @@ import {
   listLimitRisks,
   listLimitRisksToolConfig,
 } from "./tools/listLimitRisks.js";
+import { limitUnitsClause } from "./tools/responseShaping.js";
 import {
   executeAnonymous,
   executeAnonymousToolConfig,
@@ -85,8 +86,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       capabilities: {
         tools: {},
       },
-      instructions:
-        "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.",
+      instructions: `Analysis tools take an absolute path to a .log file. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.`,
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },
