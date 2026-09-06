@@ -11,6 +11,7 @@ import type {
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { capturedAt, type DeclaredLevel } from "./operations.js";
 import {
+  limitGatingCategory,
   omitEmpty,
   percentageOf,
   roundPercent,
@@ -42,19 +43,11 @@ export interface LimitRisk {
 }
 
 /**
- * The categories that decide whether a limit figure reached the log at all.
- *
- * Every limit but heap is read from the cumulative blocks, which the parser
- * stamps `apexProfiling` — `CUMULATIVE_LIMIT_USAGE` at INFO and
- * `LIMIT_USAGE_FOR_NS` at FINEST. `heapSize` comes from `HEAP_ALLOCATE`, which
- * is `apexCode` at FINER. So these two levels are what say whether a low or
- * absent figure is the transaction's or the trace flag's.
- *
- * A union over all thirteen limits, not the ones a call selected: `apexCode` is
- * reported beside a risk list that holds no `heapSize`. Narrowing it needs a
- * gating category per limit metric, which the parser does not publish.
+ * Every category that gates a limit figure, for the one case where no row
+ * selects: with nothing returned there is nothing to qualify, but a reader
+ * still has to tell "nothing is near a limit" from "limits were never logged".
  */
-const LIMIT_GATING_CATEGORIES = [
+const ALL_LIMIT_GATING_CATEGORIES = [
   "apexCode",
   "apexProfiling",
 ] as const satisfies readonly DebugCategory[];
@@ -66,8 +59,9 @@ export interface LimitRiskResult {
    */
   threshold: number;
   /**
-   * The level each category that gates a limit figure was captured at. Absent
-   * when the header declared neither: a level has no zero.
+   * The level each category gating a returned row was captured at, or every
+   * gating category when no row was returned. Absent when the header declared
+   * none of them: a level has no zero.
    */
   capturedAt?: DeclaredLevel[];
   /** Worst first. Empty means every limit is under the threshold. */
@@ -89,11 +83,18 @@ export async function listLimitRisks(args: LimitRisksArgs) {
   const { logFilePath, threshold = WARNING_THRESHOLD } = args;
 
   const apexLog = await loadApexLog(logFilePath);
+  const atRisk = atRiskLimits(apexLog.governorLimits.peak, threshold);
+
+  // The categories of the rows returned, so a level appears only where it
+  // explains one of them — the same rule the ranking tool follows.
+  const gating = atRisk.length
+    ? atRisk.map(({ limit }) => limitGatingCategory(limit))
+    : ALL_LIMIT_GATING_CATEGORIES;
 
   const result: LimitRiskResult = {
     threshold,
-    ...omitEmpty({ capturedAt: capturedAt(apexLog, LIMIT_GATING_CATEGORIES) }),
-    atRisk: atRiskLimits(apexLog.governorLimits.peak, threshold),
+    ...omitEmpty({ capturedAt: capturedAt(apexLog, gating) }),
+    atRisk,
   };
 
   return {
