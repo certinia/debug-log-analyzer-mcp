@@ -14,6 +14,7 @@
 
 import {
   ALL_LIMIT_METRICS,
+  type DebugCategory,
   type LimitMetricUnit,
   type Limits,
   type NamespaceLimits,
@@ -114,6 +115,22 @@ export function limitUnitsClause(): string {
   ).map(({ key, unit }) => `${key} in ${UNIT_PLURALS[unit]}`);
 
   return `every governor limit is a count except ${exceptions.join(" and ")}`;
+}
+
+/**
+ * The debug log category that decides whether a limit's figure reached the log.
+ *
+ * `heapSize` is summed from `HEAP_ALLOCATE`, which the parser stamps `apexCode`
+ * at FINER. Every other metric is read from the cumulative blocks, which are
+ * `apexProfiling` — `CUMULATIVE_LIMIT_USAGE` at INFO and `LIMIT_USAGE_FOR_NS`
+ * at FINEST. So the level of one of these two is what says whether a low or
+ * absent figure is the transaction's or the trace flag's.
+ *
+ * Beside `toLimitRows`, because the same module that names a limit says what
+ * gates it.
+ */
+export function limitGatingCategory(limit: string): DebugCategory {
+  return limit === "heapSize" ? "apexCode" : "apexProfiling";
 }
 
 export interface NamespaceLimitRow {

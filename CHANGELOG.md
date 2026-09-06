@@ -30,6 +30,7 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - Reduce the standing cost of having the server connected by 9%. `apexlog_list_slow_operations` is the one tool that costs more, by 145%, for what it now selects, ranks and returns ([#87], [#99], [#101], [#103], [#108], [#120], [#126], [#127], [#138])
 - `apexlog_execute_anonymous` reports `durationMs` from the log it wrote, so it now agrees with `apexlog_get_summary.durationTotalMs` for the same log ([#65])
 - Answer a second question about the same log without parsing it again ([#88])
+- Start in a fifth of the time, 290 ms down to 55 ms: the Salesforce CLI libraries are loaded when anonymous Apex runs, and not before ([#165])
 
 ### Added
 
@@ -94,3 +95,4 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 [#97]: https://github.com/certinia/debug-log-analyzer-mcp/issues/97
 [#99]: https://github.com/certinia/debug-log-analyzer-mcp/issues/99
 [#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
+[#165]: https://github.com/certinia/debug-log-analyzer-mcp/issues/165

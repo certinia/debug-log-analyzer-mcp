@@ -1,4 +1,4 @@
-import { Connection } from "@salesforce/core";
+import type { Connection } from "@salesforce/core";
 import { LOG_LEVEL } from "@apexdevtools/apex-log-parser/types";
 import type { DebugLevels } from "@apexdevtools/apex-log-parser/types";
 import type { Assert } from "../compileGuards.js";

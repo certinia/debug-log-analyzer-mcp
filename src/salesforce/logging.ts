@@ -12,6 +12,8 @@
  *
  * A module of its own, because a module body runs after every import it sits
  * beside: only the import graph can put this ahead of core's first `Logger`.
+ * So every module that value-imports the SDK imports this first, and so does
+ * `src/index.ts` for the `bin`.
  */
 process.env.SF_DISABLE_LOG_FILE ||= "true";
 process.env.SF_LOG_STDERR ||= "true";
