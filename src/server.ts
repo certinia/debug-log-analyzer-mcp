@@ -22,11 +22,11 @@ import {
   listLimitRisksToolConfig,
 } from "./tools/listLimitRisks.js";
 import {
-  executeAnonymous,
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
-} from "./tools/executeAnonymous.js";
+} from "./tools/executeAnonymousDefinition.js";
 import {
+  apexExecutionRefusal,
   CONFIRMATION_TTL_SECONDS,
   createConfirmationLedger,
   type ConfirmationState,
@@ -131,15 +131,24 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   server.registerTool(
     "apexlog_execute_anonymous",
     executeAnonymousToolConfig(apexExecutionDisabled),
-    async (args, ctx) =>
-      executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
+    async (args, ctx) => {
+      const refused = apexExecutionRefusal(apexExecutionDisabled);
+      if (refused) {
+        return refused;
+      }
+      // Loaded here and not at the top of the file: the tool reaches
+      // `@salesforce/core`, and a session that only reads logs must not pay
+      // the 250 ms it costs to load.
+      const { executeAnonymous } = await import("./tools/executeAnonymous.js");
+      return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
         allowProductionOrgs,
         apexExecutionDisabled,
         classificationCache,
         mintConfirmationState: (payload, ctx) =>
           confirmationCodec.mint(payload, ctx),
         consumeConfirmation,
-      }),
+      });
+    },
   );
 
   return server;
