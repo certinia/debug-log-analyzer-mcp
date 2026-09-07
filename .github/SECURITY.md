@@ -9,4 +9,4 @@ Include the affected version and steps to reproduce. We'll acknowledge your repo
 ## Good to know
 
 - The server runs locally, makes no network calls of its own, and needs no API keys.
-- `execute_anonymous` runs Apex against real Salesforce orgs. It's disabled unless the `--allowed-orgs` flag is set - treat that allowlist as a security boundary.
+- `apexlog_execute_anonymous` runs Apex against real Salesforce orgs. Every call is authorized by the type of the org it targets: a production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation. `--no-apex-execution` refuses every call.

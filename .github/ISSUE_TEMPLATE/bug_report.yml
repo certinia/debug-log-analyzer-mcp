@@ -16,7 +16,7 @@ body:
     attributes:
       label: What happened?
       description: What went wrong, and what did you expect instead?
-      placeholder: 'e.g. "analyze_apex_log_performance returned an empty methods array for a log that clearly contains method calls. I expected the slow methods to be listed."'
+      placeholder: 'e.g. "apexlog_list_slow_operations returned an empty operations table for a log that clearly contains method calls. I expected the slow operations to be listed."'
     validations:
       required: true
 
