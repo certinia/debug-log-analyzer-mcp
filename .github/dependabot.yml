@@ -12,6 +12,12 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ['minor', 'patch']
+    ignore:
+      # Types track the engines floor, not the newest runtime. On newer types
+      # tsc accepts an API Node 22 lacks, and no CI job can catch it: the type
+      # error is what should have stopped it.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
