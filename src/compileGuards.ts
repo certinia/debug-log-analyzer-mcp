@@ -6,8 +6,8 @@
  * Assertions the compiler checks and nothing emits.
  *
  * `satisfies` only checks that what a table names exists, never that nothing is
- * missing. A guard covers the other direction — that a set the code depends on
- * is complete — so a field or a category added upstream fails the build instead
+ * missing. A guard covers the other direction - that a set the code depends on
+ * is complete - so a field or a category added upstream fails the build instead
  * of quietly dropping out of a response.
  */
 

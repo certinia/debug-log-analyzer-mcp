@@ -13,7 +13,7 @@ describe("the Salesforce SDK", () => {
    * Both imports must be inside their test: a static one surfaces the throw
    * before any test runs, and reports it as a suite failure rather than here.
    *
-   * `scripts/eval.mjs` covers what this cannot — the built output, and an
+   * `scripts/eval.mjs` covers what this cannot - the built output, and an
    * `await import("@salesforce/core")` added inside a hot path later.
    */
   it("is not loaded when the server is built", async () => {

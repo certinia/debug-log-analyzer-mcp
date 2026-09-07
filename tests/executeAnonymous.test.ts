@@ -363,7 +363,7 @@ describe("Execute Anonymous", () => {
       expect(envelope).toContain(
         `<apex:sessionId>${TEST_SESSION_ID}</apex:sessionId>`,
       );
-      // SOAP spells both halves in title case — DB is Db, FINEST is Finest.
+      // SOAP spells both halves in title case - DB is Db, FINEST is Finest.
       expect(envelope).toContain(
         "<apex:category>Apex_code</apex:category><apex:level>Fine</apex:level>",
       );

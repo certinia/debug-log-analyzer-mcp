@@ -1,5 +1,5 @@
 // This module is the entry point of the lazy chunk, so the guard travels with
-// it — `src/index.ts` covers the `bin` alone.
+// it - `src/index.ts` covers the `bin` alone.
 import "../salesforce/logging.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";

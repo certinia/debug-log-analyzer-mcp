@@ -121,7 +121,7 @@ Unprefixed names collide across servers. `get_issue` and `list_issues` ship in b
 Sentry server; `search_files` and `read_file` in both Filesystem and Google Drive. A client with two of
 those loaded cannot tell them apart.
 
-One unbroken unit — `apexlog_`, not `apex_log_`, as `slack_` is — so the boundary between the namespace
+One unbroken unit - `apexlog_`, not `apex_log_`, as `slack_` is - so the boundary between the namespace
 and the verb is visible.
 
 ### The verb states the shape of the result
@@ -136,7 +136,7 @@ The result is what the caller plans around. The work is invisible to it.
 | `create_` / `update_` / `delete_` / `write_` | one resource, written |
 | `execute_` / `run_` | an effect outside this server |
 
-A filter does not make it a `search_` — Sentry's `list_issues` and GitHub's `list_pull_requests` both
+A filter does not make it a `search_` - Sentry's `list_issues` and GitHub's `list_pull_requests` both
 take filters. `search_` is for a caller's query string.
 
 Banned: `analyze`, `process`, `handle` and `manage`, because they name work, so two tools can both
@@ -144,7 +144,7 @@ claim them; `find`, `detect`, `check` and `fetch`, because they are synonyms of 
 
 The noun states what the result is, in the caller's words: `slow_operations`, not `timed_nodes`.
 
-A bare noun (`apexlog_summary`) is shorter, and `git_status` shows it can work — but only because git's
+A bare noun (`apexlog_summary`) is shorter, and `git_status` shows it can work - but only because git's
 subcommands *are* its vocabulary, so `status` reads as a verb there. Ours is not, and a bare noun
 cannot say whether one thing or many come back.
 
@@ -167,7 +167,7 @@ cannot say whether one thing or many come back.
 ## ✂️ Shaping Tool Responses
 
 Every token a tool returns is a token the agent cannot spend on reasoning, so responses are kept as
-small as they can be — but the saving has to come from *shape*, never from dropping a fact. If a user
+small as they can be - but the saving has to come from *shape*, never from dropping a fact. If a user
 asks "how many DML statements did this transaction consume?", the agent has to be able to answer from
 the payload alone.
 
@@ -188,7 +188,7 @@ more tokens and costs the answer, so we don't. `toLimitRows` is the helper that 
 Per-namespace usage is the exception that proves the rule. `toNamespaceLimitRows` reports only the
 limits a namespace consumed, because there a row *is* an occurrence: whether a limit was measured at
 all is a property of the transaction, which the whole-log table already answers, so a namespace with
-no row for a limit consumed none of it. It states no ceiling either — the parser keeps one ceiling
+no row for a limit consumed none of it. It states no ceiling either - the parser keeps one ceiling
 per limit for the whole transaction, and it is already in `governorLimits`.
 
 ### The conventions
@@ -198,27 +198,27 @@ one-liners.
 
 - **A fixed-schema field is always reported, even at zero.** The set of governor limits, debug
   categories and method columns is fixed and known, so a zero is a fact and an absent key is an
-  ambiguity — the reader cannot tell "nothing ran" from "never parsed". Report the zero.
-- **Only occurrence lists are omitted when empty** — issues found, errors
+  ambiguity - the reader cannot tell "nothing ran" from "never parsed". Report the zero.
+- **Only occurrence lists are omitted when empty** - issues found, errors
   encountered. There, absence is unambiguous: nothing occurred. `omitEmpty` is for these and nothing
-  else; never pass a fixed-schema scalar through it. (`false` is *not* empty — it is an answer.)
+  else; never pass a fixed-schema scalar through it. (`false` is *not* empty - it is an answer.)
 - **Say it once.** Never restate in prose a figure that is already in a table, and never report a
   value in two sections. Where prose
-  carried a fact the table could not, replace it with a scalar rather than deleting it —
+  carried a fact the table could not, replace it with a scalar rather than deleting it -
   `topMethodsSelfPercentage` is ~8 tokens where the paragraph it replaced was ~55.
 - **Don't state what the caller can derive.** A sentence earns its tokens only if it carries a fact the
   numbers do not. "No bottlenecks found" follows from an always-present empty list, so the fix is a
-  complete shape, not a sentence; "High CPU usage — consider optimizing algorithms" follows from the
+  complete shape, not a sentence; "High CPU usage - consider optimizing algorithms" follows from the
   percentage beside it. Advice built from one column and a hardcoded threshold is a worse copy of what
   the agent does anyway, because the agent reads every column.
 - **Take the bounded view, and cap what is still unbounded inside it.** Where the parser offers
   both, read the deduped one: `logIssues` holds one entry per failure, where `exceptions` holds every
-  occurrence — 4,501 throws in one real log are three messages. Then cap the free text that is left,
+  occurrence - 4,501 throws in one real log are three messages. Then cap the free text that is left,
   because its size is the log's to choose and not ours: a fatal states 53 characters of message on
   the median log and 1,070 on the worst, and one stack runs to 52,009. A field the log controls is a
   field that will one day fill the caller's context. Where the caller also chooses how many rows come
   back, cap the payload and not the count: `apexlog_list_slow_operations` elides a row's `name` past
-  400 characters and stops a page at 60,000, because a row cap is a proxy — capping every name still
+  400 characters and stops a page at 60,000, because a row cap is a proxy - capping every name still
   left 5 logs of 124 over a client's ceiling, since a thousand rows cost some 15,000 tokens in their
   numeric columns alone. Returning fewer rows than were asked for is the honest answer, and the
   matched count beside them already says the page was cut.
@@ -235,16 +235,16 @@ one-liners.
 - **Say in the tool description what is omitted and when.** Currently that is one sentence per tool,
   because there is one omission per tool.
 - **Encode with the TOON defaults.** Measured, none of the alternatives pay:
-  - `indentSize: 1` — saves 2.4%, but `decode` rejects it without a matching `indentSize`.
-  - keyed tabular (`[n:]`) — costs one character per row, `,` becoming `: `.
-  - `delimiter` tab or pipe — 2 tokens on a 9,365-token response. Quoting comes from `:` in a name.
-  - nested field groups — nothing left to fold; every table is already flat.
+  - `indentSize: 1` - saves 2.4%, but `decode` rejects it without a matching `indentSize`.
+  - keyed tabular (`[n:]`) - costs one character per row, `,` becoming `: `.
+  - `delimiter` tab or pipe - 2 tokens on a 9,365-token response. Quoting comes from `:` in a name.
+  - nested field groups - nothing left to fold; every table is already flat.
 
 ### A scalar qualifies the response, a column varies per row
 
 **A fact that qualifies every number in the response is a response-level scalar, stated once; a fact
 that varies per row is a column.** `threshold` on `apexlog_list_limit_risks` follows this rule, and so
-does `capturedAt` — the level each debug log category was captured at — which
+does `capturedAt` - the level each debug log category was captured at - which
 `apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header. It is a
 table rather than a set of scalars because it is keyed the way the rows are, on `debugCategory`, so
 the two join; and each tool names only the categories its own figures came from, since a level for a
@@ -252,14 +252,14 @@ category nothing here was logged under qualifies nothing.
 
 They matter because a capture level silently changes what every figure beside it means. On a log
 taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self
-time on a Visualforce page. That is not the page's work — it is everything the level hid, pooled at
+time on a Visualforce page. That is not the page's work - it is everything the level hid, pooled at
 the nearest logged boundary. Without the level the number reads as a finding, and any advice built on
 it is confidently wrong.
 
 Two consequences:
 
 - **A category the header never declared is left out, not defaulted.** A level has no zero, so the
-  usual "report the fixed-schema field anyway" does not apply — naming a default would state a value
+  usual "report the fixed-schema field anyway" does not apply - naming a default would state a value
   the log never did. Absent means unstated.
 - **No caveat prose and no magnitude.** The response reports the level and stops. A figure measured
   once against one org, with the harness not committed, cannot be re-derived by CI and will rot.
@@ -291,7 +291,7 @@ It does not earn a column. Measured over two real logs:
 
 Flows, SOQL, workflow and methods differ on **0%** of rows. The *time* sits entirely in the rows that
 do differ: DML differs on 4 of 5 rows carrying 934 of its 944 ms, and `codeUnit` on 17% of rows
-carrying 10,600 of its 10,904 ms. So the fact matters and the column does not — it would repeat
+carrying 10,600 of its 10,904 ms. So the fact matters and the column does not - it would repeat
 `namespace` on 97% of every response.
 
 `groupBy: "callerNamespace"` asks the question instead, for one enum value and the clause that says
@@ -310,7 +310,7 @@ which it is.**
 
 The scalar it turns on, `returnedHeapPercentage`, follows the rule two sections above: a share the
 returned rows carry qualifies the whole response rather than any one row. It earns its place because
-neither the rows nor another tool can imply it — the figures are on the field itself in
+neither the rows nor another tool can imply it - the figures are on the field itself in
 [`listSlowOperations.ts`](src/tools/listSlowOperations.ts).
 
 ### The gate
@@ -318,26 +318,27 @@ neither the rows nor another tool can imply it — the figures are on the field 
 Output changes are checked by [`pnpm run eval`](tests/eval/README.md), which drives the built server
 over stdio against committed fixtures and asserts four things per (tool, fixture): that realistic
 user questions are still answerable, that no figure appears twice, that the payload is under a token
-budget, and that it matches its golden file. Run it — and `pnpm run eval:update` to re-record the
-goldens — for any change to a response shape; the golden diff *is* the review of the change.
+budget, and that it matches its golden file. Run it - and `pnpm run eval:update` to re-record the
+goldens - for any change to a response shape; the golden diff *is* the review of the change.
 
 Two further checks run once per run: the definition budget described in
-[Shaping Tool Definitions](#️-shaping-tool-definitions), and both tables in
-[Token Cost](README.md#token-cost), which are generated from the run — so a change that moves a
-published figure fails until `pnpm run eval:update` regenerates the README with it.
+[Shaping Tool Definitions](#️-shaping-tool-definitions), and the generated README blocks - both
+[Token Cost](README.md#token-cost) tables, each tool's parameter table, and the shape of each
+response. A change that moves any of them fails until `pnpm run eval:update` regenerates the README
+with it, so the prose beside those blocks is the only part you edit by hand.
 
 The unit tests cannot substitute for it: jest maps `@toon-format/toon` to a JSON stand-in, so it
 never sees the real encoding.
 
 If you change a tool's output shape, update the [CHANGELOG](CHANGELOG.md) and the tool's entry in the
-[README](README.md#tools-reference) — the output contract is part of the public API.
+[README](README.md#tools-reference) - the output contract is part of the public API.
 
 ## 🏷️ Shaping Tool Definitions
 
 A response is paid for when a tool is called. A **definition** is paid for on every request, called or
 not, because the client sends all four with each one. Server `instructions` sit between them: sent once
 per session. So put each fact where its audience reads it, and at the frequency it is worth. A guarantee
-that holds for every tool — "a zero is a measured zero" — belongs in `instructions`, not repeated in
+that holds for every tool - "a zero is a measured zero" - belongs in `instructions`, not repeated in
 four descriptions. A rule that applies to one tool belongs in that tool's description.
 
 ### Budget the whole wire object
@@ -363,7 +364,7 @@ hint quietly coming back.
 ### Only annotate what carries information
 
 `destructiveHint` and `idempotentHint` are defined as meaningful only when `readOnlyHint` is false, so
-the three read-only tools declare `readOnlyHint: true` and `openWorldHint: false` and nothing more —
+the three read-only tools declare `readOnlyHint: true` and `openWorldHint: false` and nothing more -
 both differ from the spec default, and both say something. `apexlog_execute_anonymous` keeps all four hints; it
 is the one tool where a client that misreads a default runs Apex against an org.
 
@@ -399,7 +400,7 @@ Ensure all tests pass before submitting your pull request.
 
 Publishing a release publishes to npm. `.github/workflows/publish.yml` runs on `release: published`, and `scripts/release-tag.mjs` decides which npm **dist-tag** the version goes under.
 
-A dist-tag is a pointer to one version. `latest` is the one that matters, because `npm install @certinia/apex-log-mcp`, `@latest` and `npx` all follow it — and the VS Code extension starts this server through `npx`. A prerelease published under `latest` reaches every user on their next run, and the only way back is to publish again.
+A dist-tag is a pointer to one version. `latest` is the one that matters, because `npm install @certinia/apex-log-mcp`, `@latest` and `npx` all follow it - and the VS Code extension starts this server through `npx`. A prerelease published under `latest` reaches every user on their next run, and the only way back is to publish again.
 
 So the version chooses the channel:
 
@@ -416,7 +417,7 @@ So the version chooses the channel:
 
 Nothing changes in the release flow itself. The version string picks the channel, and the pre-release tick has to agree with it.
 
-1. Bump the version, without a local tag — GitHub creates the tag when the release is published:
+1. Bump the version, without a local tag - GitHub creates the tag when the release is published:
 
    ```zsh
    pnpm version premajor --preid beta --no-git-tag-version   # 1.0.0 -> 2.0.0-beta.0
@@ -428,7 +429,7 @@ Nothing changes in the release flow itself. The version string picks the channel
 5. Publish. The workflow reads the tag, resolves `beta`, and publishes there.
 6. Check the pointers: `npm dist-tag ls @certinia/apex-log-mcp`. `latest` must still be the last stable.
 
-Later betas come from `pnpm version prerelease --no-git-tag-version`, and the stable release from `pnpm version major --no-git-tag-version`, which drops the identifier — and then the tick comes off.
+Later betas come from `pnpm version prerelease --no-git-tag-version`, and the stable release from `pnpm version major --no-git-tag-version`, which drops the identifier - and then the tick comes off.
 
 To see the dist-tag before you tag anything:
 
@@ -440,7 +441,7 @@ RELEASE_TAG=2.0.0-beta.0 PRERELEASE=true node scripts/release-tag.mjs
 
 The check runs before the install, and long before the publish, so a refused release leaves npm untouched. Correct the version or the tick and release again.
 
-Re-running the failed job does not help: a re-run replays the original event, so it carries the same pre-release flag that failed. Delete the release and create it again — the git tag can stay, and the new release selects it instead of creating it.
+Re-running the failed job does not help: a re-run replays the original event, so it carries the same pre-release flag that failed. Delete the release and create it again - the git tag can stay, and the new release selects it instead of creating it.
 
 ### The changelog
 

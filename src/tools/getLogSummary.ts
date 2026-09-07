@@ -116,7 +116,7 @@ interface FatalError {
  * messages, where `exceptions` holds every occurrence.
  *
  * The only field that says the transaction did not finish, which decides what
- * every other figure means. It cannot be derived from the limits beside it —
+ * every other figure means. It cannot be derived from the limits beside it -
  * across 124 real logs, 18 of 42 fatals breach no governor limit at all.
  */
 function fatalErrors(logIssues: LogIssue[]): FatalError[] {

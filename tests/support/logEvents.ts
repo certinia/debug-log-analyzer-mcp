@@ -7,7 +7,7 @@
  *
  * `tests/parserContract.test.ts` is the one that parses real log text, because
  * it exists to pin what the parser does. Everything else is testing this
- * server's reading of a tree, so it builds the tree directly — which is faster
+ * server's reading of a tree, so it builds the tree directly - which is faster
  * and lets a case state the one field it is about.
  *
  * It lives here because the shape has to track the parser: every field a tool
@@ -30,7 +30,7 @@ export type PlanSpec = {
  * only what it asserts on.
  *
  * `selfNs` defaults to `totalNs`, which is what a leaf looks like. The builder
- * does not subtract a child's time from its parent — the parser does that while
+ * does not subtract a child's time from its parent - the parser does that while
  * reading, and a case that cares states both.
  */
 export type NodeSpec = {
@@ -85,7 +85,7 @@ export function node(spec: NodeSpec): unknown {
     soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
     thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
     // `self` is the node's own allocations and `total` adds its subtree's, as
-    // the parser aggregates them — so the root's total is the transaction's net
+    // the parser aggregates them - so the root's total is the transaction's net
     // heap without a case having to state it twice.
     heapAllocated: {
       self: spec.heapSelfNetBytes ?? 0,

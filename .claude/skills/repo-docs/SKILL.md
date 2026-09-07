@@ -1,12 +1,12 @@
 ---
 name: repo-docs
-description: Where a fact belongs in this repo's docs, and the shape each file expects — README tools reference, generated token-cost blocks, MIGRATING, CLAUDE.md and DEVELOPING.md. Use when documenting a tool, parameter or response field, or when a doc figure no longer matches the code.
+description: Where a fact belongs in this repo's docs, and the shape each file expects - README tools reference, generated token-cost blocks, MIGRATING, CLAUDE.md and DEVELOPING.md. Use when documenting a tool, parameter or response field, or when a doc figure no longer matches the code.
 ---
 
 # Repo docs
 
 Voice comes from the `developer-writing` skill. This skill says **which file** a fact belongs in and
-**what shape** that file expects. Changelog entries have their own rules — use `changelog-entry`.
+**what shape** that file expects. Changelog entries have their own rules - use `changelog-entry`.
 
 ## One fact, one file
 
@@ -26,27 +26,27 @@ contributor fact.
 
 The Tools Reference gives each tool, in this order:
 
-1. One paragraph of what it answers and what it is best for — the served tool description in
+1. One paragraph of what it answers and what it is best for - the served tool description in
    README voice, not a copy of it.
-2. `Rows are {…}` — the full column set, then any column that is conditional and what decides it.
-3. One short paragraph per extra table (`capturedAt`, `queryPlans`, `timeByCategory`), saying what
-   it joins to.
-4. The parameter table: `Parameter | Type | Required | Description`, in schema order, `string[]` for
-   an array. Repeat the default in the description, as `(default: 10)`.
+2. The generated `shape-<tool>` block: every response field and its columns.
+3. Hand-written prose for what the block cannot say - what a column means, what makes one
+   conditional, what an extra table joins to.
+4. The generated `params-<tool>` block.
 
-A new parameter means a table row **and** a line of prose if it changes what the rows carry.
+A new parameter regenerates its own row. Write prose for it only if it changes what the rows carry.
 
-## Generated blocks — never hand-edit
+## Generated blocks - never hand-edit
 
-`README.md` holds two tables between markers, both written by the eval run:
+`README.md` holds nine blocks between markers, all written by the eval run:
 
-- `<!-- token-cost-definitions:start -->` … `:end`
-- `<!-- token-cost-answers:start -->` … `:end`
+- `token-cost-definitions` and `token-cost-answers` - the two token tables
+- `params-<tool>` - the parameter table, from the schema the client is served
+- `shape-<tool>` - the response fields, from the fixture the figures are measured against
 
 `pnpm run build && pnpm run eval:update` regenerates them with the goldens. `pnpm run eval` fails
 when they drift, so a hand edit is a CI failure, not a saving.
 
-The prose **around** those tables is hand-written and does not regenerate — the paragraph naming
+The prose **around** those tables is hand-written and does not regenerate - the paragraph naming
 what the unsliced 19.7 MB sample log costs is measured with
 `node scripts/eval.mjs --report <log>` and has to be re-measured by hand when a response shape
 moves. It is the one figure in the file nothing checks.
@@ -55,11 +55,11 @@ moves. It is the one figure in the file nothing checks.
 
 Any figure a reader can check must match the code: percentages against 1.x, token counts, corpus
 sizes, row caps such as `NAME_LIMIT` and the page budget. When a change moves one, grep the docs for
-the old number before you commit — `README.md`, `DEVELOPING.md`, `CLAUDE.md` and `MIGRATING.md` all
+the old number before you commit - `README.md`, `DEVELOPING.md`, `CLAUDE.md` and `MIGRATING.md` all
 quote them.
 
 ## MIGRATING
 
 One section per thing a 1.x caller must do, each with a mapping table where the change is a rename,
-and a sentence naming what to grep for in their own prompts, agents and skills. No rationale — that
+and a sentence naming what to grep for in their own prompts, agents and skills. No rationale - that
 is the changelog's job and the issue's.
