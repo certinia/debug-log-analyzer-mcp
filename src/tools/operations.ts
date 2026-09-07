@@ -66,8 +66,8 @@ export interface Operation {
    * `database` row beside `database NONE` means the queries were not logged,
    * and beside `database FINEST` means none ran.
    *
-   * The parser stamps one on every timed event — pinned in
-   * `tests/parserContract.test.ts` — so this is never `""` in practice.
+   * The parser stamps one on every timed event - pinned in
+   * `tests/parserContract.test.ts` - so this is never `""` in practice.
    */
   debugCategory: DebugCategory;
   /**
@@ -101,7 +101,7 @@ export interface Operation {
    * that ran outside every other member add their total, or time inside a group
    * would count once for the child and again for every ancestor above it.
    *
-   * Never additive across rows — one row's callees are another row's calls.
+   * Never additive across rows - one row's callees are another row's calls.
    */
   durationTotalNs: number;
   durationSelfNs: number;
@@ -133,7 +133,7 @@ export interface Operation {
    * A managed package is the exception to "not what it called". The parser
    * gives `ENTERING_MANAGED_PKG` no children, so an allocation logged inside
    * the package window lands in the calling method's own body instead of the
-   * package's row — 3 of the 40 logs that allocate put a heap line there.
+   * package's row - 3 of the 40 logs that allocate put a heap line there.
    *
    * Self and not the subtree, because a subtree net is not an attribution: it
    * puts the outermost code unit at the top of 39 of the 40 logs in a 123-log
@@ -153,7 +153,7 @@ export interface Operation {
   parent: Operation | null;
   /**
    * The event this operation was read from, so a caller can reach what the
-   * operation's own columns do not carry — the query plan under this one call,
+   * operation's own columns do not carry - the query plan under this one call,
    * rather than the worst plan for its text.
    *
    * Internal, and only meaningful on an ungrouped operation: `groupOperations`
@@ -172,7 +172,7 @@ const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
 /**
  * Whether the event is a thing the transaction spent time on.
  *
- * The timeline `category` is read as nothing but "this event has a duration" —
+ * The timeline `category` is read as nothing but "this event has a duration" -
  * the parser assigns one in the `DurationLogEvent` constructor alone, and
  * publishes no other flag for it. What the event *is* comes from
  * `debugCategory` and `type`. Untimed events are most of a log, so this is both
@@ -267,8 +267,8 @@ interface Grouping {
    * also whether a row may state the type and a name of its own: a row can
    * state only what its key holds true of every member.
    *
-   * `type` decides `debugCategory` — the parser stamps one category per event
-   * class — so keying on the type keeps both columns true of every member. A
+   * `type` decides `debugCategory` - the parser stamps one category per event
+   * class - so keying on the type keeps both columns true of every member. A
    * category fold keys on the category alone, and states neither: one type
    * named would be the first member's alone, and the name would restate the
    * category.
@@ -343,7 +343,7 @@ export function operationGroupKey(operation: Operation, by: GroupBy): string {
  * is `number | undefined`, which does not extend `number`, so a plain test drops
  * it from this union and the guard below passes while the fold ignores it.
  * Stripping `undefined` first keeps the field in, and leaves an optional field of
- * some other type out — where dropping `-?` instead would fail the guard on any
+ * some other type out - where dropping `-?` instead would fail the guard on any
  * optional field, numeric or not.
  */
 type NumericField = {
@@ -376,7 +376,7 @@ const PLAIN_SUMMED = ["durationSelfNs", "heapSelfNetBytes"] as const;
 /**
  * Folded by hand, because neither is a sum of itself: `callCount` counts the
  * members rather than adding a field, and `durationSelfMaxNs` maxes over
- * `durationSelfNs` — a different field.
+ * `durationSelfNs` - a different field.
  */
 type FoldedByHand = "callCount" | "durationSelfMaxNs";
 
@@ -385,7 +385,7 @@ type FoldedByHand = "callCount" | "durationSelfMaxNs";
  * three groups above.
  *
  * A group is seeded from its first member, so a field added to `Operation` and
- * forgotten in the fold does not read as zero — the grouped row ships the first
+ * forgotten in the fold does not read as zero - the grouped row ships the first
  * member's value, which looks like a plausible figure. No test on another field
  * would notice, which is why this is a compile error and not a review note.
  */
@@ -459,8 +459,8 @@ export function groupOperations(
     group.callCount += 1;
 
     // Walked rather than named field by field, so the rule above and the code
-    // cannot drift. That costs 41% here — 44 to 63 ms over 74,960 operations of
-    // six real logs, folded twice each — because a keyed read is not a named
+    // cannot drift. That costs 41% here - 44 to 63 ms over 74,960 operations of
+    // six real logs, folded twice each - because a keyed read is not a named
     // one. It is paid against a parse of tens to hundreds of milliseconds, and
     // `nestedInGroup` dominates both figures.
     if (!nestedInGroup(operation, key)) {

@@ -22,7 +22,7 @@ body:
     id: solution
     attributes:
       label: Proposed solution (optional)
-      description: How might this work? Tool inputs/outputs, expected behavior, or rough ideas — anything helps. Include any alternatives you've considered.
+      description: How might this work? Tool inputs/outputs, expected behavior, or rough ideas - anything helps. Include any alternatives you've considered.
 
   - type: checkboxes
     id: checks

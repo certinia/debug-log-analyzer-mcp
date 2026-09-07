@@ -26,7 +26,7 @@ files moved belong in the issue and the pull request.
 ```
 
 - **One sentence, no sub-bullets.** No semicolon joining two facts. Two wrapped lines is the ceiling.
-- **Present tense.** "Add", "Reduce", "Refuse" — not "Added", "Reduced".
+- **Present tense.** "Add", "Reduce", "Refuse" - not "Added", "Reduced".
 - **Breaking entries first** in their section, prefixed `**Breaking:**`.
 - **Then most impactful first.** The entry that changes the most readers' day leads its
   section. Not commit order, not issue number, not the order you wrote them.
@@ -35,7 +35,7 @@ files moved belong in the issue and the pull request.
   the file. Never an inline URL.
 
 **The file outranks this skill on style.** Read the released sections first. If they carry an emoji
-and a bold label, or past tense, match them — a changelog that switches voice mid-file reads worse
+and a bold label, or past tense, match them - a changelog that switches voice mid-file reads worse
 than one in the wrong voice. Length and jargon are not style: those rules hold everywhere.
 
 ## Write for the reader, not the author
@@ -55,7 +55,7 @@ it, it gets no entry: a refactor, a renamed internal helper, a test, the mechani
 Give the result, not the method. A number earns its place when the size **is** the result; how it
 was measured does not.
 
-**A performance entry always carries its number** — a multiple or a percentage, and what it is of.
+**A performance entry always carries its number** - a multiple or a percentage, and what it is of.
 "Faster" on its own is not an entry, because the reader cannot tell whether to care.
 
 Already-unreleased work: edit the existing entry, and drop a fix for a bug that only ever existed
@@ -67,7 +67,7 @@ No issue fits? File one, then reference it.
 
 | Wrong                                                                                                         | Right                                                           |
 | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `- Removed destructiveHint from three tools, since the spec says it is meaningless when readOnlyHint is true` | no entry — the user sees no difference                          |
+| `- Removed destructiveHint from three tools, since the spec says it is meaningless when readOnlyHint is true` | no entry - the user sees no difference                          |
 | `- Replaced ten per-category properties with one z.partialRecord, cutting ~844 to ~428 tokens`                | fold the result into the one user-facing entry                  |
 | `- Reduced the cost by 31% ([#87](https://.../87))`                                                           | `- Reduce the cost by 31% ([#87])`, plus a reference definition |
 | `- Refactor CSV parsing to process dataset arrays asynchronously`                                             | `- Fix the freeze on a large CSV export`                        |
@@ -78,7 +78,7 @@ No issue fits? File one, then reference it.
 
 ## Trim a section nobody will read
 
-Screens long, or nested three deep. Rewrite the section whole — entry-by-entry edits never merge
+Screens long, or nested three deep. Rewrite the section whole - entry-by-entry edits never merge
 anything, and merging is most of the win.
 
 1. Find the bounds: `grep -n '^## \[' CHANGELOG.md`.
@@ -88,7 +88,7 @@ anything, and merging is most of the win.
 5. Drop what the reader cannot see, by the rules above.
 6. Re-order each section by impact. A trimmed section in the old order still buries the lead.
 7. Keep every issue reference. Losing one loses the trail to the detail you cut.
-8. Splice it in, then check the references — left column is used but undefined, right is defined but
+8. Splice it in, then check the references - left column is used but undefined, right is defined but
    unused:
 
    ```bash

@@ -1,6 +1,6 @@
 ---
 name: lean-mcp-tools
-description: Use when adding or editing an MCP tool definition — its name, title, description, inputSchema or annotations — when a server's tools/list looks expensive, when deciding whether a fact belongs in a tool description or the server instructions, or when the context cost of an MCP server needs measuring or budgeting.
+description: Use when adding or editing an MCP tool definition - its name, title, description, inputSchema or annotations - when a server's tools/list looks expensive, when deciding whether a fact belongs in a tool description or the server instructions, or when the context cost of an MCP server needs measuring or budgeting.
 ---
 
 # Lean MCP tools
@@ -17,11 +17,11 @@ per session. Put each fact where its audience reads it.
 
 ## What a definition holds
 
-- `name`, `title` — the display field. `annotations.title` is a second copy; drop it.
-- `description` — the selection prompt: what it returns, when to pick it, nothing the schema below
+- `name`, `title` - the display field. `annotations.title` is a second copy; drop it.
+- `description` - the selection prompt: what it returns, when to pick it, nothing the schema below
   already says.
-- `inputSchema` — a `describe` only for what the property name and its type cannot say.
-- `annotations` — only spec hints that differ from the default **and** carry meaning.
+- `inputSchema` - a `describe` only for what the property name and its type cannot say.
+- `annotations` - only spec hints that differ from the default **and** carry meaning.
   `destructiveHint` and `idempotentHint` are defined as meaningful only when `readOnlyHint` is false,
   so a read-only tool declares `readOnlyHint: true` and `openWorldHint: false` and stops. There is no
   `priority` hint.
@@ -31,7 +31,7 @@ per session. Put each fact where its audience reads it.
 Deleting a fact costs the answer and saves less than reshaping it.
 
 - Ten per-category properties, each inlining the same enum, became
-  `z.partialRecord(z.enum(CATEGORIES), z.enum(LEVELS))` — each enum emitted once. ~844 tokens to
+  `z.partialRecord(z.enum(CATEGORIES), z.enum(LEVELS))` - each enum emitted once. ~844 tokens to
   ~428, wire form unchanged, unknown keys now rejected. (Plain `z.record` is cheaper still, but marks
   every key required.)
 - Hold the values as an `as const` tuple and build the schema from it, so no description restates them.

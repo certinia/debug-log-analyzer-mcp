@@ -2,7 +2,7 @@
 
 ## Tool names
 
-Every tool was renamed — see [Naming Tools and Fields](DEVELOPING.md#-naming-tools-and-fields).
+Every tool was renamed - see [Naming Tools and Fields](DEVELOPING.md#-naming-tools-and-fields).
 
 | 1.x                            | 2.0                            |
 | ------------------------------ | ------------------------------ |
@@ -16,14 +16,14 @@ Update wherever you name a tool yourself:
 - Tool allow and deny lists. Some clients qualify a name with the server, so `execute_anonymous` may appear as `mcp__apex-log-mcp__execute_anonymous`.
 - Prompts, agents and skills.
 
-Response fields changed too — see the [changelog](CHANGELOG.md).
+Response fields changed too - see the [changelog](CHANGELOG.md).
 
 ## Operation categories
 
 `kind` is gone from every response and parameter. A ranked row states `debugCategory`, the Salesforce
 debug log category the platform stamped on the event, and `type`, the log's own event type. Both come
 from the log rather than from this server, and every category on the wire is now spelled as the
-`DebugLevel` field is — `database`, not `DB` — which is the spelling `apexlog_execute_anonymous`
+`DebugLevel` field is - `database`, not `DB` - which is the spelling `apexlog_execute_anonymous`
 already takes as input.
 
 | 1.x `kind`       | 2.0 `debugCategory` | 2.0 `type`                                                |
@@ -69,7 +69,7 @@ regression.
 
 | 1.x                             | 2.0                                                              |
 | ------------------------------- | ---------------------------------------------------------------- |
-| No flag (tool hidden)           | No flag — the tool works against non-production orgs             |
+| No flag (tool hidden)           | No flag - the tool works against non-production orgs             |
 | `--allowed-orgs ALLOW_ALL_ORGS` | No flag. Add `--allow-production-orgs` to target production       |
 | `--allowed-orgs <org>,<org>`    | No flag. Org type decides, not an org list                       |
 

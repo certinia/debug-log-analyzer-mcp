@@ -7,7 +7,7 @@
  *
  * Every token in a response is a token the calling model pays for on every turn
  * it stays in context. The saving comes from structure and from not saying the
- * same thing twice — never from dropping a fact. A field with a fixed schema is
+ * same thing twice - never from dropping a fact. A field with a fixed schema is
  * always reported, even at zero: an agent asked "how many DML statements ran?"
  * must be able to answer from the payload.
  */
@@ -47,7 +47,7 @@ export function percentageOf(part: number, whole: number): number {
 /**
  * Drop the lists that nothing was added to.
  *
- * For occurrence lists only — issues found, errors encountered — where an
+ * For occurrence lists only - issues found, errors encountered - where an
  * absent key unambiguously means "nothing occurred". The signature takes only
  * lists on purpose: a fixed-schema scalar must never go
  * through here, because an absent count cannot be told apart from a count that
@@ -75,7 +75,7 @@ export interface LimitRow {
 /**
  * Flatten a set of governor limits into rows.
  *
- * All limits are kept, including those at zero — the set is fixed and known, so
+ * All limits are kept, including those at zero - the set is fixed and known, so
  * a missing row would be a question the caller cannot answer. The saving comes
  * from the shape: as rows sharing three keys, TOON emits one header plus one
  * line per limit, which on a real log is a little over half the cost of the same
@@ -122,7 +122,7 @@ export function limitUnitsClause(): string {
  *
  * `heapSize` is summed from `HEAP_ALLOCATE`, which the parser stamps `apexCode`
  * at FINER. Every other metric is read from the cumulative blocks, which are
- * `apexProfiling` — `CUMULATIVE_LIMIT_USAGE` at INFO and `LIMIT_USAGE_FOR_NS`
+ * `apexProfiling` - `CUMULATIVE_LIMIT_USAGE` at INFO and `LIMIT_USAGE_FOR_NS`
  * at FINEST. So the level of one of these two is what says whether a low or
  * absent figure is the transaction's or the trace flag's.
  *
@@ -144,7 +144,7 @@ export interface NamespaceLimitRow {
  *
  * Only the limits a namespace consumed are reported. A row is an occurrence,
  * and whether a limit was measured at all is a property of the transaction,
- * which the whole-transaction table already answers — so a namespace with no
+ * which the whole-transaction table already answers - so a namespace with no
  * row for a limit consumed none of it. The ceiling is not reported either: the
  * parser keeps one per limit for the whole transaction, and it is in that
  * table.

@@ -52,7 +52,7 @@ describe("parser contract", () => {
     // Documented as bytes, but counted in UTF-16 code units, so it under-reads
     // any log that is not ASCII. `apexlog_get_summary` publishes it as
     // `fileSizeBytes`, so this case failing is the signal that the parser fixed
-    // it and the figure moved — apex-dev-tools/apex-log-parser#70, due in 0.2.0.
+    // it and the figure moved - apex-dev-tools/apex-log-parser#70, due in 0.2.0.
     it("counts UTF-16 code units, not bytes", () => {
       const { size } = parse(log);
 
@@ -178,7 +178,7 @@ describe("parser contract", () => {
 
   describe("LogEvent.category and LogEvent.debugCategory", () => {
     // `isRankable` in tools/operations.ts reads the timeline category as
-    // nothing but "this event has a duration" — the parser assigns one in the
+    // nothing but "this event has a duration" - the parser assigns one in the
     // `DurationLogEvent` constructor alone and publishes no other flag for it.
     // A timed event without one would be ranked nowhere and its time reported
     // nowhere. Every response then states `debugCategory`: a ranked row's
@@ -383,7 +383,7 @@ describe("parser contract", () => {
   describe("ALL_LIMIT_METRICS", () => {
     // Every tool reports these thirteen as a fixed table, and the suites that
     // check them derive their expectations from this list, so it is pinned once
-    // here — including the order, which the tables are emitted in.
+    // here - including the order, which the tables are emitted in.
     it("states the thirteen governor metrics, in report order", () => {
       expect(ALL_LIMIT_METRICS.map((metric) => metric.key)).toEqual([
         "soqlQueries",

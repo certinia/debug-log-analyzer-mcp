@@ -28,7 +28,7 @@ export type AnonymousApexResult = {
  * The REST Tooling API returns no log, which is why the log had to be guessed
  * from the newest `ApexLog` row before. A `DebuggingHeader` outranks any
  * `USER_DEBUG` trace flag, so the levels asked for here are the levels the
- * returned log carries — unless a `DEVELOPER_LOG` flag (the Developer Console)
+ * returned log carries - unless a `DEVELOPER_LOG` flag (the Developer Console)
  * is live, which outranks both.
  */
 export async function executeAnonymousWithLog(
@@ -66,7 +66,7 @@ export function parseLogHeaderLevels(
     .map((pair) => pair.trim().split(","))
     .filter((parts): parts is [string, string] => parts.length === 2)
     .map(([category, level]) => [
-      // The first pair carries the API version — `67.0 APEX_CODE`.
+      // The first pair carries the API version - `67.0 APEX_CODE`.
       category.slice(category.lastIndexOf(" ") + 1),
       level,
     ]);
@@ -135,7 +135,7 @@ function buildEnvelope(
   );
 }
 
-/** SOAP spells every category and level in title case — `DB` is `Db`. */
+/** SOAP spells every category and level in title case - `DB` is `Db`. */
 function toSoapName(name: string): string {
   return name.charAt(0) + name.slice(1).toLowerCase();
 }

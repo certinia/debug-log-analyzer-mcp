@@ -24,7 +24,7 @@ export type DebugLevelCategory = keyof DebugLevels;
  *
  * This is the spelling every response uses, because it is the one the parser
  * stamps on each event and the one `apexlog_execute_anonymous.debugLevel` takes
- * as input — so a category a caller reads back is a category it can ask for.
+ * as input - so a category a caller reads back is a category it can ask for.
  * `LOG_CATEGORIES` below is the same set as the header itself spells it, and is
  * now confined to the `DebugLevel` record and the SOAP envelope.
  *
@@ -76,7 +76,7 @@ export type TraceConfig = Partial<Record<TraceCategory, LogLevel>>;
  *
  * A log opens with `APEX_CODE,FINE;DB,FINEST;…`, and the `DebugLevel` record and
  * the SOAP envelope name them this way too, so this is the spelling the
- * Salesforce side of the server speaks. No response uses it — they all use
+ * Salesforce side of the server speaks. No response uses it - they all use
  * `DEBUG_CATEGORIES`. `DATA_ACCESS` appears in a header but is not a
  * `DebugLevel` field, so nothing can set it.
  */

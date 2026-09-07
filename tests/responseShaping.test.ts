@@ -156,7 +156,7 @@ describe("responseShaping", () => {
 
   describe("limitUnitsClause", () => {
     // Derived from the parser, so this names every metric it publishes in a
-    // unit other than count — not a list of our own that could go stale.
+    // unit other than count - not a list of our own that could go stale.
     it("should name every metric that is not a count", () => {
       const clause = limitUnitsClause();
 
