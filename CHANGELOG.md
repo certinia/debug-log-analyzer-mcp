@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [Migrating from 1.x](MIGRATING.md)._
 
+### Added
+
+- `apexlog_list_slow_operations` folds repeat calls into one row - by name, by `callerNamespace`, or by debug log category - each row totalling what the transaction saves if the group never runs, so the rows do not add up ([#101], [#126], [#127], [#131], [#138])
+- `apexlog_list_slow_operations` sorts by an operation's net heap allocation, not only time (`sortBy: "heapSelfNetBytes"`) ([#99], [#127], [#138])
+- `apexlog_list_slow_operations` returns the query optimiser's plan for each query it ranked ([#120])
+- `apexlog_list_slow_operations` returns `matchedCount`, so you can tell whether the page hid rows ([#63])
+- `apexlog_list_slow_operations` and `apexlog_list_limit_risks` report the level each debug log category was logged at ([#102], [#138])
+- `apexlog_execute_anonymous` reports progress, and says when the org logged at levels other than the ones asked for ([#65])
+- `--no-apex-execution` stops `apexlog_execute_anonymous` running Apex, while the log analysis tools keep working ([#52])
+
 ### Changed
 
 - **Breaking:** rename every tool with an `apexlog_` prefix: `analyze_apex_log_performance` is now `apexlog_list_slow_operations`. Full mapping in [Migrating from 1.x](MIGRATING.md) ([#107])
@@ -24,27 +34,17 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 - Cut the cost of having the server connected by 9%, and let a client cache the tool definitions for an hour, though `apexlog_list_slow_operations` costs 145% more for what it now selects and ranks ([#87], [#94], [#99], [#101], [#103], [#126], [#127], [#138])
 - The server starts in 55 ms, down from 290 ms, and reuses the log it parsed, so a second question about the same file skips the parse ([#88], [#165])
 
-### Added
-
-- `apexlog_list_slow_operations` folds repeat calls into one row - by name, by `callerNamespace`, or by debug log category - each row totalling what the transaction saves if the group never runs, so the rows do not add up ([#101], [#126], [#127], [#131], [#138])
-- `apexlog_list_slow_operations` sorts by an operation's net heap allocation, not only time (`sortBy: "heapSelfNetBytes"`) ([#99], [#127], [#138])
-- `apexlog_list_slow_operations` returns the query optimiser's plan for each query it ranked ([#120])
-- `apexlog_list_slow_operations` returns `matchedCount`, so you can tell whether the page hid rows ([#63])
-- `apexlog_list_slow_operations` and `apexlog_list_limit_risks` report the level each debug log category was logged at ([#102], [#138])
-- `apexlog_execute_anonymous` reports progress, and says when the org logged at levels other than the ones asked for ([#65])
-- `--no-apex-execution` stops `apexlog_execute_anonymous` running Apex, while the log analysis tools keep working ([#52])
-
-### Removed
-
-- **Breaking:** remove `--allowed-orgs` and its special tokens. The flag is accepted, ignored and warns, and the org's type decides instead ([#52])
-- **Breaking:** drop Node.js 20 (end of life April 2026). Minimum node version is 22
-
 ### Fixed
 
 - `apexlog_execute_anonymous` returns the log for the Apex you ran, not the newest log for the user ([#65])
 - `apexlog_execute_anonymous` returns an absolute log path, and warns when `outputDir` lands outside the folders the client opened ([#109])
 - The log analysis tools name the real reason a log file cannot be opened. A permission error used to read as "Log file not found" ([#109])
 - `apexlog_execute_anonymous` is marked destructive, so clients stop running it unprompted ([#52])
+
+### Removed
+
+- **Breaking:** remove `--allowed-orgs` and its special tokens. The flag is accepted, ignored and warns, and the org's type decides instead ([#52])
+- **Breaking:** drop Node.js 20 (end of life April 2026). Minimum node version is 22
 
 ## [1.0.0] - 2026-03-20
 
