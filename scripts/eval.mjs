@@ -20,7 +20,7 @@
  * 4. Golden files — the exact payload, committed, so any shape change is a diff
  *    a reviewer can read.
  *
- * Three more are checked once per run:
+ * Four more are checked once per run:
  *
  * 5. Definition budget — what `tools/list` costs on every request, per tool and
  *    in total, measured over the whole wire object the client receives.
@@ -28,6 +28,8 @@
  *    trim that saves tokens cannot quietly cost discovery.
  * 7. README tables — the published figures are generated from this run, so a
  *    change that moves them fails until the README is regenerated with it.
+ * 8. Startup cost — listing the tools must not load the Salesforce SDK, which
+ *    is five times the rest of startup. Only this sees the built output.
  *
  * Usage:
  *   node scripts/eval.mjs            # assert
@@ -79,19 +81,34 @@ const ANSWERABILITY = {
       fields: ["durationTotalMs", "fileSizeBytes"],
     },
     {
-      question: "Where did the time go — methods, queries or a managed package?",
-      keys: ["timeByKind"],
-      columns: ["kind", "operationCount", "durationSelfMs"],
+      question: "Where did the time go — Apex, the database or Visualforce?",
+      keys: ["timeByCategory"],
+      columns: ["debugCategory", "operationCount", "durationSelfMs"],
     },
     {
       question: "Is detail missing because a log category was switched off?",
       keys: ["debugLevels"],
-      columns: ["logCategory", "level"],
+      columns: ["debugCategory", "level"],
     },
     {
-      question: "Did the log parse cleanly, and did it capture the whole run?",
-      fields: ["parsingErrorCount"],
+      question: "Did the run fail, and can I trust these numbers?",
+      fields: ["thrownCount"],
       keys: ["truncated"],
+    },
+    {
+      // Only where the run died. `fatalErrors` is the one field that says the
+      // transaction did not finish, and a fatal that breaches no limit is
+      // invisible in every other field.
+      fixture: "governor-heavy",
+      question: "What killed the transaction, and where?",
+      keys: ["fatalErrors"],
+      columns: ["message", "frames"],
+    },
+    {
+      // Only where the platform dropped content, which gates the field.
+      fixture: "truncated",
+      question: "How much of the log is missing?",
+      fields: ["skippedBytes"],
     },
     { question: "Which namespaces ran?", keys: ["namespaces"] },
   ],
@@ -100,7 +117,7 @@ const ANSWERABILITY = {
     {
       question: "Was it a method, a query, a search or DML?",
       keys: ["operations"],
-      columns: ["kind", "callCount"],
+      columns: ["debugCategory", "type", "callCount"],
     },
     {
       question: "What share of the runtime do those operations account for?",
@@ -123,11 +140,29 @@ const ANSWERABILITY = {
     },
     {
       question: "Was the log captured at a level that hides work inside these rows?",
-      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
+      keys: ["capturedAt"],
+      columns: ["debugCategory", "level"],
     },
     {
       question: "Did the row cap hide operations the selection matched?",
       fields: ["matchedCount"],
+    },
+    {
+      // Pinned to the one case that passes `sortBy`, which is what puts the
+      // column on the row — the log's own allocations do not. `FIXTURES_BY_TOOL`
+      // carries those args, and a check can only be pinned by fixture, so this
+      // holds only while `heap-heavy` is the sole heap-ranked case.
+      fixture: "heap-heavy",
+      question: "Which code is holding the heap I need to cut?",
+      keys: ["operations"],
+      columns: ["heapSelfNetBytes"],
+    },
+    {
+      // The rows name the retainers; only this says whether they are most of
+      // the problem. Pinned to the same heap-ranked case.
+      fixture: "heap-heavy",
+      question: "Do those rows account for most of the heap, or is it spread?",
+      fields: ["returnedHeapPercentage"],
     },
     {
       // Only where a query was ranked and the log recorded a plan for it.
@@ -148,8 +183,12 @@ const ANSWERABILITY = {
       fields: ["threshold"],
     },
     {
-      question: "Was the log captured at a level that hides what consumed a limit?",
-      keys: ["apexCodeLevel", "systemLevel", "dbLevel", "workflowLevel"],
+      // The two categories that gate a limit figure: the cumulative blocks are
+      // `apexProfiling` and the heap allocations behind `heapSize` are
+      // `apexCode`, both pinned in tests/parserContract.test.ts.
+      question: "Was the log captured at a level that hides a limit figure?",
+      keys: ["capturedAt"],
+      columns: ["debugCategory", "level"],
     },
   ],
 };
@@ -168,7 +207,7 @@ const MINIMAL_FIXTURE = "minimal";
 
 const MINIMAL_ZEROS = {
   apexlog_get_summary: {
-    fields: ["parsingErrorCount"],
+    fields: ["thrownCount"],
     allLimitsZero: true,
   },
 };
@@ -181,24 +220,41 @@ const MINIMAL_ZEROS = {
  */
 const TOKEN_BUDGET = {
   // Raised for the two tables #62 added: what each namespace consumed of the
-  // limits, and where the time went by kind of operation. Both answer questions
-  // the 1.x summary could not.
-  "apexlog_get_summary/governor-heavy": 357,
-  "apexlog_get_summary/minimal": 249,
+  // limits, and where the time went by category. Both answer questions the 1.x
+  // summary could not. Raised again for the stack frames #100 added to a fatal:
+  // the message names the limit, the frames name the code, and 18 of 42 fatals
+  // across a 124-log corpus breach no limit at all, so nothing else in the
+  // response reveals them. Lowered by #138, which dropped the `logCategory`
+  // column from every row of the time table — the row key is now the category
+  // itself.
+  "apexlog_get_summary/governor-heavy": 382,
+  "apexlog_get_summary/minimal": 245,
   // Raised for the grouped default #126 made: every row now carries its call
-  // count and the self time of its slowest call, and for the four capture levels
+  // count and the self time of its slowest call, and for the capture levels
   // #102 added, which say how much of the transaction reached the log at all,
   // and for the `matchedCount` #63 added, which says whether the row cap hid
   // anything the selection matched, and for the query plans #120 added, which
-  // say whether the optimizer treats a ranked query as selective.
-  "apexlog_list_slow_operations/governor-heavy": 410,
-  "apexlog_list_slow_operations/minimal": 130,
-  // Raised for the fifth capture level #97 added. A callout is a timed event to
-  // the published parser, so it is ranked, and a ranked kind has to state the
-  // level that gates it or a zero cannot be read.
-  "apexlog_list_limit_risks/governor-heavy": 46,
-  "apexlog_list_limit_risks/minimal": 30,
-  "apexlog_get_summary/heap-heavy": 269,
+  // say whether the optimizer treats a ranked query as selective. Raised again
+  // by #138 for the second classification column: a row states the category
+  // that gated it and the log's own event type, where it stated one invented
+  // `kind`. Measured over a 29-log corpus sample that is 41 tokens on a default
+  // ten-row page, and it is what makes `soql` tellable from `dml` inside
+  // `database`.
+  "apexlog_list_slow_operations/governor-heavy": 416,
+  "apexlog_list_slow_operations/minimal": 131,
+  // Lowered by #138: the levels reported are now the two that gate a limit
+  // figure — `apexProfiling` for the cumulative blocks and `apexCode` for the
+  // heap allocations — where five were reported, none of which gated anything
+  // in this response.
+  "apexlog_list_limit_risks/governor-heavy": 41,
+  "apexlog_list_limit_risks/minimal": 25,
+  // The heap ranking over `heap-heavy`: two ranked bodies and the one extra
+  // column, which only this case asks for. Raised by #138 for the two
+  // classification columns every ranked row now states, and again for the
+  // `returnedHeapPercentage` scalar beside them.
+  "apexlog_list_slow_operations/heap-heavy": 207,
+  "apexlog_get_summary/heap-heavy": 256,
+  "apexlog_get_summary/truncated": 252,
 };
 
 /**
@@ -236,10 +292,28 @@ const DEFINITION_BUDGET = {
   // warning that a grouped durationTotalMs must not be summed across rows, and
   // for what grouping by default now states about the row it returns, and for
   // callerNamespace, which needs a clause to say what it attributes, and for the
-  // clause #120 added to say the response also carries the query plans.
-  apexlog_list_slow_operations: 392,
+  // clause #120 added to say the response also carries the query plans, and
+  // for `offset` beside the whole-number floor on `limit` — a schema that
+  // states `integer` and `minimum` costs tokens, and buys a `limit` of -5 no
+  // longer returning the whole ranking bar its five fastest rows, and for the
+  // clause saying
+  // a plan names its row except under a namespace grouping — an agent that
+  // assumes the query text is always there reads `undefined` — and for telling
+  // a caller to advance `offset` by the rows it got, since the page budget can
+  // return fewer than `limit` and paging by `limit` would then skip rows, and
+  // for `sortBy`, which buys the one question self time cannot answer: on the
+  // 40 logs of a 123-log corpus that record an allocation, a heap ranking's top
+  // ten holds a median six rows the self-time top ten never returns.
+  //
+  // Raised again by #138, which replaced the one `kind` filter with the two axes
+  // the log itself has — `debugCategory` and the event `type` — and widened
+  // both, and `namespace`, to arrays, so one call can ask for a family. `type`
+  // takes free strings and names three examples rather than an enum, for the
+  // reason recorded on the field itself. The `groupBy` clause grew by the
+  // category fold, which is the one grouping that states no type or name.
+  apexlog_list_slow_operations: 610,
   // Raised for the two facts the summary gained: per-namespace limit usage, and
-  // time by kind of operation.
+  // time by category.
   apexlog_get_summary: 180,
   apexlog_list_limit_risks: 210,
   apexlog_execute_anonymous: 449,
@@ -270,7 +344,15 @@ const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
  * longer says "governor limits" is a regression, not a saving.
  */
 const SELECTION_KEYWORDS = {
-  apexlog_list_slow_operations: ["self-execution time", "optimize"],
+  // "queries" and "DML" are the words a caller searching for database work
+  // matches on, and the vocabulary the rows themselves no longer use — the
+  // description is the only place they appear.
+  apexlog_list_slow_operations: [
+    "self-execution time",
+    "optimize",
+    "queries",
+    "DML",
+  ],
   apexlog_get_summary: ["summary", "overview"],
   apexlog_list_limit_risks: ["governor limits", "CPU time"],
   apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
@@ -283,20 +365,43 @@ const SELECTION_KEYWORDS = {
  * case is a server round trip and a golden file a reviewer has to read, so a
  * case earns its place only by pinning something the others would miss — and a
  * cross product spends three cases on a fixture that answers one question.
- * `heap-heavy` is here for `apexlog_get_summary` alone, the one tool whose
- * answer its heap changes. `apexlog_list_limit_risks` does read heap, but this
- * log's heap sits under its risk threshold, and the rows
- * `apexlog_list_slow_operations` would rank are kinds `governor-heavy` pins
- * already.
+ * `heap-heavy` earns a case wherever heap changes the answer, which is the
+ * summary and the heap ranking. `apexlog_list_limit_risks` does read heap, but
+ * this log's heap sits under its risk threshold, so it earns none there.
+ *
+ * An entry may be `{ fixture, args }`, and the arguments reach the `tools/call`
+ * beside the log path. Use them to reach a shape no default response has, not
+ * to measure one a plain case already covers.
  */
 const FIXTURES_BY_TOOL = {
-  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy"],
-  apexlog_list_slow_operations: ["governor-heavy", "minimal"],
+  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy", "truncated"],
+  apexlog_list_slow_operations: [
+    "governor-heavy",
+    "minimal",
+    // The heap ranking is a different answer over the same tool, so it needs a
+    // log that allocates and the argument that asks for it. `heap-heavy` holds
+    // one body that allocates and keeps it beside one that frees what it took,
+    // which is the distinction the ranking exists to make.
+    { fixture: "heap-heavy", args: { sortBy: "heapSelfNetBytes" } },
+  ],
   apexlog_list_limit_risks: ["governor-heavy", "minimal"],
 };
 
+/**
+ * The one log the README publishes a cost against.
+ *
+ * The answers table is keyed on tools rather than on cases, so a fixture added
+ * to pin a correctness fact does not also add a published row. `governor-heavy`
+ * is the log every tool is measured against, and the only one with a 1.x
+ * baseline to compare against. Why a bigger log would not move the figures is
+ * in the README, beside the table itself.
+ */
+const PUBLISHED_FIXTURE = "governor-heavy";
+
 const CASES = Object.entries(FIXTURES_BY_TOOL).flatMap(([tool, fixtures]) =>
-  fixtures.map((fixture) => ({ tool, fixture })),
+  fixtures.map((entry) =>
+    typeof entry === "string" ? { tool, fixture: entry } : { tool, ...entry },
+  ),
 );
 
 const CASE_KEYS = new Set(
@@ -313,11 +418,25 @@ const CASE_KEYS = new Set(
  * read. So dropping a fixture or a tool from `FIXTURES_BY_TOOL` retires every
  * check scoped to it and the run still passes.
  *
+ * `PUBLISHED_FIXTURE` has the hole too, from the other side: the answers block
+ * renders whichever cases match it, so a tool that stops being measured against
+ * it loses its published row rather than failing.
+ *
  * `SELECTION_KEYWORDS` has the same hole but is keyed by what `tools/list`
  * returns rather than by a case, so `checkDefinitionBudget` is where it belongs.
  */
 function checkChecksAreRun(failures) {
   const notRun = (tool, fixture) => !CASE_KEYS.has(`${tool}/${fixture}`);
+
+  // Everything else keys a case on its tool and fixture — its golden file, its
+  // token budget, the fixture an answerability check pins on — so two cases
+  // over one pair would share all three, and the arguments of one would decide
+  // what the other is asserted against.
+  if (CASE_KEYS.size !== CASES.length) {
+    failures.push(
+      `${CASES.length - CASE_KEYS.size} case(s) share a tool and fixture with another, which would share one golden file and one budget`,
+    );
+  }
 
   for (const [tool, checks] of Object.entries(ANSWERABILITY)) {
     if (!FIXTURES_BY_TOOL[tool]?.length) {
@@ -361,6 +480,11 @@ function checkChecksAreRun(failures) {
         `${tool}: measured against ${FIXTURES_BY_TOOL[tool].length} fixture(s) with no answerability checks declared`,
       );
     }
+    if (notRun(tool, PUBLISHED_FIXTURE)) {
+      failures.push(
+        `${tool}: the README publishes a cost against ${PUBLISHED_FIXTURE}, which this run does not measure it against`,
+      );
+    }
   }
 }
 
@@ -375,14 +499,50 @@ const MODERN_ENVELOPE = {
   "io.modelcontextprotocol/clientInfo": { name: "apex-log-mcp-eval", version: "0" },
 };
 
-/** Minimal MCP stdio client: initialize, then one tools/call per case. */
-function createClient(era = "legacy") {
-  const child = spawn("node", ["--max-old-space-size=8192", SERVER], {
+/** How long one request may go unanswered before the run gives up on it. */
+const REQUEST_TIMEOUT_MS = 60_000;
+
+/**
+ * What a dead server said, out of the stack Node prints around it. The bracket
+ * is Node's own error code, as in `Error [ERR_MODULE_NOT_FOUND]:`.
+ */
+function errorLine(stderr) {
+  return /^.*Error(?: \[[^\]]+\])?: (.+)$/m.exec(stderr)?.[1] ?? stderr.trim();
+}
+
+/**
+ * Minimal MCP stdio client: initialize, then one tools/call per case.
+ *
+ * `nodeArgs` is how a check runs the same server under different flags — the
+ * startup guard adds a `--import` hook.
+ */
+function createClient(era = "legacy", nodeArgs = ["--max-old-space-size=8192"]) {
+  const child = spawn("node", [...nodeArgs, SERVER], {
     stdio: ["pipe", "pipe", "pipe"],
   });
   const pending = new Map();
   let buffer = "";
+  let stderr = "";
   let nextId = 1;
+
+  child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+
+  const failPending = (reason) => {
+    for (const { reject } of pending.values()) {
+      reject(new Error(reason));
+    }
+    pending.clear();
+  };
+
+  // A server that dies or never starts leaves every request unanswered, and an
+  // unanswered promise waits for the CI timeout rather than failing. Say what
+  // happened instead: its stderr carries the reason.
+  child.on("exit", (code, signal) => {
+    if (child.killed) return;
+    const how = signal ? `signal ${signal}` : `code ${code}`;
+    failPending(`the server exited with ${how} — ${errorLine(stderr)}`);
+  });
+  child.on("error", (error) => failPending(`the server did not start — ${error.message}`));
 
   child.stdout.on("data", (chunk) => {
     buffer += chunk.toString();
@@ -396,18 +556,25 @@ function createClient(era = "legacy") {
       } catch {
         continue;
       }
-      const resolve = pending.get(message.id);
-      if (resolve) {
+      const waiting = pending.get(message.id);
+      if (waiting) {
         pending.delete(message.id);
-        resolve(message);
+        waiting.resolve(message);
       }
     }
   });
 
   const request = (method, params) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
       const id = nextId++;
-      pending.set(id, resolve);
+      pending.set(id, { resolve, reject });
+      // A server that is alive but silent answers nothing and exits never, so
+      // the exit handler above cannot see it.
+      setTimeout(() => {
+        if (pending.delete(id)) {
+          reject(new Error(`${method} went unanswered for ${REQUEST_TIMEOUT_MS} ms`));
+        }
+      }, REQUEST_TIMEOUT_MS).unref();
       const addressed =
         era === "modern" ? { ...params, _meta: MODERN_ENVELOPE } : params;
       child.stdin.write(
@@ -439,6 +606,9 @@ function createClient(era = "legacy") {
       const text = response.result?.content?.[0]?.text;
       if (typeof text !== "string") {
         throw new Error(`${name}: no text content in ${JSON.stringify(response)}`);
+      }
+      if (response.result.isError) {
+        throw new Error(`${name}: returned an error result — ${text}`);
       }
       return text;
     },
@@ -672,6 +842,27 @@ function checkCacheHints(result, failures) {
   }
 }
 
+/**
+ * Starting the server and listing its tools must not load the Salesforce SDK.
+ *
+ * Driven against `dist/index.js`, the file that ships: the ESLint rule and
+ * `tests/salesforceCoreIsLazy.test.ts` read `src/`, so neither sees what `tsc`
+ * emitted, the `bin` entry point, or an `await import` added to a startup path
+ * later. The hook throws on resolve, so a violation kills the server and the
+ * client reports what its stderr said.
+ */
+async function checkNoSdkAtStartup(failures) {
+  const hook = path.join(ROOT, "scripts", "noSalesforceSdkAtStartup.mjs");
+  try {
+    await withClient((client) => client.toolsList(), "legacy", [
+      "--import",
+      hook,
+    ]);
+  } catch (error) {
+    failures.push(`startup: ${error.message}`);
+  }
+}
+
 function checkSelectionKeywords(costs, failures) {
   for (const { name, description } of costs) {
     const lowered = description.toLowerCase();
@@ -740,13 +931,17 @@ function renderTokenCost(costs, responses) {
     {
       id: "token-cost-answers",
       table: renderTable(
-        ["Tool", "Log", "Response", "1.x", "Change"],
-        responses.map(({ tool, fixture, tokens }) => [
-          `\`${tool}\``,
-          `\`${fixture}.log\``,
-          `~${thousands(tokens)}`,
-          ...comparison(V1_RESPONSE_TOKENS[`${tool}/${fixture}`], tokens),
-        ]),
+        ["Tool", "Response", "1.x", "Change"],
+        responses
+          .filter(({ fixture }) => fixture === PUBLISHED_FIXTURE)
+          .map(({ tool, tokens }) => [
+            `\`${tool}\``,
+            `~${thousands(tokens)}`,
+            ...comparison(
+              V1_RESPONSE_TOKENS[`${tool}/${PUBLISHED_FIXTURE}`],
+              tokens,
+            ),
+          ]),
       ),
     },
   ];
@@ -788,8 +983,8 @@ async function checkReadme(blocks, failures, update) {
 }
 
 /** One server process for the whole run, stopped however the run ends. */
-async function withClient(run, era) {
-  const client = createClient(era);
+async function withClient(run, era, nodeArgs) {
+  const client = createClient(era, nodeArgs);
   await client.start();
   try {
     return await run(client);
@@ -827,12 +1022,18 @@ async function main() {
 
   checkChecksAreRun(failures);
 
+  await checkNoSdkAtStartup(failures);
+  console.log("checked startup — the Salesforce SDK is not loaded to list tools");
+
   const responses = [];
 
   await withClient(async (client) => {
     for (const testCase of CASES) {
       const logFilePath = path.join(FIXTURES, `${testCase.fixture}.log`);
-      const toon = await client.callTool(testCase.tool, { logFilePath });
+      const toon = await client.callTool(testCase.tool, {
+        logFilePath,
+        ...testCase.args,
+      });
       checkAnswerability(testCase, toon, failures);
       checkNoDuplication(testCase, toon, failures);
       const tokens = checkTokenBudget(testCase, toon, failures);

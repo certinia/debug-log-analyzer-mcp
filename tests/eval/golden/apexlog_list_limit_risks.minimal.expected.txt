@@ -1,7 +1,5 @@
-apexCodeLevel: FINE
-systemLevel: DEBUG
-dbLevel: NONE
-calloutLevel: NONE
-workflowLevel: NONE
 threshold: 80
+capturedAt[2]{debugCategory,level}:
+  apexCode,FINE
+  apexProfiling,NONE
 atRisk: []

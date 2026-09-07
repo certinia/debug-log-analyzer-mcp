@@ -211,6 +211,17 @@ one-liners.
   complete shape, not a sentence; "High CPU usage — consider optimizing algorithms" follows from the
   percentage beside it. Advice built from one column and a hardcoded threshold is a worse copy of what
   the agent does anyway, because the agent reads every column.
+- **Take the bounded view, and cap what is still unbounded inside it.** Where the parser offers
+  both, read the deduped one: `logIssues` holds one entry per failure, where `exceptions` holds every
+  occurrence — 4,501 throws in one real log are three messages. Then cap the free text that is left,
+  because its size is the log's to choose and not ours: a fatal states 53 characters of message on
+  the median log and 1,070 on the worst, and one stack runs to 52,009. A field the log controls is a
+  field that will one day fill the caller's context. Where the caller also chooses how many rows come
+  back, cap the payload and not the count: `apexlog_list_slow_operations` elides a row's `name` past
+  400 characters and stops a page at 60,000, because a row cap is a proxy — capping every name still
+  left 5 logs of 124 over a client's ceiling, since a thousand rows cost some 15,000 tokens in their
+  numeric columns alone. Returning fewer rows than were asked for is the honest answer, and the
+  matched count beside them already says the page was cut.
 - **Don't echo the input back.** If the caller supplied it (a file path, a flag), it does not belong
   in the response.
 - **Round to the precision someone acts on.** `roundMs` for durations (3dp, keeps microsecond
@@ -233,8 +244,11 @@ one-liners.
 
 **A fact that qualifies every number in the response is a response-level scalar, stated once; a fact
 that varies per row is a column.** `threshold` on `apexlog_list_limit_risks` follows this rule, and so
-do the four capture levels — `apexCodeLevel`, `systemLevel`, `dbLevel` and `workflowLevel` — that
-`apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header.
+does `capturedAt` — the level each debug log category was captured at — which
+`apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header. It is a
+table rather than a set of scalars because it is keyed the way the rows are, on `debugCategory`, so
+the two join; and each tool names only the categories its own figures came from, since a level for a
+category nothing here was logged under qualifies nothing.
 
 They matter because a capture level silently changes what every figure beside it means. On a log
 taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self
@@ -250,7 +264,7 @@ Two consequences:
 - **No caveat prose and no magnitude.** The response reports the level and stops. A figure measured
   once against one org, with the harness not committed, cannot be re-derived by CI and will rot.
 
-`apexlog_get_summary` needs none of them: `timeByKind` already carries a `logCategory` column and
+`apexlog_get_summary` needs none of it: `timeByCategory` is keyed on `debugCategory` and
 `debugLevels` lists the level per category, so the join is the caller's to make and restating it
 would break "say it once".
 
@@ -283,6 +297,21 @@ carrying 10,600 of its 10,904 ms. So the fact matters and the column does not �
 `groupBy: "callerNamespace"` asks the question instead, for one enum value and the clause that says
 what it attributes. Every response that does not pass it is unchanged. The rule: **a fact worth an
 answer but not worth a column belongs in a parameter that reshapes the rows, not in the rows.**
+
+Heap goes one step further and earns a **sort key, plus the column and scalar only that key carries**.
+On the 40 logs of a 123-log corpus that record an allocation, a ranking by the net heap each row's own
+code retained holds a median 6 of 10 rows the self-time ranking never returns, and a different top row
+on 31 of the 40, so the answer is not derivable from the default response. But only 1 of the 103 logs
+that state a heap limit passes half of it, so permanent fields would be zeros on two thirds of
+responses for a one-in-a-hundred question. `sortBy: "heapSelfNetBytes"` asks for all three together,
+and `durationSelfMaxMs` under `groupBy` is the same shape. This is the boundary of the fixed-schema
+rule: **a field the caller's own parameter turns on is not an omission, because the parameter says
+which it is.**
+
+The scalar it turns on, `returnedHeapPercentage`, follows the rule two sections above: a share the
+returned rows carry qualifies the whole response rather than any one row. It earns its place because
+neither the rows nor another tool can imply it — the figures are on the field itself in
+[`listSlowOperations.ts`](src/tools/listSlowOperations.ts).
 
 ### The gate
 

@@ -3,6 +3,7 @@
  */
 
 import {
+  limitUnitsClause,
   omitEmpty,
   roundMs,
   roundPercent,
@@ -150,6 +151,28 @@ describe("responseShaping", () => {
 
     it("should return no rows when the log named no namespace", () => {
       expect(toNamespaceLimitRows(new Map())).toEqual([]);
+    });
+  });
+
+  describe("limitUnitsClause", () => {
+    // Derived from the parser, so this names every metric it publishes in a
+    // unit other than count — not a list of our own that could go stale.
+    it("should name every metric that is not a count", () => {
+      const clause = limitUnitsClause();
+
+      for (const { key, unit } of ALL_LIMIT_METRICS) {
+        if (unit === "count") {
+          expect(clause).not.toContain(key);
+        } else {
+          expect(clause).toContain(key);
+        }
+      }
+    });
+
+    it("should say what unit each of them is in", () => {
+      expect(limitUnitsClause()).toBe(
+        "every governor limit is a count except cpuTime in milliseconds and heapSize in bytes",
+      );
     });
   });
 });

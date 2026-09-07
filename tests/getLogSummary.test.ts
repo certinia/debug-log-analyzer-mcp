@@ -9,8 +9,9 @@ import {
   LogSummaryArgs,
   getLogSummaryToolConfig,
 } from "../src/tools/getLogSummary";
+import { logEvent } from "./support/logEvents";
 import { clearApexLogCache } from "../src/tools/apexLogSource";
-import { OPERATION_KINDS } from "../src/tools/operations";
+import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type {
   ApexLog,
@@ -59,38 +60,6 @@ const mockStats = {
 } as BigIntStats;
 
 const counts = { total: 0, self: 0 };
-
-/** A timed node, as the tools read one: a sub-category and its own time. */
-const node = ({
-  type = null,
-  category,
-  selfNs = 0,
-  children = [],
-  isTruncated = false,
-}: {
-  type?: string | null;
-  category?: string;
-  selfNs?: number;
-  children?: LogEvent[];
-  isTruncated?: boolean;
-}): LogEvent =>
-  ({
-    type,
-    category,
-    children,
-    isTruncated,
-    text: type ?? "",
-    namespace: "default",
-    lineNumber: null,
-    duration: { total: selfNs, self: selfNs },
-    soqlCount: counts,
-    dmlCount: counts,
-    soslCount: counts,
-    soqlRowCount: counts,
-    dmlRowCount: counts,
-    soslRowCount: counts,
-    thrownCount: counts,
-  }) as unknown as LogEvent;
 
 describe("getLogSummary", () => {
   beforeEach(() => {
@@ -156,7 +125,10 @@ describe("getLogSummary", () => {
       debugLevels: {},
       namespaces: ["default", "MyNamespace"],
       logIssues: [] as LogIssue[],
-      parsingErrors: [] as string[],
+      isTruncated: false,
+      truncation: { regions: [], totalSkippedBytes: 0 },
+      truncatedEvents: [] as LogEvent[],
+      thrownCount: counts,
       governorLimits: governorLimitsOf({
         used: { soqlQueries: 5, dmlStatements: 3, cpuTime: 1500 },
       }),
@@ -190,68 +162,92 @@ describe("getLogSummary", () => {
       expect(summary.fileSizeBytes).toBe(15000);
       expect(summary.durationTotalMs).toBe(12500);
       expect(summary.truncated).toBe(false);
-      expect(summary.parsingErrorCount).toBe(0);
+      expect(summary.skippedBytes).toBeUndefined();
       expect(summary.namespaces).toEqual(["default", "MyNamespace"]);
     });
 
-    it("should say when the log stopped before the transaction did", async () => {
-      // The parser marks the line that lost its exit event. The root is never
-      // marked, so reading it there reports every truncated log as whole.
+    it("should say when the platform dropped part of the log, and how much", async () => {
+      // Every figure in a partial log is a floor, so a CPU time read from one as
+      // though it were a total is the worst answer the server can give.
       const summary = await summaryOf({
-        children: [node({ category: "Apex", isTruncated: true })],
+        isTruncated: true,
+        truncation: {
+          regions: [{ kind: "skipped-lines", startTime: 8000 }],
+          totalSkippedBytes: 14_680_064,
+        },
       });
 
       expect(summary.truncated).toBe(true);
+      expect(summary.truncatedBy).toEqual(["skipped-lines"]);
+      expect(summary.skippedBytes).toBe(14_680_064);
     });
 
-    it("should say when a section of the log was skipped", async () => {
-      // The events pair up around the gap, so no node is marked and only the
-      // log issue says part of the transaction is missing.
+    it("should say when the log stopped inside a frame it never closed", async () => {
+      // The platform dropping content and the log stopping mid-frame are
+      // different shapes, and the parser only calls the first one truncation. A
+      // log cut off by an interrupted download states no region at all, and
+      // nothing else in the response would say its figures are floors.
       const summary = await summaryOf({
-        children: [node({ category: "Apex" })],
+        truncatedEvents: [logEvent({ type: "METHOD_ENTRY", category: "Apex" })],
+      });
+
+      expect(summary.truncated).toBe(true);
+      // Neither is reported: both read the regions the platform's own truncation
+      // fills, and this log has none. Stating 0 skipped bytes under no reason at
+      // all would name a loss the platform never made.
+      expect(summary.truncatedBy).toBeUndefined();
+      expect(summary.skippedBytes).toBeUndefined();
+    });
+
+    it("should report a zero byte count on a log that hit the maximum size", async () => {
+      // A max-size region states no byte count for what it lost, so 0 beside a
+      // true `truncated` is a real answer rather than a missing one.
+      const summary = await summaryOf({
+        isTruncated: true,
+        truncation: {
+          regions: [{ kind: "max-size", startTime: 9000 }],
+          totalSkippedBytes: 0,
+        },
+      });
+
+      expect(summary.truncatedBy).toEqual(["max-size"]);
+      expect(summary.skippedBytes).toBe(0);
+    });
+
+    it("should name both losses when a log suffered both", async () => {
+      // Two of 124 real logs carry both, and a reader of `skippedBytes` alone
+      // would take a hole's byte count for the whole extent of the loss.
+      const summary = await summaryOf({
+        isTruncated: true,
+        truncation: {
+          regions: [
+            { kind: "skipped-lines", startTime: 8000 },
+            { kind: "max-size", startTime: 9000 },
+          ],
+          totalSkippedBytes: 14_680_064,
+        },
+      });
+
+      expect(summary.truncatedBy).toEqual(["skipped-lines", "max-size"]);
+    });
+
+    it("should clip a frames cell one long frame would otherwise fill", async () => {
+      // A single frame runs to 1,081 characters on a 124-log corpus, so capping
+      // the frame count alone leaves the cell unbounded.
+      const summary = await summaryOf({
         logIssues: [
           {
-            summary: "Skipped-Lines",
-            description: "*** Skipped 1,000 bytes of detailed log",
-            type: "skip",
+            summary: "System.CalloutException: bad response",
+            description: `${"x".repeat(5000)}\nClass.Service.run: line 1, column 1`,
+            type: "fatal",
             startTime: 8000,
           },
         ] as LogIssue[],
       });
 
-      expect(summary.truncated).toBe(true);
-    });
-
-    it("should say when the log hit the maximum size", async () => {
-      const summary = await summaryOf({
-        children: [node({ category: "Apex" })],
-        logIssues: [
-          {
-            summary: "Max-Size-reached",
-            description: "The maximum log size has been reached.",
-            type: "skip",
-            startTime: 9000,
-          },
-        ] as LogIssue[],
-      });
-
-      expect(summary.truncated).toBe(true);
-    });
-
-    it("should call a whole log whole when its issues are not about missing log", async () => {
-      const summary = await summaryOf({
-        children: [node({ category: "Apex" })],
-        logIssues: [
-          {
-            summary: "CPU time exceeded",
-            description: "Maximum CPU time limit exceeded",
-            type: "error",
-            startTime: 8000,
-          },
-        ] as LogIssue[],
-      });
-
-      expect(summary.truncated).toBe(false);
+      const { frames } = summary.fatalErrors[0];
+      expect(frames).toHaveLength(401);
+      expect(frames.endsWith("…")).toBe(true);
     });
 
     it("should report every log category and its level", async () => {
@@ -262,36 +258,160 @@ describe("getLogSummary", () => {
       });
 
       expect(summary.debugLevels).toEqual([
-        { logCategory: "APEX_CODE", level: "DEBUG" },
-        { logCategory: "DB", level: "NONE" },
+        { debugCategory: "apexCode", level: "DEBUG" },
+        { debugCategory: "database", level: "NONE" },
       ]);
     });
 
-    it("should report log issues and count parsing errors", async () => {
+    it("should report what killed the transaction, and where", async () => {
       const summary = await summaryOf({
         logIssues: [
           {
-            summary: "CPU time exceeded",
-            description: "Maximum CPU time limit exceeded",
-            type: "error",
+            summary: "System.LimitException: Apex CPU time limit exceeded",
+            description:
+              "Class.Searcher.search: line 31, column 1\nClass.Service.run: line 102, column 1",
+            type: "fatal",
             startTime: 8000,
           },
         ] as LogIssue[],
-        parsingErrors: ["Unknown log event type: CUSTOM_EVENT"],
       });
 
-      expect(summary.logIssues).toEqual([
-        { type: "error", summary: "CPU time exceeded" },
+      expect(summary.fatalErrors).toEqual([
+        {
+          message: "System.LimitException: Apex CPU time limit exceeded",
+          frames:
+            "Class.Searcher.search: line 31, column 1 | Class.Service.run: line 102, column 1",
+        },
       ]);
-      expect(summary.parsingErrorCount).toBe(1);
     });
 
-    it("should drop logIssues, the one occurrence list, when nothing occurred", async () => {
-      const summary = await summaryOf();
+    it("should state the innermost frames and say that it dropped the rest", async () => {
+      // A real log states 52,009 characters of stack. Three frames name the
+      // failing call and its callers; the rest costs more than it says. Half of
+      // a 124-log corpus has a fourth, so the drop has to be visible or a deep
+      // stack reads like a shallow one.
+      const summary = await summaryOf({
+        logIssues: [
+          {
+            summary: "System.LimitException: Maximum stack depth reached: 1001",
+            description: ["one", "two", "three", "four", "five"].join("\n"),
+            type: "fatal",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
 
-      expect(summary.logIssues).toBeUndefined();
-      // The rest are part of the fixed schema and report their emptiness.
-      expect(summary.parsingErrorCount).toBe(0);
+      expect(summary.fatalErrors[0].frames).toBe("one | two | three | …");
+    });
+
+    it("should not claim a drop on a stack that fits", async () => {
+      const summary = await summaryOf({
+        logIssues: [
+          {
+            summary: "System.NullPointerException: Attempt to de-reference null",
+            description: ["one", "two", "three"].join("\n"),
+            type: "fatal",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.fatalErrors[0].frames).toBe("one | two | three");
+    });
+
+    it("should not spend a frame on a blank line inside the stack", async () => {
+      // The limit counts real frames. Counting raw lines let a blank one inside
+      // the stack cost a frame and still claim a drop, so a stack that fits read
+      // as one that had been cut.
+      const summary = await summaryOf({
+        logIssues: [
+          {
+            summary: "System.NullPointerException: Attempt to de-reference null",
+            description: ["one", "", "two", "three"].join("\n"),
+            type: "fatal",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.fatalErrors[0].frames).toBe("one | two | three");
+    });
+
+    it("should clip a message where it runs into prose", async () => {
+      // A DmlException embeds the whole validation message a user would see —
+      // 1,070 characters at the worst of 124 real logs. The kept part carries
+      // the exception class, the offending row and the error code.
+      const prose = "x".repeat(400);
+      const summary = await summaryOf({
+        logIssues: [
+          {
+            summary: `System.DmlException: Update failed. first error: CANNOT_EXECUTE_FLOW_TRIGGER, ${prose}`,
+            description: "Class.Service.run: line 1, column 1",
+            type: "fatal",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
+
+      const { message } = summary.fatalErrors[0];
+      expect(message).toHaveLength(201);
+      expect(message.endsWith("…")).toBe(true);
+      expect(message).toContain("CANNOT_EXECUTE_FLOW_TRIGGER");
+    });
+
+    it("should keep the frames cell on a fatal the log gave no stack for", async () => {
+      // An absent key would put the table out of its one-header form, which
+      // costs more than the empty cell it saves.
+      const summary = await summaryOf({
+        logIssues: [
+          {
+            summary: "Internal Salesforce.com Error",
+            description: "",
+            type: "fatal",
+            startTime: 8000,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.fatalErrors).toEqual([
+        { message: "Internal Salesforce.com Error", frames: "" },
+      ]);
+    });
+
+    it("should ignore the issues that are not a fatal", async () => {
+      // `error` repeats a fatal's message without its stack, and `skip` and
+      // `unexpected` say what `truncated` already says.
+      const summary = await summaryOf({
+        logIssues: [
+          {
+            summary: "System.DmlException: Update failed",
+            description: "",
+            type: "error",
+            startTime: 8000,
+          },
+          {
+            summary: "Unexpected-Exit",
+            description: "An exit event was found without a corresponding entry",
+            type: "unexpected",
+            startTime: 8100,
+          },
+        ] as LogIssue[],
+      });
+
+      expect(summary.fatalErrors).toBeUndefined();
+    });
+
+    it("should report how many exceptions were thrown, zero included", async () => {
+      // Part of the fixed schema: an absent count could not be told from one
+      // the log never carried, and a caught exception is invisible otherwise.
+      expect((await summaryOf()).thrownCount).toBe(0);
+      // A second path, because the parse cache holds one slot and keys on it.
+      const threw = await summaryOf(
+        { thrownCount: { total: 4501, self: 0 } },
+        "/path/to/threw.log",
+      );
+
+      expect(threw.thrownCount).toBe(4501);
     });
 
     it("should not echo the log file path back to the caller", async () => {
@@ -381,67 +501,88 @@ describe("getLogSummary", () => {
     });
   });
 
-  describe("timeByKind", () => {
-    it("should report a row for every kind, so a zero can be read", async () => {
+  describe("timeByCategory", () => {
+    const rowOf = (
+      summary: { timeByCategory: { debugCategory: string }[] },
+      debugCategory: string,
+    ) =>
+      summary.timeByCategory.find((row) => row.debugCategory === debugCategory);
+
+    // `database 0` beside `database NONE` means the queries were not logged;
+    // the same row beside `database FINEST` means none ran. Neither reads
+    // without the row, so every category is reported.
+    it("should report a row for every category, so a zero can be read", async () => {
       const summary = await summaryOf();
 
-      expect(summary.timeByKind.map((row: { kind: string }) => row.kind)).toEqual(
-        [...OPERATION_KINDS],
-      );
+      expect(
+        summary.timeByCategory.map(
+          (row: { debugCategory: string }) => row.debugCategory,
+        ),
+      ).toEqual([...DEBUG_CATEGORIES]);
     });
 
-    it("should count the operations of a kind and sum their self time", async () => {
+    it("should count the operations of a category and sum their self time", async () => {
       const summary = await summaryOf({
         children: [
-          node({
+          logEvent({
             type: "METHOD_ENTRY",
             category: "Apex",
-            selfNs: 2_000_000_000,
+            debugCategory: "apexCode",
+            totalNs: 2_000_000_000,
             children: [
-              node({
+              {
                 type: "SOQL_EXECUTE_BEGIN",
                 category: "SOQL",
-                selfNs: 1_000_000_000,
-              }),
+                debugCategory: "database",
+                totalNs: 1_000_000_000,
+              },
             ],
           }),
-          node({
+          logEvent({
             type: "METHOD_ENTRY",
             category: "Apex",
-            selfNs: 500_000_000,
+            debugCategory: "apexCode",
+            totalNs: 500_000_000,
           }),
         ],
       });
 
-      const rowOf = (kind: string) =>
-        summary.timeByKind.find((row: { kind: string }) => row.kind === kind);
-
-      expect(rowOf("method")).toEqual({
-        kind: "method",
-        logCategory: "APEX_CODE",
+      expect(rowOf(summary, "apexCode")).toEqual({
+        debugCategory: "apexCode",
         operationCount: 2,
         durationSelfMs: 2500,
         selfPercentage: 20,
       });
-      expect(rowOf("soql")).toEqual({
-        kind: "soql",
-        logCategory: "DB",
+      expect(rowOf(summary, "database")).toEqual({
+        debugCategory: "database",
         operationCount: 1,
         durationSelfMs: 1000,
         selfPercentage: 8,
       });
     });
 
-    it("should name the trace category that decides whether a kind was logged", async () => {
-      // A `soql 0` row beside `DB NONE` means the queries were not logged; the
-      // same row beside `DB FINEST` means none ran.
-      const summary = await summaryOf();
-      const rowOf = (kind: string) =>
-        summary.timeByKind.find((row: { kind: string }) => row.kind === kind);
+    // A Visualforce formula carries the timeline category `System`, so reading
+    // that would report half a Visualforce transaction as system time.
+    it("should file an operation under the category that gates it", async () => {
+      const summary = await summaryOf({
+        children: [
+          logEvent({
+            type: "VF_EVALUATE_FORMULA_BEGIN",
+            category: "System",
+            debugCategory: "visualforce",
+            selfNs: 6_000_000_000,
+          }),
+        ],
+      });
 
-      expect(rowOf("soql").logCategory).toBe("DB");
-      expect(rowOf("systemMethod").logCategory).toBe("SYSTEM");
-      expect(rowOf("workflow").logCategory).toBe("WORKFLOW");
+      expect(rowOf(summary, "visualforce")).toMatchObject({
+        operationCount: 1,
+        durationSelfMs: 6000,
+      });
+      expect(rowOf(summary, "system")).toMatchObject({
+        operationCount: 0,
+        durationSelfMs: 0,
+      });
     });
 
     it("should report zeros rather than divide by a log that ran no time", async () => {
@@ -451,7 +592,7 @@ describe("getLogSummary", () => {
       });
 
       expect(summary.durationTotalMs).toBe(0);
-      summary.timeByKind.forEach(
+      summary.timeByCategory.forEach(
         (row: { operationCount: number; selfPercentage: number }) => {
           expect(row.operationCount).toBe(0);
           expect(row.selfPercentage).toBe(0);

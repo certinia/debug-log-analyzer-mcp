@@ -3,47 +3,137 @@
  */
 
 import { z } from "zod";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import {
-  captureLevels,
+  capturedAt,
   GROUP_BY,
+  GROUPINGS,
   groupOperations,
   listOperations,
   operationGroupKey,
-  OPERATION_KINDS,
-  type CaptureLevels,
+  UNGROUPED,
+  type DeclaredLevel,
   type GroupBy,
   type Operation,
-  type OperationKind,
 } from "./operations.js";
-import { listQueryPlans, type QueryPlan } from "./queryPlans.js";
+import { DEBUG_CATEGORIES } from "../salesforce/debugLevels.js";
+import type { DebugCategory } from "@apexdevtools/apex-log-parser/types";
+import {
+  canCarryPlan,
+  listQueryPlans,
+  planOf,
+  type QueryPlan,
+  type QueryPlanVerdict,
+} from "./queryPlans.js";
 import {
   NS_TO_MS,
   omitEmpty,
+  percentageOf,
   roundMs,
   roundPercent,
 } from "./responseShaping.js";
 
+/**
+ * What the ranking can be ordered on, named after the column each one orders,
+ * so the enum a caller reads and the header it gets back are the same word.
+ * Those are wire names, which is why this sits here and not beside `GROUP_BY`
+ * in `operations.js` — that module owns `durationSelfNs`, not `durationSelfMs`.
+ */
+const SORT_BY = ["durationSelfMs", "heapSelfNetBytes"] as const;
+
+type SortBy = (typeof SORT_BY)[number];
+
+const bySelfTime = (a: Operation, b: Operation) =>
+  b.durationSelfNs - a.durationSelfNs;
+
+/**
+ * How each key orders the rows: its own figure, then self time to break a tie.
+ *
+ * The tiebreak is what makes a heap sort safe to ask for blind. Most logs
+ * record no allocation at all, and every row of those is a flat zero — without
+ * a second key the ranking would fall back to the order the log states, which
+ * ranks nothing. Calling `bySelfTime` from both entries is what makes "it
+ * degrades to the self-time ranking" true rather than merely intended.
+ */
+const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
+  durationSelfMs: bySelfTime,
+  heapSelfNetBytes: (a, b) =>
+    b.heapSelfNetBytes - a.heapSelfNetBytes || bySelfTime(a, b),
+};
+
 export const listSlowOperationsInputSchema = {
   logFilePath: logFilePathSchema,
-  kind: z
-    .enum(OPERATION_KINDS)
+  debugCategory: z
+    .array(z.enum(DEBUG_CATEGORIES))
     .optional()
-    .describe("Rank only operations of this kind"),
-  namespace: z.string().optional().describe("Rank only this namespace"),
+    .describe("Rank only these debug log categories"),
+  // Free strings and three examples rather than an enum: the parser publishes
+  // `LogEventType` as a type alone, and its 290 names would cost some 1,450
+  // tokens in every `tools/list` — more than the four tools together are
+  // allowed. Tightening this to an enum fails the definition budget.
+  type: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY",
+    ),
+  namespace: z.array(z.string()).optional().describe("Rank only these namespaces"),
   minSelfMs: z
     .number()
     .optional()
-    .describe("Drop operations below this self time (default: 0)"),
-  limit: z.number().optional().describe("Rows to return (default: 10)"),
+    .describe(
+      "Drop operations below this self time (default: 0), whichever sortBy is used",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe("Page size (default: 10); fewer if the page would be too large"),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      "Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.",
+    ),
   groupBy: z
     .enum([...GROUP_BY, "none"])
     .optional()
     .describe(
-      "Fold repeats into one row: by name (default), by namespace, or by callerNamespace, which attributes platform DML to the package that drove it. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
+      "Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own.",
+    ),
+  sortBy: z
+    .enum(SORT_BY)
+    .optional()
+    .describe(
+      "Rank on (default: durationSelfMs). heapSelfNetBytes adds that column.",
     ),
 };
+
+/**
+ * The longest query text reported on a row.
+ *
+ * Names are short until they are not: across 23,456 rows of a 124-log corpus
+ * the median is 50 characters and the p90 is 100, but the longest is 19,593 —
+ * about 4,900 tokens for one row. Eliding at 400 touches 2% of rows and takes
+ * the whole tail with it.
+ */
+const NAME_LIMIT = 400;
+
+/**
+ * The most one page of rows may cost, as characters.
+ *
+ * About 15,000 tokens at the four-characters-a-token estimate `scripts/eval.mjs`
+ * measures with, which leaves headroom under the 25,000-token response ceiling
+ * a client is likely to impose. Eliding names is not enough on its own: a
+ * thousand rows cost some 15,000 tokens in their numeric columns alone, so 5
+ * logs in that corpus still breached the ceiling with every name capped.
+ */
+const PAGE_CHAR_BUDGET = 60_000;
 
 export type SlowOperationsArgs = z.infer<
   z.ZodObject<typeof listSlowOperationsInputSchema>
@@ -52,7 +142,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
+    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains — code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace or category grouping.",
   inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,
@@ -62,8 +152,16 @@ export const listSlowOperationsToolConfig = {
 
 /** One ranked row, in the units and the order the payload uses. */
 export interface SlowOperation {
-  kind: OperationKind;
-  name: string;
+  /** The category that decided whether the operation reached the log at all. */
+  debugCategory: DebugCategory;
+  /**
+   * The log's own event type. Absent under `groupBy: "debugCategory"`, where the
+   * row folds the types of a category together and naming one would name the
+   * first alone.
+   */
+  type?: string;
+  /** Absent under `groupBy: "debugCategory"`, where the category identifies the row. */
+  name?: string;
   namespace: string;
   callCount: number;
   /**
@@ -80,9 +178,23 @@ export interface SlowOperation {
   soslCount: number;
   rowCount: number;
   thrownCount: number;
+  /**
+   * Net heap the row's own code retained: the signed `HEAP_ALLOCATE` bytes, so
+   * a row that released more than it took reads below zero. What counts as a
+   * free, and where a managed package's allocations land, are on
+   * `Operation.heapSelfNetBytes`.
+   *
+   * Present under `sortBy: "heapSelfNetBytes"` alone, because most logs record
+   * no allocation and every other ranking would carry a column of zeros — see
+   * DEVELOPING.md for the corpus behind that. A zero here means none was
+   * retained, and the `apexCode` row of `capturedAt`, where the log's header
+   * declared a level, says whether that can be true: nothing below
+   * `APEX_CODE,FINER` records an allocation.
+   */
+  heapSelfNetBytes?: number;
 }
 
-export interface SlowOperationsResult extends CaptureLevels {
+export interface SlowOperationsResult {
   durationTotalMs: number;
   /**
    * Share of the transaction the returned rows account for between them. A low
@@ -91,43 +203,250 @@ export interface SlowOperationsResult extends CaptureLevels {
    */
   returnedSelfPercentage: number;
   /**
-   * Rows the selection matched, before `limit` cut it. Above the returned count
-   * it says the cap hid rows, which no other figure in the response states.
+   * Share of the heap the transaction retained that the returned rows carry
+   * between them, present under `sortBy: "heapSelfNetBytes"` alone — beside the
+   * column it qualifies, and on the one ranking it says anything about.
+   *
+   * The rows do not always hold it: a default page carries a median 98.3% of
+   * the transaction's net heap, but under 90% on 17 of the 40 logs in a corpus
+   * that allocate, and as little as 50%, because one log needs 64 rows to reach
+   * 90%. Nothing else in any response says so — the transaction's *net* heap is
+   * reported nowhere, and `apexlog_get_summary` carries the peak live figure,
+   * which is a different measure and not a denominator for these rows.
+   *
+   * Against the whole log and not the selection, on the same footing as
+   * `returnedSelfPercentage` beside it.
+   *
+   * It can read above 100 where rows outside the page freed more than they
+   * took, since those lower the denominator and not the page. No log in the
+   * corpus does: 0 to 100 across all 123, and a net-negative row has never
+   * reached a top ten.
+   *
+   * It reads 0 where the transaction retained no net heap, which is the answer
+   * on the 83 logs that record no allocation — the column of zeros beside it
+   * says the same. A transaction that released more than it took would read 0
+   * as well, where no share is meaningful; none of the 123 does.
+   */
+  returnedHeapPercentage?: number;
+  /**
+   * Rows the selection matched, before `offset`, `limit` or the page budget cut
+   * it. Above the returned count it says rows were held back, which no other
+   * figure in the response states.
    */
   matchedCount: number;
+  /**
+   * The level each category among the returned rows was captured at, keyed as
+   * the rows are, so the two join. Absent when the header declared none of
+   * them: a level has no zero.
+   */
+  capturedAt?: DeclaredLevel[];
   operations: SlowOperation[];
   /**
    * What the query optimiser decided about the queries behind those rows, one
    * row per distinct query text it explained — a grouped row can stand for
-   * several. Absent when it explained none of them: an
-   * explain is emitted at `DB,FINEST` alone, and `dbLevel` says whether the log
-   * could carry one.
+   * several. Absent when it explained none of them: an explain is emitted at
+   * `database,FINEST` alone, and the `database` row of `capturedAt` says whether
+   * the log could carry one.
    *
    * A separate table rather than a column, because `relativeCost` is null on
    * every row that is not a query, and a table whose rows share no key set
    * costs more than it says.
+   *
+   * Keyed by `operationRow` where the ranked row is already named after the
+   * query, and by `name` where it is not — see `PlanRow`.
    */
-  queryPlans?: QueryPlan[];
+  queryPlans?: PlanRow[];
+}
+
+/**
+ * A plan under the ranked row it explains, for a grouping that names the row
+ * after the query itself.
+ *
+ * The query is then named by that row — elided past `NAME_LIMIT` like any other
+ * name — and repeating it here would state one string twice: p90 1,364 tokens
+ * across a 124-log corpus and 4,699 at worst. `operationRow` is the 1-based
+ * line of `operations` as returned, so it stays right under paging and can only
+ * name a row the response carries.
+ */
+export interface RankedPlan extends QueryPlanVerdict {
+  operationRow: number;
+}
+
+/**
+ * Grouping by namespace names the row after the namespace, so the query text
+ * appears nowhere else and has to stay.
+ */
+export type PlanRow = RankedPlan | QueryPlan;
+
+/** The verdict without the query text, spelled out so a new field is a decision. */
+function verdictOf(plan: QueryPlan): QueryPlanVerdict {
+  return {
+    leadingOperationType: plan.leadingOperationType,
+    relativeCost: plan.relativeCost,
+    cardinality: plan.cardinality,
+    sObjectCardinality: plan.sObjectCardinality,
+  };
+}
+
+/**
+ * Keep the head and the tail of an over-long name, and say so in the middle.
+ *
+ * The middle goes rather than the end, because a query names its columns first
+ * and its object last, and dropping the `FROM` clause would leave a row the
+ * caller cannot identify.
+ *
+ * Measured in UTF-16 units, which is what the name costs to send, and cut by
+ * slicing rather than by walking the string: on a name of the length above,
+ * that is 0.16 microseconds against 56.
+ */
+function elide(text: string, maxChars: number): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+  const head = Math.ceil((maxChars - 1) / 2);
+  const tail = maxChars - 1 - head;
+  // A cut inside a surrogate pair would send half a character, so step off it.
+  const first = text.charCodeAt(head - 1);
+  const from = first >= 0xd800 && first <= 0xdbff ? head - 1 : head;
+  const last = text.charCodeAt(text.length - tail);
+  const to =
+    last >= 0xdc00 && last <= 0xdfff
+      ? text.length - tail + 1
+      : text.length - tail;
+  return `${text.slice(0, from)}…${text.slice(to)}`;
+}
+
+/**
+ * What a row costs on the wire, near enough to bound a page by.
+ *
+ * An estimate, not the encoded length: it counts each cell and a separator,
+ * where TOON also indents the row and quotes any cell holding a comma. It
+ * therefore under-counts, by 3% on the worst page of a 124-log corpus — which
+ * the budget's own headroom absorbs, since 60,000 characters is well under the
+ * 100,000 a 25,000-token ceiling allows.
+ */
+function rowCost(row: SlowOperation | PlanRow): number {
+  return Object.values(row).reduce(
+    (total, cell) => total + String(cell).length + 1,
+    0,
+  );
+}
+
+/**
+ * Plans for the ranked rows named after their query, in rank order.
+ *
+ * One row per ranked query row that was explained, not one per query text: the
+ * same query can rank on several rows — 23 of them in one real log ranked
+ * ungrouped, and two whenever one text runs in two namespaces — and the row is
+ * now the only thing that identifies which. Stating the verdict once would
+ * leave every other row of the same query reading as unexplained. It repeats
+ * only the four small figures, never the text.
+ *
+ * A page with no query among its rows pays nothing for the second walk.
+ *
+ * Where a row is one call — `groupBy: "none"` — the plan comes from that call's
+ * own event, not from the worst plan for its text. The row makes a claim about
+ * one call, and 13 query texts across a 124-log corpus were explained at more
+ * than one `relativeCost`, so the worst would tell those rows a cost the
+ * optimiser did not reach for them. A grouped row stands for every call of the
+ * text, where the worst is the figure to act on.
+ */
+function plansForRankedRows(
+  ranked: Operation[],
+  apexLog: ApexLog,
+  perCall: boolean,
+): RankedPlan[] {
+  if (!ranked.some(canCarryPlan)) {
+    return [];
+  }
+
+  const explained = perCall ? undefined : listQueryPlans(apexLog);
+  const plans: RankedPlan[] = [];
+  ranked.forEach((operation, index) => {
+    if (!canCarryPlan(operation)) {
+      return;
+    }
+    const plan = explained
+      ? explained.get(operation.name)
+      : planOf(operation.node);
+    if (plan) {
+      plans.push({ operationRow: index + 1, ...verdictOf(plan) });
+    }
+  });
+  return plans;
+}
+
+/**
+ * Plans behind the ranked rows that are named after a namespace or a category.
+ *
+ * The row does not name the query, so the plan has to. One such row can stand
+ * for several queries, so the group key is what finds them — and the queries are
+ * looked for in the whole selection rather than the page, because the row is a
+ * fold of operations the page does not list.
+ */
+function plansForFoldedRows(
+  selected: Operation[],
+  ranked: Operation[],
+  groupBy: GroupBy,
+  apexLog: ApexLog,
+): QueryPlan[] {
+  const rankedKeys = new Set(
+    ranked.map((operation) => operationGroupKey(operation, groupBy)),
+  );
+  const queryNames = new Set(
+    selected
+      .filter(
+        (operation) =>
+          canCarryPlan(operation) &&
+          rankedKeys.has(operationGroupKey(operation, groupBy)),
+      )
+      .map((operation) => operation.name),
+  );
+  if (queryNames.size === 0) {
+    return [];
+  }
+
+  const explained = listQueryPlans(apexLog);
+  return [...queryNames]
+    .map((name) => explained.get(name))
+    .filter((plan): plan is QueryPlan => plan !== undefined)
+    // The same cap as a row's name: this is the one path where a query text is
+    // still reported, so it is the one path that would otherwise ship 19,593
+    // characters of it.
+    .map((plan) => ({ ...plan, name: elide(plan.name, NAME_LIMIT) }));
+}
+
+/** An empty or absent filter selects everything on that axis. */
+function matches(wanted: string[] | undefined, value: string): boolean {
+  return !wanted?.length || wanted.includes(value);
 }
 
 export async function listSlowOperations(args: SlowOperationsArgs) {
   const {
     logFilePath,
-    kind,
+    debugCategory,
+    type,
     namespace,
     minSelfMs = 0,
     limit = 10,
+    offset = 0,
     groupBy = "name",
+    sortBy = "durationSelfMs",
   } = args;
 
   const apexLog = await loadApexLog(logFilePath);
   const durationTotalNs = apexLog.duration.total;
+  // The log's own net heap, which the operation rows account for in full: they
+  // carry 100.0% of it on every one of the 40 logs in a corpus that allocate,
+  // min to max, because an allocation lands in the `self` of exactly one node.
+  const heapTotalBytes = apexLog.heapAllocated.total;
   const minSelfNs = minSelfMs * NS_TO_MS;
 
   const selected = listOperations(apexLog).filter(
     (operation) =>
-      (!kind || operation.kind === kind) &&
-      (!namespace || operation.namespace === namespace),
+      matches(debugCategory, operation.debugCategory) &&
+      matches(type, operation.type) &&
+      matches(namespace, operation.namespace),
   );
 
   const grouped = groupBy !== "none";
@@ -140,19 +459,26 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
     // NaN, which fails both, and such an operation must be dropped, not ranked.
     .filter((operation) => operation.durationSelfNs >= minSelfNs)
-    .sort((a, b) => b.durationSelfNs - a.durationSelfNs);
-  const ranked = matched.slice(0, limit);
+    // Stable by specification, and every key ends in one number, so a caller
+    // walking the ranking with `offset` sees each row once and in one order.
+    .sort(COMPARE_BY[sortBy]);
+  const page = matched.slice(offset, offset + limit);
 
   const selfPercentageOf = (operation: Operation) =>
-    durationTotalNs > 0 ? (operation.durationSelfNs / durationTotalNs) * 100 : 0;
+    percentageOf(operation.durationSelfNs, durationTotalNs);
 
   // The column set is spelled out rather than spread, so the compiler fails the
   // build if an `Operation` field is added without deciding whether it belongs
   // on the wire, and so the columns arrive in a readable order. It is a fixed
   // set: a zero SOQL count reads as "none" rather than "not measured".
-  const operations: SlowOperation[] = ranked.map((operation) => ({
-    kind: operation.kind,
-    name: operation.name,
+  const { keysOnType } = groupBy === "none" ? UNGROUPED : GROUPINGS[groupBy];
+
+  const toRow = (operation: Operation): SlowOperation => ({
+    debugCategory: operation.debugCategory,
+    ...(keysOnType && {
+      type: operation.type,
+      name: elide(operation.name, NAME_LIMIT),
+    }),
     namespace: operation.namespace,
     callCount: operation.callCount,
     durationTotalMs: roundMs(operation.durationTotalNs / NS_TO_MS),
@@ -168,44 +494,81 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     soslCount: operation.soslCount,
     rowCount: operation.rowCount,
     thrownCount: operation.thrownCount,
-  }));
+    // Only where it is the key, so it is the one column a caller asked for
+    // rather than one every ranking pays for.
+    ...(sortBy === "heapSelfNetBytes" && {
+      heapSelfNetBytes: operation.heapSelfNetBytes,
+    }),
+  });
+
+  // Built and costed in one pass, so a row the budget turns away is never
+  // built, and `operations` is a prefix of `page` by construction rather than
+  // by an invariant the next reader has to take on trust — which is what lets
+  // a plan's `operationRow` name a row safely. At least one row always comes
+  // back, so a single enormous row is reported rather than the table quietly
+  // going empty. Rows returned read against `matchedCount` say the page was
+  // cut, which needs no field of its own.
+  const operations: SlowOperation[] = [];
+  let spent = 0;
+  for (const operation of page) {
+    const row = toRow(operation);
+    spent += rowCost(row);
+    if (spent > PAGE_CHAR_BUDGET && operations.length > 0) {
+      break;
+    }
+    operations.push(row);
+  }
+
+  // Kept in step by construction — the loop above appends in order and stops —
+  // so a plan's `operationRow` can only name a row the response carries.
+  const ranked = page.slice(0, operations.length);
 
   // Only the returned rows are explained, so the table qualifies what the
-  // response says rather than ranking a second time; and a log with no query
-  // among its slowest operations pays nothing for the second walk. A grouped
-  // row is named after its group, which is the query text under `name` and the
-  // namespace otherwise, so the queries behind it are found by group key. The
-  // set folds the repeats: one query text is one plan however many rows or
-  // calls carry it.
-  const groupKeyBy: GroupBy | null = groupBy === "none" ? null : groupBy;
-  const rankedKeys = new Set(
-    groupKeyBy
-      ? ranked.map((operation) => operationGroupKey(operation, groupKeyBy))
-      : [],
-  );
-  const queryNames = new Set(
-    (groupKeyBy ? selected : ranked)
-      .filter(
-        (operation) =>
-          operation.kind === "soql" &&
-          (!groupKeyBy ||
-            rankedKeys.has(operationGroupKey(operation, groupKeyBy))),
-      )
-      .map((operation) => operation.name),
-  );
+  // response says rather than ranking a second time. Where the row names the
+  // query the plan points at it; where it does not, the plan looks the queries
+  // up by group key and carries the text.
+  const explained: PlanRow[] =
+    groupBy === "none" || GROUPINGS[groupBy].namesOperation
+      ? plansForRankedRows(ranked, apexLog, groupBy === "none")
+      : plansForFoldedRows(selected, ranked, groupBy, apexLog);
 
-  const explained = queryNames.size ? listQueryPlans(apexLog) : undefined;
-  const queryPlans = [...queryNames]
-    .map((name) => explained?.get(name))
-    .filter((plan): plan is QueryPlan => plan !== undefined);
+  // Out of what the rows left, because the plans are part of the same response.
+  // A namespace grouping reports one plan per distinct query text behind the
+  // rows, each carrying up to `NAME_LIMIT` characters of that text and none of
+  // it bounded by the row cap — 30 such rows were 90% of a real response. The
+  // rows come first: a plan qualifies a row, so a plan without its row says
+  // nothing.
+  const queryPlans: PlanRow[] = [];
+  for (const plan of explained) {
+    spent += rowCost(plan);
+    if (spent > PAGE_CHAR_BUDGET) {
+      break;
+    }
+    queryPlans.push(plan);
+  }
 
   const result: SlowOperationsResult = {
-    ...captureLevels(apexLog),
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
     returnedSelfPercentage: roundPercent(
       ranked.reduce((total, operation) => total + selfPercentageOf(operation), 0),
     ),
+    ...(sortBy === "heapSelfNetBytes" && {
+      returnedHeapPercentage: roundPercent(
+        percentageOf(
+          ranked.reduce((bytes, o) => bytes + o.heapSelfNetBytes, 0),
+          heapTotalBytes,
+        ),
+      ),
+    }),
     matchedCount: matched.length,
+    // The categories the rows returned came from, and no others: a level for a
+    // category nothing here was logged under would qualify nothing.
+    ...omitEmpty({
+      capturedAt: capturedAt(
+        apexLog,
+        operations.map((row) => row.debugCategory),
+      ),
+    }),
     operations,
     ...omitEmpty({ queryPlans }),
   };

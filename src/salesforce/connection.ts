@@ -1,3 +1,5 @@
+import "./logging.js";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports
 import { ConfigAggregator, OrgConfigProperties, Org } from "@salesforce/core";
 
 export async function resolveOrg(

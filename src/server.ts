@@ -21,12 +21,13 @@ import {
   listLimitRisks,
   listLimitRisksToolConfig,
 } from "./tools/listLimitRisks.js";
+import { limitUnitsClause } from "./tools/responseShaping.js";
 import {
-  executeAnonymous,
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
-} from "./tools/executeAnonymous.js";
+} from "./tools/executeAnonymousDefinition.js";
 import {
+  apexExecutionRefusal,
   CONFIRMATION_TTL_SECONDS,
   createConfirmationLedger,
   type ConfirmationState,
@@ -85,8 +86,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       capabilities: {
         tools: {},
       },
-      instructions:
-        "Analysis tools take an absolute path to a .log file and report every duration in milliseconds. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.",
+      instructions: `Analysis tools take an absolute path to a .log file. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.`,
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },
@@ -131,15 +131,24 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   server.registerTool(
     "apexlog_execute_anonymous",
     executeAnonymousToolConfig(apexExecutionDisabled),
-    async (args, ctx) =>
-      executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
+    async (args, ctx) => {
+      const refused = apexExecutionRefusal(apexExecutionDisabled);
+      if (refused) {
+        return refused;
+      }
+      // Loaded here and not at the top of the file: the tool reaches
+      // `@salesforce/core`, and a session that only reads logs must not pay
+      // the 250 ms it costs to load.
+      const { executeAnonymous } = await import("./tools/executeAnonymous.js");
+      return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
         allowProductionOrgs,
         apexExecutionDisabled,
         classificationCache,
         mintConfirmationState: (payload, ctx) =>
           confirmationCodec.mint(payload, ctx),
         consumeConfirmation,
-      }),
+      });
+    },
   );
 
   return server;

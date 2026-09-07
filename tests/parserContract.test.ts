@@ -27,6 +27,9 @@ const fixture = (name: string): string =>
 const HEADER =
   "64.0 APEX_CODE,FINE;APEX_PROFILING,FINE;CALLOUT,NONE;DATA_ACCESS,NONE;DB,INFO;NBA,NONE;SYSTEM,NONE;VALIDATION,NONE;VISUALFORCE,NONE;WAVE,NONE;WORKFLOW,NONE";
 
+/** The fixtures with a transaction in them, so a per-event sweep has events. */
+const TIMED_FIXTURES = ["governor-heavy", "minimal", "heap-heavy"];
+
 /** Every node the tree holds, which is what `walkLog` reaches. */
 function tree(node: LogEvent, into: LogEvent[] = []): LogEvent[] {
   for (const child of node.children) {
@@ -131,14 +134,58 @@ describe("parser contract", () => {
       expect(heapGross.total).toBe(950_000);
       expect(governorLimits.peak.heapSize.used).toBe(750_000);
     });
+
+    const nested = [
+      HEADER,
+      "09:00:00.1 (1000)|EXECUTION_STARTED",
+      "09:00:00.1 (2000)|METHOD_ENTRY|[1]|01p000000000000|Outer.run()",
+      "09:00:00.2 (3000)|HEAP_ALLOCATE|[2]|Bytes:100",
+      "09:00:00.3 (4000)|METHOD_ENTRY|[3]|01p000000000001|Inner.run()",
+      "09:00:00.4 (5000)|HEAP_ALLOCATE|[4]|Bytes:900",
+      "09:00:00.5 (6000)|METHOD_EXIT|[3]|Inner.run()",
+      "09:00:00.6 (7000)|METHOD_EXIT|[1]|Outer.run()",
+      "09:00:01.0 (10000)|EXECUTION_FINISHED",
+      "",
+    ].join("\n");
+
+    // What `groupOperations` sums `heapSelfNetBytes` plainly on: an allocation
+    // lands in its direct parent's `self` and in no other node's, so adding the
+    // members of a group counts each allocation once even where one member ran
+    // inside another. Every other suite builds its own nodes, so a parser that
+    // folded a subtree net into `self` would leave jest green and every grouped
+    // row silently doubled.
+    //
+    // The totals are asserted beside the selfs because they are what makes the
+    // reading unambiguous: 1,000 against 100 is the parent counting the child's
+    // allocation in one figure and not the other.
+    it("keeps a method's heap self to its own body, so a group can sum it", () => {
+      const methods = tree(parse(nested)).filter(
+        (node) => node.type === "METHOD_ENTRY",
+      );
+
+      expect(
+        methods.map(({ text, heapAllocated }) => [
+          text,
+          heapAllocated.self,
+          heapAllocated.total,
+        ]),
+      ).toEqual([
+        ["Outer.run()", 100, 1000],
+        ["Inner.run()", 900, 900],
+      ]);
+    });
   });
 
-  describe("LogEvent.category", () => {
-    // `kindOf` in tools/operations.ts drops an event with no category before it
-    // looks at anything else, so a timed event without one would be ranked
-    // nowhere and its time reported nowhere.
-    it.each(["governor-heavy", "minimal", "heap-heavy"])(
-      "is set on every event that carries a duration (%s)",
+  describe("LogEvent.category and LogEvent.debugCategory", () => {
+    // `isRankable` in tools/operations.ts reads the timeline category as
+    // nothing but "this event has a duration" — the parser assigns one in the
+    // `DurationLogEvent` constructor alone and publishes no other flag for it.
+    // A timed event without one would be ranked nowhere and its time reported
+    // nowhere. Every response then states `debugCategory`: a ranked row's
+    // category, a `timeByCategory` row, and the `capturedAt` level beside them,
+    // so an event stamped `""` would reach a row as an empty cell.
+    it.each(TIMED_FIXTURES)(
+      "are both set on every event that carries a duration (%s)",
       (name) => {
         const timed = tree(parse(fixture(name))).filter(
           (node) => node.duration.total > 0,
@@ -146,28 +193,190 @@ describe("parser contract", () => {
 
         expect(timed.length).toBeGreaterThan(0);
         expect(timed.filter((node) => node.category === "")).toEqual([]);
+        expect(timed.filter((node) => node.debugCategory === "")).toEqual([]);
       },
     );
 
-    // The two types `KIND_BY_TYPE` places by name are reached after that test,
-    // so each has to carry a category of its own.
-    it("is set on the types this server places by name", () => {
+    // What lets the group key carry the type alone: keying on it keeps the
+    // category column true of every member of a group. One type stamped with
+    // two categories would make that false, and a folded row would state the
+    // first member's category for all of them.
+    it.each(TIMED_FIXTURES)(
+      "is one category per event type (%s)",
+      (name) => {
+        const byType = new Map<string, Set<string>>();
+        tree(parse(fixture(name)))
+          .filter((node) => node.category !== "")
+          .forEach((node) => {
+            const type = node.type ?? "Unknown";
+            const seen = byType.get(type) ?? new Set<string>();
+            seen.add(node.debugCategory);
+            byType.set(type, seen);
+          });
+
+        expect(byType.size).toBeGreaterThan(0);
+        expect(
+          [...byType]
+            .filter(([, categories]) => categories.size > 1)
+            .map(([type]) => type),
+        ).toEqual([]);
+      },
+    );
+
+    // The pairs the timeline category gets wrong: reading `category` files a
+    // Visualforce formula under `System` and a cumulative limit block under it
+    // too, which is why selection moved onto this field.
+    it("names the gating category where the timeline category differs", () => {
       const log = parse(
         [
           HEADER,
           "09:00:00.1 (1000)|EXECUTION_STARTED",
-          "09:00:00.1 (2000)|ENTERING_MANAGED_PKG|core_pkg",
-          "09:00:00.1 (3000)|SOSL_EXECUTE_BEGIN|[1]|FIND 'x'",
-          "09:00:00.1 (4000)|SOSL_EXECUTE_END|[1]|Rows:0",
-          "09:00:00.1 (5000)|EXECUTION_FINISHED",
+          "09:00:00.2 (2000)|VF_APEX_CALL_START|[1]|Controller invoke(save)",
+          "09:00:00.3 (3000)|VF_APEX_CALL_END|Controller invoke(save)",
+          "09:00:00.4 (4000)|CUMULATIVE_LIMIT_USAGE",
+          "09:00:00.4 (4000)|CUMULATIVE_LIMIT_USAGE_END",
+          "09:00:00.5 (5000)|EXECUTION_FINISHED",
+          "",
+        ].join("\n"),
+      );
+      const categoriesOf = (type: string) => {
+        const event = tree(log).find((node) => node.type === type);
+        return [event?.category, event?.debugCategory];
+      };
+
+      expect(categoriesOf("VF_APEX_CALL_START")).toEqual([
+        "Apex",
+        "visualforce",
+      ]);
+      expect(categoriesOf("CUMULATIVE_LIMIT_USAGE")).toEqual([
+        "System",
+        "apexProfiling",
+      ]);
+    });
+
+    // `apexlog_list_limit_risks` reports these two levels and no others,
+    // because they are the ones that decide whether a limit figure was written
+    // at all: every limit but heap comes from the cumulative blocks, and heap
+    // from `HEAP_ALLOCATE`.
+    it("gates the limit figures under apexProfiling, and heap under apexCode", () => {
+      const log = parse(
+        [
+          HEADER,
+          "09:00:00.1 (1000)|EXECUTION_STARTED",
+          "09:00:00.2 (2000)|HEAP_ALLOCATE|[1]|Bytes:100",
+          "09:00:00.9 (9000)|CUMULATIVE_LIMIT_USAGE",
+          "09:00:00.9 (9000)|LIMIT_USAGE_FOR_NS|(default)|",
+          "  Number of SOQL queries: 1 out of 100",
+          "",
+          "09:00:00.9 (9000)|CUMULATIVE_LIMIT_USAGE_END",
+          "09:00:01.0 (10000)|EXECUTION_FINISHED",
           "",
         ].join("\n"),
       );
       const categoryOf = (type: string) =>
-        tree(log).find((node) => node.type === type)?.category;
+        tree(log).find((node) => node.type === type)?.debugCategory;
 
-      expect(categoryOf("ENTERING_MANAGED_PKG")).not.toBe("");
-      expect(categoryOf("SOSL_EXECUTE_BEGIN")).not.toBe("");
+      expect(categoryOf("CUMULATIVE_LIMIT_USAGE")).toBe("apexProfiling");
+      expect(categoryOf("LIMIT_USAGE_FOR_NS")).toBe("apexProfiling");
+      expect(categoryOf("HEAP_ALLOCATE")).toBe("apexCode");
+    });
+  });
+
+  describe("logIssues and thrownCount", () => {
+    // Closed, so the only issues are the ones the case is about: a log that
+    // ends mid-frame raises an `Unexpected-End` of its own.
+    const failing = (...lines: string[]): string =>
+      [
+        HEADER,
+        "09:00:00.1 (1000)|EXECUTION_STARTED",
+        ...lines,
+        "09:00:00.1 (9000)|EXECUTION_FINISHED",
+        "",
+      ].join("\n");
+
+    // `apexlog_get_summary.fatalErrors` reads both halves: the message names the
+    // failure and the stack names the code. Both come off one issue.
+    it("states a fatal's message as the summary and its stack as the description", () => {
+      const { logIssues } = parse(
+        failing(
+          "09:00:00.1 (4000)|FATAL_ERROR|System.LimitException: Apex CPU time limit exceeded",
+          "Class.Searcher.search: line 31, column 1",
+          "Class.Service.run: line 102, column 1",
+        ),
+      );
+
+      expect(logIssues).toEqual([
+        {
+          startTime: 4000,
+          eventIndex: 2,
+          summary: "System.LimitException: Apex CPU time limit exceeded",
+          description:
+            "Class.Searcher.search: line 31, column 1\nClass.Service.run: line 102, column 1",
+          type: "fatal",
+        },
+      ]);
+    });
+
+    // This is what makes `fatalErrors` safe to report as a table: one real log
+    // throws 4,501 times for three messages. `exceptions` holds every
+    // occurrence, so a tool reading that would return thousands of rows.
+    it("holds one issue per distinct failure while exceptions holds every one", () => {
+      // On `fatal`, which is the type the summary reads. An `EXCEPTION_THROWN`
+      // raises an issue only when its message names a `System.LimitException`,
+      // so deduping that type would exercise a path no tool looks at.
+      const fatal = "|FATAL_ERROR|System.LimitException: Apex CPU time limit exceeded";
+      const log = parse(
+        failing(`09:00:00.1 (2000)${fatal}`, `09:00:00.1 (3000)${fatal}`),
+      );
+
+      expect(log.logIssues.filter((issue) => issue.type === "fatal")).toHaveLength(1);
+      expect(log.exceptions).toHaveLength(2);
+    });
+
+    // `thrownCount` is the magnitude the summary reports beside `fatalErrors`,
+    // so it must not double-count the fatal that the table already names.
+    it("counts a thrown exception and not the fatal error", () => {
+      const log = parse(
+        failing(
+          "09:00:00.1 (2000)|EXCEPTION_THROWN|[12]|System.DmlException: Update failed",
+          "09:00:00.1 (4000)|FATAL_ERROR|System.DmlException: Update failed",
+        ),
+      );
+
+      expect(log.exceptions.map((event) => event.type)).toEqual([
+        "EXCEPTION_THROWN",
+        "FATAL_ERROR",
+      ]);
+      expect(log.thrownCount.total).toBe(1);
+    });
+  });
+
+  describe("ApexLog.isTruncated", () => {
+    // `apexlog_get_summary.truncated` is this flag, and the figures beside it
+    // are floors when it is set. It follows the regions the platform said it
+    // dropped, so a log that merely ends mid-frame does not raise it.
+    it("is set by a region the platform dropped, not by an unclosed frame", () => {
+      const dropped = parse(fixture("truncated"));
+
+      expect(dropped.truncation.regions.map((region) => region.kind)).toEqual([
+        "skipped-lines",
+        "max-size",
+      ]);
+      expect(dropped.truncation.totalSkippedBytes).toBe(14_680_064);
+      expect(dropped.isTruncated).toBe(true);
+
+      const unclosed = parse(
+        [
+          HEADER,
+          "09:00:00.1 (1000)|EXECUTION_STARTED",
+          "09:00:00.1 (2000)|METHOD_ENTRY|[1]|01pEa00000Never|Never.returns()",
+          "",
+        ].join("\n"),
+      );
+
+      expect(unclosed.truncatedEvents.length).toBeGreaterThan(0);
+      expect(unclosed.truncation.regions).toEqual([]);
+      expect(unclosed.isTruncated).toBe(false);
     });
   });
 

@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { Org } from "@salesforce/core";
+import type { Org } from "@salesforce/core";
 
 /**
  * The subset of the Organization record needed to classify an org.

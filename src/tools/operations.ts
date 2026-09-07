@@ -3,106 +3,20 @@
  */
 
 import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
-// Renamed: the parser's `LogCategory` is a timeline grouping, not the debug log
-// category of the same name in `salesforce/debugLevels.js`.
-import type { LogCategory as TimelineCategory } from "@apexdevtools/apex-log-parser/types";
+import type {
+  DebugCategory,
+  LogEventType,
+} from "@apexdevtools/apex-log-parser/types";
 import {
-  DEBUG_LEVEL_FIELD_BY_CATEGORY,
-  LOG_CATEGORIES,
-  type LogCategory,
+  DEBUG_CATEGORIES,
+  type DebugLevelCategory,
 } from "../salesforce/debugLevels.js";
+import type { Assert } from "../compileGuards.js";
 import { walkLog } from "./apexLogSource.js";
-
-/**
- * What the log spent time on. Every timed node the parser produces falls into
- * one of these, so a tool that ranks operations can rank all of them.
- *
- * This is not the debug log category: `category` is a timeline grouping, and
- * `soql` and `dml` both arrive under `DB`. `logCategoryOf` maps a kind back to
- * the category that controls whether it was logged at all, so that an absence
- * is readable — `soql 0` beside `DB NONE` means "not logged", and beside
- * `DB FINEST` means "no queries ran".
- */
-export const OPERATION_KINDS = [
-  "codeUnit",
-  "managedPackage",
-  "method",
-  "systemMethod",
-  "soql",
-  "sosl",
-  "dml",
-  "callout",
-  "flow",
-  "workflow",
-] as const;
-
-export type OperationKind = (typeof OPERATION_KINDS)[number];
-
-/**
- * The category that decides whether a kind reaches the log.
- *
- * Typed as `LogCategory`, so the spelling here cannot drift from the one the
- * `debugLevels` rows carry — a caller reads `timeByKind` against them.
- */
-const LOG_CATEGORY_BY_KIND = {
-  codeUnit: "APEX_CODE",
-  managedPackage: "APEX_CODE",
-  method: "APEX_CODE",
-  systemMethod: "SYSTEM",
-  soql: "DB",
-  sosl: "DB",
-  dml: "DB",
-  callout: "CALLOUT",
-  flow: "WORKFLOW",
-  workflow: "WORKFLOW",
-  // `satisfies` rather than an annotation: the value type has to stay the four
-  // categories these kinds name, so `LEVEL_FIELD_BY_CATEGORY` covers exactly
-  // them.
-} as const satisfies Record<OperationKind, LogCategory>;
-
-export function logCategoryOf(kind: OperationKind): LogCategory {
-  return LOG_CATEGORY_BY_KIND[kind];
-}
-
-/**
- * The level each gating category was captured at, keyed as the response reports
- * it. Typed over the categories `LOG_CATEGORY_BY_KIND` produces, so a kind
- * cannot be added under a category no response states.
- */
-const LEVEL_FIELD_BY_CATEGORY: Record<
-  (typeof LOG_CATEGORY_BY_KIND)[OperationKind],
-  keyof CaptureLevels
-> = {
-  APEX_CODE: "apexCodeLevel",
-  SYSTEM: "systemLevel",
-  DB: "dbLevel",
-  CALLOUT: "calloutLevel",
-  WORKFLOW: "workflowLevel",
-};
-
-const CAPTURE_LEVEL_FIELDS = Object.entries(LEVEL_FIELD_BY_CATEGORY) as [
-  LogCategory,
-  keyof CaptureLevels,
-][];
-
-/**
- * How much of the transaction reached the log at all.
- *
- * A field is absent when the log's header declared no level for the category:
- * a level has no zero, and naming a default would state a value the log never
- * did. Absent therefore means unstated, not off.
- */
-export interface CaptureLevels {
-  apexCodeLevel?: string;
-  systemLevel?: string;
-  dbLevel?: string;
-  calloutLevel?: string;
-  workflowLevel?: string;
-}
 
 /** One level the log's header declared, as a response reports it. */
 export interface DeclaredLevel {
-  logCategory: LogCategory;
+  debugCategory: DebugLevelCategory;
   level: string;
 }
 
@@ -113,31 +27,29 @@ export interface DeclaredLevel {
  * absent row means unstated rather than off.
  */
 export function declaredLevels({ debugLevels }: ApexLog): DeclaredLevel[] {
-  return LOG_CATEGORIES.flatMap((logCategory) => {
-    const level = debugLevels[DEBUG_LEVEL_FIELD_BY_CATEGORY[logCategory]];
-    return level === undefined ? [] : [{ logCategory, level }];
+  return DEBUG_CATEGORIES.flatMap((debugCategory) => {
+    const level = debugLevels[debugCategory];
+    return level === undefined ? [] : [{ debugCategory, level }];
   });
 }
 
 /**
- * Read the levels that gate the ranked kinds off the log's header.
+ * The level each of the named categories was captured at.
  *
- * They qualify every figure in a response rather than any one row of it — a
- * self time under `APEX_CODE,ERROR` is the work of everything the capture level
- * hid, pooled at the nearest logged boundary — so each is a response-level
- * scalar, stated once.
+ * A capture level decides what reaches the log at all, so it qualifies the
+ * figures beside it: a self time under `apexCode,ERROR` is the work of
+ * everything the level hid, pooled at the nearest logged boundary. The caller
+ * names the categories its own figures came from, so a response states only the
+ * levels that could explain them, keyed as its rows are.
  */
-export function captureLevels({ debugLevels }: ApexLog): CaptureLevels {
-  const levels: CaptureLevels = {};
-
-  CAPTURE_LEVEL_FIELDS.forEach(([category, field]) => {
-    const level = debugLevels[DEBUG_LEVEL_FIELD_BY_CATEGORY[category]];
-    if (level !== undefined) {
-      levels[field] = level;
-    }
-  });
-
-  return levels;
+export function capturedAt(
+  apexLog: ApexLog,
+  categories: Iterable<DebugCategory>,
+): DeclaredLevel[] {
+  const named = new Set(categories);
+  return declaredLevels(apexLog).filter(({ debugCategory }) =>
+    named.has(debugCategory),
+  );
 }
 
 /**
@@ -147,7 +59,27 @@ export function captureLevels({ debugLevels }: ApexLog): CaptureLevels {
  * sums them, and rounding before the sum loses more than it saves.
  */
 export interface Operation {
-  kind: OperationKind;
+  /**
+   * The Salesforce debug log category the parser stamped on the event, which is
+   * the category that decides whether the event reached the log at all. Read
+   * against the levels the header declared, a missing row is then readable: no
+   * `database` row beside `database NONE` means the queries were not logged,
+   * and beside `database FINEST` means none ran.
+   *
+   * The parser stamps one on every timed event — pinned in
+   * `tests/parserContract.test.ts` — so this is never `""` in practice.
+   */
+  debugCategory: DebugCategory;
+  /**
+   * The log's own event type, e.g. `SOQL_EXECUTE_BEGIN`. It is what the category
+   * cannot say: `soql`, `sosl` and `dml` all arrive under `database`, and a
+   * managed package entry under `apexCode` beside the methods it hides.
+   *
+   * The parser's own union, so a misspelt literal anywhere downstream fails the
+   * build instead of matching nothing. `"Unknown"` covers the events the parser
+   * leaves untyped.
+   */
+  type: LogEventType | "Unknown";
   name: string;
   namespace: string;
   /**
@@ -190,87 +122,64 @@ export interface Operation {
   rowCount: number;
   thrownCount: number;
   /**
+   * Net heap the operation's own body retained, and not what it called.
+   *
+   * The signed `HEAP_ALLOCATE` bytes, so a negative allocation is the free that
+   * brings the figure down and a body that releases more than it took reads
+   * below zero. `HEAP_DEALLOCATE` is *not* counted: the parser reads its bytes
+   * and drops them. No log in the corpus emits one, so nothing under-reads
+   * today, but a log that did would read as retaining what it freed.
+   *
+   * A managed package is the exception to "not what it called". The parser
+   * gives `ENTERING_MANAGED_PKG` no children, so an allocation logged inside
+   * the package window lands in the calling method's own body instead of the
+   * package's row — 3 of the 40 logs that allocate put a heap line there.
+   *
+   * Self and not the subtree, because a subtree net is not an attribution: it
+   * puts the outermost code unit at the top of 39 of the 40 logs in a 123-log
+   * corpus that record an allocation, and there it equals the transaction peak
+   * `apexlog_get_summary` already reports on 36 of them. A self net names a
+   * method on 27 of the 40 and matches that peak on 3.
+   *
+   * A plain sum once grouped, like `durationSelfNs`: one member's own body is
+   * never inside another's, so no member can be counted twice.
+   */
+  heapSelfNetBytes: number;
+  /**
    * The operation this one ran inside, or null at the top of the log. It is how
    * a group tells a nested member from an outer one, and it never reaches a
    * response.
    */
   parent: Operation | null;
+  /**
+   * The event this operation was read from, so a caller can reach what the
+   * operation's own columns do not carry — the query plan under this one call,
+   * rather than the worst plan for its text.
+   *
+   * Internal, and only meaningful on an ungrouped operation: `groupOperations`
+   * folds many events into one row and keeps the first member's node.
+   */
+  node: LogEvent;
 }
 
 /**
  * The transaction frame owns no time of its own: ranking it says only that the
- * transaction took as long as it took. It carries the `Apex` category, so a
- * test on category alone counts it as a method and inflates every method total.
+ * transaction took as long as it took. It is timed and carries `apexCode`, so
+ * nothing else holds it out.
  */
-const FRAME_TYPES = new Set(["EXECUTION_STARTED"]);
+const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
 
 /**
- * The types the category cannot tell apart.
+ * Whether the event is a thing the transaction spent time on.
  *
- * SOSL shares the `SOQL` category, and a search is not a query: it has its own
- * governor limit and its own fix. A managed package entry carries `Apex`, but
- * its self time is the time the package spent where the log shows nothing —
- * often most of the transaction, and never a method the caller can open.
+ * The timeline `category` is read as nothing but "this event has a duration" —
+ * the parser assigns one in the `DurationLogEvent` constructor alone, and
+ * publishes no other flag for it. What the event *is* comes from
+ * `debugCategory` and `type`. Untimed events are most of a log, so this is both
+ * the cheap test and the first one.
  */
-const KIND_BY_TYPE: Record<string, OperationKind> = {
-  SOSL_EXECUTE_BEGIN: "sosl",
-  ENTERING_MANAGED_PKG: "managedPackage",
-};
-
-/**
- * The kind each timeline category ranks as.
- *
- * `Validation` is absent because no timed event carries it, so nothing under it
- * could be ranked. Every other category must appear: an unranked timed event
- * keeps its own time out of the enclosing method's self time and never becomes
- * a row of its own, so the time is reported nowhere.
- */
-const KIND_BY_CATEGORY: Partial<Record<TimelineCategory, OperationKind>> = {
-  Apex: "method",
-  System: "systemMethod",
-  "Code Unit": "codeUnit",
-  DML: "dml",
-  SOQL: "soql",
-  Callout: "callout",
-};
-
-/**
- * `Automation` merges what a caller has to keep apart, so the event type splits
- * flow and workflow back out. A prefix this does not know stays unranked, so a
- * category the parser widens reads as time missing rather than time filed under
- * the wrong kind.
- */
-function automationKind(type: string): OperationKind | undefined {
-  if (type.startsWith("FLOW_") || type.startsWith("EVENT_SERVICE_")) {
-    return "flow";
-  }
-  return type.startsWith("WF_") ? "workflow" : undefined;
-}
-
-function kindOf({
-  type,
-  category,
-  debugCategory,
-}: LogEvent): OperationKind | undefined {
-  // Only a timed event is given a category, and untimed events are most of a
-  // log, so this is both the cheap test and the first one.
-  if (category === "" || (type && FRAME_TYPES.has(type))) {
-    return undefined;
-  }
-
-  // Next Best Action is filed under `Automation`, and is neither of the two
-  // kinds that category splits into. Ranked where it was before the parser
-  // named a category, so no figure moves; #138 gives it its own.
-  if (debugCategory === "nba") {
-    return "systemMethod";
-  }
-
-  return (
-    (type ? KIND_BY_TYPE[type] : undefined) ??
-    (category === "Automation"
-      ? automationKind(type ?? "")
-      : KIND_BY_CATEGORY[category])
-  );
+function isRankable({ category, type }: LogEvent): boolean {
+  return category !== "" && !(type && FRAME_TYPES.has(type));
 }
 
 /**
@@ -284,8 +193,9 @@ export function operationName(node: LogEvent): string {
 /**
  * Flatten the log into the operations it performed, parents before children.
  *
- * This is the one classification in the server: every tool is a view over this
- * list, so no two of them can disagree about what the log contains.
+ * Every timed event becomes a row. An event left out would keep its own time
+ * out of the enclosing frame's self time without becoming a row of its own, so
+ * the time would be reported nowhere.
  */
 export function listOperations(apexLog: ApexLog): Operation[] {
   const operations: Operation[] = [];
@@ -296,13 +206,13 @@ export function listOperations(apexLog: ApexLog): Operation[] {
   // The visitor hands its children the operation they ran inside, which is the
   // one it just made, or its own when the node itself is untimed.
   const visit = (node: LogEvent, parent: Operation | undefined) => {
-    const kind = kindOf(node);
-    if (!kind) {
+    if (!isRankable(node)) {
       return parent;
     }
 
     const operation: Operation = {
-      kind,
+      debugCategory: node.debugCategory,
+      type: node.type ?? "Unknown",
       name: operationName(node),
       namespace: node.namespace || "default",
       callerNamespace: node.parent?.namespace || "default",
@@ -318,7 +228,9 @@ export function listOperations(apexLog: ApexLog): Operation[] {
         node.dmlRowCount.total +
         node.soslRowCount.total,
       thrownCount: node.thrownCount.total,
+      heapSelfNetBytes: node.heapAllocated.self,
       parent: parent ?? null,
+      node,
     };
     operations.push(operation);
 
@@ -333,33 +245,85 @@ export function listOperations(apexLog: ApexLog): Operation[] {
 }
 
 /** What a fold can key on, so the tool schema cannot drift from this module. */
-export const GROUP_BY = ["name", "namespace", "callerNamespace"] as const;
+export const GROUP_BY = [
+  "name",
+  "namespace",
+  "callerNamespace",
+  "debugCategory",
+] as const;
 
 export type GroupBy = (typeof GROUP_BY)[number];
 
-/**
- * What a folded row calls itself, per grouping. A group is keyed on `kind` and
- * this pair, so no column can be true of one member and false of the next:
- * folding on a namespace puts it in `name` too, because the calls underneath it
- * no longer share a name of their own.
- */
-const IDENTITY_BY_GROUP: Record<
-  GroupBy,
-  (operation: Operation) => { namespace: string; name: string }
-> = {
-  name: (operation) => ({
-    namespace: operation.namespace,
-    name: operation.name,
-  }),
-  namespace: (operation) => ({
-    namespace: operation.namespace,
-    name: operation.namespace,
-  }),
-  callerNamespace: (operation) => ({
-    namespace: operation.callerNamespace,
-    name: operation.callerNamespace,
-  }),
+/** Everything a grouping decides, so a new one cannot be half-defined. */
+interface Grouping {
+  /**
+   * What a folded row calls itself. Folding on a namespace puts it in `name`
+   * too, because the calls underneath it no longer share a name of their own,
+   * and folding on a category does the same with the category.
+   */
+  identity: (operation: Operation) => { namespace: string; name: string };
+  /**
+   * Whether the key carries the event `type` beside that identity, which is
+   * also whether a row may state the type and a name of its own: a row can
+   * state only what its key holds true of every member.
+   *
+   * `type` decides `debugCategory` — the parser stamps one category per event
+   * class — so keying on the type keeps both columns true of every member. A
+   * category fold keys on the category alone, and states neither: one type
+   * named would be the first member's alone, and the name would restate the
+   * category.
+   */
+  keysOnType: boolean;
+  /**
+   * Whether that `name` is the operation's own, so a query plan can point at
+   * the row instead of repeating the query text.
+   */
+  namesOperation: boolean;
+}
+
+export const GROUPINGS: Record<GroupBy, Grouping> = {
+  name: {
+    identity: (operation) => ({
+      namespace: operation.namespace,
+      name: operation.name,
+    }),
+    keysOnType: true,
+    namesOperation: true,
+  },
+  namespace: {
+    identity: (operation) => ({
+      namespace: operation.namespace,
+      name: operation.namespace,
+    }),
+    keysOnType: true,
+    namesOperation: false,
+  },
+  callerNamespace: {
+    identity: (operation) => ({
+      namespace: operation.callerNamespace,
+      name: operation.callerNamespace,
+    }),
+    keysOnType: true,
+    namesOperation: false,
+  },
+  debugCategory: {
+    identity: (operation) => ({
+      namespace: operation.namespace,
+      name: operation.debugCategory,
+    }),
+    keysOnType: false,
+    namesOperation: false,
+  },
 };
+
+/**
+ * Ranking each call on its own, which folds nothing and so states everything.
+ * It has no identity or key of its own: two identical calls stay two rows.
+ */
+export const UNGROUPED = {
+  keysOnType: true,
+  namesOperation: true,
+} as const satisfies Omit<Grouping, "identity">;
 
 /**
  * The row an operation folds into under a grouping. Two operations share a row
@@ -367,18 +331,81 @@ const IDENTITY_BY_GROUP: Record<
  * operations are behind a returned row can ask rather than reproduce the rule.
  */
 export function operationGroupKey(operation: Operation, by: GroupBy): string {
-  const { namespace, name } = IDENTITY_BY_GROUP[by](operation);
-  return `${operation.kind} ${namespace} ${name}`;
+  const { identity, keysOnType } = GROUPINGS[by];
+  const { namespace, name } = identity(operation);
+  return `${keysOnType ? operation.type : ""} ${namespace} ${name}`;
 }
+
+/**
+ * Every number an `Operation` carries, optional ones included.
+ *
+ * `NonNullable` is what reaches an optional field: `Operation[K]` on `f?: number`
+ * is `number | undefined`, which does not extend `number`, so a plain test drops
+ * it from this union and the guard below passes while the fold ignores it.
+ * Stripping `undefined` first keeps the field in, and leaves an optional field of
+ * some other type out — where dropping `-?` instead would fail the guard on any
+ * optional field, numeric or not.
+ */
+type NumericField = {
+  [K in keyof Operation]-?: NonNullable<Operation[K]> extends number ? K : never;
+}[keyof Operation];
+
+/**
+ * Subtree totals: what the operation and everything it called did.
+ *
+ * A member that ran inside another member of the group is already inside that
+ * ancestor's figure, so adding it counts the same query, statement, row or
+ * throw once per level of the stack above it. `groupOperations` suppresses
+ * these for a nested member and no others.
+ */
+const SUBTREE_SUMMED = [
+  "durationTotalNs",
+  "soqlCount",
+  "dmlCount",
+  "soslCount",
+  "rowCount",
+  "thrownCount",
+] as const;
+
+/**
+ * Figures that exclude what the operation called, so every member adds its own
+ * and nesting cannot double-count.
+ */
+const PLAIN_SUMMED = ["durationSelfNs", "heapSelfNetBytes"] as const;
+
+/**
+ * Folded by hand, because neither is a sum of itself: `callCount` counts the
+ * members rather than adding a field, and `durationSelfMaxNs` maxes over
+ * `durationSelfNs` — a different field.
+ */
+type FoldedByHand = "callCount" | "durationSelfMaxNs";
+
+/**
+ * Compile guard: every number on an `Operation` has to appear in one of the
+ * three groups above.
+ *
+ * A group is seeded from its first member, so a field added to `Operation` and
+ * forgotten in the fold does not read as zero — the grouped row ships the first
+ * member's value, which looks like a plausible figure. No test on another field
+ * would notice, which is why this is a compile error and not a review note.
+ */
+export type EveryNumberFolded = Assert<
+  NumericField extends
+    | (typeof SUBTREE_SUMMED)[number]
+    | (typeof PLAIN_SUMMED)[number]
+    | FoldedByHand
+    ? true
+    : false
+>;
 
 /**
  * Fold repeats together, so that a query run four hundred times in a loop is
  * one row carrying its four hundred calls rather than four hundred rows the
  * ranking pushes apart.
  *
- * `kind` is part of every key, so a namespace that runs both queries and
- * methods is two rows rather than one that has to call itself mixed. Beside it
- * sits the identity from `IDENTITY_BY_GROUP`, so two operations that share a
+ * A key that carries the event type keeps a namespace that runs both queries
+ * and methods as two rows, rather than one that has to call itself
+ * mixed. Beside it sits the grouping's identity, so two operations that share a
  * name in different namespaces stay apart rather than merging under whichever
  * namespace was seen first.
  */
@@ -387,12 +414,12 @@ export function groupOperations(
   by: GroupBy,
 ): Operation[] {
   const groups = new Map<string, Operation>();
-  const identityOf = IDENTITY_BY_GROUP[by];
+  const identityOf = GROUPINGS[by].identity;
 
   // `parent` is the log's chain, not this call's. When a caller narrows the
-  // operations by kind or namespace, an ancestor outside the selection can share
-  // a group's key without being in the group, and suppressing on it would report
-  // a total below the row's own self time.
+  // operations by category, type or namespace, an ancestor outside the selection
+  // can share a group's key without being in the group, and suppressing on it
+  // would report a total below the row's own self time.
   const members = new Set(operations);
 
   // Memoized: the nesting test walks the ancestors of every member, and a deep
@@ -430,20 +457,20 @@ export function groupOperations(
     }
 
     group.callCount += 1;
-    // Every subtree total: a member that ran inside another member of the group
-    // is already inside that ancestor's, so adding it counts the same query,
-    // statement, row or throw once per level of the stack above it. `callCount`
-    // counts calls and `durationSelfNs` excludes children, so both stay plain
-    // sums.
+
+    // Walked rather than named field by field, so the rule above and the code
+    // cannot drift. That costs 41% here — 44 to 63 ms over 74,960 operations of
+    // six real logs, folded twice each — because a keyed read is not a named
+    // one. It is paid against a parse of tens to hundreds of milliseconds, and
+    // `nestedInGroup` dominates both figures.
     if (!nestedInGroup(operation, key)) {
-      group.durationTotalNs += operation.durationTotalNs;
-      group.soqlCount += operation.soqlCount;
-      group.dmlCount += operation.dmlCount;
-      group.soslCount += operation.soslCount;
-      group.rowCount += operation.rowCount;
-      group.thrownCount += operation.thrownCount;
+      for (const field of SUBTREE_SUMMED) {
+        group[field] += operation[field];
+      }
     }
-    group.durationSelfNs += operation.durationSelfNs;
+    for (const field of PLAIN_SUMMED) {
+      group[field] += operation[field];
+    }
 
     group.durationSelfMaxNs = Math.max(
       group.durationSelfMaxNs,

@@ -12,9 +12,12 @@
  * must be able to answer from the payload.
  */
 
-import type {
-  Limits,
-  NamespaceLimits,
+import {
+  ALL_LIMIT_METRICS,
+  type DebugCategory,
+  type LimitMetricUnit,
+  type Limits,
+  type NamespaceLimits,
 } from "@apexdevtools/apex-log-parser/types";
 
 /** The parser works in nanoseconds; every reported duration is milliseconds. */
@@ -86,6 +89,48 @@ export function toLimitRows(limits: Limits): LimitRow[] {
     const { used, limit } = value as Limits[keyof Limits];
     return { limit: name, used, max: limit };
   });
+}
+
+/** English plurals for the units the parser publishes. */
+const UNIT_PLURALS: Record<LimitMetricUnit, string> = {
+  count: "counts",
+  millisecond: "milliseconds",
+  byte: "bytes",
+};
+
+/**
+ * What a governor limit's numbers count, for the server `instructions`.
+ *
+ * Every row of a limit table is `{limit, used, max}`, so nothing on the wire
+ * says that `heapSize 6000000` is bytes and not six million allocations. Said
+ * once per session rather than as a `unit` column, which measured 22 to 37
+ * tokens on *every* response carrying a limit table against 21 tokens once.
+ *
+ * Read from `ALL_LIMIT_METRICS`, so a metric the parser adds in another unit
+ * cannot go unstated.
+ */
+export function limitUnitsClause(): string {
+  const exceptions = ALL_LIMIT_METRICS.filter(
+    ({ unit }) => unit !== "count",
+  ).map(({ key, unit }) => `${key} in ${UNIT_PLURALS[unit]}`);
+
+  return `every governor limit is a count except ${exceptions.join(" and ")}`;
+}
+
+/**
+ * The debug log category that decides whether a limit's figure reached the log.
+ *
+ * `heapSize` is summed from `HEAP_ALLOCATE`, which the parser stamps `apexCode`
+ * at FINER. Every other metric is read from the cumulative blocks, which are
+ * `apexProfiling` — `CUMULATIVE_LIMIT_USAGE` at INFO and `LIMIT_USAGE_FOR_NS`
+ * at FINEST. So the level of one of these two is what says whether a low or
+ * absent figure is the transaction's or the trace flag's.
+ *
+ * Beside `toLimitRows`, because the same module that names a limit says what
+ * gates it.
+ */
+export function limitGatingCategory(limit: string): DebugCategory {
+  return limit === "heapSize" ? "apexCode" : "apexProfiling";
 }
 
 export interface NamespaceLimitRow {

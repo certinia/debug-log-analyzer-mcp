@@ -4,10 +4,15 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
-import type { Limits } from "@apexdevtools/apex-log-parser/types";
+import type {
+  DebugCategory,
+  Limits,
+} from "@apexdevtools/apex-log-parser/types";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
-import { captureLevels, type CaptureLevels } from "./operations.js";
+import { capturedAt, type DeclaredLevel } from "./operations.js";
 import {
+  limitGatingCategory,
+  omitEmpty,
   percentageOf,
   roundPercent,
   toLimitRows,
@@ -37,12 +42,28 @@ export interface LimitRisk {
   usedPercentage: number;
 }
 
-export interface LimitRiskResult extends CaptureLevels {
+/**
+ * Every category that gates a limit figure, for the one case where no row
+ * selects: with nothing returned there is nothing to qualify, but a reader
+ * still has to tell "nothing is near a limit" from "limits were never logged".
+ */
+const ALL_LIMIT_GATING_CATEGORIES = [
+  "apexCode",
+  "apexProfiling",
+] as const satisfies readonly DebugCategory[];
+
+export interface LimitRiskResult {
   /**
    * What "at risk" meant for this call. The rows are a selection, so without it
    * an empty table cannot be told apart from a threshold nothing could reach.
    */
   threshold: number;
+  /**
+   * The level each category gating a returned row was captured at, or every
+   * gating category when no row was returned. Absent when the header declared
+   * none of them: a level has no zero.
+   */
+  capturedAt?: DeclaredLevel[];
   /** Worst first. Empty means every limit is under the threshold. */
   atRisk: LimitRisk[];
 }
@@ -62,11 +83,18 @@ export async function listLimitRisks(args: LimitRisksArgs) {
   const { logFilePath, threshold = WARNING_THRESHOLD } = args;
 
   const apexLog = await loadApexLog(logFilePath);
+  const atRisk = atRiskLimits(apexLog.governorLimits.peak, threshold);
+
+  // The categories of the rows returned, so a level appears only where it
+  // explains one of them — the same rule the ranking tool follows.
+  const gating = atRisk.length
+    ? atRisk.map(({ limit }) => limitGatingCategory(limit))
+    : ALL_LIMIT_GATING_CATEGORIES;
 
   const result: LimitRiskResult = {
-    ...captureLevels(apexLog),
     threshold,
-    atRisk: atRiskLimits(apexLog.governorLimits.peak, threshold),
+    ...omitEmpty({ capturedAt: capturedAt(apexLog, gating) }),
+    atRisk,
   };
 
   return {

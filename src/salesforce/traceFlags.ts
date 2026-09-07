@@ -1,4 +1,4 @@
-import { Connection } from "@salesforce/core";
+import type { Connection } from "@salesforce/core";
 import { toDateTimeLiteral } from "./soql.js";
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
