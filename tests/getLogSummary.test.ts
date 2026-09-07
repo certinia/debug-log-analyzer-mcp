@@ -338,7 +338,7 @@ describe("getLogSummary", () => {
     });
 
     it("should clip a message where it runs into prose", async () => {
-      // A DmlException embeds the whole validation message a user would see —
+      // A DmlException embeds the whole validation message a user would see -
       // 1,070 characters at the worst of 124 real logs. The kept part carries
       // the exception class, the offending row and the error code.
       const prose = "x".repeat(400);

@@ -15,7 +15,7 @@ export default {
           target: "es2022",
           // As `tsconfig.json` sets it. Without it swc drops an import whose
           // names are all used as types, and a test cannot see what the built
-          // output loads — which is what tests/salesforceCoreIsLazy.test.ts
+          // output loads - which is what tests/salesforceCoreIsLazy.test.ts
           // asserts.
           transform: { verbatimModuleSyntax: true },
         },

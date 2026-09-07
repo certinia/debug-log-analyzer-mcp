@@ -16,7 +16,7 @@ import { operationName } from "./operations.js";
  *
  * `relativeCost` is the figure and the verdict is the caller's: above 1 the
  * optimiser will not treat the query as selective. `sObjectType` is not
- * reported — it is in the query text.
+ * reported - it is in the query text.
  */
 export interface QueryPlanVerdict {
   leadingOperationType: string;

@@ -16,7 +16,7 @@ import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
  * server's working directory, which is where the client happened to spawn us
  * and not where the caller is. Resolving would read a different file, or none,
  * and report neither. Refinements do not reach the JSON schema, so this costs
- * no tokens in the tool definition — `pnpm run eval` holds that to its budget.
+ * no tokens in the tool definition - `pnpm run eval` holds that to its budget.
  */
 export const logFilePathSchema = z
   .string()
@@ -39,8 +39,8 @@ type CachedLog = {
  * the cache already makes, so neither costs a further read.
  *
  * Nanoseconds rather than milliseconds, so two writes inside one millisecond
- * are still two fingerprints. This is not a guarantee — only the content is
- * that — but what it leaves is a file rewritten in place, to the same length,
+ * are still two fingerprints. This is not a guarantee - only the content is
+ * that - but what it leaves is a file rewritten in place, to the same length,
  * inside one nanosecond.
  */
 function fingerprintOf(stats: BigIntStats): string {

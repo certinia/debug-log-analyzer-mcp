@@ -93,7 +93,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       // The tool definitions are fixed for the life of the process, so an hour
       // is safe whatever they say. "public" additionally claims one copy serves
       // every caller, which holds only while the definitions are a pure
-      // function of the code — see definitionsVaryByConfig.
+      // function of the code - see definitionsVaryByConfig.
       cacheHints: {
         "tools/list": {
           ttlMs: 3_600_000,

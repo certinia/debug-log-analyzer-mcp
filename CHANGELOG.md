@@ -14,8 +14,8 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 
 - **Breaking:** prefix every tool `apexlog_` and name it for what comes back, so `analyze_apex_log_performance` is now `apexlog_list_slow_operations`. See [Migrating from 1.x](MIGRATING.md) for the full mapping ([#107])
 - **Breaking:** `apexlog_list_slow_operations` ranks every timed operation by self time in one table, folding repeats into one row, in place of its five 1.x fields and its prose `summary`. `topMethods` and `minDuration` are now `limit` and `minSelfMs`, and `groupBy: "none"` ranks each call on its own ([#86], [#108], [#126])
-- **Breaking:** every ranked row states the debug log category the platform stamped on the event and the log's own event type — `apexCode,METHOD_ENTRY`, `database,SOQL_EXECUTE_BEGIN` — in place of one `kind` this server invented, and `debugCategory`, `type` and `namespace` all take arrays ([#138])
-- **Breaking:** spell every category on the wire as the platform does — `database`, not `DB` — which is the spelling `apexlog_execute_anonymous` already takes as input ([#138])
+- **Breaking:** every ranked row states the debug log category the platform stamped on the event and the log's own event type - `apexCode,METHOD_ENTRY`, `database,SOQL_EXECUTE_BEGIN` - in place of one `kind` this server invented, and `debugCategory`, `type` and `namespace` all take arrays ([#138])
+- **Breaking:** spell every category on the wire as the platform does - `database`, not `DB` - which is the spelling `apexlog_execute_anonymous` already takes as input ([#138])
 - **Breaking:** a grouped row's `durationTotalMs`, `soqlCount`, `dmlCount`, `soslCount`, `rowCount` and `thrownCount` state what the transaction takes back if the group never runs, so they are not additive across rows ([#101], [#131])
 - **Breaking:** rank a callout under its own `callout` category, taking its wall time out of the calling method's self time, and file duplicate detection and the match engine under `system` ([#97], [#138])
 - **Breaking:** `apexlog_get_summary` gains `timeByCategory` and `limitsByNamespace`, so a managed package that spends your CPU time is visible, and reports all thirteen governor limits as flat `{limit, used, max}` rows including the ones at zero. The five `total*` fields and `file` are gone, and three more are renamed for their units ([#62], [#86], [#108])
@@ -66,9 +66,9 @@ _If you are upgrading from 1.x: please see [Migrating from 1.x](MIGRATING.md)._
 - **Log Summaries** (`get_apex_log_summary`) - Get a debug log summary. Total execution time, method count, governor limit usage (all limits with usage > 0), and log issues as structured `{type, summary}` objects.
 - **Bottleneck Detection** (`find_performance_bottlenecks`) - Detects CPU, database and method performance issues by type so you know exactly what to focus on. Empty sections are omitted for cleaner responses.
 - **Anonymous Apex Execution** (`execute_anonymous`) - Run Apex against any Salesforce org. The debug log is saved to a local file (default: `.apex-log-mcp/` in the project root) and a summary with the file path is returned. Use the file path with the analysis tools for deeper investigation. Specify a target org by alias or username, or use the project default.
-  - **Org allowlist** (`--allowed-orgs`) — Disabled by default, must be explicitly enabled. Supports special tokens: `ALLOW_ALL_ORGS` (permit any org), `DEFAULT_TARGET_ORG` and `DEFAULT_TARGET_DEV_HUB` (resolve from Salesforce CLI config). Aliases in the allowlist are resolved to usernames for matching.
-  - **Debug levels** — Configurable via the `debugLevel` parameter. Set all categories at once (e.g. `"FINEST"`), reset to defaults, or override specific categories like apexCode, database, and nba.
-  - **Output directory** — Configurable via the `outputDir` parameter. Defaults to `.apex-log-mcp/` in the project root.
+  - **Org allowlist** (`--allowed-orgs`) - Disabled by default, must be explicitly enabled. Supports special tokens: `ALLOW_ALL_ORGS` (permit any org), `DEFAULT_TARGET_ORG` and `DEFAULT_TARGET_DEV_HUB` (resolve from Salesforce CLI config). Aliases in the allowlist are resolved to usernames for matching.
+  - **Debug levels** - Configurable via the `debugLevel` parameter. Set all categories at once (e.g. `"FINEST"`), reset to defaults, or override specific categories like apexCode, database, and nba.
+  - **Output directory** - Configurable via the `outputDir` parameter. Defaults to `.apex-log-mcp/` in the project root.
 
 <!-- Unreleased -->
 

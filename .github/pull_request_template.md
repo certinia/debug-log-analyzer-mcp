@@ -28,4 +28,4 @@ _What does this PR do, and why is it needed?_
 ## ✅ Checklist
 
 - [ ] Added or updated tests (or not needed)
-- [ ] Updated docs — README / CHANGELOG (or not needed)
+- [ ] Updated docs - README / CHANGELOG (or not needed)

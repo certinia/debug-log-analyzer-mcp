@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 // The script is run the way the workflow runs it, rather than imported: what
-// matters is the contract with the runner — the environment in, the
+// matters is the contract with the runner - the environment in, the
 // `dist_tag=` line in $GITHUB_OUTPUT, and the exit code.
 const SCRIPT = path.join(__dirname, "..", "scripts", "release-tag.mjs");
 

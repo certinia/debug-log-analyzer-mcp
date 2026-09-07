@@ -28,18 +28,18 @@ pnpm start
 
 - **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else.
 - **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the four tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
-- **src/tools/responseShaping.ts**: the shared response helpers — `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`.
+- **src/tools/responseShaping.ts**: the shared response helpers - `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`.
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
-- **`@apexdevtools/apex-log-parser`**: the parser, as a dependency — nothing here parses a log. Runtime values come from the package root, every type and const from `@apexdevtools/apex-log-parser/types`. Read `debugCategory` for an event's category, never `category`: that one is a UI grouping slated for deprecation, and `src/tools/operations.ts` reads it only as the flag that says an event has a duration.
+- **`@apexdevtools/apex-log-parser`**: the parser, as a dependency - nothing here parses a log. Runtime values come from the package root, every type and const from `@apexdevtools/apex-log-parser/types`. Read `debugCategory` for an event's category, never `category`: that one is a UI grouping slated for deprecation, and `src/tools/operations.ts` reads it only as the flag that says an event has a duration.
 
-  `tests/parserContract.test.ts` pins what the tools assume, against a real parse — no other suite would notice a parser upgrade that broke one. One pinned assumption is a known defect, fixed upstream in 0.2.0: `ApexLog.size` counts UTF-16 code units, not bytes ([apex-log-parser#70](https://github.com/apex-dev-tools/apex-log-parser/issues/70)).
+  `tests/parserContract.test.ts` pins what the tools assume, against a real parse - no other suite would notice a parser upgrade that broke one. One pinned assumption is a known defect, fixed upstream in 0.2.0: `ApexLog.size` counts UTF-16 code units, not bytes ([apex-log-parser#70](https://github.com/apex-dev-tools/apex-log-parser/issues/70)).
 
 ### Key Data Structures
 
 - `ApexLog`: root log structure with duration, governor limits, namespaces
 - `LogEvent`: one parsed event, with its parent and children
 - `Operation`: one timed thing the transaction did, with its timing and resource usage
-- `GovernorLimits`: `{ snapshots, final, peak, byNamespace }`. Every tool reports **`peak`** — a counter falls when the frame that spent it exits, so `final` reads below the figure the platform enforced.
+- `GovernorLimits`: `{ snapshots, final, peak, byNamespace }`. Every tool reports **`peak`** - a counter falls when the frame that spent it exits, so `final` reads below the figure the platform enforced.
 
 ### MCP Integration
 
@@ -51,7 +51,7 @@ Registered automatically by the Apex Log Analyzer VS Code extension, and spoken 
 - Module: NodeNext (module + moduleResolution)
 - Strict mode plus extra strictness (noUncheckedIndexedAccess, noImplicitOverride, verbatimModuleSyntax, isolatedModules)
 - Output to `dist/` directory
-- Emits `.js` only — no source maps or declarations
+- Emits `.js` only - no source maps or declarations
 
 ## File Structure
 
@@ -76,19 +76,19 @@ Tools 1-3 take an absolute path to a `.log` file.
 
 ## Naming
 
-[DEVELOPING.md](DEVELOPING.md#-naming-tools-and-fields) holds the rules — read them before you add or rename a tool, parameter or field. The ones most easily missed: a field carries its unit (`durationSelfMs`, `fileSizeBytes`), `total` means including children and `self` excluding them, and one fact keeps one name across every tool.
+[DEVELOPING.md](DEVELOPING.md#-naming-tools-and-fields) holds the rules - read them before you add or rename a tool, parameter or field. The ones most easily missed: a field carries its unit (`durationSelfMs`, `fileSizeBytes`), `total` means including children and `self` excluding them, and one fact keeps one name across every tool.
 
 ## Response Shaping
 
-Responses are TOON-encoded and lean, but the saving comes from shape, never from dropping a fact — conventions in [DEVELOPING.md](DEVELOPING.md#️-shaping-tool-responses), helpers in `src/tools/responseShaping.ts`. Two rules bite most often: report a fixed-schema field even at zero, since an absent count reads as one never parsed, and use `omitEmpty` **only** for occurrence lists.
+Responses are TOON-encoded and lean, but the saving comes from shape, never from dropping a fact - conventions in [DEVELOPING.md](DEVELOPING.md#️-shaping-tool-responses), helpers in `src/tools/responseShaping.ts`. Two rules bite most often: report a fixed-schema field even at zero, since an absent count reads as one never parsed, and use `omitEmpty` **only** for occurrence lists.
 
 Decisions worth not undoing: no prose `summary` or `recommendations`; report a table even when empty, beside the parameter that selected it, since a cutoff left unstated cannot be read; a column only one `sortBy` populates appears under that `sortBy` alone.
 
-The tool definitions follow the same rule and are charged on every turn, called or not — see [Shaping Tool Definitions](DEVELOPING.md#️-shaping-tool-definitions). An enum already lists its values, so a `.describe()` must not repeat them; set `title` at the top level only, because `annotations.title` is an alias and is sent twice; anything true of every tool goes in the server `instructions` once.
+The tool definitions follow the same rule and are charged on every turn, called or not - see [Shaping Tool Definitions](DEVELOPING.md#️-shaping-tool-definitions). An enum already lists its values, so a `.describe()` must not repeat them; set `title` at the top level only, because `annotations.title` is an alias and is sent twice; anything true of every tool goes in the server `instructions` once.
 
-`pnpm run eval` (`scripts/eval.mjs`, wired into CI) is the gate: it drives the built server over stdio and checks answerability, duplication, token budgets, golden files, and that startup loads no Salesforce SDK — none of which the jest suite can do, because it swaps TOON for a JSON stand-in. It also generates the README's token tables, parameter tables and response shapes, so a change that moves any of them fails until the README is regenerated with it. Re-record with `pnpm run build && pnpm run eval:update` and read the diff.
+`pnpm run eval` (`scripts/eval.mjs`, wired into CI) is the gate: it drives the built server over stdio and checks answerability, duplication, token budgets, golden files, and that startup loads no Salesforce SDK - none of which the jest suite can do, because it swaps TOON for a JSON stand-in. It also generates the README's token tables, parameter tables and response shapes, so a change that moves any of them fails until the README is regenerated with it. Re-record with `pnpm run build && pnpm run eval:update` and read the diff.
 
-`outputSchema`/`structuredContent` are unimplemented on cost, not on the spec: the schema is charged in `tools/list` every turn, and a client is free to read `structuredContent` instead of our text block, spending the shaping saving. Measure both before implementing — see #66.
+`outputSchema`/`structuredContent` are unimplemented on cost, not on the spec: the schema is charged in `tools/list` every turn, and a client is free to read `structuredContent` instead of our text block, spending the shaping saving. Measure both before implementing - see #66.
 
 ## Anonymous Apex
 
