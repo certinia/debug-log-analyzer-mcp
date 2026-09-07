@@ -6,30 +6,30 @@
  * Response-quality evaluation for the log analysis tools.
  *
  * Drives the *built* server over real stdio, so what is asserted is the bytes an
- * agent actually receives — TOON encoding included. The jest suite cannot do
+ * agent actually receives - TOON encoding included. The jest suite cannot do
  * this: it maps `@toon-format/toon` to a JSON stand-in, so it verifies field
  * shape and nothing about the payload.
  *
  * Four things are checked for every (tool, fixture) pair:
  *
- * 1. Answerability — a realistic user question is only answerable if the fields
+ * 1. Answerability - a realistic user question is only answerable if the fields
  *    it needs are present. Shrinking a response must not cost an answer.
- * 2. No duplication — a figure reported once costs once. No top-level scalar may
+ * 2. No duplication - a figure reported once costs once. No top-level scalar may
  *    be restated in prose.
- * 3. Token budget — a per-case ceiling, so bloat fails instead of creeping.
- * 4. Golden files — the exact payload, committed, so any shape change is a diff
+ * 3. Token budget - a per-case ceiling, so bloat fails instead of creeping.
+ * 4. Golden files - the exact payload, committed, so any shape change is a diff
  *    a reviewer can read.
  *
  * Four more are checked once per run:
  *
- * 5. Definition budget — what `tools/list` costs on every request, per tool and
+ * 5. Definition budget - what `tools/list` costs on every request, per tool and
  *    in total, measured over the whole wire object the client receives.
- * 6. Selection keywords — the words a client's tool search matches on, so a
+ * 6. Selection keywords - the words a client's tool search matches on, so a
  *    trim that saves tokens cannot quietly cost discovery.
- * 7. README blocks — the published figures, the parameter tables and the shape
+ * 7. README blocks - the published figures, the parameter tables and the shape
  *    of each response are generated from this run, so a change that moves any
  *    of them fails until the README is regenerated with it.
- * 8. Startup cost — listing the tools must not load the Salesforce SDK, which
+ * 8. Startup cost - listing the tools must not load the Salesforce SDK, which
  *    is five times the rest of startup. Only this sees the built output.
  *
  * Usage:
@@ -82,7 +82,7 @@ const ANSWERABILITY = {
       fields: ["durationTotalMs", "fileSizeBytes"],
     },
     {
-      question: "Where did the time go — Apex, the database or Visualforce?",
+      question: "Where did the time go - Apex, the database or Visualforce?",
       keys: ["timeByCategory"],
       columns: ["debugCategory", "operationCount", "durationSelfMs"],
     },
@@ -150,7 +150,7 @@ const ANSWERABILITY = {
     },
     {
       // Pinned to the one case that passes `sortBy`, which is what puts the
-      // column on the row — the log's own allocations do not. `FIXTURES_BY_TOOL`
+      // column on the row - the log's own allocations do not. `FIXTURES_BY_TOOL`
       // carries those args, and a check can only be pinned by fixture, so this
       // holds only while `heap-heavy` is the sole heap-ranked case.
       fixture: "heap-heavy",
@@ -197,7 +197,7 @@ const ANSWERABILITY = {
 /**
  * On `minimal.log` nothing happened, so these must be reported *as zero* rather
  * than left out. "How many DML statements ran?" has to be answerable with "none",
- * and an absent field cannot say that — it cannot be told apart from a log the
+ * and an absent field cannot say that - it cannot be told apart from a log the
  * parser never got a limit block for.
  *
  * `allLimitsZero` asserts the same of every `governorLimits` row that is present,
@@ -226,7 +226,7 @@ const TOKEN_BUDGET = {
   // the message names the limit, the frames name the code, and 18 of 42 fatals
   // across a 124-log corpus breach no limit at all, so nothing else in the
   // response reveals them. Lowered by #138, which dropped the `logCategory`
-  // column from every row of the time table — the row key is now the category
+  // column from every row of the time table - the row key is now the category
   // itself.
   "apexlog_get_summary/governor-heavy": 382,
   "apexlog_get_summary/minimal": 245,
@@ -244,8 +244,8 @@ const TOKEN_BUDGET = {
   "apexlog_list_slow_operations/governor-heavy": 416,
   "apexlog_list_slow_operations/minimal": 131,
   // Lowered by #138: the levels reported are now the two that gate a limit
-  // figure — `apexProfiling` for the cumulative blocks and `apexCode` for the
-  // heap allocations — where five were reported, none of which gated anything
+  // figure - `apexProfiling` for the cumulative blocks and `apexCode` for the
+  // heap allocations - where five were reported, none of which gated anything
   // in this response.
   "apexlog_list_limit_risks/governor-heavy": 41,
   "apexlog_list_limit_risks/minimal": 25,
@@ -261,7 +261,7 @@ const TOKEN_BUDGET = {
 /**
  * What 1.x cost, so the README can show what changed. Both sets were measured
  * once, through this same stdio path and this same estimator, against the server
- * built at b79328f — the commit before the shaping work. Static on purpose: a
+ * built at b79328f - the commit before the shaping work. Static on purpose: a
  * released figure cannot change.
  */
 const V1_DEFINITION_TOKENS = {
@@ -294,12 +294,12 @@ const DEFINITION_BUDGET = {
   // for what grouping by default now states about the row it returns, and for
   // callerNamespace, which needs a clause to say what it attributes, and for the
   // clause #120 added to say the response also carries the query plans, and
-  // for `offset` beside the whole-number floor on `limit` — a schema that
+  // for `offset` beside the whole-number floor on `limit` - a schema that
   // states `integer` and `minimum` costs tokens, and buys a `limit` of -5 no
   // longer returning the whole ranking bar its five fastest rows, and for the
   // clause saying
-  // a plan names its row except under a namespace grouping — an agent that
-  // assumes the query text is always there reads `undefined` — and for telling
+  // a plan names its row except under a namespace grouping - an agent that
+  // assumes the query text is always there reads `undefined` - and for telling
   // a caller to advance `offset` by the rows it got, since the page budget can
   // return fewer than `limit` and paging by `limit` would then skip rows, and
   // for `sortBy`, which buys the one question self time cannot answer: on the
@@ -307,7 +307,7 @@ const DEFINITION_BUDGET = {
   // ten holds a median six rows the self-time top ten never returns.
   //
   // Raised again by #138, which replaced the one `kind` filter with the two axes
-  // the log itself has — `debugCategory` and the event `type` — and widened
+  // the log itself has - `debugCategory` and the event `type` - and widened
   // both, and `namespace`, to arrays, so one call can ask for a family. `type`
   // takes free strings and names three examples rather than an enum, for the
   // reason recorded on the field itself. The `groupBy` clause grew by the
@@ -331,7 +331,7 @@ const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
 
 /**
  * The whole of `tools/list` must stay under what 1.x charged for it. The per-tool
- * budgets cannot assert this on their own — a fifth tool would pass all four and
+ * budgets cannot assert this on their own - a fifth tool would pass all four and
  * still put the total back over the baseline.
  */
 const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
@@ -346,7 +346,7 @@ const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
  */
 const SELECTION_KEYWORDS = {
   // "queries" and "DML" are the words a caller searching for database work
-  // matches on, and the vocabulary the rows themselves no longer use — the
+  // matches on, and the vocabulary the rows themselves no longer use - the
   // description is the only place they appear.
   apexlog_list_slow_operations: [
     "self-execution time",
@@ -364,7 +364,7 @@ const SELECTION_KEYWORDS = {
  *
  * Declared per tool rather than as a cross product of tools and fixtures. Every
  * case is a server round trip and a golden file a reviewer has to read, so a
- * case earns its place only by pinning something the others would miss — and a
+ * case earns its place only by pinning something the others would miss - and a
  * cross product spends three cases on a fixture that answers one question.
  * `heap-heavy` earns a case wherever heap changes the answer, which is the
  * summary and the heap ranking. `apexlog_list_limit_risks` does read heap, but
@@ -429,8 +429,8 @@ const CASE_KEYS = new Set(
 function checkChecksAreRun(failures) {
   const notRun = (tool, fixture) => !CASE_KEYS.has(`${tool}/${fixture}`);
 
-  // Everything else keys a case on its tool and fixture — its golden file, its
-  // token budget, the fixture an answerability check pins on — so two cases
+  // Everything else keys a case on its tool and fixture - its golden file, its
+  // token budget, the fixture an answerability check pins on - so two cases
   // over one pair would share all three, and the arguments of one would decide
   // what the other is asserted against.
   if (CASE_KEYS.size !== CASES.length) {
@@ -514,7 +514,7 @@ function errorLine(stderr) {
 /**
  * Minimal MCP stdio client: initialize, then one tools/call per case.
  *
- * `nodeArgs` is how a check runs the same server under different flags — the
+ * `nodeArgs` is how a check runs the same server under different flags - the
  * startup guard adds a `--import` hook.
  */
 function createClient(era = "legacy", nodeArgs = ["--max-old-space-size=8192"]) {
@@ -541,9 +541,9 @@ function createClient(era = "legacy", nodeArgs = ["--max-old-space-size=8192"]) 
   child.on("exit", (code, signal) => {
     if (child.killed) return;
     const how = signal ? `signal ${signal}` : `code ${code}`;
-    failPending(`the server exited with ${how} — ${errorLine(stderr)}`);
+    failPending(`the server exited with ${how} - ${errorLine(stderr)}`);
   });
-  child.on("error", (error) => failPending(`the server did not start — ${error.message}`));
+  child.on("error", (error) => failPending(`the server did not start - ${error.message}`));
 
   child.stdout.on("data", (chunk) => {
     buffer += chunk.toString();
@@ -609,7 +609,7 @@ function createClient(era = "legacy", nodeArgs = ["--max-old-space-size=8192"]) 
         throw new Error(`${name}: no text content in ${JSON.stringify(response)}`);
       }
       if (response.result.isError) {
-        throw new Error(`${name}: returned an error result — ${text}`);
+        throw new Error(`${name}: returned an error result - ${text}`);
       }
       return text;
     },
@@ -621,11 +621,11 @@ function createClient(era = "legacy", nodeArgs = ["--max-old-space-size=8192"]) 
 
 /**
  * Read the payload's top-level scalars, table headers and rows out of its TOON
- * text. Deliberately shallow — enough to assert what is present and what is
+ * text. Deliberately shallow - enough to assert what is present and what is
  * repeated, without reimplementing the decoder.
  *
  * It reads the *encoded text* rather than calling `decode` on purpose: the checks
- * are about the encoding, so they need the things decoding throws away — the
+ * are about the encoding, so they need the things decoding throws away - the
  * table header, its column set and its one-line-per-row form.
  */
 function inspect(toon) {
@@ -654,7 +654,7 @@ function inspect(toon) {
         if (Number.isFinite(numeric) && /^-?[\d.]+$/.test(value)) {
           scalars.set(key, numeric);
         } else {
-          // Prose at the top level — a `note`, or a reintroduced `summary`.
+          // Prose at the top level - a `note`, or a reintroduced `summary`.
           // Scanned for restated figures below.
           strings.push(value);
         }
@@ -690,7 +690,7 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
       const [table, ...rest] = check.keys ?? [];
       if (!table || rest.length) {
         throw new Error(
-          `${tool}: a "columns" check names the one table they are in, in "keys" — "${check.question}"`,
+          `${tool}: a "columns" check names the one table they are in, in "keys" - "${check.question}"`,
         );
       }
       const header = columns.get(table) ?? new Set();
@@ -706,7 +706,7 @@ function checkAnswerability({ tool, fixture }, toon, failures) {
     }
     if (missing.length) {
       failures.push(
-        `${tool}/${fixture}: cannot answer "${check.question}" — missing ${missing.join(", ")}`,
+        `${tool}/${fixture}: cannot answer "${check.question}" - missing ${missing.join(", ")}`,
       );
     }
   }
@@ -752,7 +752,7 @@ function checkNoDuplication({ tool, fixture }, toon, failures) {
     );
     if (restated.length) {
       failures.push(
-        `${tool}/${fixture}: ${key} (${rendered}) is restated in prose — ${restated[0]}`,
+        `${tool}/${fixture}: ${key} (${rendered}) is restated in prose - ${restated[0]}`,
       );
     }
   }
@@ -781,7 +781,7 @@ async function checkGolden({ tool, fixture }, toon, failures, update) {
     expected = await fs.readFile(file, "utf-8");
   } catch {
     failures.push(
-      `${tool}/${fixture}: no golden file — run \`pnpm run eval:update\` and review the diff`,
+      `${tool}/${fixture}: no golden file - run \`pnpm run eval:update\` and review the diff`,
     );
     return;
   }
@@ -794,7 +794,7 @@ async function checkGolden({ tool, fixture }, toon, failures, update) {
 
 /**
  * What an agent pays for a tool it has not called: the definition exactly as the
- * client receives it, whole. Not a subset — `title`, `annotations` and the SDK's
+ * client receives it, whole. Not a subset - `title`, `annotations` and the SDK's
  * own fields cost the same tokens as the description does, and a budget that
  * cannot see them cannot hold them down.
  */
@@ -875,16 +875,26 @@ function checkSelectionKeywords(costs, failures) {
   }
 }
 
+/**
+ * Where a column stops being worth aligning. One served description runs past
+ * 400 characters, and padding nine rows out to meet it costs 3 KB of spaces.
+ */
+const MAX_PADDED_WIDTH = 60;
+
 /** Pads cells so the pipes line up, which is what markdownlint MD060 wants. */
 function renderTable(headers, rows) {
-  const widths = headers.map((header, column) =>
-    Math.max(header.length, ...rows.map((row) => row[column].length)),
-  );
+  const widths = headers.map((header, column) => {
+    const width = Math.max(
+      header.length,
+      ...rows.map((row) => row[column].length),
+    );
+    return width > MAX_PADDED_WIDTH ? 0 : width;
+  });
   const line = (cells) =>
     `| ${cells.map((cell, i) => cell.padEnd(widths[i])).join(" | ")} |`;
   return [
     line(headers),
-    `| ${widths.map((width) => "-".repeat(width)).join(" | ")} |`,
+    `| ${widths.map((width) => "-".repeat(Math.max(width, 3))).join(" | ")} |`,
     ...rows.map(line),
   ].join("\n");
 }
@@ -894,7 +904,7 @@ const thousands = (value) => value.toLocaleString("en-US");
 /** The two comparison cells: what 1.x cost, and the signed change since. */
 function comparison(before, after) {
   if (before === undefined) {
-    return ["—", "—"];
+    return ["-", "-"];
   }
   const change = Math.round((100 * (after - before)) / before);
   return [`~${thousands(before)}`, `${change > 0 ? "+" : ""}${change}%`];
@@ -996,7 +1006,7 @@ function renderResponseShapes(toonByTool) {
     id: `shape-${tool}`,
     table: [...inspect(toon).columns]
       .map(
-        ([table, columns]) => `- \`${table}\` — \`{${[...columns].join(", ")}}\``,
+        ([table, columns]) => `- \`${table}\` - \`{${[...columns].join(", ")}}\``,
       )
       .join("\n"),
   }));
@@ -1078,7 +1088,7 @@ async function main() {
   checkChecksAreRun(failures);
 
   await checkNoSdkAtStartup(failures);
-  console.log("checked startup — the Salesforce SDK is not loaded to list tools");
+  console.log("checked startup - the Salesforce SDK is not loaded to list tools");
 
   const responses = [];
   const publishedToon = {};
@@ -1101,7 +1111,7 @@ async function main() {
         publishedToon[testCase.tool] = toon;
       }
       console.log(
-        `${update ? "updated" : "checked"} ${testCase.tool}/${testCase.fixture} — ~${tokens} tokens`,
+        `${update ? "updated" : "checked"} ${testCase.tool}/${testCase.fixture} - ~${tokens} tokens`,
       );
     }
 
@@ -1120,14 +1130,14 @@ async function main() {
     );
     const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
     console.log(
-      `${update ? "updated" : "checked"} tool definitions — ~${total} tokens across ${costs.length} tools`,
+      `${update ? "updated" : "checked"} tool definitions - ~${total} tokens across ${costs.length} tools`,
     );
   });
 
   await withClient(async (client) => {
     checkCacheHints(await client.toolsList(), failures);
     console.log(
-      `checked tools/list cache hint — ttlMs ${TOOLS_LIST_CACHE_HINT.ttlMs}, cacheScope ${TOOLS_LIST_CACHE_HINT.cacheScope}`,
+      `checked tools/list cache hint - ttlMs ${TOOLS_LIST_CACHE_HINT.ttlMs}, cacheScope ${TOOLS_LIST_CACHE_HINT.cacheScope}`,
     );
   }, "modern");
 

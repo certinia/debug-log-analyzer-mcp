@@ -52,7 +52,7 @@ Then ask your assistant to analyze a log. `apexlog_execute_anonymous` also needs
 
 ### Enabling the tools
 
-Every request carries all four tool definitions, called or not. That is the standing cost of having the server connected. Each figure is the whole definition the client receives — name, title, description, input schema and annotations.
+Every request carries all four tool definitions, called or not - the standing cost of having the server connected. Each figure is the whole definition: name, title, description, input schema and annotations.
 
 <!-- token-cost-definitions:start -->
 
@@ -68,9 +68,9 @@ Every request carries all four tool definitions, called or not. That is the stan
 
 ### Calling a tool
 
-Every analysis call takes a tool name and a log path, about 15 tokens, so what a call costs is what it returns. Each row answers the same log as 1.x did — the same facts, in a cheaper shape.
+A call takes a tool name and a log path, about 15 tokens, so a call costs what it returns. Each row answers the same log as 1.x did, with the same facts in a cheaper shape.
 
-Cost does not scale with the log. A response is bounded by its shape — a fixed table of governor limits, a row cap on ranked operations — not by the bytes parsed. Measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log); on the full 19.7 MB original, `apexlog_get_summary` returns ~374 tokens instead of ~364, and `apexlog_list_limit_risks` returns the same ~35.
+Cost does not scale with the log: a response is bounded by its shape - a fixed table of governor limits, a row cap on ranked operations - not by the bytes parsed. Measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log); on the full 19.7 MB original, `apexlog_get_summary` returns ~374 tokens instead of ~364 and `apexlog_list_limit_risks` the same ~35.
 
 <!-- token-cost-answers:start -->
 
@@ -84,54 +84,45 @@ Cost does not scale with the log. A response is bounded by its shape — a fixed
 
 ## Tools Reference
 
-All tools return [TOON](https://github.com/toon-format/toon)-encoded data, kept lean by shape rather than by dropping facts:
-
-- **Every governor limit, debug category and operation column is returned, including zeros.** `0` means none, not "not measured".
-- **Nested objects are returned as flat tables**, which TOON encodes as one header plus one line per row.
-- **Nothing is reported twice**, and no prose restates a number in the table beside it.
-- **Only what did not happen is omitted** — fatal errors, lost log content, query plans. Every other field reports its zero.
-
-Durations are milliseconds to 3 decimal places, percentages to 1.
+All tools return [TOON](https://github.com/toon-format/toon)-encoded flat tables - lean by shape, not by dropping facts. Every limit, category and column is returned, so `0` means none rather than "not measured"; only what did not happen is omitted, which is fatal errors, lost log content and query plans. Nothing is reported twice. Durations are milliseconds to 3 decimal places, percentages to 1.
 
 ### apexlog_list_slow_operations
 
-Ranks what a log spent its time on by self time — code units, methods, queries, searches, DML, flows and workflows in one table.
+Ranks what a log spent its time on by self time - code units, methods, queries, searches, DML, flows and workflows in one table.
 
 A default response returns:
 
 <!-- shape-apexlog_list_slow_operations:start -->
 
-- `capturedAt` — `{debugCategory, level}`
-- `operations` — `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`
-- `queryPlans` — `{operationRow, leadingOperationType, relativeCost, cardinality, sObjectCardinality}`
+- `capturedAt` - `{debugCategory, level}`
+- `operations` - `{debugCategory, type, name, namespace, callCount, durationTotalMs, durationSelfMs, durationSelfMaxMs, selfPercentage, soqlCount, dmlCount, soslCount, rowCount, thrownCount}`
+- `queryPlans` - `{operationRow, leadingOperationType, relativeCost, cardinality, sObjectCardinality}`
 
 <!-- shape-apexlog_list_slow_operations:end -->
 
-beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` those rows account for, and the `matchedCount` the selection matched before paging. `durationSelfMaxMs` is the slowest single call in a grouped row — read against `durationSelfMs` it tells one bad call from sheer volume — and is absent when each row is already one call.
+beside the transaction's `durationTotalMs`, the `returnedSelfPercentage` those rows account for, and the `matchedCount` matched before paging. `durationSelfMaxMs` is the slowest single call in a grouped row - against `durationSelfMs` it tells one bad call from sheer volume - and is absent when a row is already one call.
 
-Both classification columns come from the log. `debugCategory` is what Salesforce stamped on the event, which decided whether it was written at all, and is the spelling `apexlog_execute_anonymous` takes as input. `type` is the event type, which is what the category cannot say: `SOQL_EXECUTE_BEGIN`, `SOSL_EXECUTE_BEGIN` and `DML_BEGIN` all sit under `database`, and `ENTERING_MANAGED_PKG` — the time a package spent where the log shows nothing, often most of a transaction — sits under `apexCode` beside the methods it hides.
+Two columns classify each row, both straight from the log. `debugCategory` is what Salesforce stamped on the event, which decided whether it was logged at all, and is the spelling `apexlog_execute_anonymous` takes. `type` is the event type, which the category cannot imply: `SOQL_EXECUTE_BEGIN`, `SOSL_EXECUTE_BEGIN` and `DML_BEGIN` all sit under `database`, and `ENTERING_MANAGED_PKG` - the time a package spent where the log shows nothing, often most of a transaction - sits under `apexCode` beside the methods it hides.
 
-`sortBy: "heapSelfNetBytes"` ranks by retained heap instead of time, adding that column and a `returnedHeapPercentage` scalar; both are absent otherwise. The figure is signed `HEAP_ALLOCATE` bytes, so a row that released more than it took reads below zero. Allocations reach the log only at `apexCode` FINER and above, so the `apexCode` row of `capturedAt` says whether a zero is real.
+`sortBy: "heapSelfNetBytes"` ranks by retained heap instead of time, adding that column and a `returnedHeapPercentage`; both are absent otherwise. It is signed `HEAP_ALLOCATE` bytes, so a row that released more than it took reads below zero, and allocations are logged only at `apexCode` FINER and above - the `apexCode` row of `capturedAt` says whether a zero is real.
 
 `capturedAt` covers the categories among the returned rows, keyed to join with them.
 
-`queryPlans` is what the optimizer decided about the queries behind those rows: a `relativeCost` above 1 means it will not treat the query as selective. It is absent when the log explained none, which the `database` row of `capturedAt` explains — explain lines are written at `database` FINEST alone. `operationRow` is the 1-based line of `operations`, except under a `namespace`, `callerNamespace` or `debugCategory` grouping, where the row is not named after the query, so the plan carries the query text as `name`.
-
-A page is bounded by size as well as by `limit`, so you can get fewer rows than you asked for; `matchedCount` says whether any were hidden.
+`queryPlans` is what the optimizer decided about the queries behind those rows: `relativeCost` above 1 means it will not treat the query as selective. It is absent when the log explained none, since explain lines are written at `database` FINEST alone. `operationRow` is the 1-based line of `operations` - except under a `namespace`, `callerNamespace` or `debugCategory` grouping, where the row is not named after the query, so the plan carries the query text as `name`.
 
 <!-- params-apexlog_list_slow_operations:start -->
 
-| Parameter       | Type     | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `logFilePath`   | string   | Yes      | Absolute path to the Apex debug log file (.log)                                                                                                                                                                                                                                                                                                                                                                          |
-| `debugCategory` | string[] | No       | Rank only these debug log categories                                                                                                                                                                                                                                                                                                                                                                                     |
-| `type`          | string[] | No       | Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY                                                                                                                                                                                                                                                                                                                                        |
-| `namespace`     | string[] | No       | Rank only these namespaces                                                                                                                                                                                                                                                                                                                                                                                               |
-| `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0), whichever sortBy is used                                                                                                                                                                                                                                                                                                                                              |
-| `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large                                                                                                                                                                                                                                                                                                                                                            |
-| `offset`        | number   | No       | Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.                                                                                                                                                                                                                                                                                                                         |
-| `groupBy`       | string   | No       | Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs — never sum it across rows. Pass none to rank each call on its own. |
-| `sortBy`        | string   | No       | Rank on (default: durationSelfMs). heapSelfNetBytes adds that column.                                                                                                                                                                                                                                                                                                                                                    |
+| Parameter       | Type     | Required | Description |
+| --------------- | -------- | -------- | --- |
+| `logFilePath`   | string   | Yes      | Absolute path to the Apex debug log file (.log) |
+| `debugCategory` | string[] | No       | Rank only these debug log categories |
+| `type`          | string[] | No       | Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY |
+| `namespace`     | string[] | No       | Rank only these namespaces |
+| `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0), whichever sortBy is used |
+| `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large |
+| `offset`        | number   | No       | Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit. |
+| `groupBy`       | string   | No       | Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. Pass none to rank each call on its own. |
+| `sortBy`        | string   | No       | Rank on (default: durationSelfMs). heapSelfNetBytes adds that column. |
 
 <!-- params-apexlog_list_slow_operations:end -->
 
@@ -141,19 +132,21 @@ How long the transaction ran, where the time went, what it consumed, and whether
 
 <!-- shape-apexlog_get_summary:start -->
 
-- `fatalErrors` — `{message, frames}`
-- `debugLevels` — `{debugCategory, level}`
-- `governorLimits` — `{limit, used, max}`
-- `limitsByNamespace` — `{namespace, limit, used}`
-- `timeByCategory` — `{debugCategory, operationCount, durationSelfMs, selfPercentage}`
+- `fatalErrors` - `{message, frames}`
+- `debugLevels` - `{debugCategory, level}`
+- `governorLimits` - `{limit, used, max}`
+- `limitsByNamespace` - `{namespace, limit, used}`
+- `timeByCategory` - `{debugCategory, operationCount, durationSelfMs, selfPercentage}`
 
 <!-- shape-apexlog_get_summary:end -->
 
-All thirteen governor limits are listed, zeros included. `limitsByNamespace` covers each limit a namespace consumed — how you see that a managed package spent your CPU time. It names no ceiling, because there is one ceiling per limit for the whole transaction and it is already in `governorLimits`.
+All thirteen governor limits are listed, zeros included. `limitsByNamespace` covers each limit a namespace consumed - how you see a managed package spending your CPU time. It names no ceiling: there is one per limit for the whole transaction, already in `governorLimits`.
 
-`timeByCategory` covers all eleven categories. Since the category decided whether an operation was logged at all, read a zero against `debugLevels`: `database 0` beside `database NONE` means the queries were not logged; beside `database FINEST` it means none ran. Three categories — `dataAccess`, `wave` and `validation` — can only ever be zero, because no timed event carries them.
+`timeByCategory` covers all eleven categories. Since the category decided whether an operation was logged at all, read a zero against `debugLevels`: `database 0` beside `database NONE` means the queries were not logged; beside `database FINEST` it means none ran. Three categories - `dataAccess`, `wave` and `validation` - can only ever be zero, because no timed event carries them.
 
-`truncated` says whether the log is complete; every figure in a partial one is a floor. Where the platform cut it, `truncatedBy` names how (`skipped-lines` for a hole, `max-size` for a missing tail) and `skippedBytes` how much went. Both are absent on a log that merely stops mid-frame. `thrownCount` counts exceptions thrown, zero included. `fatalErrors` appears once per failure that ended a transaction, with the innermost three frames and a trailing `…` where there were more — it is the only field that says a transaction did not finish, and a fatal error need breach no limit, so nothing else in the response reveals one.
+`truncated` says whether the log is complete; every figure in a partial one is a floor. Where the platform cut it, `truncatedBy` names how (`skipped-lines` for a hole, `max-size` for a missing tail) and `skippedBytes` how much went; both are absent on a log that merely stops mid-frame. `thrownCount` counts exceptions thrown, zero included.
+
+`fatalErrors` appears once per failure that ended a transaction, with the innermost three frames and a trailing `…` where there were more. It is the only field that says a transaction did not finish - a fatal error need breach no limit, so nothing else reveals one.
 
 <!-- params-apexlog_get_summary:start -->
 
@@ -169,8 +162,8 @@ The governor limits nearest their ceiling, worst first.
 
 <!-- shape-apexlog_list_limit_risks:start -->
 
-- `capturedAt` — `{debugCategory, level}`
-- `atRisk` — `{limit, used, max, usedPercentage}`
+- `capturedAt` - `{debugCategory, level}`
+- `atRisk` - `{limit, used, max, usedPercentage}`
 
 <!-- shape-apexlog_list_limit_risks:end -->
 
@@ -180,9 +173,9 @@ The `threshold` that selected the rows is reported beside them, so an empty tabl
 
 <!-- params-apexlog_list_limit_risks:start -->
 
-| Parameter     | Type   | Required | Description                                                      |
-| ------------- | ------ | -------- | ---------------------------------------------------------------- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log)                  |
+| Parameter     | Type   | Required | Description |
+| ------------- | ------ | -------- | --- |
+| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
 | `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
 
 <!-- params-apexlog_list_limit_risks:end -->
@@ -191,45 +184,26 @@ The `threshold` that selected the rows is reported beside them, so an empty tabl
 
 Runs anonymous Apex against an authenticated org, saves the debug log locally, and returns the path. Pass that path to any analysis tool.
 
-The response also gives the org username (and alias, if set), the org type, and an execution summary. Logs go to `.apex-log-mcp/` by default — add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
+The response also gives the org username (and alias, if set), the org type, and an execution summary. Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
 
 <!-- params-apexlog_execute_anonymous:start -->
 
-| Parameter    | Type             | Required | Description                                                                                                                                                                                                                                                                                                |
-| ------------ | ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apex`       | string           | Yes      | The anonymous Apex to be executed                                                                                                                                                                                                                                                                          |
-| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified.                                                                                                                                                                                                                 |
-| `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root.                                                                                                                                                                                                                      |
+| Parameter    | Type             | Required | Description |
+| ------------ | ---------------- | -------- | --- |
+| `apex`       | string           | Yes      | The anonymous Apex to be executed |
+| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root. |
 | `debugLevel` | string \| object | No       | Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
 
-`debugLevel` takes `"default"` to reset every category, a level such as `"FINEST"` to set them all, or an object to override some:
+An object `debugLevel` looks like this:
 
 ```json
 { "database": "FINEST", "apexCode": "FINE" }
 ```
 
 Levels are `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`.
-
-<details>
-<summary>📋 <strong>Default debug levels</strong> — used when <code>debugLevel</code> is omitted (click to expand)</summary>
-<br />
-
-| Category        | Default Level |
-| --------------- | ------------- |
-| `apexCode`      | FINE          |
-| `apexProfiling` | FINE          |
-| `callout`       | DEBUG         |
-| `database`      | FINEST        |
-| `nba`           | INFO          |
-| `system`        | DEBUG         |
-| `validation`    | DEBUG         |
-| `visualforce`   | FINE          |
-| `wave`          | INFO          |
-| `workflow`      | FINE          |
-
-</details>
 
 **Example prompts:**
 
@@ -240,7 +214,7 @@ Levels are `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`.
 
 ## Configuration
 
-The [Quick Start](#quick-start) config gives you all four tools. The rest of this section is the production safety policy and how to change it.
+The [Quick Start](#quick-start) config gives you all four tools.
 
 ### Production safety
 
@@ -255,7 +229,7 @@ The [Quick Start](#quick-start) config gives you all four tools. The rest of thi
 | `production` | Anything else                     | Confirmation required |
 | `unknown`    | The org could not be queried      | Confirmation required |
 
-For a production org the server runs it anyway under `--allow-production-orgs`; otherwise it asks you to confirm, if your client supports [elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation), naming the org and showing the Apex; otherwise it refuses, and says both ways to proceed.
+For a production org, `--allow-production-orgs` runs it anyway. Otherwise the server asks you to confirm - naming the org, showing the Apex - if your client supports [elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation); if not, it refuses and names both ways to proceed.
 
 An org that cannot be identified is treated as production, so a network or permissions problem can never silently downgrade one.
 
@@ -263,7 +237,7 @@ An org that cannot be identified is treated as production, so a network or permi
 
 | Flag                      | Description                                                                                                            |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `--allow-production-orgs` | Treat production orgs like any other — no confirmation, no refusal. Only set this if production targets are intentional. |
+| `--allow-production-orgs` | Treat production orgs like any other - no confirmation, no refusal. Only set this if production targets are intentional. |
 | `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. The three analysis tools are unaffected. |
 
 For an analysis-only deployment:
@@ -283,7 +257,7 @@ For an analysis-only deployment:
 
 - **Runs as a local process.** Your client spawns the server and talks to it over stdio. No network requests, no API keys.
 - **Uses the [Apex Log Analyzer](https://github.com/certinia/debug-log-analyzer) parser**, the same one the VS Code extension runs on.
-- **Returns structured data** — durations in milliseconds, limits as used/max rows, operations with SOQL and DML counts.
+- **Returns structured data** - durations in milliseconds, limits as used/max rows, operations with SOQL and DML counts.
 - **Parses a log once, not once per tool.** A summary followed by a deeper look at the same file reuses the parse.
 
 ## Documentation
@@ -293,14 +267,14 @@ For an analysis-only deployment:
 
 ### Related Projects
 
-- [Apex Log Analyzer VS Code Extension](https://github.com/certinia/debug-log-analyzer) — full Apex log analyzer for VS Code
+- [Apex Log Analyzer VS Code Extension](https://github.com/certinia/debug-log-analyzer) - full Apex log analyzer for VS Code
 
 ## Contributing
 
 See the [Contributing Guide](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CONTRIBUTING.md).
 
-- [Developing](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/DEVELOPING.md) — set up your development environment
-- [Code of Conduct](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CODE_OF_CONDUCT.md) — community guidelines
+- [Developing](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/DEVELOPING.md) - set up your development environment
+- [Code of Conduct](https://github.com/certinia/debug-log-analyzer-mcp/blob/main/CODE_OF_CONDUCT.md) - community guidelines
 
 ## Contributors
 
