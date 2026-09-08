@@ -34,12 +34,26 @@ jobs:
       # `package-manager-cache` defaults to true - it only auto-caches when
       # `packageManager` names npm, and saying so here keeps the guarantee from
       # resting on that field staying `pnpm`.
+      #
+      # No registry-url: it writes an .npmrc line reading
+      # `_authToken=${NODE_AUTH_TOKEN}`, and an auth line with no token behind
+      # it stops npm reaching the OIDC exchange.
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: ".nvmrc"
-          registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
+
+      # `pnpm publish` shells out to `npm publish`, and OIDC lives in the npm
+      # CLI, so the npm beside Node decides whether trusted publishing happens.
+      # Node 22 carries npm 10, which has none: 2.0.0-beta.0 published
+      # anonymously and the registry answered 404. Trusted publishing needs
+      # 11.5.1 or later. Pinned, like the actionlint tarball in
+      # workflow-lint.yml, so it needs a manual bump.
+      - name: Install an npm that can use trusted publishing
+        env:
+          NPM_VERSION: 11.19.1
+        run: npm install --global "npm@${NPM_VERSION}"
 
       # Before the install, which is the slow step here: a release published
       # from the wrong tag would otherwise ship silently, and there is no
