@@ -34,11 +34,23 @@ jobs:
       # `package-manager-cache` defaults to true - it only auto-caches when
       # `packageManager` names npm, and saying so here keeps the guarantee from
       # resting on that field staying `pnpm`.
+      #
+      # No registry-url: it writes an .npmrc line reading
+      # `_authToken=${NODE_AUTH_TOKEN}`, and an auth line with no token behind
+      # it stops npm reaching the OIDC exchange.
+      #
+      # Node 24 rather than .nvmrc, for the npm that ships beside it: `pnpm
+      # publish` shells out to `npm publish`, and the OIDC exchange lives in
+      # the npm CLI. Node 22 carries npm 10, which cannot do it - 2.0.0-beta.0
+      # published anonymously and the registry answered 404. Trusted
+      # publishing needs npm 11.5.1; Node 24 carries 11.19. Installing a newer
+      # npm by hand would do as well, but that is a package outside the
+      # lockfile, which zizmor rejects. `tsc` output does not depend on the
+      # Node that runs it, and the test matrix already covers 24.
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: ".nvmrc"
-          registry-url: "https://registry.npmjs.org"
+          node-version: "24"
           package-manager-cache: false
 
       # Before the install, which is the slow step here: a release published
