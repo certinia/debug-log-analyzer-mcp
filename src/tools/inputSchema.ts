@@ -22,6 +22,12 @@ export function toolInputSchema<S extends z.ZodRawShape>(
 ): z.ZodObject<S> {
   const object = z.object(shape);
   const { jsonSchema, ...rest } = object["~standard"];
+  // A zod that no longer publishes the converter is one the SDK falls back to
+  // `z.toJSONSchema` for, and a saving of 14 tokens is not worth trading that
+  // fallback for a TypeError at import, which would take all four tools with it.
+  if (jsonSchema === undefined) {
+    return object;
+  }
   const withoutDialect = (
     convert: (options: Parameters<typeof jsonSchema.input>[0]) => Record<string, unknown>,
   ) => (options: Parameters<typeof jsonSchema.input>[0]) => {

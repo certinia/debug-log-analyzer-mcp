@@ -67,11 +67,14 @@ const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
 /**
  * The largest page and the furthest offset the schema accepts.
  *
- * Stated, because `.int()` alone puts zod's safe-integer maximum,
- * `9007199254740991`, on the wire for both fields - 5 tokens of every request to
- * bound a page that `PAGE_CHAR_BUDGET` cuts long before either figure.
+ * Stated, because `.int()` alone puts zod's safe-integer bounds on the wire for
+ * both fields, which no client reads. Both sit above anything a real call asks
+ * for - the largest log in a 124-log corpus ranks 39,415 rows - because a page
+ * is bounded by `PAGE_CHAR_BUDGET`, and "fewer rows than you asked for" is the
+ * answer a caller gets today. A ceiling low enough to refuse a large `limit`
+ * would trade that for an error, which is not what 3 tokens buy.
  */
-const MAX_PAGE_SIZE = 1_000;
+const MAX_PAGE_SIZE = 100_000;
 const MAX_OFFSET = 1_000_000;
 
 export const listSlowOperationsInputSchema = {
