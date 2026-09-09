@@ -321,8 +321,8 @@ user questions are still answerable, that no figure appears twice, that the payl
 budget, and that it matches its golden file. Run it - and `pnpm run eval:update` to re-record the
 goldens - for any change to a response shape; the golden diff *is* the review of the change.
 
-Two further checks run once per run: the definition budget described in
-[Shaping Tool Definitions](#️-shaping-tool-definitions), and the generated README blocks - both
+Further checks run once per run: the definition budgets in [`scripts/eval.mjs`](scripts/eval.mjs),
+and the generated README blocks - both
 [Token Cost](README.md#token-cost) tables, each tool's parameter table, and the shape of each
 response. A change that moves any of them fails until `pnpm run eval:update` regenerates the README
 with it, so the prose beside those blocks is the only part you edit by hand.
@@ -336,13 +336,14 @@ If you change a tool's output shape, update the [CHANGELOG](CHANGELOG.md) and th
 ## 🏷️ Shaping Tool Definitions
 
 A definition is charged on every request, called or not. Server `instructions` are charged once per
-session, a response only when the tool is called. Put each fact where its audience reads it, at the
-frequency it is worth.
+session, a response only when the tool is called. So a fact true of every tool belongs in
+`instructions`, and a fact true of one belongs in that tool's description.
 
 The [MCP spec](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) covers the
 rest - what `title`, `description` and each annotation are for. Where it is silent, `pnpm run eval`
 is the rule, not this file: it measures every wire object in a live `tools/list` and fails with the
-reason. Read `scripts/eval.mjs` for the current budgets.
+reason. Read `scripts/eval.mjs` for the current budgets, and the definition tests in `tests/` for
+the annotations, which no budget with headroom would notice coming back.
 
 One trade a budget cannot see: a description is a selection prompt, so a trim that saves tokens can
 cost discovery. `SELECTION_KEYWORDS` makes that fail loudly instead of passing quietly.

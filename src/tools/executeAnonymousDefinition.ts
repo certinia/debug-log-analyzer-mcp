@@ -87,6 +87,9 @@ export function executeAnonymousToolConfig(apexExecutionDisabled = false) {
       ? `[DISABLED on this server] ${EXECUTE_ANONYMOUS_DESCRIPTION} ${APEX_EXECUTION_DISABLED_MESSAGE}`
       : EXECUTE_ANONYMOUS_DESCRIPTION,
     inputSchema: toolInputSchema(executeAnonymousInputSchema),
+    // All four hints, where the read-only tools state only the two that differ
+    // from the spec default: this is the one tool where a client that misreads a
+    // default runs Apex against an org.
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,

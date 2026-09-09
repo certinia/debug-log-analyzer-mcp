@@ -84,7 +84,7 @@ Responses are TOON-encoded and lean, but the saving comes from shape, never from
 
 Decisions worth not undoing: no prose `summary` or `recommendations`; report a table even when empty, beside the parameter that selected it, since a cutoff left unstated cannot be read; a column only one `sortBy` populates appears under that `sortBy` alone.
 
-The tool definitions follow the same rule and are charged on every turn, called or not - see [Shaping Tool Definitions](DEVELOPING.md#️-shaping-tool-definitions). An enum already lists its values, so a `.describe()` must not repeat them; set `title` at the top level only, because `annotations.title` is an alias and is sent twice; anything true of every tool goes in the server `instructions` once.
+The tool definitions follow the same rule and are charged on every turn, called or not - the budgets and the checks are in [`scripts/eval.mjs`](scripts/eval.mjs). An enum already lists its values, so a `.describe()` must not repeat them; set `title` at the top level only, because `annotations.title` is an alias and is sent twice; anything true of every tool goes in the server `instructions` once.
 
 `pnpm run eval` (`scripts/eval.mjs`, wired into CI) is the gate: it drives the built server over stdio and checks answerability, duplication, token budgets, golden files, and that startup loads no Salesforce SDK - none of which the jest suite can do, because it swaps TOON for a JSON stand-in. It also generates the README's token tables, parameter tables and response shapes, so a change that moves any of them fails until the README is regenerated with it. Re-record with `pnpm run build && pnpm run eval:update` and read the diff.
 
