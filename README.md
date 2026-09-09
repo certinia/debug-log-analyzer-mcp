@@ -105,10 +105,9 @@ How long the transaction ran, where the time went, what it consumed, and whether
 <!-- shape-apexlog_get_summary:start -->
 
 - `fatalErrors` - `{message, frames}`
-- `debugLevels` - `{debugCategory, level}`
 - `governorLimits` - `{limit, used, max}`
 - `limitsByNamespace` - `{namespace, limit, used}`
-- `timeByCategory` - `{debugCategory, operationCount, durationSelfMs, selfPercentage}`
+- `categories` - `{debugCategory, level, operationCount, durationSelfMs, selfPercentage}`
 
 <!-- shape-apexlog_get_summary:end -->
 
@@ -116,10 +115,11 @@ All thirteen governor limits are listed, zeros included.
 
 `limitsByNamespace` shows what each namespace consumed. This is how you see a managed package spending your CPU time. It has no ceiling column, because a ceiling is per limit for the whole transaction and already sits in `governorLimits`.
 
-`timeByCategory` covers all eleven categories. A category decided whether an operation was logged, so read a zero against `debugLevels`:
+`categories` covers all eleven, each with the level it was captured at, because the level is what a zero means:
 
-- `database 0` beside `database NONE` - the queries were not logged.
-- `database 0` beside `database FINEST` - no queries ran.
+- `database,NONE,0` - the queries were not logged.
+- `database,FINEST,0` - no queries ran.
+- `database,"",0` - the log's header declared no level for it, which is most logs for `dataAccess`.
 
 `dataAccess`, `wave` and `validation` are always zero. No timed event carries them.
 
@@ -219,7 +219,7 @@ Cost does not grow with the log size. The figures below are measured against a 4
 
 | Tool                           | Response | 1.x  | Change |
 | ------------------------------ | -------- | ---- | ------ |
-| `apexlog_get_summary`          | ~364     | ~293 | +24%   |
+| `apexlog_get_summary`          | ~325     | ~293 | +11%   |
 | `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
 

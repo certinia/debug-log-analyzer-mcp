@@ -52,15 +52,21 @@ export const getLogSummaryToolConfig = {
 };
 
 /**
- * Where the transaction's time went, one row per debug log category.
+ * One row per debug log category: the level it was captured at, and where the
+ * transaction's time went under it.
  *
- * The category is the one that decides whether an operation reaches the log at
- * all, so a zero row reads against `debugLevels`: `database 0` beside
- * `database NONE` means the queries were not logged, and beside
- * `database FINEST` means none ran.
+ * One table rather than two, because the level is what a zero row means: a
+ * `database 0` beside `database NONE` means the queries were not logged, and
+ * beside `database FINEST` means none ran. Keyed the same way, the two tables
+ * stated every category twice and left the join to the caller.
+ *
+ * `level` is empty where the log's header declared none for the category, which
+ * is most logs for `dataAccess`. A level has no zero, so empty says unstated
+ * rather than off - naming a default would state a level the log did not.
  */
 interface CategoryRow {
   debugCategory: DebugLevelCategory;
+  level: string;
   operationCount: number;
   durationSelfMs: number;
   selfPercentage: number;
@@ -175,10 +181,9 @@ interface LogSummaryResult {
   thrownCount: number;
   fatalErrors?: FatalError[];
   namespaces: string[];
-  debugLevels: DeclaredLevel[];
   governorLimits: LimitRow[];
   limitsByNamespace: NamespaceLimitRow[];
-  timeByCategory: CategoryRow[];
+  categories: CategoryRow[];
 }
 
 export async function getLogSummary(args: LogSummaryArgs) {
@@ -213,10 +218,13 @@ export async function getLogSummary(args: LogSummaryArgs) {
     thrownCount: apexLog.thrownCount.total,
     ...omitEmpty({ fatalErrors: fatalErrors(apexLog.logIssues) }),
     namespaces: apexLog.namespaces,
-    debugLevels: declaredLevels(apexLog),
     governorLimits: toLimitRows(apexLog.governorLimits.peak),
     limitsByNamespace: toNamespaceLimitRows(apexLog.governorLimits.byNamespace),
-    timeByCategory: timeByCategory(listOperations(apexLog), durationTotalNs),
+    categories: categories(
+      declaredLevels(apexLog),
+      listOperations(apexLog),
+      durationTotalNs,
+    ),
   };
 
   return {
@@ -229,7 +237,8 @@ export async function getLogSummary(args: LogSummaryArgs) {
   };
 }
 
-function timeByCategory(
+function categories(
+  levels: DeclaredLevel[],
   operations: Operation[],
   durationTotalNs: number,
 ): CategoryRow[] {
@@ -255,8 +264,15 @@ function timeByCategory(
     }
   });
 
+  // Every row carries a `level` key, empty where the header declared none, so
+  // TOON holds the table to one header and one line per row.
+  const declared = new Map(
+    levels.map(({ debugCategory, level }) => [debugCategory, level]),
+  );
+
   return totals.map(({ debugCategory, operationCount, selfNs }) => ({
     debugCategory,
+    level: declared.get(debugCategory) ?? "",
     operationCount,
     durationSelfMs: roundMs(selfNs / NS_TO_MS),
     selfPercentage: roundPercent(percentageOf(selfNs, durationTotalNs)),

@@ -250,19 +250,6 @@ describe("getLogSummary", () => {
       expect(frames.endsWith("…")).toBe(true);
     });
 
-    it("should report every log category and its level", async () => {
-      // The levels tie log content to log configuration: what was captured, and
-      // what is missing because a category was switched off.
-      const summary = await summaryOf({
-        debugLevels: { apexCode: "DEBUG", database: "NONE" },
-      });
-
-      expect(summary.debugLevels).toEqual([
-        { debugCategory: "apexCode", level: "DEBUG" },
-        { debugCategory: "database", level: "NONE" },
-      ]);
-    });
-
     it("should report what killed the transaction, and where", async () => {
       const summary = await summaryOf({
         logIssues: [
@@ -501,12 +488,25 @@ describe("getLogSummary", () => {
     });
   });
 
-  describe("timeByCategory", () => {
+  describe("categories", () => {
     const rowOf = (
-      summary: { timeByCategory: { debugCategory: string }[] },
+      summary: { categories: { debugCategory: string }[] },
       debugCategory: string,
-    ) =>
-      summary.timeByCategory.find((row) => row.debugCategory === debugCategory);
+    ) => summary.categories.find((row) => row.debugCategory === debugCategory);
+
+    // The level ties log content to log configuration: what was captured, and
+    // what is missing because a category was switched off. Empty where the
+    // header declared none, because a level has no zero and a default would
+    // state one the log did not.
+    it("should state the level each category was captured at", async () => {
+      const summary = await summaryOf({
+        debugLevels: { apexCode: "DEBUG", database: "NONE" },
+      });
+
+      expect(rowOf(summary, "apexCode")).toMatchObject({ level: "DEBUG" });
+      expect(rowOf(summary, "database")).toMatchObject({ level: "NONE" });
+      expect(rowOf(summary, "callout")).toMatchObject({ level: "" });
+    });
 
     // `database 0` beside `database NONE` means the queries were not logged;
     // the same row beside `database FINEST` means none ran. Neither reads
@@ -515,7 +515,7 @@ describe("getLogSummary", () => {
       const summary = await summaryOf();
 
       expect(
-        summary.timeByCategory.map(
+        summary.categories.map(
           (row: { debugCategory: string }) => row.debugCategory,
         ),
       ).toEqual([...DEBUG_CATEGORIES]);
@@ -549,12 +549,14 @@ describe("getLogSummary", () => {
 
       expect(rowOf(summary, "apexCode")).toEqual({
         debugCategory: "apexCode",
+        level: "",
         operationCount: 2,
         durationSelfMs: 2500,
         selfPercentage: 20,
       });
       expect(rowOf(summary, "database")).toEqual({
         debugCategory: "database",
+        level: "",
         operationCount: 1,
         durationSelfMs: 1000,
         selfPercentage: 8,
@@ -592,7 +594,7 @@ describe("getLogSummary", () => {
       });
 
       expect(summary.durationTotalMs).toBe(0);
-      summary.timeByCategory.forEach(
+      summary.categories.forEach(
         (row: { operationCount: number; selfPercentage: number }) => {
           expect(row.operationCount).toBe(0);
           expect(row.selfPercentage).toBe(0);

@@ -258,15 +258,16 @@ it is confidently wrong.
 
 Two consequences:
 
-- **A category the header never declared is left out, not defaulted.** A level has no zero, so the
-  usual "report the fixed-schema field anyway" does not apply - naming a default would state a value
-  the log never did. Absent means unstated.
+- **A level the header never declared is never defaulted.** A level has no zero, so the usual
+  "report the fixed-schema field anyway" does not apply - naming a default would state a value the
+  log never did. `capturedAt` leaves the category out; `apexlog_get_summary`, whose rows are the
+  fixed eleven, states the level empty. Both mean unstated.
 - **No caveat prose and no magnitude.** The response reports the level and stops. A figure measured
   once against one org, with the harness not committed, cannot be re-derived by CI and will rot.
 
-`apexlog_get_summary` needs none of it: `timeByCategory` is keyed on `debugCategory` and
-`debugLevels` lists the level per category, so the join is the caller's to make and restating it
-would break "say it once".
+`apexlog_get_summary` states the level as a column of `categories`, beside the time each category
+took. Two tables keyed on `debugCategory` in the same order named every category twice and left the
+join to the caller.
 
 ### When a fact earns a grouping and not a column
 
