@@ -304,15 +304,22 @@ const DEFINITION_BUDGET = {
 const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
 
 /**
- * The whole of `tools/list` must stay under what 1.x charged for it: 247 + 171 +
- * 267 + 844, measured as `V1_RESPONSE_TOKENS` was. One figure rather than four,
- * because two of those tools were renamed and re-scoped, so a per-tool
- * comparison names a tool that no longer exists.
+ * What 1.x charged for the whole of `tools/list`: 247 + 171 + 267 + 844,
+ * measured as `V1_RESPONSE_TOKENS` was. One figure rather than four, because two
+ * of those tools were renamed and re-scoped, so a per-tool comparison names a
+ * tool that no longer exists. The README publishes it.
+ */
+const V1_DEFINITION_TOTAL = 1529;
+
+/**
+ * The ceiling `tools/list` must stay under, which starts at what 1.x charged and
+ * ratchets down with each saving. Separate from the released figure above, so
+ * lowering the gate cannot rewrite what the README says 1.x cost.
  *
  * The per-tool budgets cannot assert this on their own - a fifth tool would
  * pass all four and still put the total back over the baseline.
  */
-const TOTAL_DEFINITION_BUDGET = 1529;
+const TOTAL_DEFINITION_BUDGET = V1_DEFINITION_TOTAL;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -952,7 +959,7 @@ function comparison(before, after) {
 function renderTokenCost(costs, responses) {
   const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
   const share = ((100 * total) / CONTEXT_WINDOW).toFixed(1);
-  const [v1TotalCell, totalChange] = comparison(TOTAL_DEFINITION_BUDGET, total);
+  const [v1TotalCell, totalChange] = comparison(V1_DEFINITION_TOTAL, total);
 
   // Only the total compares with 1.x: per tool it would compare renamed,
   // re-scoped tools. The README's Token Cost prose states why.
