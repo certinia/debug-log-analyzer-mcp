@@ -56,15 +56,17 @@ Every request carries all four tool definitions, called or not - the standing co
 
 <!-- token-cost-definitions:start -->
 
-| Tool                           | Tokens                              | 1.x        | Change   |
-| ------------------------------ | ----------------------------------- | ---------- | -------- |
-| `apexlog_list_slow_operations` | ~539                                | ~247       | +118%    |
-| `apexlog_execute_anonymous`    | ~407                                | ~844       | -52%     |
-| `apexlog_list_limit_risks`     | ~150                                | ~267       | -44%     |
-| `apexlog_get_summary`          | ~145                                | ~171       | -15%     |
-| **Total**                      | **~1,241** (0.6% of a 200K context) | **~1,529** | **-19%** |
+| Tool                           | Tokens                                                      |
+| ------------------------------ | ----------------------------------------------------------- |
+| `apexlog_list_slow_operations` | ~539                                                        |
+| `apexlog_execute_anonymous`    | ~407                                                        |
+| `apexlog_list_limit_risks`     | ~150                                                        |
+| `apexlog_get_summary`          | ~145                                                        |
+| **Total**                      | **~1,241** (0.6% of a 200K context), **-19% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
+
+Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event.
 
 ### Calling a tool
 

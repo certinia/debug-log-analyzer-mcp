@@ -259,18 +259,11 @@ const TOKEN_BUDGET = {
 };
 
 /**
- * What 1.x cost, so the README can show what changed. Both sets were measured
- * once, through this same stdio path and this same estimator, against the server
- * built at b79328f - the commit before the shaping work. Static on purpose: a
- * released figure cannot change.
+ * What 1.x cost, so the README can show what changed. Measured once, through
+ * this same stdio path and this same estimator, against the server built at
+ * b79328f - the commit before the shaping work. Static on purpose: a released
+ * figure cannot change.
  */
-const V1_DEFINITION_TOKENS = {
-  apexlog_list_slow_operations: 247,
-  apexlog_get_summary: 171,
-  apexlog_list_limit_risks: 267,
-  apexlog_execute_anonymous: 844,
-};
-
 const V1_RESPONSE_TOKENS = {
   "apexlog_get_summary/governor-heavy": 293,
   "apexlog_get_summary/minimal": 249,
@@ -311,14 +304,15 @@ const DEFINITION_BUDGET = {
 const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
 
 /**
- * The whole of `tools/list` must stay under what 1.x charged for it. The per-tool
- * budgets cannot assert this on their own - a fifth tool would pass all four and
- * still put the total back over the baseline.
+ * The whole of `tools/list` must stay under what 1.x charged for it: 247 + 171 +
+ * 267 + 844, measured as `V1_RESPONSE_TOKENS` was. One figure rather than four,
+ * because two of those tools were renamed and re-scoped, so a per-tool
+ * comparison names a tool that no longer exists.
+ *
+ * The per-tool budgets cannot assert this on their own - a fifth tool would
+ * pass all four and still put the total back over the baseline.
  */
-const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
-  (sum, tokens) => sum + tokens,
-  0,
-);
+const TOTAL_DEFINITION_BUDGET = 1529;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -924,22 +918,21 @@ function renderTokenCost(costs, responses) {
   const share = ((100 * total) / CONTEXT_WINDOW).toFixed(1);
   const [v1TotalCell, totalChange] = comparison(TOTAL_DEFINITION_BUDGET, total);
 
+  // Only the total compares with 1.x: per tool it would compare renamed,
+  // re-scoped tools. The README's Token Cost prose states why.
   return [
     {
       id: "token-cost-definitions",
       table: renderTable(
-        ["Tool", "Tokens", "1.x", "Change"],
+        ["Tool", "Tokens"],
         [
           ...costs.map(({ name, tokens }) => [
             `\`${name}\``,
             `~${thousands(tokens)}`,
-            ...comparison(V1_DEFINITION_TOKENS[name], tokens),
           ]),
           [
             "**Total**",
-            `**~${thousands(total)}** (${share}% of a 200K context)`,
-            `**${v1TotalCell}**`,
-            `**${totalChange}**`,
+            `**~${thousands(total)}** (${share}% of a 200K context), **${totalChange} vs 1.x ${v1TotalCell}**`,
           ],
         ],
       ),
