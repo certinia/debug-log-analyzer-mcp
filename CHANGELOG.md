@@ -10,41 +10,40 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 
 ### Added
 
-- `apexlog_list_slow_operations` folds repeat calls into one row - by name, by `callerNamespace`, or by debug log category - each row totalling what the transaction saves if the group never runs, so the rows do not add up ([#101], [#126], [#127], [#131], [#138])
-- `apexlog_list_slow_operations` sorts by an operation's net heap allocation, not only time (`sortBy: "heapSelfNetBytes"`) ([#99], [#127], [#138])
-- `apexlog_list_slow_operations` returns the query optimiser's plan for each query it ranked ([#120])
-- `apexlog_list_slow_operations` returns `matchedCount`, so you can tell whether the page hid rows ([#63])
-- `apexlog_list_slow_operations` and `apexlog_list_limit_risks` report the level each debug log category was logged at ([#102], [#138])
-- `apexlog_execute_anonymous` reports progress, and says when the org logged at levels other than the ones asked for ([#65])
-- `--no-apex-execution` stops `apexlog_execute_anonymous` running Apex, while the log analysis tools keep working ([#52])
+- Report where the time went by category, and governor limits by namespace, in `apexlog_get_summary` ([#62], [#86], [#108])
+- Report the level each debug log category was captured at, in `apexlog_list_slow_operations` and `apexlog_list_limit_risks`, so you can see what the log could not show ([#102], [#138])
+- Group operations in `apexlog_list_slow_operations` by name, namespace, caller namespace or debug log category, so you can see whether the time went to one slow call or many small repeats ([#101], [#126], [#127], [#131], [#138])
+- Rank operations by the heap they retain in `apexlog_list_slow_operations`, not only by time ([#99], [#127], [#138])
+- Return the query optimiser's plan for each query `apexlog_list_slow_operations` ranked ([#120])
+- Report progress while `apexlog_execute_anonymous` connects, sets the trace flag, runs and writes, and report when the org logged at levels other than the ones asked for ([#65])
+- Add `--no-apex-execution`, which stops `apexlog_execute_anonymous` running Apex while the log analysis tools keep working ([#52])
+- Support the 2026-07-28 protocol revision - clients on the 2025 revisions keep working ([#103])
 
 ### Changed
 
-- **Breaking:** rename every tool with an `apexlog_` prefix: `analyze_apex_log_performance` is now `apexlog_list_slow_operations`. Full mapping in [Migrating from 1.x](MIGRATING.md) ([#107])
-- **Breaking:** `apexlog_execute_anonymous` refuses a production org, or one it cannot classify, unless you confirm the run or set `--allow-production-orgs` ([#52], [#93])
-- `apexlog_list_slow_operations` ranks every timed operation by self time - a callout or a query as well as a method - in place of the five lists and the prose advice of `analyze_apex_log_performance` ([#86], [#97], [#108], [#126])
-- `apexlog_get_summary` reports all thirteen governor limits, zeros included, plus time by category and limits by namespace, so a managed package spending your CPU time is visible ([#62], [#86], [#108])
-- `apexlog_get_summary` and `apexlog_list_limit_risks` report each governor limit's peak, not the figure the transaction ended on ([#97])
-- `apexlog_list_limit_risks` returns one table of the limits nearest their ceiling, covering thirteen where `find_performance_bottlenecks` covered six ([#108])
-- `apexlog_get_summary` says whether the log was truncated, by what, and how much it skipped ([#100])
-- `apexlog_list_slow_operations` renames its parameters and row fields - `topMethods` is now `limit`, `minDuration` is `minSelfMs`, and `kind` is the platform's debug log category and event type, `database,SOQL_EXECUTE_BEGIN` - and takes a list in every filter ([#86], [#97], [#108], [#138])
-- `apexlog_execute_anonymous` renames `success` to `succeeded`, and reports a duration that agrees with `apexlog_get_summary` ([#65], [#109])
-- `apexlog_list_slow_operations` caps a response by size, not by row count, so one huge log cannot flood the reply: the biggest of 124 real logs returns 15,511 tokens, down from 35,520 ([#108])
-- Cut tool responses with no fact lost - `apexlog_list_limit_risks` by 54%, `apexlog_execute_anonymous` by 30%. `apexlog_get_summary` costs 24% more, for the two tables it gained ([#62], [#86], [#97], [#108], [#109], [#120], [#138])
-- Cut the cost of having the server connected by 9%, and let a client cache the tool definitions for an hour, though `apexlog_list_slow_operations` costs 145% more for what it now selects and ranks ([#87], [#94], [#99], [#101], [#103], [#126], [#127], [#138])
-- The server starts in 55 ms, down from 290 ms, and reuses the log it parsed, so a second question about the same file skips the parse ([#88], [#165])
+- **Breaking:** rename every tool with an `apexlog_` prefix - `analyze_apex_log_performance` is now `apexlog_list_slow_operations`. Update your permission lists and prompts; the full mapping is in [Migrating from 1.x](MIGRATING.md) ([#107])
+- **Breaking:** refuse to run Apex from `apexlog_execute_anonymous` for production orgs or orgs whose type cannot be determined, unless you confirm. Clients name the org and show the Apex. Allow with `--allow-production-orgs`. Sandbox, scratch, trial and Developer orgs run unprompted ([#52], [#93])
+- Rank every timed operation by self time in one `apexlog_list_slow_operations` list - instead of the five lists and the prose advice of `analyze_apex_log_performance` ([#86], [#97], [#108], [#126])
+- Report all thirteen governor limits in `apexlog_get_summary`, zeros included where 1.x reported only those above zero, and state each limit's unit ([#62], [#86], [#108], [#167])
+- Report the limits nearest their ceiling in `apexlog_list_limit_risks` as one table, beside the threshold that selected it, in place of the four overlapping sections of `find_performance_bottlenecks` ([#108])
+- Report failed logs, partial logs, fatal errors and their exception messages in `apexlog_get_summary` ([#97], [#100])
+- Cut tool responses with no fact lost - `apexlog_list_limit_risks` by 58%, and `apexlog_list_slow_operations` ~2.2× smaller, capped by size rather than row count and stating how many rows matched ([#63], [#97], [#108], [#109], [#120], [#138])
+- Reduce the tool definitions token cost on every request by 9%, ~1,529 to ~1,393. Clients can also cache them for an hour ([#87], [#94], [#99], [#101], [#103], [#126], [#127], [#138])
+- Start the server in 55 ms, down from 290 ms, and answer a second question about the same log without parsing it again ([#88], [#165])
 
 ### Fixed
 
-- `apexlog_execute_anonymous` returns the log for the Apex you ran, not the newest log for the user ([#65])
-- `apexlog_execute_anonymous` returns an absolute log path, and warns when `outputDir` lands outside the folders the client opened ([#109])
-- The log analysis tools name the real reason a log file cannot be opened. A permission error used to read as "Log file not found" ([#109])
-- `apexlog_execute_anonymous` is marked destructive, so clients stop running it unprompted ([#52])
+- Fix incorrectly reported timings for callouts in `apexlog_list_slow_operations`, which were counted in the calling method's self time ([#97], [#138])
+- Fix understated governor limit usage in `apexlog_get_summary` and `apexlog_list_limit_risks`, which reported the usage the transaction ended on rather than its peak ([#97])
+- Return the debug log of the run `apexlog_execute_anonymous` made, where the newest log for the user could be another process's ([#65])
+- Return an absolute log path from `apexlog_execute_anonymous`, and warn when `outputDir` resolves outside every folder the client opened ([#109])
+- Name the real reason a log file cannot be opened - a permission error used to read as "Log file not found" ([#109])
+- Mark `apexlog_execute_anonymous` destructive, so clients stop running it unprompted ([#52])
 
 ### Removed
 
-- **Breaking:** remove `--allowed-orgs` and its special tokens. The flag is accepted, ignored and warns, and the org's type decides instead ([#52])
-- **Breaking:** drop Node.js 20 (end of life April 2026). Minimum node version is 22
+- **Breaking:** remove `--allowed-orgs` and its special tokens - the flag is accepted, ignored and warns, and the org's type decides instead ([#52])
+- **Breaking:** drop Node.js 20 (end of life April 2026) - Node.js 22 is the minimum
 
 ## [1.0.0] - 2026-03-20
 
@@ -84,3 +83,4 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 [#99]: https://github.com/certinia/debug-log-analyzer-mcp/issues/99
 [#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
 [#165]: https://github.com/certinia/debug-log-analyzer-mcp/issues/165
+[#167]: https://github.com/certinia/debug-log-analyzer-mcp/issues/167
