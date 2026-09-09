@@ -37,9 +37,11 @@ Then ask your assistant to analyze a log. `apexlog_execute_anonymous` also needs
 - "Are we approaching any governor limits in this transaction?"
 - "Run this Apex against my scratch org and analyze the performance"
 
-Keeping the server connected costs ~1,393 tokens, 0.7% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~1,232 tokens, 0.6% of a 200K context. See [Token Cost](#token-cost).
 
 ## Tools Reference
+
+The analysis tools take an absolute path to a `.log` file.
 
 Every tool returns one flat table, encoded as [TOON](https://github.com/toon-format/toon). Nothing is repeated, and nothing is dropped to save space.
 
@@ -84,15 +86,15 @@ Watch for `ENTERING_MANAGED_PKG`. It is time a package spent where the log shows
 
 | Parameter       | Type     | Required | Description |
 | --------------- | -------- | -------- | --- |
-| `logFilePath`   | string   | Yes      | Absolute path to the Apex debug log file (.log) |
+| `logFilePath`   | string   | Yes      | Absolute path |
 | `debugCategory` | string[] | No       | Rank only these debug log categories |
 | `type`          | string[] | No       | Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY |
 | `namespace`     | string[] | No       | Rank only these namespaces |
 | `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0), whichever sortBy is used |
 | `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large |
 | `offset`        | number   | No       | Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit. |
-| `groupBy`       | string   | No       | Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. Pass none to rank each call on its own. |
-| `sortBy`        | string   | No       | Rank on (default: durationSelfMs). heapSelfNetBytes adds that column. |
+| `groupBy`       | string   | No       | Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. |
+| `sortBy`        | string   | No       | Default durationSelfMs. heapSelfNetBytes adds that column. |
 
 <!-- params-apexlog_list_slow_operations:end -->
 
@@ -129,9 +131,9 @@ All thirteen governor limits are listed, zeros included.
 
 <!-- params-apexlog_get_summary:start -->
 
-| Parameter     | Type   | Required | Description                                     |
-| ------------- | ------ | -------- | ----------------------------------------------- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
+| Parameter     | Type   | Required | Description   |
+| ------------- | ------ | -------- | ------------- |
+| `logFilePath` | string | Yes      | Absolute path |
 
 <!-- params-apexlog_get_summary:end -->
 
@@ -154,7 +156,7 @@ The governor limits nearest their ceiling, worst first.
 
 | Parameter     | Type   | Required | Description |
 | ------------- | ------ | -------- | --- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
+| `logFilePath` | string | Yes      | Absolute path |
 | `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
 
 <!-- params-apexlog_list_limit_risks:end -->
@@ -197,15 +199,17 @@ Every request carries all four tool definitions, whether you call them or not. E
 
 <!-- token-cost-definitions:start -->
 
-| Tool                           | Tokens                              | 1.x        | Change  |
-| ------------------------------ | ----------------------------------- | ---------- | ------- |
-| `apexlog_list_slow_operations` | ~606                                | ~247       | +145%   |
-| `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%    |
-| `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%    |
-| `apexlog_get_summary`          | ~174                                | ~171       | +2%     |
-| **Total**                      | **~1,393** (0.7% of a 200K context) | **~1,529** | **-9%** |
+| Tool                           | Tokens                                                      |
+| ------------------------------ | ----------------------------------------------------------- |
+| `apexlog_list_slow_operations` | ~530                                                        |
+| `apexlog_execute_anonymous`    | ~407                                                        |
+| `apexlog_list_limit_risks`     | ~150                                                        |
+| `apexlog_get_summary`          | ~145                                                        |
+| **Total**                      | **~1,232** (0.6% of a 200K context), **-19% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
+
+Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event.
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 
@@ -238,7 +242,7 @@ The [Quick Start](#quick-start) config gives you all four tools.
 | `production` | Anything else                     | Confirmation required |
 | `unknown`    | The org could not be queried      | Confirmation required |
 
-For a production org, `--allow-production-orgs` runs it anyway. Otherwise the server asks you to confirm, naming the org and showing the Apex. That needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/2025-06-18/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one run.
+For a production org, `--allow-production-orgs` runs it anyway. Otherwise the server asks you to confirm, naming the org and showing the Apex. That needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one run.
 
 An org that cannot be identified is treated as production, so a network or permissions problem can never quietly downgrade one.
 

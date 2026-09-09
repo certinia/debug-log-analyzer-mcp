@@ -17,11 +17,14 @@ import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
  * and not where the caller is. Resolving would read a different file, or none,
  * and report neither. Refinements do not reach the JSON schema, so this costs
  * no tokens in the tool definition - `pnpm run eval` holds that to its budget.
+ *
+ * Two words of describe: the server `instructions` state the absolute `.log`
+ * path once, which is where a fact true of every tool belongs.
  */
 export const logFilePathSchema = z
   .string()
   .refine(isAbsolute, "must be an absolute path")
-  .describe("Absolute path to the Apex debug log file (.log)");
+  .describe("Absolute path");
 
 type CachedLog = {
   path: string;

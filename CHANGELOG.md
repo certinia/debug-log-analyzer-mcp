@@ -28,7 +28,7 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 - Report the limits nearest their ceiling in `apexlog_list_limit_risks` as one table, beside the threshold that selected it, in place of the four overlapping sections of `find_performance_bottlenecks` ([#108])
 - Report failed logs, partial logs, fatal errors and their exception messages in `apexlog_get_summary` ([#97], [#100])
 - Cut tool responses with no fact lost - `apexlog_list_limit_risks` by 58%, and `apexlog_list_slow_operations` ~2.2× smaller, capped by size rather than row count and stating how many rows matched ([#63], [#97], [#108], [#109], [#120], [#138])
-- Reduce the tool definitions token cost on every request by 9%, ~1,529 to ~1,393. Clients can also cache them for an hour ([#87], [#94], [#99], [#101], [#103], [#126], [#127], [#138])
+- Reduce the tool definitions token cost on every request by 19%, ~1,529 to ~1,232. Clients can also cache them for an hour ([#87], [#94], [#99], [#101], [#103], [#126], [#127], [#138], [#188], [#189])
 - Start the server in 55 ms, down from 290 ms, and answer a second question about the same log without parsing it again ([#88], [#165])
 
 ### Fixed
@@ -84,3 +84,5 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 [#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
 [#165]: https://github.com/certinia/debug-log-analyzer-mcp/issues/165
 [#167]: https://github.com/certinia/debug-log-analyzer-mcp/issues/167
+[#188]: https://github.com/certinia/debug-log-analyzer-mcp/issues/188
+[#189]: https://github.com/certinia/debug-log-analyzer-mcp/issues/189

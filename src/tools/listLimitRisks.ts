@@ -9,6 +9,7 @@ import type {
   Limits,
 } from "@apexdevtools/apex-log-parser/types";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
+import { toolInputSchema } from "./inputSchema.js";
 import { capturedAt, type DeclaredLevel } from "./operations.js";
 import {
   limitGatingCategory,
@@ -71,8 +72,8 @@ export interface LimitRiskResult {
 export const listLimitRisksToolConfig = {
   title: "List Apex Log Limit Risks",
   description:
-    "List the governor limits an Apex log transaction has nearly consumed - CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote - worst first, with how much of each was used. Best for checking whether a transaction is at risk of failing on a limit.",
-  inputSchema: listLimitRisksInputSchema,
+    "List the governor limits an Apex log transaction has nearly consumed - CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote - worst first, with how much of each was used",
+  inputSchema: toolInputSchema(listLimitRisksInputSchema),
   annotations: {
     readOnlyHint: true,
     openWorldHint: false,

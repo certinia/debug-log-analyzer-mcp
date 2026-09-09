@@ -19,6 +19,7 @@ import {
   TRACE_CATEGORIES,
 } from "../salesforce/debugLevels.js";
 import { APEX_EXECUTION_DISABLED_MESSAGE } from "../policy/orgExecutionPolicy.js";
+import { toolInputSchema } from "./inputSchema.js";
 
 const logLevelSchema = z.enum(LOG_LEVELS);
 
@@ -85,7 +86,10 @@ export function executeAnonymousToolConfig(apexExecutionDisabled = false) {
     description: apexExecutionDisabled
       ? `[DISABLED on this server] ${EXECUTE_ANONYMOUS_DESCRIPTION} ${APEX_EXECUTION_DISABLED_MESSAGE}`
       : EXECUTE_ANONYMOUS_DESCRIPTION,
-    inputSchema: executeAnonymousInputSchema,
+    inputSchema: toolInputSchema(executeAnonymousInputSchema),
+    // All four hints, where the read-only tools state only the two that differ
+    // from the spec default: this is the one tool where a client that misreads a
+    // default runs Apex against an org.
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,

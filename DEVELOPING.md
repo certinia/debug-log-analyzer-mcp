@@ -321,8 +321,8 @@ user questions are still answerable, that no figure appears twice, that the payl
 budget, and that it matches its golden file. Run it - and `pnpm run eval:update` to re-record the
 goldens - for any change to a response shape; the golden diff *is* the review of the change.
 
-Two further checks run once per run: the definition budget described in
-[Shaping Tool Definitions](#️-shaping-tool-definitions), and the generated README blocks - both
+Further checks run once per run: the definition budgets in [`scripts/eval.mjs`](scripts/eval.mjs),
+and the generated README blocks - both
 [Token Cost](README.md#token-cost) tables, each tool's parameter table, and the shape of each
 response. A change that moves any of them fails until `pnpm run eval:update` regenerates the README
 with it, so the prose beside those blocks is the only part you edit by hand.
@@ -335,45 +335,18 @@ If you change a tool's output shape, update the [CHANGELOG](CHANGELOG.md) and th
 
 ## 🏷️ Shaping Tool Definitions
 
-A response is paid for when a tool is called. A **definition** is paid for on every request, called or
-not, because the client sends all four with each one. Server `instructions` sit between them: sent once
-per session. So put each fact where its audience reads it, and at the frequency it is worth. A guarantee
-that holds for every tool - "a zero is a measured zero" - belongs in `instructions`, not repeated in
-four descriptions. A rule that applies to one tool belongs in that tool's description.
+A definition is charged on every request, called or not. Server `instructions` are charged once per
+session, a response only when the tool is called. So a fact true of every tool belongs in
+`instructions`, and a fact true of one belongs in that tool's description.
 
-### Budget the whole wire object
+The [MCP spec](https://modelcontextprotocol.io/specification/latest/server/tools) covers the
+rest - what `title`, `description` and each annotation are for. Where it is silent, `pnpm run eval`
+is the rule, not this file: it measures every wire object in a live `tools/list` and fails with the
+reason. Read `scripts/eval.mjs` for the current budgets, and the definition tests in `tests/` for
+the annotations, which no budget with headroom would notice coming back.
 
-`pnpm run eval` sums `estimateTokens(JSON.stringify(tool))` for each tool in a live `tools/list`
-response, so the budget covers `name`, `title`, `description`, `inputSchema`, `annotations` and
-everything else the client receives. A budget over a subset of the fields guards a subset of the cost:
-it would let `title` or `annotations` grow without a word of complaint.
-
-Three assertions run against those figures:
-
-- **Per-tool budgets** (`DEFINITION_BUDGET`), with about 5% headroom, so one careless sentence fails.
-- **A total under the 1.x baseline** (`V1_DEFINITION_TOKENS`, measured at `b79328f` over this same
-  stdio path). The total also catches a fifth tool, which no per-tool budget can.
-- **Selection keywords** (`SELECTION_KEYWORDS`), one or two phrases per tool. A description is a
-  selection prompt: clients match the words in it, so a trim that saves tokens can cost discovery.
-  The keyword assertion makes that trade visible instead of silent.
-
-The unit tests pin the parts a token budget with headroom would not notice, such as an
-[annotation](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-annotations)
-hint quietly coming back.
-
-### Only annotate what carries information
-
-`destructiveHint` and `idempotentHint` are defined as meaningful only when `readOnlyHint` is false, so
-the three read-only tools declare `readOnlyHint: true` and `openWorldHint: false` and nothing more -
-both differ from the spec default, and both say something. `apexlog_execute_anonymous` keeps all four hints; it
-is the one tool where a client that misreads a default runs Apex against an org.
-
-### Know the floor
-
-Two fields per tool come from the SDK and cannot be removed through a public API: `$schema`, which
-zod's `toJSONSchema` emits (~52 tokens across the four tools), and `execution`, which `McpServer` adds
-(~40). About 90 tokens of the total are not ours to spend, and are not worth reaching into SDK
-internals for.
+One trade a budget cannot see: a description is a selection prompt, so a trim that saves tokens can
+cost discovery. `SELECTION_KEYWORDS` makes that fail loudly instead of passing quietly.
 
 ## 🧪 Testing Your Changes
 

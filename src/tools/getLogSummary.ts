@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
+import { toolInputSchema } from "./inputSchema.js";
 import {
   declaredLevels,
   listOperations,
@@ -42,8 +43,8 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview before deeper analysis.",
-  inputSchema: getLogSummaryInputSchema,
+    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview.",
+  inputSchema: toolInputSchema(getLogSummaryInputSchema),
   annotations: {
     readOnlyHint: true,
     openWorldHint: false,

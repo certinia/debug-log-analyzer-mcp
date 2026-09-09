@@ -259,18 +259,11 @@ const TOKEN_BUDGET = {
 };
 
 /**
- * What 1.x cost, so the README can show what changed. Both sets were measured
- * once, through this same stdio path and this same estimator, against the server
- * built at b79328f - the commit before the shaping work. Static on purpose: a
- * released figure cannot change.
+ * What 1.x cost, so the README can show what changed. Measured once, through
+ * this same stdio path and this same estimator, against the server built at
+ * b79328f - the commit before the shaping work. Static on purpose: a released
+ * figure cannot change.
  */
-const V1_DEFINITION_TOKENS = {
-  apexlog_list_slow_operations: 247,
-  apexlog_get_summary: 171,
-  apexlog_list_limit_risks: 267,
-  apexlog_execute_anonymous: 844,
-};
-
 const V1_RESPONSE_TOKENS = {
   "apexlog_get_summary/governor-heavy": 293,
   "apexlog_get_summary/minimal": 249,
@@ -288,36 +281,17 @@ const V1_RESPONSE_TOKENS = {
  * not a silent tax on every request.
  */
 const DEFINITION_BUDGET = {
-  // Raised for the five selection parameters, which the caller acts on: without
-  // them a ranking over every operation kind can only be read whole, and for the
-  // warning that a grouped durationTotalMs must not be summed across rows, and
-  // for what grouping by default now states about the row it returns, and for
-  // callerNamespace, which needs a clause to say what it attributes, and for the
-  // clause #120 added to say the response also carries the query plans, and
-  // for `offset` beside the whole-number floor on `limit` - a schema that
-  // states `integer` and `minimum` costs tokens, and buys a `limit` of -5 no
-  // longer returning the whole ranking bar its five fastest rows, and for the
-  // clause saying
-  // a plan names its row except under a namespace grouping - an agent that
-  // assumes the query text is always there reads `undefined` - and for telling
-  // a caller to advance `offset` by the rows it got, since the page budget can
-  // return fewer than `limit` and paging by `limit` would then skip rows, and
-  // for `sortBy`, which buys the one question self time cannot answer: on the
-  // 40 logs of a 123-log corpus that record an allocation, a heap ranking's top
-  // ten holds a median six rows the self-time top ten never returns.
-  //
-  // Raised again by #138, which replaced the one `kind` filter with the two axes
-  // the log itself has - `debugCategory` and the event `type` - and widened
-  // both, and `namespace`, to arrays, so one call can ask for a family. `type`
-  // takes free strings and names three examples rather than an enum, for the
-  // reason recorded on the field itself. The `groupBy` clause grew by the
-  // category fold, which is the one grouping that states no type or name.
-  apexlog_list_slow_operations: 610,
-  // Raised for the two facts the summary gained: per-namespace limit usage, and
+  // The ranking is dear because it carries eight selection parameters, and each
+  // buys a question the response cannot be read for. The one of them the schema
+  // cannot show the case for is `sortBy`: on the 40 logs of a 123-log corpus that
+  // record an allocation, a heap ranking's top ten holds a median six rows the
+  // self-time top ten never returns.
+  apexlog_list_slow_operations: 557,
+  // Covers the two facts the summary gained: per-namespace limit usage, and
   // time by category.
-  apexlog_get_summary: 180,
-  apexlog_list_limit_risks: 210,
-  apexlog_execute_anonymous: 449,
+  apexlog_get_summary: 153,
+  apexlog_list_limit_risks: 158,
+  apexlog_execute_anonymous: 428,
 };
 
 /**
@@ -330,14 +304,10 @@ const DEFINITION_BUDGET = {
 const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
 
 /**
- * The whole of `tools/list` must stay under what 1.x charged for it. The per-tool
- * budgets cannot assert this on their own - a fifth tool would pass all four and
- * still put the total back over the baseline.
+ * What 1.x charged for the whole of `tools/list`: 247 + 171 + 267 + 844,
+ * measured as `V1_RESPONSE_TOKENS` was. The README publishes it.
  */
-const TOTAL_DEFINITION_BUDGET = Object.values(V1_DEFINITION_TOKENS).reduce(
-  (sum, tokens) => sum + tokens,
-  0,
-);
+const V1_DEFINITION_TOTAL = 1529;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -808,6 +778,51 @@ function definitionCosts(tools) {
     .sort((a, b) => b.tokens - a.tokens);
 }
 
+/**
+ * The fields `toolInputSchema` drops, back on the wire: the JSON Schema dialect
+ * and a bound at zod's safe-integer figure. A tool registered without the
+ * wrapper states both, and a budget with 5% headroom would not notice.
+ */
+function checkNothingUnreadOnTheWire(tools, failures) {
+  for (const tool of tools) {
+    if (tool.inputSchema?.$schema !== undefined) {
+      failures.push(
+        `${tool.name}: inputSchema states its JSON Schema dialect, which MCP fixes and no client reads - wrap the shape in toolInputSchema`,
+      );
+    }
+    for (const where of safeIntegerBounds(tool.inputSchema, [])) {
+      failures.push(
+        `${tool.name}: ${where} states zod's safe-integer bound, which describes the double and not the parameter`,
+      );
+    }
+  }
+}
+
+/**
+ * Every place in a JSON Schema stating a safe-integer bound, by path. Recursive
+ * over values, because the bound belongs to the number: an `.int()` inside an
+ * array or a record states it a level down.
+ */
+function safeIntegerBounds(schema, path) {
+  if (typeof schema !== "object" || schema === null) {
+    return [];
+  }
+  const stated = [schema.minimum, schema.maximum].some(
+    (bound) =>
+      typeof bound === "number" && Math.abs(bound) === Number.MAX_SAFE_INTEGER,
+  );
+
+  return [
+    ...(stated ? [path.join(".") || "the schema"] : []),
+    ...Object.entries(schema).flatMap(([keyword, value]) =>
+      safeIntegerBounds(
+        value,
+        keyword === "properties" ? path : [...path, keyword],
+      ),
+    ),
+  ];
+}
+
 function checkDefinitionBudget(costs, failures) {
   for (const { name, tokens } of costs) {
     const budget = DEFINITION_BUDGET[name];
@@ -824,10 +839,18 @@ function checkDefinitionBudget(costs, failures) {
       failures.push(`${name}: budgeted but absent from tools/list`);
     }
   }
-  const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
-  if (total > TOTAL_DEFINITION_BUDGET) {
+  // The budgets themselves, not the measurements: every tool has one - the loop
+  // above fails a tool that does not - so a run under all four is under their
+  // sum, and a fifth tool cannot slip past. What no per-tool budget can say is
+  // that the sum is still under what 1.x charged, which is the figure the README
+  // publishes as the saving.
+  const budgeted = Object.values(DEFINITION_BUDGET).reduce(
+    (sum, budget) => sum + budget,
+    0,
+  );
+  if (budgeted > V1_DEFINITION_TOTAL) {
     failures.push(
-      `tools/list is ~${total} tokens, over the ${TOTAL_DEFINITION_BUDGET} that 1.x charged for it`,
+      `the definition budgets sum to ${budgeted}, over the ${V1_DEFINITION_TOTAL} that 1.x charged for tools/list`,
     );
   }
 }
@@ -917,24 +940,21 @@ function comparison(before, after) {
 function renderTokenCost(costs, responses) {
   const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
   const share = ((100 * total) / CONTEXT_WINDOW).toFixed(1);
-  const [v1TotalCell, totalChange] = comparison(TOTAL_DEFINITION_BUDGET, total);
+  const [v1TotalCell, totalChange] = comparison(V1_DEFINITION_TOTAL, total);
 
   return [
     {
       id: "token-cost-definitions",
       table: renderTable(
-        ["Tool", "Tokens", "1.x", "Change"],
+        ["Tool", "Tokens"],
         [
           ...costs.map(({ name, tokens }) => [
             `\`${name}\``,
             `~${thousands(tokens)}`,
-            ...comparison(V1_DEFINITION_TOKENS[name], tokens),
           ]),
           [
             "**Total**",
-            `**~${thousands(total)}** (${share}% of a 200K context)`,
-            `**${v1TotalCell}**`,
-            `**${totalChange}**`,
+            `**~${thousands(total)}** (${share}% of a 200K context), **${totalChange} vs 1.x ${v1TotalCell}**`,
           ],
         ],
       ),
@@ -1118,6 +1138,7 @@ async function main() {
     const { tools } = await client.toolsList();
     const costs = definitionCosts(tools);
     checkDefinitionBudget(costs, failures);
+    checkNothingUnreadOnTheWire(tools, failures);
     checkSelectionKeywords(costs, failures);
     await checkReadme(
       [
