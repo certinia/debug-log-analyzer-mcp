@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
+import { toolInputSchema } from "./inputSchema.js";
 import {
   capturedAt,
   GROUP_BY,
@@ -63,6 +64,16 @@ const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
     b.heapSelfNetBytes - a.heapSelfNetBytes || bySelfTime(a, b),
 };
 
+/**
+ * The largest page and the furthest offset the schema accepts.
+ *
+ * Stated, because `.int()` alone puts zod's safe-integer maximum,
+ * `9007199254740991`, on the wire for both fields - 5 tokens of every request to
+ * bound a page that `PAGE_CHAR_BUDGET` cuts long before either figure.
+ */
+const MAX_PAGE_SIZE = 1_000;
+const MAX_OFFSET = 1_000_000;
+
 export const listSlowOperationsInputSchema = {
   logFilePath: logFilePathSchema,
   debugCategory: z
@@ -86,16 +97,21 @@ export const listSlowOperationsInputSchema = {
     .describe(
       "Drop operations below this self time (default: 0), whichever sortBy is used",
     ),
+  // `.min(0)` so a negative page size cannot read as "every row bar the fastest".
   limit: z
     .number()
     .int()
     .min(0)
+    .max(MAX_PAGE_SIZE)
     .optional()
     .describe("Page size (default: 10); fewer if the page would be too large"),
+  // The describe says advance by the rows you got, because the page budget can
+  // return fewer than `limit` and paging by `limit` would then skip rows.
   offset: z
     .number()
     .int()
     .min(0)
+    .max(MAX_OFFSET)
     .optional()
     .describe(
       "Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.",
@@ -141,7 +157,7 @@ export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
     "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
-  inputSchema: listSlowOperationsInputSchema,
+  inputSchema: toolInputSchema(listSlowOperationsInputSchema),
   annotations: {
     readOnlyHint: true,
     openWorldHint: false,

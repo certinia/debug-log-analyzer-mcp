@@ -31,7 +31,7 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 - `apexlog_execute_anonymous` renames `success` to `succeeded`, and reports a duration that agrees with `apexlog_get_summary` ([#65], [#109])
 - `apexlog_list_slow_operations` caps a response by size, not by row count, so one huge log cannot flood the reply: the biggest of 124 real logs returns 15,511 tokens, down from 35,520 ([#108])
 - Cut tool responses with no fact lost - `apexlog_list_limit_risks` by 54%, `apexlog_execute_anonymous` by 30%. `apexlog_get_summary` costs 24% more, for the two tables it gained ([#62], [#86], [#97], [#108], [#109], [#120], [#138])
-- Cut the cost of having the server connected by 15%, and let a client cache the tool definitions for an hour, though `apexlog_list_slow_operations` costs more for what it now selects and ranks ([#87], [#94], [#99], [#101], [#103], [#126], [#127], [#138], [#188])
+- Cut the cost of having the server connected by 19%, and let a client cache the tool definitions for an hour, though `apexlog_list_slow_operations` costs more for what it now selects and ranks ([#87], [#94], [#99], [#101], [#103], [#126], [#127], [#138], [#188], [#189])
 - The server starts in 55 ms, down from 290 ms, and reuses the log it parsed, so a second question about the same file skips the parse ([#88], [#165])
 
 ### Fixed
@@ -85,3 +85,4 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 [#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
 [#165]: https://github.com/certinia/debug-log-analyzer-mcp/issues/165
 [#188]: https://github.com/certinia/debug-log-analyzer-mcp/issues/188
+[#189]: https://github.com/certinia/debug-log-analyzer-mcp/issues/189

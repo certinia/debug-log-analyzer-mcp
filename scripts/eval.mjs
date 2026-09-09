@@ -293,12 +293,12 @@ const DEFINITION_BUDGET = {
   // cannot show the case for is `sortBy`: on the 40 logs of a 123-log corpus that
   // record an allocation, a heap ranking's top ten holds a median six rows the
   // self-time top ten never returns.
-  apexlog_list_slow_operations: 586,
+  apexlog_list_slow_operations: 566,
   // Covers the two facts the summary gained: per-namespace limit usage, and
   // time by category.
-  apexlog_get_summary: 167,
-  apexlog_list_limit_risks: 173,
-  apexlog_execute_anonymous: 443,
+  apexlog_get_summary: 152,
+  apexlog_list_limit_risks: 158,
+  apexlog_execute_anonymous: 427,
 };
 
 /**
@@ -789,6 +789,30 @@ function definitionCosts(tools) {
     .sort((a, b) => b.tokens - a.tokens);
 }
 
+/**
+ * Two things zod emits that no client reads, and that a budget with 5% headroom
+ * would not notice coming back: the dialect `$schema` states (14 tokens a tool,
+ * dropped by `toolInputSchema`) and the safe-integer `maximum` an `.int()` with
+ * no ceiling of its own carries (3 tokens a field, see `MAX_PAGE_SIZE`).
+ */
+function checkNothingUnreadOnTheWire(tools, failures) {
+  for (const tool of tools) {
+    if (tool.inputSchema?.$schema !== undefined) {
+      failures.push(
+        `${tool.name}: inputSchema states its JSON Schema dialect, which MCP fixes and no client reads - wrap the shape in toolInputSchema`,
+      );
+    }
+    const properties = Object.entries(tool.inputSchema?.properties ?? {});
+    for (const [property, schema] of properties) {
+      if (schema.maximum === Number.MAX_SAFE_INTEGER) {
+        failures.push(
+          `${tool.name}: ${property} states zod's safe-integer maximum - give it a ceiling of its own`,
+        );
+      }
+    }
+  }
+}
+
 function checkDefinitionBudget(costs, failures) {
   for (const { name, tokens } of costs) {
     const budget = DEFINITION_BUDGET[name];
@@ -1099,6 +1123,7 @@ async function main() {
     const { tools } = await client.toolsList();
     const costs = definitionCosts(tools);
     checkDefinitionBudget(costs, failures);
+    checkNothingUnreadOnTheWire(tools, failures);
     checkSelectionKeywords(costs, failures);
     await checkReadme(
       [
