@@ -305,21 +305,9 @@ const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
 
 /**
  * What 1.x charged for the whole of `tools/list`: 247 + 171 + 267 + 844,
- * measured as `V1_RESPONSE_TOKENS` was. One figure rather than four, because two
- * of those tools were renamed and re-scoped, so a per-tool comparison names a
- * tool that no longer exists. The README publishes it.
+ * measured as `V1_RESPONSE_TOKENS` was. The README publishes it.
  */
 const V1_DEFINITION_TOTAL = 1529;
-
-/**
- * The ceiling `tools/list` must stay under, which starts at what 1.x charged and
- * ratchets down with each saving. Separate from the released figure above, so
- * lowering the gate cannot rewrite what the README says 1.x cost.
- *
- * The per-tool budgets cannot assert this on their own - a fifth tool would
- * pass all four and still put the total back over the baseline.
- */
-const TOTAL_DEFINITION_BUDGET = V1_DEFINITION_TOTAL;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -791,10 +779,9 @@ function definitionCosts(tools) {
 }
 
 /**
- * Two things zod emits that no client reads, and that a budget with 5% headroom
- * would not notice coming back: the dialect `$schema` states (14 tokens a tool,
- * dropped by `toolInputSchema`) and the safe-integer bounds an `.int()` carries
- * where it states no ceiling or floor of its own (see `MAX_PAGE_SIZE`).
+ * The fields `toolInputSchema` drops, back on the wire: the JSON Schema dialect
+ * and a bound at zod's safe-integer figure. A tool registered without the
+ * wrapper states both, and a budget with 5% headroom would not notice.
  */
 function checkNothingUnreadOnTheWire(tools, failures) {
   for (const tool of tools) {
@@ -803,21 +790,18 @@ function checkNothingUnreadOnTheWire(tools, failures) {
         `${tool.name}: inputSchema states its JSON Schema dialect, which MCP fixes and no client reads - wrap the shape in toolInputSchema`,
       );
     }
-    for (const where of safeIntegerBounds(tool.inputSchema ?? {}, [])) {
+    for (const where of safeIntegerBounds(tool.inputSchema, [])) {
       failures.push(
-        `${tool.name}: ${where} states zod's safe-integer bound - state a floor and a ceiling of its own`,
+        `${tool.name}: ${where} states zod's safe-integer bound, which describes the double and not the parameter`,
       );
     }
   }
 }
 
 /**
- * Every place in a JSON Schema stating a safe-integer bound, by path.
- *
- * Recursive because the bound is a property of the number, not of the tool: an
- * `.int()` inside an array or an object states it one level down, where a check
- * on the top-level properties reads nothing. `minimum` as well as `maximum`,
- * because `-9007199254740991` is a character longer than the ceiling.
+ * Every place in a JSON Schema stating a safe-integer bound, by path. Recursive
+ * over values, because the bound belongs to the number: an `.int()` inside an
+ * array or a record states it a level down.
  */
 function safeIntegerBounds(schema, path) {
   if (typeof schema !== "object" || schema === null) {
@@ -827,26 +811,15 @@ function safeIntegerBounds(schema, path) {
     (bound) =>
       typeof bound === "number" && Math.abs(bound) === Number.MAX_SAFE_INTEGER,
   );
-  const named = path.length ? path.join(".") : "the schema";
 
   return [
-    ...(stated ? [named] : []),
-    ...Object.entries(schema).flatMap(([keyword, value]) => {
-      if (keyword === "properties" || keyword === "patternProperties") {
-        return Object.entries(value ?? {}).flatMap(([property, child]) =>
-          safeIntegerBounds(child, [...path, property]),
-        );
-      }
-      if (["items", "additionalProperties", "not"].includes(keyword)) {
-        return safeIntegerBounds(value, [...path, keyword]);
-      }
-      if (["anyOf", "oneOf", "allOf", "prefixItems"].includes(keyword)) {
-        return (value ?? []).flatMap((child, index) =>
-          safeIntegerBounds(child, [...path, `${keyword}[${index}]`]),
-        );
-      }
-      return [];
-    }),
+    ...(stated ? [path.join(".") || "the schema"] : []),
+    ...Object.entries(schema).flatMap(([keyword, value]) =>
+      safeIntegerBounds(
+        value,
+        keyword === "properties" ? path : [...path, keyword],
+      ),
+    ),
   ];
 }
 
@@ -866,10 +839,18 @@ function checkDefinitionBudget(costs, failures) {
       failures.push(`${name}: budgeted but absent from tools/list`);
     }
   }
-  const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
-  if (total > TOTAL_DEFINITION_BUDGET) {
+  // The budgets themselves, not the measurements: every tool has one - the loop
+  // above fails a tool that does not - so a run under all four is under their
+  // sum, and a fifth tool cannot slip past. What no per-tool budget can say is
+  // that the sum is still under what 1.x charged, which is the figure the README
+  // publishes as the saving.
+  const budgeted = Object.values(DEFINITION_BUDGET).reduce(
+    (sum, budget) => sum + budget,
+    0,
+  );
+  if (budgeted > V1_DEFINITION_TOTAL) {
     failures.push(
-      `tools/list is ~${total} tokens, over the ${TOTAL_DEFINITION_BUDGET} that 1.x charged for it`,
+      `the definition budgets sum to ${budgeted}, over the ${V1_DEFINITION_TOTAL} that 1.x charged for tools/list`,
     );
   }
 }
@@ -961,8 +942,6 @@ function renderTokenCost(costs, responses) {
   const share = ((100 * total) / CONTEXT_WINDOW).toFixed(1);
   const [v1TotalCell, totalChange] = comparison(V1_DEFINITION_TOTAL, total);
 
-  // Only the total compares with 1.x: per tool it would compare renamed,
-  // re-scoped tools. The README's Token Cost prose states why.
   return [
     {
       id: "token-cost-definitions",
