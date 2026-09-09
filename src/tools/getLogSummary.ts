@@ -42,7 +42,7 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview before deeper analysis.",
+    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview.",
   inputSchema: getLogSummaryInputSchema,
   annotations: {
     readOnlyHint: true,

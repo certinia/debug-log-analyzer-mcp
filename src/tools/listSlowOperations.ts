@@ -104,14 +104,12 @@ export const listSlowOperationsInputSchema = {
     .enum([...GROUP_BY, "none"])
     .optional()
     .describe(
-      "Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. Pass none to rank each call on its own.",
+      "Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows.",
     ),
   sortBy: z
     .enum(SORT_BY)
     .optional()
-    .describe(
-      "Rank on (default: durationSelfMs). heapSelfNetBytes adds that column.",
-    ),
+    .describe("Default durationSelfMs. heapSelfNetBytes adds that column."),
 };
 
 /**
@@ -142,7 +140,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them. A plan names its row, or the query itself under a namespace or category grouping.",
+    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
   inputSchema: listSlowOperationsInputSchema,
   annotations: {
     readOnlyHint: true,

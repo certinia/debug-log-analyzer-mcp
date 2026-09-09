@@ -56,13 +56,13 @@ Every request carries all four tool definitions, called or not - the standing co
 
 <!-- token-cost-definitions:start -->
 
-| Tool                           | Tokens                              | 1.x        | Change  |
-| ------------------------------ | ----------------------------------- | ---------- | ------- |
-| `apexlog_list_slow_operations` | ~606                                | ~247       | +145%   |
-| `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%    |
-| `apexlog_list_limit_risks`     | ~192                                | ~267       | -28%    |
-| `apexlog_get_summary`          | ~174                                | ~171       | +2%     |
-| **Total**                      | **~1,393** (0.7% of a 200K context) | **~1,529** | **-9%** |
+| Tool                           | Tokens                              | 1.x        | Change   |
+| ------------------------------ | ----------------------------------- | ---------- | -------- |
+| `apexlog_list_slow_operations` | ~558                                | ~247       | +126%    |
+| `apexlog_execute_anonymous`    | ~421                                | ~844       | -50%     |
+| `apexlog_list_limit_risks`     | ~164                                | ~267       | -39%     |
+| `apexlog_get_summary`          | ~159                                | ~171       | -7%      |
+| **Total**                      | **~1,302** (0.7% of a 200K context) | **~1,529** | **-15%** |
 
 <!-- token-cost-definitions:end -->
 
@@ -84,7 +84,7 @@ Cost does not scale with the log: a response is bounded by its shape - a fixed t
 
 ## Tools Reference
 
-All tools return [TOON](https://github.com/toon-format/toon)-encoded flat tables - lean by shape, not by dropping facts. Every limit, category and column is returned, so `0` means none rather than "not measured"; only what did not happen is omitted, which is fatal errors, lost log content and query plans. Nothing is reported twice. Durations are milliseconds to 3 decimal places, percentages to 1.
+The analysis tools take an absolute path to a `.log` file. All tools return [TOON](https://github.com/toon-format/toon)-encoded flat tables - lean by shape, not by dropping facts. Every limit, category and column is returned, so `0` means none rather than "not measured"; only what did not happen is omitted, which is fatal errors, lost log content and query plans. Nothing is reported twice. Durations are milliseconds to 3 decimal places, percentages to 1.
 
 ### apexlog_list_slow_operations
 
@@ -114,15 +114,15 @@ Two columns classify each row, both straight from the log. `debugCategory` is wh
 
 | Parameter       | Type     | Required | Description |
 | --------------- | -------- | -------- | --- |
-| `logFilePath`   | string   | Yes      | Absolute path to the Apex debug log file (.log) |
+| `logFilePath`   | string   | Yes      | Absolute path |
 | `debugCategory` | string[] | No       | Rank only these debug log categories |
 | `type`          | string[] | No       | Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY |
 | `namespace`     | string[] | No       | Rank only these namespaces |
 | `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0), whichever sortBy is used |
 | `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large |
 | `offset`        | number   | No       | Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit. |
-| `groupBy`       | string   | No       | Fold repeats into one row: by name (default), by namespace, by callerNamespace, which attributes platform DML to the package that drove it, or by debugCategory, which folds a namespace's event types into one row per category and so states no type or name. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. Pass none to rank each call on its own. |
-| `sortBy`        | string   | No       | Rank on (default: durationSelfMs). heapSelfNetBytes adds that column. |
+| `groupBy`       | string   | No       | Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. |
+| `sortBy`        | string   | No       | Default durationSelfMs. heapSelfNetBytes adds that column. |
 
 <!-- params-apexlog_list_slow_operations:end -->
 
@@ -150,9 +150,9 @@ All thirteen governor limits are listed, zeros included. `limitsByNamespace` cov
 
 <!-- params-apexlog_get_summary:start -->
 
-| Parameter     | Type   | Required | Description                                     |
-| ------------- | ------ | -------- | ----------------------------------------------- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
+| Parameter     | Type   | Required | Description   |
+| ------------- | ------ | -------- | ------------- |
+| `logFilePath` | string | Yes      | Absolute path |
 
 <!-- params-apexlog_get_summary:end -->
 
@@ -175,7 +175,7 @@ The `threshold` that selected the rows is reported beside them, so an empty tabl
 
 | Parameter     | Type   | Required | Description |
 | ------------- | ------ | -------- | --- |
-| `logFilePath` | string | Yes      | Absolute path to the Apex debug log file (.log) |
+| `logFilePath` | string | Yes      | Absolute path |
 | `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
 
 <!-- params-apexlog_list_limit_risks:end -->

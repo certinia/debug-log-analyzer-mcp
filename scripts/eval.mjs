@@ -288,36 +288,17 @@ const V1_RESPONSE_TOKENS = {
  * not a silent tax on every request.
  */
 const DEFINITION_BUDGET = {
-  // Raised for the five selection parameters, which the caller acts on: without
-  // them a ranking over every operation kind can only be read whole, and for the
-  // warning that a grouped durationTotalMs must not be summed across rows, and
-  // for what grouping by default now states about the row it returns, and for
-  // callerNamespace, which needs a clause to say what it attributes, and for the
-  // clause #120 added to say the response also carries the query plans, and
-  // for `offset` beside the whole-number floor on `limit` - a schema that
-  // states `integer` and `minimum` costs tokens, and buys a `limit` of -5 no
-  // longer returning the whole ranking bar its five fastest rows, and for the
-  // clause saying
-  // a plan names its row except under a namespace grouping - an agent that
-  // assumes the query text is always there reads `undefined` - and for telling
-  // a caller to advance `offset` by the rows it got, since the page budget can
-  // return fewer than `limit` and paging by `limit` would then skip rows, and
-  // for `sortBy`, which buys the one question self time cannot answer: on the
-  // 40 logs of a 123-log corpus that record an allocation, a heap ranking's top
-  // ten holds a median six rows the self-time top ten never returns.
-  //
-  // Raised again by #138, which replaced the one `kind` filter with the two axes
-  // the log itself has - `debugCategory` and the event `type` - and widened
-  // both, and `namespace`, to arrays, so one call can ask for a family. `type`
-  // takes free strings and names three examples rather than an enum, for the
-  // reason recorded on the field itself. The `groupBy` clause grew by the
-  // category fold, which is the one grouping that states no type or name.
-  apexlog_list_slow_operations: 610,
-  // Raised for the two facts the summary gained: per-namespace limit usage, and
+  // The ranking is dear because it carries eight selection parameters, and each
+  // buys a question the response cannot be read for. The one of them the schema
+  // cannot show the case for is `sortBy`: on the 40 logs of a 123-log corpus that
+  // record an allocation, a heap ranking's top ten holds a median six rows the
+  // self-time top ten never returns.
+  apexlog_list_slow_operations: 586,
+  // Covers the two facts the summary gained: per-namespace limit usage, and
   // time by category.
-  apexlog_get_summary: 180,
-  apexlog_list_limit_risks: 210,
-  apexlog_execute_anonymous: 449,
+  apexlog_get_summary: 167,
+  apexlog_list_limit_risks: 173,
+  apexlog_execute_anonymous: 443,
 };
 
 /**
