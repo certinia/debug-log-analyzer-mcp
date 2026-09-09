@@ -339,7 +339,7 @@ A definition is charged on every request, called or not. Server `instructions` a
 session, a response only when the tool is called. So a fact true of every tool belongs in
 `instructions`, and a fact true of one belongs in that tool's description.
 
-The [MCP spec](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) covers the
+The [MCP spec](https://modelcontextprotocol.io/specification/latest/server/tools) covers the
 rest - what `title`, `description` and each annotation are for. Where it is silent, `pnpm run eval`
 is the rule, not this file: it measures every wire object in a live `tools/list` and fails with the
 reason. Read `scripts/eval.mjs` for the current budgets, and the definition tests in `tests/` for
