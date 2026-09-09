@@ -786,8 +786,8 @@ function definitionCosts(tools) {
 /**
  * Two things zod emits that no client reads, and that a budget with 5% headroom
  * would not notice coming back: the dialect `$schema` states (14 tokens a tool,
- * dropped by `toolInputSchema`) and the safe-integer `maximum` an `.int()` with
- * no ceiling of its own carries (3 tokens a field, see `MAX_PAGE_SIZE`).
+ * dropped by `toolInputSchema`) and the safe-integer bounds an `.int()` carries
+ * where it states no ceiling or floor of its own (see `MAX_PAGE_SIZE`).
  */
 function checkNothingUnreadOnTheWire(tools, failures) {
   for (const tool of tools) {
@@ -796,15 +796,51 @@ function checkNothingUnreadOnTheWire(tools, failures) {
         `${tool.name}: inputSchema states its JSON Schema dialect, which MCP fixes and no client reads - wrap the shape in toolInputSchema`,
       );
     }
-    const properties = Object.entries(tool.inputSchema?.properties ?? {});
-    for (const [property, schema] of properties) {
-      if (schema.maximum === Number.MAX_SAFE_INTEGER) {
-        failures.push(
-          `${tool.name}: ${property} states zod's safe-integer maximum - give it a ceiling of its own`,
-        );
-      }
+    for (const where of safeIntegerBounds(tool.inputSchema ?? {}, [])) {
+      failures.push(
+        `${tool.name}: ${where} states zod's safe-integer bound - state a floor and a ceiling of its own`,
+      );
     }
   }
+}
+
+/**
+ * Every place in a JSON Schema stating a safe-integer bound, by path.
+ *
+ * Recursive because the bound is a property of the number, not of the tool: an
+ * `.int()` inside an array or an object states it one level down, where a check
+ * on the top-level properties reads nothing. `minimum` as well as `maximum`,
+ * because `-9007199254740991` is a character longer than the ceiling.
+ */
+function safeIntegerBounds(schema, path) {
+  if (typeof schema !== "object" || schema === null) {
+    return [];
+  }
+  const stated = [schema.minimum, schema.maximum].some(
+    (bound) =>
+      typeof bound === "number" && Math.abs(bound) === Number.MAX_SAFE_INTEGER,
+  );
+  const named = path.length ? path.join(".") : "the schema";
+
+  return [
+    ...(stated ? [named] : []),
+    ...Object.entries(schema).flatMap(([keyword, value]) => {
+      if (keyword === "properties" || keyword === "patternProperties") {
+        return Object.entries(value ?? {}).flatMap(([property, child]) =>
+          safeIntegerBounds(child, [...path, property]),
+        );
+      }
+      if (["items", "additionalProperties", "not"].includes(keyword)) {
+        return safeIntegerBounds(value, [...path, keyword]);
+      }
+      if (["anyOf", "oneOf", "allOf", "prefixItems"].includes(keyword)) {
+        return (value ?? []).flatMap((child, index) =>
+          safeIntegerBounds(child, [...path, `${keyword}[${index}]`]),
+        );
+      }
+      return [];
+    }),
+  ];
 }
 
 function checkDefinitionBudget(costs, failures) {
