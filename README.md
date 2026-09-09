@@ -119,7 +119,7 @@ All thirteen governor limits are listed, zeros included.
 
 - `database,NONE,0` - the queries were not logged.
 - `database,FINEST,0` - no queries ran.
-- `database,"",0` - the log's header declared no level for it, which is most logs for `dataAccess`.
+- `dataAccess,"",0` - the log's header declared no level for it, which most logs do not.
 
 `dataAccess`, `wave` and `validation` are always zero. No timed event carries them.
 
