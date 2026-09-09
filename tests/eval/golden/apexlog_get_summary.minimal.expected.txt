@@ -1,20 +1,8 @@
-fileSizeBytes: 1274
+fileSizeBytes: 1257
 durationTotalMs: 0.561
 truncated: false
 thrownCount: 0
 namespaces[1]: default
-debugLevels[11]{debugCategory,level}:
-  apexCode,FINE
-  apexProfiling,NONE
-  callout,NONE
-  dataAccess,NONE
-  database,NONE
-  nba,NONE
-  system,DEBUG
-  validation,NONE
-  visualforce,NONE
-  wave,NONE
-  workflow,NONE
 governorLimits[13]{limit,used,max}:
   soqlQueries,0,100
   soslQueries,0,20
@@ -30,15 +18,15 @@ governorLimits[13]{limit,used,max}:
   queueableJobsAddedToQueue,0,50
   mobileApexPushCalls,0,10
 limitsByNamespace: []
-timeByCategory[11]{debugCategory,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,1,0.546,97.3
-  apexProfiling,1,0,0
-  callout,0,0,0
-  dataAccess,0,0,0
-  database,0,0,0
-  nba,0,0,0
-  system,0,0,0
-  validation,0,0,0
-  visualforce,0,0,0
-  wave,0,0,0
-  workflow,0,0,0
+categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,FINE,1,0.546,97.3
+  apexProfiling,NONE,1,0,0
+  callout,NONE,0,0,0
+  dataAccess,"",0,0,0
+  database,NONE,0,0,0
+  nba,NONE,0,0,0
+  system,DEBUG,0,0,0
+  validation,NONE,0,0,0
+  visualforce,NONE,0,0,0
+  wave,NONE,0,0,0
+  workflow,NONE,0,0,0

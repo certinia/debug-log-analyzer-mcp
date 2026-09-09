@@ -10,7 +10,7 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 
 ### Added
 
-- Report where the time went by category, and governor limits by namespace, in `apexlog_get_summary` ([#62], [#86], [#108])
+- Report where the time went by category, with the level each category was captured at, and governor limits by namespace, in `apexlog_get_summary` ([#62], [#86], [#108], [#191])
 - Report the level each debug log category was captured at, in `apexlog_list_slow_operations` and `apexlog_list_limit_risks`, so you can see what the log could not show ([#102], [#138])
 - Group operations in `apexlog_list_slow_operations` by name, namespace, caller namespace or debug log category, so you can see whether the time went to one slow call or many small repeats ([#101], [#126], [#127], [#131], [#138])
 - Rank operations by the heap they retain in `apexlog_list_slow_operations`, not only by time ([#99], [#127], [#138])
@@ -86,3 +86,4 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 [#167]: https://github.com/certinia/debug-log-analyzer-mcp/issues/167
 [#188]: https://github.com/certinia/debug-log-analyzer-mcp/issues/188
 [#189]: https://github.com/certinia/debug-log-analyzer-mcp/issues/189
+[#191]: https://github.com/certinia/debug-log-analyzer-mcp/issues/191

@@ -100,7 +100,7 @@ export type LogCategory = (typeof LOG_CATEGORIES)[number];
  * Compile guard for the other direction: every `satisfies` above only checks
  * that what is named exists, never that nothing is missing. A category the
  * parser adds has to reach `DEBUG_CATEGORIES`, or `declaredLevels` drops it
- * from every response and `timeByCategory` loses its row, and no other check
+ * from every response and `apexlog_get_summary` loses its row, and no other check
  * notices.
  */
 export type EveryDebugLevelCategoryNamed = Assert<

@@ -182,7 +182,7 @@ describe("parser contract", () => {
     // `DurationLogEvent` constructor alone and publishes no other flag for it.
     // A timed event without one would be ranked nowhere and its time reported
     // nowhere. Every response then states `debugCategory`: a ranked row's
-    // category, a `timeByCategory` row, and the `capturedAt` level beside them,
+    // category, a `categories` row in the summary, and a `capturedAt` level,
     // so an event stamped `""` would reach a row as an empty cell.
     it.each(TIMED_FIXTURES)(
       "are both set on every event that carries a duration (%s)",

@@ -6,18 +6,15 @@ import { z } from "zod";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
-import {
-  declaredLevels,
-  listOperations,
-  type DeclaredLevel,
-  type Operation,
-} from "./operations.js";
+import { listOperations, type Operation } from "./operations.js";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
+  type LogLevel,
 } from "../salesforce/debugLevels.js";
 import type {
   DebugCategory,
+  DebugLevels,
   LogIssue,
 } from "@apexdevtools/apex-log-parser/types";
 import {
@@ -43,7 +40,7 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category, every governor limit it and each namespace consumed, the debug levels it was logged at, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview.",
+    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category and the level each was logged at, every governor limit it and each namespace consumed, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview.",
   inputSchema: toolInputSchema(getLogSummaryInputSchema),
   annotations: {
     readOnlyHint: true,
@@ -52,15 +49,21 @@ export const getLogSummaryToolConfig = {
 };
 
 /**
- * Where the transaction's time went, one row per debug log category.
+ * One row per debug log category: the level it was captured at, and where the
+ * transaction's time went under it.
  *
- * The category is the one that decides whether an operation reaches the log at
- * all, so a zero row reads against `debugLevels`: `database 0` beside
- * `database NONE` means the queries were not logged, and beside
- * `database FINEST` means none ran.
+ * One table rather than two, because the level is what a zero row means: a
+ * `database 0` beside `database NONE` means the queries were not logged, and
+ * beside `database FINEST` means none ran.
+ *
+ * `level` is empty where the log's header declared none for the category, which
+ * is most logs for `dataAccess`. A level has no zero, so empty says unstated
+ * rather than off - naming a default would state a level the log did not, and
+ * `NONE` typechecks, so the goldens are what hold the cell empty.
  */
 interface CategoryRow {
   debugCategory: DebugLevelCategory;
+  level: LogLevel | "";
   operationCount: number;
   durationSelfMs: number;
   selfPercentage: number;
@@ -175,10 +178,9 @@ interface LogSummaryResult {
   thrownCount: number;
   fatalErrors?: FatalError[];
   namespaces: string[];
-  debugLevels: DeclaredLevel[];
   governorLimits: LimitRow[];
   limitsByNamespace: NamespaceLimitRow[];
-  timeByCategory: CategoryRow[];
+  categories: CategoryRow[];
 }
 
 export async function getLogSummary(args: LogSummaryArgs) {
@@ -213,10 +215,13 @@ export async function getLogSummary(args: LogSummaryArgs) {
     thrownCount: apexLog.thrownCount.total,
     ...omitEmpty({ fatalErrors: fatalErrors(apexLog.logIssues) }),
     namespaces: apexLog.namespaces,
-    debugLevels: declaredLevels(apexLog),
     governorLimits: toLimitRows(apexLog.governorLimits.peak),
     limitsByNamespace: toNamespaceLimitRows(apexLog.governorLimits.byNamespace),
-    timeByCategory: timeByCategory(listOperations(apexLog), durationTotalNs),
+    categories: categories(
+      apexLog.debugLevels,
+      listOperations(apexLog),
+      durationTotalNs,
+    ),
   };
 
   return {
@@ -229,7 +234,8 @@ export async function getLogSummary(args: LogSummaryArgs) {
   };
 }
 
-function timeByCategory(
+function categories(
+  debugLevels: DebugLevels,
   operations: Operation[],
   durationTotalNs: number,
 ): CategoryRow[] {
@@ -255,8 +261,12 @@ function timeByCategory(
     }
   });
 
+  // The header record is read directly rather than through `declaredLevels`,
+  // which drops the categories it left unstated - the row set here is fixed, so
+  // dropping them only to put them back says nothing.
   return totals.map(({ debugCategory, operationCount, selfNs }) => ({
     debugCategory,
+    level: debugLevels[debugCategory] ?? "",
     operationCount,
     durationSelfMs: roundMs(selfNs / NS_TO_MS),
     selfPercentage: roundPercent(percentageOf(selfNs, durationTotalNs)),

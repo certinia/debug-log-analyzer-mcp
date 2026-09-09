@@ -82,14 +82,17 @@ const ANSWERABILITY = {
       fields: ["durationTotalMs", "fileSizeBytes"],
     },
     {
-      question: "Where did the time go - Apex, the database or Visualforce?",
-      keys: ["timeByCategory"],
-      columns: ["debugCategory", "operationCount", "durationSelfMs"],
-    },
-    {
-      question: "Is detail missing because a log category was switched off?",
-      keys: ["debugLevels"],
-      columns: ["debugCategory", "level"],
+      // One check, because one table answers both: a zero is only readable
+      // beside the level that gated it.
+      question:
+        "Where did the time go, and is a category zero because it was switched off?",
+      keys: ["categories"],
+      columns: [
+        "debugCategory",
+        "level",
+        "operationCount",
+        "durationSelfMs",
+      ],
     },
     {
       question: "Did the run fail, and can I trust these numbers?",
@@ -227,9 +230,10 @@ const TOKEN_BUDGET = {
   // across a 124-log corpus breach no limit at all, so nothing else in the
   // response reveals them. Lowered by #138, which dropped the `logCategory`
   // column from every row of the time table - the row key is now the category
-  // itself.
-  "apexlog_get_summary/governor-heavy": 382,
-  "apexlog_get_summary/minimal": 245,
+  // itself, and by #191, which folded the level table into it, so a category is
+  // stated once rather than in two tables keyed the same way.
+  "apexlog_get_summary/governor-heavy": 341,
+  "apexlog_get_summary/minimal": 203,
   // Raised for the grouped default #126 made: every row now carries its call
   // count and the self time of its slowest call, and for the capture levels
   // #102 added, which say how much of the transaction reached the log at all,
@@ -254,8 +258,8 @@ const TOKEN_BUDGET = {
   // classification columns every ranked row now states, and again for the
   // `returnedHeapPercentage` scalar beside them.
   "apexlog_list_slow_operations/heap-heavy": 207,
-  "apexlog_get_summary/heap-heavy": 256,
-  "apexlog_get_summary/truncated": 252,
+  "apexlog_get_summary/heap-heavy": 215,
+  "apexlog_get_summary/truncated": 211,
 };
 
 /**

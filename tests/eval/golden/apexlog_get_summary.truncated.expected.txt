@@ -5,18 +5,6 @@ truncatedBy[2]: skipped-lines,max-size
 skippedBytes: 14680064
 thrownCount: 0
 namespaces[1]: default
-debugLevels[11]{debugCategory,level}:
-  apexCode,FINE
-  apexProfiling,NONE
-  callout,NONE
-  dataAccess,NONE
-  database,INFO
-  nba,NONE
-  system,DEBUG
-  validation,NONE
-  visualforce,NONE
-  wave,NONE
-  workflow,NONE
 governorLimits[13]{limit,used,max}:
   soqlQueries,0,0
   soslQueries,0,0
@@ -32,15 +20,15 @@ governorLimits[13]{limit,used,max}:
   queueableJobsAddedToQueue,0,0
   mobileApexPushCalls,0,0
 limitsByNamespace: []
-timeByCategory[11]{debugCategory,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,3,1996,95.1
-  apexProfiling,0,0,0
-  callout,0,0,0
-  dataAccess,0,0,0
-  database,2,101,4.8
-  nba,0,0,0
-  system,0,0,0
-  validation,0,0,0
-  visualforce,0,0,0
-  wave,0,0,0
-  workflow,0,0,0
+categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,FINE,3,1996,95.1
+  apexProfiling,NONE,0,0,0
+  callout,NONE,0,0,0
+  dataAccess,NONE,0,0,0
+  database,INFO,2,101,4.8
+  nba,NONE,0,0,0
+  system,DEBUG,0,0,0
+  validation,NONE,0,0,0
+  visualforce,NONE,0,0,0
+  wave,NONE,0,0,0
+  workflow,NONE,0,0,0
