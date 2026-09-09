@@ -64,19 +64,6 @@ const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
     b.heapSelfNetBytes - a.heapSelfNetBytes || bySelfTime(a, b),
 };
 
-/**
- * The largest page and the furthest offset the schema accepts.
- *
- * Stated, because `.int()` alone puts zod's safe-integer bounds on the wire for
- * both fields, which no client reads. Both sit above anything a real call asks
- * for - the largest log in a 124-log corpus ranks 39,415 rows - because a page
- * is bounded by `PAGE_CHAR_BUDGET`, and "fewer rows than you asked for" is the
- * answer a caller gets today. A ceiling low enough to refuse a large `limit`
- * would trade that for an error, which is not what 3 tokens buy.
- */
-const MAX_PAGE_SIZE = 100_000;
-const MAX_OFFSET = 1_000_000;
-
 export const listSlowOperationsInputSchema = {
   logFilePath: logFilePathSchema,
   debugCategory: z
@@ -101,20 +88,20 @@ export const listSlowOperationsInputSchema = {
       "Drop operations below this self time (default: 0), whichever sortBy is used",
     ),
   // `.min(0)` so a negative page size cannot read as "every row bar the fastest".
+  // No ceiling: a page is bounded by `PAGE_CHAR_BUDGET`, and the safe-integer
+  // maximum `.int()` states is dropped by `toolInputSchema`, not by a figure
+  // invented here - one low enough to refuse a large `limit` would turn a
+  // trimmed page into an error.
   limit: z
     .number()
     .int()
     .min(0)
-    .max(MAX_PAGE_SIZE)
     .optional()
     .describe("Page size (default: 10); fewer if the page would be too large"),
-  // The describe says advance by the rows you got, because the page budget can
-  // return fewer than `limit` and paging by `limit` would then skip rows.
   offset: z
     .number()
     .int()
     .min(0)
-    .max(MAX_OFFSET)
     .optional()
     .describe(
       "Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.",

@@ -286,12 +286,12 @@ const DEFINITION_BUDGET = {
   // cannot show the case for is `sortBy`: on the 40 logs of a 123-log corpus that
   // record an allocation, a heap ranking's top ten holds a median six rows the
   // self-time top ten never returns.
-  apexlog_list_slow_operations: 566,
+  apexlog_list_slow_operations: 557,
   // Covers the two facts the summary gained: per-namespace limit usage, and
   // time by category.
-  apexlog_get_summary: 152,
+  apexlog_get_summary: 153,
   apexlog_list_limit_risks: 158,
-  apexlog_execute_anonymous: 427,
+  apexlog_execute_anonymous: 428,
 };
 
 /**

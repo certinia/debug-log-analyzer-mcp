@@ -58,11 +58,11 @@ Every request carries all four tool definitions, called or not - the standing co
 
 | Tool                           | Tokens                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
-| `apexlog_list_slow_operations` | ~539                                                        |
+| `apexlog_list_slow_operations` | ~530                                                        |
 | `apexlog_execute_anonymous`    | ~407                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
 | `apexlog_get_summary`          | ~145                                                        |
-| **Total**                      | **~1,241** (0.6% of a 200K context), **-19% vs 1.x ~1,529** |
+| **Total**                      | **~1,232** (0.6% of a 200K context), **-19% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
