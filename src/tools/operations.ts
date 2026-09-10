@@ -124,11 +124,8 @@ export interface Operation {
   /**
    * Net heap the operation's own body retained, and not what it called.
    *
-   * The signed `HEAP_ALLOCATE` bytes, so a negative allocation is the free that
-   * brings the figure down and a body that releases more than it took reads
-   * below zero. `HEAP_DEALLOCATE` is *not* counted: the parser reads its bytes
-   * and drops them. No log in the corpus emits one, so nothing under-reads
-   * today, but a log that did would read as retaining what it freed.
+   * The signed `HEAP_ALLOCATE` bytes less the `HEAP_DEALLOCATE` bytes, so a
+   * body that releases more than it took reads below zero.
    *
    * A managed package is the exception to "not what it called". The parser
    * gives `ENTERING_MANAGED_PKG` no children, so an allocation logged inside

@@ -49,15 +49,15 @@ describe("parser contract", () => {
       "",
     ].join("\n");
 
-    // Documented as bytes, but counted in UTF-16 code units, so it under-reads
-    // any log that is not ASCII. `apexlog_get_summary` publishes it as
-    // `fileSizeBytes`, so this case failing is the signal that the parser fixed
-    // it and the figure moved - apex-dev-tools/apex-log-parser#70, due in 0.2.0.
-    it("counts UTF-16 code units, not bytes", () => {
+    // `apexlog_get_summary` publishes it as `fileSizeBytes`, so a log that is
+    // not ASCII must not under-read. The code-unit length is asserted beside it
+    // because that is what makes the reading unambiguous: the two disagree only
+    // where the count is in bytes - apex-dev-tools/apex-log-parser#70.
+    it("counts UTF-8 bytes, not UTF-16 code units", () => {
       const { size } = parse(log);
 
-      expect(size).toBe(log.length);
-      expect(size).toBeLessThan(Buffer.byteLength(log, "utf8"));
+      expect(size).toBe(Buffer.byteLength(log, "utf8"));
+      expect(size).toBeGreaterThan(log.length);
     });
   });
 
@@ -173,6 +173,32 @@ describe("parser contract", () => {
         ["Outer.run()", 100, 1000],
         ["Inner.run()", 900, 900],
       ]);
+    });
+
+    const freed = [
+      HEADER,
+      "09:00:00.1 (1000)|EXECUTION_STARTED",
+      "09:00:00.1 (2000)|METHOD_ENTRY|[1]|01p000000000000|Outer.run()",
+      "09:00:00.2 (3000)|HEAP_ALLOCATE|[2]|Bytes:1000",
+      "09:00:00.3 (4000)|HEAP_DEALLOCATE|[3]|Bytes:400",
+      "09:00:00.6 (7000)|METHOD_EXIT|[1]|Outer.run()",
+      "09:00:01.0 (10000)|EXECUTION_FINISHED",
+      "",
+    ].join("\n");
+
+    // `heapSelfNetBytes` is a net, so a body that frees what it took must read
+    // below what it allocated. The gross is asserted beside it because that is
+    // what makes the net unambiguous: 600 against 1,000 is the free applied to
+    // one figure and not the other - apex-dev-tools/apex-log-parser#73.
+    it("nets HEAP_DEALLOCATE off the body that allocated", () => {
+      const parsed = parse(freed);
+      const [method] = tree(parsed).filter(
+        (node) => node.type === "METHOD_ENTRY",
+      );
+
+      expect(parsed.heapAllocated.total).toBe(600);
+      expect(parsed.heapGross.total).toBe(1000);
+      expect(method?.heapAllocated.self).toBe(600);
     });
   });
 

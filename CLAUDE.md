@@ -32,7 +32,7 @@ pnpm start
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
 - **`@apexdevtools/apex-log-parser`**: the parser, as a dependency - nothing here parses a log. Runtime values come from the package root, every type and const from `@apexdevtools/apex-log-parser/types`. Read `debugCategory` for an event's category, never `category`: that one is a UI grouping slated for deprecation, and `src/tools/operations.ts` reads it only as the flag that says an event has a duration.
 
-  `tests/parserContract.test.ts` pins what the tools assume, against a real parse - no other suite would notice a parser upgrade that broke one. One pinned assumption is a known defect, fixed upstream in 0.2.0: `ApexLog.size` counts UTF-16 code units, not bytes ([apex-log-parser#70](https://github.com/apex-dev-tools/apex-log-parser/issues/70)).
+  `tests/parserContract.test.ts` pins what the tools assume, against a real parse - no other suite would notice a parser upgrade that broke one.
 
 ### Key Data Structures
 

@@ -183,9 +183,9 @@ export interface SlowOperation {
   rowCount: number;
   thrownCount: number;
   /**
-   * Net heap the row's own code retained: the signed `HEAP_ALLOCATE` bytes, so
-   * a row that released more than it took reads below zero. What counts as a
-   * free, and where a managed package's allocations land, are on
+   * Net heap the row's own code retained: what it allocated less what it
+   * freed, so a row that released more than it took reads below zero. What
+   * counts as a free, and where a managed package's allocations land, are on
    * `Operation.heapSelfNetBytes`.
    *
    * Present under `sortBy: "heapSelfNetBytes"` alone, because most logs record

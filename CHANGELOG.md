@@ -35,6 +35,7 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 
 - Fix incorrectly reported timings for callouts in `apexlog_list_slow_operations`, which were counted in the calling method's self time ([#97], [#138])
 - Fix understated governor limit usage in `apexlog_get_summary` and `apexlog_list_limit_risks`, which reported the usage the transaction ended on rather than its peak ([#97])
+- Fix the understated size of a log holding non-ASCII characters, and the heap a row retains where the code freed memory, on apex-log-parser 0.1.1
 - Return the debug log of the run `apexlog_execute_anonymous` made, where the newest log for the user could be another process's ([#65])
 - Return an absolute log path from `apexlog_execute_anonymous`, and warn when `outputDir` resolves outside every folder the client opened ([#109])
 - Name the real reason a log file cannot be opened - a permission error used to read as "Log file not found" ([#109])
