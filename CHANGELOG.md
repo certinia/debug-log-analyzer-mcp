@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Common Changelog](https://common-changelog.org/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2026-09-11
 
 _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [Migrating from 1.x](MIGRATING.md)._
 
@@ -59,7 +59,7 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
   - **Debug levels** - Configurable via the `debugLevel` parameter. Set all categories at once (e.g. `"FINEST"`), reset to defaults, or override specific categories like apexCode, database, and nba.
   - **Output directory** - Configurable via the `outputDir` parameter. Defaults to `.apex-log-mcp/` in the project root.
 
-<!-- Unreleased -->
+<!-- 2.0.0 -->
 
 [#52]: https://github.com/certinia/debug-log-analyzer-mcp/issues/52
 [#62]: https://github.com/certinia/debug-log-analyzer-mcp/issues/62
