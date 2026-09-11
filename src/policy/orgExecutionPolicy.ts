@@ -12,6 +12,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
+import { denyOrgTypeRefusal } from "./orgDenyList.js";
 
 export type PolicyDecision =
   | { outcome: "allowed" }
@@ -174,9 +175,15 @@ function confirmationRequest(
 /**
  * Decide whether anonymous Apex may run against the classified target org.
  *
- * Non-production orgs run silently. Production orgs (and orgs whose type could
- * not be verified) need either the --allow-production-orgs flag or an explicit,
- * per-call user confirmation.
+ * A denied org type refuses first, before any allow path: --deny-org-types is
+ * absolute, and neither --allow-production-orgs nor a confirmation lifts it.
+ * The --deny-orgs half is enforced by the caller instead, before it classifies
+ * the org, because it reads the auth file alone and so refuses a denied org
+ * without contacting it.
+ *
+ * Otherwise non-production orgs run silently. Production orgs (and orgs whose
+ * type could not be verified) need either the --allow-production-orgs flag or
+ * an explicit, per-call user confirmation.
  *
  * The confirmation is a multi-round-trip: the first call returns the request,
  * and the client re-sends the same call carrying the answer. The whole handler
@@ -195,11 +202,19 @@ export async function authorizeExecution(opts: {
   orgLabel: string;
   apex: string;
   allowProductionOrgs: boolean;
+  denyOrgTypes: OrgClassification[];
   consumeConfirmation: ConsumeConfirmation;
   unverifiedReason?: string;
 }): Promise<PolicyDecision> {
   const { ctx, classification, orgId, orgLabel, apex, allowProductionOrgs } =
     opts;
+
+  if (opts.denyOrgTypes.includes(classification)) {
+    return {
+      outcome: "refused",
+      reason: denyOrgTypeRefusal(orgLabel, classification),
+    };
+  }
 
   if (classification !== "production" && classification !== "unknown") {
     return { outcome: "allowed" };

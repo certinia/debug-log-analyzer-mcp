@@ -47,6 +47,7 @@ describe("authorizeExecution", () => {
       ctx?: ServerContext;
       classification?: OrgClassification;
       allowProductionOrgs?: boolean;
+      denyOrgTypes?: OrgClassification[];
       apex?: string;
       orgId?: string;
       unverifiedReason?: string;
@@ -63,6 +64,7 @@ describe("authorizeExecution", () => {
       orgLabel,
       apex: overrides.apex ?? apex,
       allowProductionOrgs: overrides.allowProductionOrgs ?? false,
+      denyOrgTypes: overrides.denyOrgTypes ?? [],
       unverifiedReason: overrides.unverifiedReason,
     });
   }
@@ -73,6 +75,7 @@ describe("authorizeExecution", () => {
       ctx?: ServerContext;
       reason?: string;
       allowProductionOrgs?: boolean;
+      denyOrgTypes?: OrgClassification[];
     } = {},
   ) {
     return authorize({
@@ -80,6 +83,7 @@ describe("authorizeExecution", () => {
       classification: "unknown",
       unverifiedReason: overrides.reason ?? "inactive organization",
       allowProductionOrgs: overrides.allowProductionOrgs,
+      denyOrgTypes: overrides.denyOrgTypes,
     });
   }
 
@@ -148,6 +152,39 @@ describe("authorizeExecution", () => {
     await expect(
       authorizeUnknown({ allowProductionOrgs: true }),
     ).resolves.toEqual({ outcome: "allowed" });
+  });
+
+  describe("a denied org type", () => {
+    it("should beat --allow-production-orgs", async () => {
+      await expect(
+        authorize({ allowProductionOrgs: true, denyOrgTypes: ["production"] }),
+      ).resolves.toMatchObject({ outcome: "refused" });
+    });
+
+    it("should refuse instead of asking for a confirmation", async () => {
+      await expect(
+        authorize({ denyOrgTypes: ["production"] }),
+      ).resolves.toMatchObject({ outcome: "refused" });
+      expect(mintConfirmationState).not.toHaveBeenCalled();
+    });
+
+    it("should deny a sandbox, which the type gate alone allows", async () => {
+      await expect(
+        authorize({ classification: "sandbox", denyOrgTypes: ["sandbox"] }),
+      ).resolves.toMatchObject({ outcome: "refused" });
+    });
+
+    it("should deny an org whose type could not be verified", async () => {
+      await expect(
+        authorizeUnknown({ denyOrgTypes: ["unknown"] }),
+      ).resolves.toMatchObject({ outcome: "refused" });
+    });
+
+    it("should allow a classification the list does not name", async () => {
+      await expect(
+        authorize({ classification: "sandbox", denyOrgTypes: ["production"] }),
+      ).resolves.toEqual({ outcome: "allowed" });
+    });
   });
 
   describe("the first round", () => {
