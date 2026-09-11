@@ -16,13 +16,25 @@ export type OrganizationRecord = {
   OrganizationType: string;
 };
 
-export type OrgClassification =
-  | "sandbox"
-  | "scratch"
-  | "developer"
-  | "trial"
-  | "production"
-  | "unknown";
+/**
+ * Every classification, for a caller that must validate one against user input.
+ * `OrgClassification` is derived from it, so the two cannot drift apart.
+ */
+export const ORG_CLASSIFICATIONS = [
+  "sandbox",
+  "scratch",
+  "developer",
+  "trial",
+  "production",
+  "unknown",
+] as const;
+
+export type OrgClassification = (typeof ORG_CLASSIFICATIONS)[number];
+
+/** Whether a string names one of them. */
+export function isOrgClassification(value: string): value is OrgClassification {
+  return (ORG_CLASSIFICATIONS as readonly string[]).includes(value);
+}
 
 export type OrgTypeResult = {
   classification: OrgClassification;
