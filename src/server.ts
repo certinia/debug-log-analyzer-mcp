@@ -33,6 +33,7 @@ import {
   type ConfirmationState,
 } from "./policy/orgExecutionPolicy.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
+import packageJson from "../package.json" with { type: "json" };
 
 export type ServerConfig = {
   allowProductionOrgs?: boolean;
@@ -78,7 +79,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const server = new McpServer(
     {
       name: "apex-log-mcp",
-      version: "1.0.0",
+      version: packageJson.version,
       description:
         "Analyzes Salesforce Apex debug logs for performance bottlenecks, governor limit usage, and optimization opportunities.",
     },
