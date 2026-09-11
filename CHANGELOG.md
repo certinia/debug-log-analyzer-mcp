@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Common Changelog](https://common-changelog.org/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-09-11
+## [2.0.1] - 2026-09-11
 
 _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [Migrating from 1.x](MIGRATING.md)._
 
@@ -47,6 +47,10 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
 - **Breaking:** drop Node.js 20 (end of life April 2026) - Node.js 22 is the minimum
 - Remove the canned recommendations of `analyze_apex_log_performance` - an agent advises better from the numbers ([#86])
 
+## [2.0.0] - 2026-09-11
+
+_There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
+
 ## [1.0.0] - 2026-03-20
 
 ### Added
@@ -59,7 +63,7 @@ _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [M
   - **Debug levels** - Configurable via the `debugLevel` parameter. Set all categories at once (e.g. `"FINEST"`), reset to defaults, or override specific categories like apexCode, database, and nba.
   - **Output directory** - Configurable via the `outputDir` parameter. Defaults to `.apex-log-mcp/` in the project root.
 
-<!-- 2.0.0 -->
+<!-- 2.0.1 -->
 
 [#52]: https://github.com/certinia/debug-log-analyzer-mcp/issues/52
 [#62]: https://github.com/certinia/debug-log-analyzer-mcp/issues/62
