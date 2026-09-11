@@ -4,6 +4,7 @@
 
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import packageJson from "../package.json";
 
 // Mock the MCP SDK components
 jest.mock("@modelcontextprotocol/server", () => ({
@@ -229,7 +230,7 @@ describe("createApexLogServer", () => {
       expect(McpServer).toHaveBeenCalledWith(
         {
           name: "apex-log-mcp",
-          version: "1.0.0",
+          version: packageJson.version,
           description: expect.any(String),
         },
         {
