@@ -96,4 +96,6 @@ The tool definitions follow the same rule and are charged on every turn, called 
 
 It is always registered so agents can discover it; each call is authorized in `src/policy/orgExecutionPolicy.ts`. A production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation, decided before any `DebugLevel` or `TraceFlag` is written. `--no-apex-execution` refuses every call; the 1.x `--allowed-orgs` is accepted, ignored and warned about.
 
+`--deny-orgs` and `--deny-org-types` refuse outright, in `src/policy/orgDenyList.ts`. A deny beats `--allow-production-orgs` and beats a confirmation. Identity matches before `classifyOrg`, off the local auth file, so a denied org is never contacted; the type matches inside `authorizeExecution`. Only an org id is unspoofable, so the README documents the rest as convenience.
+
 `@salesforce/core` loads only for this tool: `src/server.ts` reaches it through `await import()`, and `executeAnonymousDefinition.ts` holds the wire definition so registration stays synchronous. Startup is 55 ms, not 290 ms; an ESLint rule, `tests/salesforceCoreIsLazy.test.ts` and the `pnpm run eval` startup check keep it there.

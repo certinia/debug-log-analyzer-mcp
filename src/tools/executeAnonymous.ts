@@ -33,6 +33,11 @@ import {
   type ConsumeConfirmation,
   type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
+import {
+  denyOrgRefusal,
+  matchDeniedOrg,
+  type DenyPattern,
+} from "../policy/orgDenyList.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */
@@ -46,6 +51,8 @@ const NO_LOG_CAPTURED_WARNING =
 
 export type ExecuteAnonymousPolicy = {
   allowProductionOrgs: boolean;
+  denyOrgs: DenyPattern[];
+  denyOrgTypes: OrgClassification[];
   apexExecutionDisabled: boolean;
   classificationCache: Map<string, OrgClassification>;
   mintConfirmationState: MintConfirmationState;
@@ -139,6 +146,19 @@ export async function executeAnonymous(
   const alias = await getAliasForUsername(username);
   const orgLabel = alias ? `${username} (${alias})` : username;
 
+  // Everything a pattern matches comes from the local auth file, so a denied
+  // org is refused without being contacted at all.
+  const orgId = org.getOrgId();
+  const denied = matchDeniedOrg(policy.denyOrgs, {
+    orgId,
+    username,
+    alias,
+    instanceUrl: connection.instanceUrl,
+  });
+  if (denied) {
+    return toolError(denyOrgRefusal(orgLabel, denied));
+  }
+
   // Authorize before creating any DebugLevel or TraceFlag records, so a refused
   // call leaves the target org untouched.
   const { classification, unverifiedReason } = await classifyOrg(
@@ -150,10 +170,11 @@ export async function executeAnonymous(
     mintConfirmationState: policy.mintConfirmationState,
     consumeConfirmation: policy.consumeConfirmation,
     classification,
-    orgId: org.getOrgId(),
+    orgId,
     orgLabel,
     apex,
     allowProductionOrgs: policy.allowProductionOrgs,
+    denyOrgTypes: policy.denyOrgTypes,
     unverifiedReason,
   });
 
