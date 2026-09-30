@@ -174,7 +174,7 @@ The response also gives the org username, its alias if set, the org type, and a 
 | `apex`       | string           | Yes      | The anonymous Apex to be executed |
 | `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
 | `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root. |
-| `debugLevel` | string \| object | No       | Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
+| `debugLevel` | string \| object | No       | This run's log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
 
