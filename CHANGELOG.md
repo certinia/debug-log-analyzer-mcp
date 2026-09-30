@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 
 - Stop `apexlog_execute_anonymous` changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
+- Run the Apex with a warning when the org refuses `apexlog_execute_anonymous` a trace flag, instead of failing the call ([#207])
 
 ## [2.0.1] - 2026-09-11
 

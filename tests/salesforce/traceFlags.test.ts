@@ -6,29 +6,33 @@ import { Connection } from "@salesforce/core";
 import {
   createTraceFlag,
   deleteTraceFlag,
-  isAlreadyTraced,
+  hasActiveTraceFlag,
 } from "../../src/salesforce/traceFlags";
 
 describe("Trace Flags", () => {
   const tracedEntityId = "000000000000000000";
   const traceFlagId = "100000000000000000";
   const debugLevelId = "200000000000000000";
+  const now = "2025-01-15T09:00:00.000Z";
 
   let mockConnection: jest.Mocked<Connection>;
   let mockSobject: jest.Mock;
   let mockCreate: jest.Mock;
   let mockDestroy: jest.Mock;
+  let mockFindOne: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
-    jest.setSystemTime(new Date("2025-01-15T09:00:00.000Z"));
+    jest.setSystemTime(new Date(now));
 
     mockCreate = jest.fn();
     mockDestroy = jest.fn();
+    mockFindOne = jest.fn();
     mockSobject = jest.fn().mockReturnValue({
       create: mockCreate,
       destroy: mockDestroy,
+      findOne: mockFindOne,
     });
 
     mockConnection = {
@@ -40,9 +44,51 @@ describe("Trace Flags", () => {
     jest.useRealTimers();
   });
 
+  describe("hasActiveTraceFlag", () => {
+    it("is true when the entity has a live flag", async () => {
+      mockFindOne.mockResolvedValue({ Id: traceFlagId });
+
+      await expect(
+        hasActiveTraceFlag(mockConnection, tracedEntityId),
+      ).resolves.toBe(true);
+    });
+
+    it("is false when the entity has none", async () => {
+      mockFindOne.mockResolvedValue(null);
+
+      await expect(
+        hasActiveTraceFlag(mockConnection, tracedEntityId),
+      ).resolves.toBe(false);
+    });
+
+    // Live now, and of a type that stores the log: a Developer Console flag counts.
+    it("asks for USER_DEBUG and DEVELOPER_LOG flags on the entity that are live now", async () => {
+      mockFindOne.mockResolvedValue(null);
+
+      await hasActiveTraceFlag(mockConnection, tracedEntityId);
+
+      const [conditions, fields] = mockFindOne.mock.calls[0] ?? [];
+      expect(mockSobject).toHaveBeenCalledWith("TraceFlag");
+      expect(fields).toEqual(["Id"]);
+      expect(conditions.TracedEntityId).toBe(tracedEntityId);
+      expect(String(conditions.StartDate.$lte)).toBe(now);
+      expect(String(conditions.ExpirationDate.$gt)).toBe(now);
+      expect(conditions.LogType).toEqual({
+        $in: ["USER_DEBUG", "DEVELOPER_LOG"],
+      });
+    });
+
+    it("passes a query error on", async () => {
+      mockFindOne.mockRejectedValue(new Error("Query failed"));
+
+      await expect(
+        hasActiveTraceFlag(mockConnection, tracedEntityId),
+      ).rejects.toThrow("Query failed");
+    });
+  });
+
   describe("createTraceFlag", () => {
-    // Started back by the clock skew, so an org clock behind this one still
-    // sees the flag live.
+    // Started back by the clock skew, so an org clock behind this one still sees it live.
     it("creates a USER_DEBUG flag from 5 minutes back until the duration ends", async () => {
       mockCreate.mockResolvedValue({ success: true, id: traceFlagId });
 
@@ -83,32 +129,6 @@ describe("Trace Flags", () => {
       await expect(
         createTraceFlag(mockConnection, tracedEntityId, debugLevelId, 900_000),
       ).rejects.toThrow("Network error");
-    });
-  });
-
-  describe("isAlreadyTraced", () => {
-    const refusal = (errorCode: string, message: string) =>
-      Object.assign(new Error(message), { errorCode });
-
-    it("is true for Salesforce's overlapping-flag refusal", () => {
-      expect(
-        isAlreadyTraced(
-          refusal(
-            "FIELD_INTEGRITY_EXCEPTION",
-            "This entity is already being traced by a trace flag with a start and expiration date that overlap this trace flag's start and expiration date.: Traced Entity ID",
-          ),
-        ),
-      ).toBe(true);
-    });
-
-    it("is false for any other refusal", () => {
-      expect(
-        isAlreadyTraced(
-          refusal("FIELD_INTEGRITY_EXCEPTION", "Expiration date too far"),
-        ),
-      ).toBe(false);
-      expect(isAlreadyTraced(new Error("Network error"))).toBe(false);
-      expect(isAlreadyTraced("already being traced")).toBe(false);
     });
   });
 

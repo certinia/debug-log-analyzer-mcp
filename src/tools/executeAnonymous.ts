@@ -16,7 +16,7 @@ import {
 import {
   createTraceFlag,
   deleteTraceFlag,
-  isAlreadyTraced,
+  hasActiveTraceFlag,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
@@ -167,33 +167,43 @@ export async function executeAnonymous(
 
   await report("Setting the trace flag");
   const userId = await getUserIdByUsername(connection, username);
-  const { id: debugLevelId, levels } = await ensureDebugLevel(
-    connection,
-    debugLevel,
-  );
+  // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
+  const [{ id: debugLevelId, levels }, alreadyTraced] = await Promise.all([
+    ensureDebugLevel(connection, debugLevel),
+    hasActiveTraceFlag(connection, userId),
+  ]);
 
   const {
     value: { apexResult, logId },
-    warning: traceFlagWarning,
-  } = await withTraceFlagForRun(connection, userId, debugLevelId, async () => {
-    await report("Executing the Apex");
-    const startedAt = new Date();
-    const apexResult = await executeAnonymousWithLog(connection, apex, levels);
-
-    if (!apexResult.compiled) {
-      throw new Error(
-        `Apex could not be compiled at line ${apexResult.line}, column ${apexResult.column}: ${apexResult.compileProblem}`,
+    warnings: traceFlagWarnings,
+  } = await withTraceFlagForRun(
+    connection,
+    userId,
+    alreadyTraced ? undefined : debugLevelId,
+    async () => {
+      await report("Executing the Apex");
+      const startedAt = new Date();
+      const apexResult = await executeAnonymousWithLog(
+        connection,
+        apex,
+        levels,
       );
-    }
 
-    const logId = await findStoredLogId(
-      connection,
-      userId,
-      apexResult.debugLog,
-      startedAt,
-    );
-    return { apexResult, logId };
-  });
+      if (!apexResult.compiled) {
+        throw new Error(
+          `Apex could not be compiled at line ${apexResult.line}, column ${apexResult.column}: ${apexResult.compileProblem}`,
+        );
+      }
+
+      const logId = await findStoredLogId(
+        connection,
+        userId,
+        apexResult.debugLog,
+        startedAt,
+      );
+      return { apexResult, logId };
+    },
+  );
 
   await report("Writing the debug log");
 
@@ -222,7 +232,7 @@ export async function executeAnonymous(
     // Said outright, because an empty file and a zero duration otherwise read
     // as a run that did nothing rather than a log that was never captured.
     apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
-    traceFlagWarning,
+    ...traceFlagWarnings,
     // Only for a caller-given directory: the default is inside the project root
     // by construction, so checking it could only ever say the obvious.
     args.outputDir
@@ -261,44 +271,52 @@ export async function executeAnonymous(
   };
 }
 
-// Only an active flag stores the log the id comes from, so reuse the user's or add one for this run: .claude/rules/trace-flags.md
+// Only a live flag stores the log the file's id comes from; `flagLevelId` is undefined when the user has one (.claude/rules/trace-flags.md).
 async function withTraceFlagForRun<T>(
   connection: Connection,
   userId: string,
-  debugLevelId: string,
+  flagLevelId: string | undefined,
   run: () => Promise<T>,
-): Promise<{ value: T; warning?: string }> {
-  const createdId = await createRunTraceFlag(connection, userId, debugLevelId);
+): Promise<{ value: T; warnings: string[] }> {
+  const created =
+    flagLevelId === undefined
+      ? {}
+      : await createRunTraceFlag(connection, userId, flagLevelId);
 
-  const outcome = await run().then(
-    (value) => ({ value }),
-    (error: unknown) => ({ error }),
-  );
-  const warning = await removeRunTraceFlag(connection, createdId);
-  if ("error" in outcome) {
-    throw outcome.error;
+  let value: T;
+  let deleteWarning: string | undefined;
+  try {
+    value = await run();
+  } finally {
+    deleteWarning = await removeRunTraceFlag(connection, created.id);
   }
-  return { value: outcome.value, warning };
+  return {
+    value,
+    warnings: [created.warning, deleteWarning].filter(
+      (warning): warning is string => warning !== undefined,
+    ),
+  };
 }
 
-// Refused as already traced: the user's own flag, or a concurrent run's, stores this log.
+// A refused flag costs only the file's log id, so the run goes on and says so.
 async function createRunTraceFlag(
   connection: Connection,
   userId: string,
   debugLevelId: string,
-): Promise<string | undefined> {
+): Promise<{ id?: string; warning?: string }> {
   try {
-    return await createTraceFlag(
-      connection,
-      userId,
-      debugLevelId,
-      RUN_TRACE_FLAG_MS,
-    );
+    return {
+      id: await createTraceFlag(
+        connection,
+        userId,
+        debugLevelId,
+        RUN_TRACE_FLAG_MS,
+      ),
+    };
   } catch (error) {
-    if (isAlreadyTraced(error)) {
-      return undefined;
-    }
-    throw error;
+    const warning = `Could not set a trace flag for this run, so the org may not store its log and the file may be named by time, not log id: ${error instanceof Error ? error.message : String(error)}`;
+    console.error(`[apex-log-mcp] ${warning}`);
+    return { warning };
   }
 }
 

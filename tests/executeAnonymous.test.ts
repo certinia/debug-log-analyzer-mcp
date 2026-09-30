@@ -24,10 +24,9 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 }));
 
 jest.mock("../src/salesforce/traceFlags", () => ({
+  hasActiveTraceFlag: jest.fn(),
   createTraceFlag: jest.fn(),
   deleteTraceFlag: jest.fn(),
-  isAlreadyTraced: jest.requireActual("../src/salesforce/traceFlags")
-    .isAlreadyTraced,
 }));
 
 jest.mock("../src/salesforce/connection", () => ({
@@ -70,7 +69,11 @@ import {
   ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
 } from "../src/salesforce/debugLevels";
-import { createTraceFlag, deleteTraceFlag } from "../src/salesforce/traceFlags";
+import {
+  createTraceFlag,
+  deleteTraceFlag,
+  hasActiveTraceFlag,
+} from "../src/salesforce/traceFlags";
 import { resolveOrg } from "../src/salesforce/connection";
 import { loadApexLog } from "../src/tools/apexLogSource";
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
@@ -89,6 +92,9 @@ const mockEnsureDebugLevel = ensureDebugLevel as jest.MockedFunction<
   typeof ensureDebugLevel
 >;
 const mockLoadApexLog = loadApexLog as jest.MockedFunction<typeof loadApexLog>;
+const mockHasActiveTraceFlag = hasActiveTraceFlag as jest.MockedFunction<
+  typeof hasActiveTraceFlag
+>;
 const mockCreateTraceFlag = createTraceFlag as jest.MockedFunction<
   typeof createTraceFlag
 >;
@@ -285,6 +291,7 @@ describe("Execute Anonymous", () => {
       id: testDebugLevelId,
       levels: DEFAULT_TRACE_CONFIG,
     });
+    mockHasActiveTraceFlag.mockResolvedValue(false);
     mockCreateTraceFlag.mockResolvedValue(testTraceFlagId);
     mockDeleteTraceFlag.mockResolvedValue();
     mockLoadApexLog.mockResolvedValue({
@@ -625,14 +632,9 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    // The user's own flag, or a concurrent run's, already stores the log, and
-    // the header sets this run's levels, so that flag is used untouched.
-    it("runs on the flag already there when the user is already being traced", async () => {
-      mockCreateTraceFlag.mockRejectedValue(
-        Object.assign(new Error("already being traced"), {
-          errorCode: "FIELD_INTEGRITY_EXCEPTION",
-        }),
-      );
+    // A live flag already stores the log, and the header sets this run's levels.
+    it("runs on the user's live trace flag and leaves it untouched", async () => {
+      mockHasActiveTraceFlag.mockResolvedValue(true);
 
       const result = await executeAnonymous(
         mockServer,
@@ -641,13 +643,16 @@ describe("Execute Anonymous", () => {
         policy(),
       );
 
-      expect(mockRequest).toHaveBeenCalledTimes(1);
+      expect(hasActiveTraceFlag).toHaveBeenCalledWith(
+        mockConnection,
+        testUserId,
+      );
+      expect(createTraceFlag).not.toHaveBeenCalled();
       expect(deleteTraceFlag).not.toHaveBeenCalled();
       expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
-    // Without a flag Salesforce stores no log, so there is no id to name the
-    // file by. The flag lives until the log id is matched, then goes.
+    // Without a live flag Salesforce stores no log, so the flag lives until the id is matched.
     it("creates a flag for the run and deletes it once the log id is matched", async () => {
       const order: string[] = [];
       mockCreateTraceFlag.mockImplementation(async () => {
@@ -698,8 +703,7 @@ describe("Execute Anonymous", () => {
       );
     });
 
-    // The Apex has run and the log is in hand, so a failed delete must not
-    // lose it. The flag expires on its own; the caller is told it is there.
+    // The log is in hand and the flag expires on its own, so a failed delete only warns.
     it("returns the log and warns when the flag it created cannot be deleted", async () => {
       mockDeleteTraceFlag.mockRejectedValue(new Error("Locked"));
 
@@ -717,18 +721,25 @@ describe("Execute Anonymous", () => {
       expect(decoded.warning).toContain("15 minutes");
     });
 
-    it("should propagate errors from createTraceFlag", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
+    // The header returns the log without a flag; only the file's log id depends on one.
+    it("runs and warns when Salesforce refuses the run's trace flag", async () => {
       mockCreateTraceFlag.mockRejectedValue(
-        new Error("Failed to create trace flag"),
+        new Error("FIELD_INTEGRITY_EXCEPTION: overlapping trace flag"),
       );
 
-      await expect(
-        executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Failed to create trace flag");
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
 
-      expect(mockRequest).not.toHaveBeenCalled();
+      const decoded = toonDecode(result);
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+      expect(deleteTraceFlag).not.toHaveBeenCalled();
+      expect(decoded.succeeded).toBe(true);
+      expect(decoded.warning).toContain("Could not set a trace flag");
+      expect(decoded.warning).toContain("overlapping trace flag");
     });
 
     it("should handle errors from the SOAP call", async () => {
