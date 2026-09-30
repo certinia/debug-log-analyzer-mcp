@@ -8,10 +8,10 @@
  *
  * `latest` is a pointer, not "the highest version". `npm install`, `npm install
  * pkg@latest` and `npx pkg` all follow it, and `pnpm publish` moves it to
- * whatever was just published unless `--tag` says otherwise. The VS Code
- * extension starts this server through `npx`, so a prerelease published without
- * a tag reaches every user on their next run - and the pointer can only be put
- * back by publishing again. That is what this script exists to prevent.
+ * whatever was just published unless `--tag` says otherwise. Every documented
+ * client setup starts this server through `npx`, so a prerelease published
+ * without a tag reaches every user on their next run - and the pointer can only
+ * be put back by publishing again. That is what this script exists to prevent.
  *
  * The prerelease identifier chooses the dist-tag, so `2.0.0-beta.1` publishes
  * under `beta` and is installed with `@certinia/apex-log-mcp@beta`. Only the

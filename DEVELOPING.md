@@ -374,7 +374,7 @@ Ensure all tests pass before submitting your pull request.
 
 Publishing a release publishes to npm. `.github/workflows/publish.yml` runs on `release: published`, and `scripts/release-tag.mjs` decides which npm **dist-tag** the version goes under.
 
-A dist-tag is a pointer to one version. `latest` is the one that matters, because `npm install @certinia/apex-log-mcp`, `@latest` and `npx` all follow it - and the VS Code extension starts this server through `npx`. A prerelease published under `latest` reaches every user on their next run, and the only way back is to publish again.
+A dist-tag is a pointer to one version. `latest` is the one that matters, because `npm install @certinia/apex-log-mcp`, `@latest` and `npx` all follow it - and every documented client setup starts this server through `npx`. A prerelease published under `latest` reaches every user on their next run, and the only way back is to publish again.
 
 So the version chooses the channel:
 

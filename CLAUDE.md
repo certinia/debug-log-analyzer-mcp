@@ -43,7 +43,7 @@ pnpm start
 
 ### MCP Integration
 
-Registered automatically by the Apex Log Analyzer VS Code extension, and spoken to over stdio.
+Users add it to their MCP client by hand (`.vscode/mcp.json`, `claude mcp add`), and it is spoken to over stdio.
 
 ## TypeScript Configuration
 
