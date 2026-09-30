@@ -24,7 +24,10 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 }));
 
 jest.mock("../src/salesforce/traceFlags", () => ({
-  ensureTraceFlag: jest.fn(),
+  createTraceFlag: jest.fn(),
+  deleteTraceFlag: jest.fn(),
+  isAlreadyTraced: jest.requireActual("../src/salesforce/traceFlags")
+    .isAlreadyTraced,
 }));
 
 jest.mock("../src/salesforce/connection", () => ({
@@ -67,7 +70,7 @@ import {
   ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
 } from "../src/salesforce/debugLevels";
-import { ensureTraceFlag } from "../src/salesforce/traceFlags";
+import { createTraceFlag, deleteTraceFlag } from "../src/salesforce/traceFlags";
 import { resolveOrg } from "../src/salesforce/connection";
 import { loadApexLog } from "../src/tools/apexLogSource";
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
@@ -86,6 +89,12 @@ const mockEnsureDebugLevel = ensureDebugLevel as jest.MockedFunction<
   typeof ensureDebugLevel
 >;
 const mockLoadApexLog = loadApexLog as jest.MockedFunction<typeof loadApexLog>;
+const mockCreateTraceFlag = createTraceFlag as jest.MockedFunction<
+  typeof createTraceFlag
+>;
+const mockDeleteTraceFlag = deleteTraceFlag as jest.MockedFunction<
+  typeof deleteTraceFlag
+>;
 const mockConfigAggregatorCreate = ConfigAggregator.create as jest.Mock;
 const mockStateAggregatorGetInstance = StateAggregator.getInstance as jest.Mock;
 
@@ -171,6 +180,7 @@ describe("Execute Anonymous", () => {
   const testUserId = "005000000000001";
   const testDebugLevelId = "07L000000000001";
   const testLogId = "07L000000000002";
+  const testTraceFlagId = "7tf000000000001";
   const testLogBody = `${DEFAULT_LOG_HEADER}\nAPEX DEBUG LOG CONTENT HERE\n`;
   const testApexCode = "System.debug('Hello World');";
 
@@ -275,9 +285,8 @@ describe("Execute Anonymous", () => {
       id: testDebugLevelId,
       levels: DEFAULT_TRACE_CONFIG,
     });
-    (
-      ensureTraceFlag as jest.MockedFunction<typeof ensureTraceFlag>
-    ).mockResolvedValue();
+    mockCreateTraceFlag.mockResolvedValue(testTraceFlagId);
+    mockDeleteTraceFlag.mockResolvedValue();
     mockLoadApexLog.mockResolvedValue({
       duration: { total: 150_000_000 },
     } as ApexLog);
@@ -294,10 +303,15 @@ describe("Execute Anonymous", () => {
         "test@example.com",
       );
       expect(ensureDebugLevel).toHaveBeenCalledWith(mockConnection, undefined);
-      expect(ensureTraceFlag).toHaveBeenCalledWith(
+      expect(createTraceFlag).toHaveBeenCalledWith(
         mockConnection,
         testUserId,
         testDebugLevelId,
+        15 * 60 * 1000,
+      );
+      expect(deleteTraceFlag).toHaveBeenCalledWith(
+        mockConnection,
+        testTraceFlagId,
       );
       expectPostedApex(testApexCode);
       expect(mockSobject).toHaveBeenCalledWith("ApexLog");
@@ -398,7 +412,7 @@ describe("Execute Anonymous", () => {
 
       expect(getUserIdByUsername).not.toHaveBeenCalled();
       expect(ensureDebugLevel).not.toHaveBeenCalled();
-      expect(ensureTraceFlag).not.toHaveBeenCalled();
+      expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
@@ -592,7 +606,7 @@ describe("Execute Anonymous", () => {
       ).rejects.toThrow("User not found");
 
       expect(ensureDebugLevel).not.toHaveBeenCalled();
-      expect(ensureTraceFlag).not.toHaveBeenCalled();
+      expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
@@ -607,17 +621,106 @@ describe("Execute Anonymous", () => {
         executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("Failed to create debug level");
 
-      expect(ensureTraceFlag).not.toHaveBeenCalled();
+      expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it("should propagate errors from ensureTraceFlag", async () => {
+    // The user's own flag, or a concurrent run's, already stores the log, and
+    // the header sets this run's levels, so that flag is used untouched.
+    it("runs on the flag already there when the user is already being traced", async () => {
+      mockCreateTraceFlag.mockRejectedValue(
+        Object.assign(new Error("already being traced"), {
+          errorCode: "FIELD_INTEGRITY_EXCEPTION",
+        }),
+      );
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+      expect(deleteTraceFlag).not.toHaveBeenCalled();
+      expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
+    });
+
+    // Without a flag Salesforce stores no log, so there is no id to name the
+    // file by. The flag lives until the log id is matched, then goes.
+    it("creates a flag for the run and deletes it once the log id is matched", async () => {
+      const order: string[] = [];
+      mockCreateTraceFlag.mockImplementation(async () => {
+        order.push("create");
+        return testTraceFlagId;
+      });
+      mockRequest.mockImplementation(async () => {
+        order.push("run");
+        return soapResponse();
+      });
+      mockFindOne.mockImplementation(async () => {
+        order.push("match");
+        return { Id: testLogId };
+      });
+      mockDeleteTraceFlag.mockImplementation(async () => {
+        order.push("delete");
+      });
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(order).toEqual(["create", "run", "match", "delete"]);
+      expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
+      expect(toonDecode(result).warning).toBeUndefined();
+    });
+
+    it("still deletes the flag it created when the Apex does not compile", async () => {
+      mockRequest.mockResolvedValue(
+        soapResponse({
+          compiled: "false",
+          line: "1",
+          column: "5",
+          compileProblem: "Unexpected token",
+        }),
+      );
+
+      await expect(
+        executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
+      ).rejects.toThrow("Apex could not be compiled");
+
+      expect(deleteTraceFlag).toHaveBeenCalledWith(
+        mockConnection,
+        testTraceFlagId,
+      );
+    });
+
+    // The Apex has run and the log is in hand, so a failed delete must not
+    // lose it. The flag expires on its own; the caller is told it is there.
+    it("returns the log and warns when the flag it created cannot be deleted", async () => {
+      mockDeleteTraceFlag.mockRejectedValue(new Error("Locked"));
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      const decoded = toonDecode(result);
+      expect(decoded.succeeded).toBe(true);
+      expect(decoded.filePath).toContain(`${testLogId}.log`);
+      expect(decoded.warning).toContain(testTraceFlagId);
+      expect(decoded.warning).toContain("15 minutes");
+    });
+
+    it("should propagate errors from createTraceFlag", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const mockEnsureTraceFlag = ensureTraceFlag as jest.MockedFunction<
-        typeof ensureTraceFlag
-      >;
-      mockEnsureTraceFlag.mockRejectedValue(
+      mockCreateTraceFlag.mockRejectedValue(
         new Error("Failed to create trace flag"),
       );
 
@@ -696,7 +799,7 @@ describe("Execute Anonymous", () => {
 
       expect(getUserIdByUsername).not.toHaveBeenCalled();
       expect(ensureDebugLevel).not.toHaveBeenCalled();
-      expect(ensureTraceFlag).not.toHaveBeenCalled();
+      expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
   });
@@ -846,7 +949,7 @@ describe("Execute Anonymous", () => {
       await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(ensureDebugLevel).not.toHaveBeenCalled();
-      expect(ensureTraceFlag).not.toHaveBeenCalled();
+      expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
@@ -936,7 +1039,7 @@ describe("Execute Anonymous", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("does not match this call");
       expect(ensureDebugLevel).not.toHaveBeenCalled();
-      expect(ensureTraceFlag).not.toHaveBeenCalled();
+      expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
