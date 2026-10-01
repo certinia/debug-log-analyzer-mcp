@@ -108,7 +108,7 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
    node dist/index.js --allow-production-orgs
    ```
 
-   To disable Apex execution altogether, use `--no-apex-execution`. See the [README](README.md#production-safety) for the full policy.
+   To disable Apex execution altogether, use `--no-apex-execution`. To refuse named orgs or whole org types, whatever `--allow-production-orgs` says, use `--deny-orgs` and `--deny-org-types`. See the [README](README.md#production-safety) for the full policy.
 
 ## 🔤 Naming Tools and Fields
 

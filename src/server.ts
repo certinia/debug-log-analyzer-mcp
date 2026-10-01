@@ -32,12 +32,20 @@ import {
   createConfirmationLedger,
   type ConfirmationState,
 } from "./policy/orgExecutionPolicy.js";
+import {
+  compileDenyOrgs,
+  parseDenyOrgPatterns,
+  parseDenyOrgTypes,
+} from "./policy/orgDenyList.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
 import packageJson from "../package.json" with { type: "json" };
 
 export type ServerConfig = {
   allowProductionOrgs?: boolean;
   apexExecutionDisabled?: boolean;
+  /** `--deny-orgs` patterns, cleaned. Compiled once per server. */
+  denyOrgs?: string[];
+  denyOrgTypes?: OrgClassification[];
 };
 
 // An org id maps to one classification for the life of the process, so this
@@ -76,6 +84,9 @@ function definitionsVaryByConfig(config: Required<ServerConfig>): boolean {
 export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const allowProductionOrgs = config.allowProductionOrgs ?? false;
   const apexExecutionDisabled = config.apexExecutionDisabled ?? false;
+  const denyOrgs = config.denyOrgs ?? [];
+  const denyOrgTypes = config.denyOrgTypes ?? [];
+  const denyOrgPatterns = compileDenyOrgs(denyOrgs);
   const server = new McpServer(
     {
       name: "apex-log-mcp",
@@ -101,6 +112,8 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
           cacheScope: definitionsVaryByConfig({
             allowProductionOrgs,
             apexExecutionDisabled,
+            denyOrgs,
+            denyOrgTypes,
           })
             ? "private"
             : "public",
@@ -143,6 +156,8 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       const { executeAnonymous } = await import("./tools/executeAnonymous.js");
       return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
         allowProductionOrgs,
+        denyOrgs: denyOrgPatterns,
+        denyOrgTypes,
         apexExecutionDisabled,
         classificationCache,
         mintConfirmationState: (payload, ctx) =>
@@ -187,6 +202,9 @@ export function runStdioServer(config: ServerConfig = {}): void {
  * `--allowed-orgs` is deprecated and ignored, but is still declared here because
  * parseArgs is strict: leaving it out would make existing client configurations
  * fail to start.
+ *
+ * Throws on an unrecognised `--deny-org-types` value, so a typo stops the server
+ * rather than leaving a deny that silently never matches.
  */
 export function parseServerConfig(argv: string[]): ServerConfig {
   const { values } = parseArgs({
@@ -195,6 +213,8 @@ export function parseServerConfig(argv: string[]): ServerConfig {
       "allowed-orgs": { type: "string" },
       "allow-production-orgs": { type: "boolean" },
       "no-apex-execution": { type: "boolean" },
+      "deny-orgs": { type: "string", multiple: true },
+      "deny-org-types": { type: "string", multiple: true },
     },
   });
 
@@ -208,5 +228,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   return {
     allowProductionOrgs: values["allow-production-orgs"] ?? false,
     apexExecutionDisabled: values["no-apex-execution"] ?? false,
+    denyOrgs: parseDenyOrgPatterns(values["deny-orgs"] ?? []),
+    denyOrgTypes: parseDenyOrgTypes(values["deny-org-types"] ?? []),
   };
 }

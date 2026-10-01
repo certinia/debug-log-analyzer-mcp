@@ -73,6 +73,10 @@ import { loadApexLog } from "../src/tools/apexLogSource";
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
 import {
+  compileDenyOrgs,
+  type DenyPattern,
+} from "../src/policy/orgDenyList";
+import {
   createConfirmationLedger,
   type ConfirmationState,
 } from "../src/policy/orgExecutionPolicy";
@@ -139,12 +143,16 @@ function policy(
   overrides: {
     allowProductionOrgs?: boolean;
     apexExecutionDisabled?: boolean;
+    denyOrgs?: DenyPattern[];
+    denyOrgTypes?: OrgClassification[];
     classificationCache?: Map<string, OrgClassification>;
   } = {},
 ) {
   return {
     allowProductionOrgs: false,
     apexExecutionDisabled: false,
+    denyOrgs: [],
+    denyOrgTypes: [],
     classificationCache: new Map<string, OrgClassification>(),
     mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
     consumeConfirmation: createConfirmationLedger(),
@@ -798,6 +806,45 @@ describe("Execute Anonymous", () => {
 
       expect(toonDecode(result).orgType).toBe("sandbox");
       expectPostedApex(testApexCode);
+    });
+
+    // A deny turns on these three reaching the matcher before classifyOrg
+    // does. The classification query and the Apex both need a round trip, and
+    // neither is worth making for an org the configuration already refused.
+    it.each([
+      ["org id", TEST_ORG_ID],
+      ["username", "test@*.com"],
+      ["instance URL", "*.my.salesforce.com"],
+    ])("should deny on the %s the auth file already knows", async (_f, p) => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ denyOrgs: compileDenyOrgs([p]) }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(`--deny-orgs pattern '${p}'`);
+      expect(mockRetrieveOrgInfo).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("should deny an org type even with --allow-production-orgs", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ allowProductionOrgs: true, denyOrgTypes: ["production"] }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("its type is 'production'");
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should ask for confirmation on the first production call", async () => {
