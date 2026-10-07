@@ -1,87 +1,72 @@
 import type { Connection } from "@salesforce/core";
-import { toDateTimeLiteral } from "./soql.js";
+import { CLOCK_SKEW_MS, toDateTimeLiteral } from "./soql.js";
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
-const USER_DEBUG = "USER_DEBUG";
 
-type TraceFlag = {
-  Id: string;
-  TracedEntityId: string;
-  DebugLevelId: string;
-  StartDate: string;
-  ExpirationDate: string;
-};
+// A Developer Console flag stores the user's logs too - see .claude/rules/trace-flags.md.
+const STORING_LOG_TYPES = ["USER_DEBUG", "DEVELOPER_LOG"];
 
-export async function ensureTraceFlag(
+/** Whether the entity has a flag live now that stores its logs. */
+export async function hasActiveTraceFlag(
   connection: Connection,
   tracedEntityId: string,
-  debugLevelId: string,
-): Promise<void> {
-  const existingTraceFlag = await findActiveTraceFlag(
-    connection,
-    tracedEntityId,
-  );
-
-  if (existingTraceFlag) {
-    if (existingTraceFlag.DebugLevelId !== debugLevelId) {
-      await updateTraceFlag(connection, existingTraceFlag.Id, debugLevelId);
-    }
-    return;
-  }
-
-  const createResult = await createTraceFlag(
-    connection,
-    tracedEntityId,
-    debugLevelId,
-  );
-
-  if (!createResult.success) {
-    throw new Error(
-      `Failed to create TraceFlag: ${JSON.stringify(createResult.errors)}`,
-    );
-  }
-}
-
-async function findActiveTraceFlag(
-  connection: Connection,
-  tracedEntityId: string,
-): Promise<TraceFlag | null> {
-  return await connection.tooling.sobject(TRACE_FLAG_SOBJECT).findOne(
+): Promise<boolean> {
+  const now = toDateTimeLiteral(new Date());
+  const flag = await connection.tooling.sobject(TRACE_FLAG_SOBJECT).findOne(
     {
       TracedEntityId: tracedEntityId,
-      ExpirationDate: { $gt: toDateTimeLiteral(new Date()) },
-      LogType: USER_DEBUG,
+      StartDate: { $lte: now },
+      ExpirationDate: { $gt: now },
+      LogType: { $in: STORING_LOG_TYPES },
     },
-    ["Id", "TracedEntityId", "DebugLevelId", "StartDate", "ExpirationDate"],
+    ["Id"],
   );
+  return flag !== null;
 }
 
-async function updateTraceFlag(
+/**
+ * Create a `USER_DEBUG` flag live for `durationMs`, and return its id.
+ *
+ * Starts back by the clock skew, so an org clock behind this one still sees it
+ * live. Salesforce refuses it when the entity has a `USER_DEBUG` flag whose
+ * window overlaps, live or not.
+ */
+export async function createTraceFlag(
+  connection: Connection,
+  tracedEntityId: string,
+  debugLevelId: string,
+  durationMs: number,
+): Promise<string> {
+  const now = Date.now();
+  const result = await connection.tooling.sobject(TRACE_FLAG_SOBJECT).create({
+    TracedEntityId: tracedEntityId,
+    DebugLevelId: debugLevelId,
+    StartDate: new Date(now - CLOCK_SKEW_MS).toISOString(),
+    ExpirationDate: new Date(now + durationMs).toISOString(),
+    LogType: "USER_DEBUG",
+  });
+
+  if (!result.success || !result.id) {
+    throw new Error(
+      `Failed to create TraceFlag: ${JSON.stringify(result.errors)}`,
+    );
+  }
+
+  return result.id;
+}
+
+/** Delete a trace flag by id. */
+export async function deleteTraceFlag(
   connection: Connection,
   traceFlagId: string,
-  debugLevelId: string,
 ): Promise<void> {
   const result = await connection.tooling
     .sobject(TRACE_FLAG_SOBJECT)
-    .update({ Id: traceFlagId, DebugLevelId: debugLevelId });
+    .destroy(traceFlagId);
 
   if (!result.success) {
     throw new Error(
-      `Failed to update TraceFlag: ${JSON.stringify(result.errors)}`,
+      `Failed to delete TraceFlag: ${JSON.stringify(result.errors)}`,
     );
   }
-}
-
-async function createTraceFlag(
-  connection: Connection,
-  tracedEntityId: string,
-  debugLevelId: string,
-): Promise<any> {
-  return await connection.tooling.sobject(TRACE_FLAG_SOBJECT).create({
-    TracedEntityId: tracedEntityId,
-    DebugLevelId: debugLevelId,
-    StartDate: new Date().toISOString(),
-    ExpirationDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    LogType: USER_DEBUG,
-  });
 }

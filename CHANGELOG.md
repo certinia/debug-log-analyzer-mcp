@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Common Changelog](https://common-changelog.org/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Stop `apexlog_execute_anonymous` changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
+- Run the Apex with a warning when the org refuses `apexlog_execute_anonymous` a trace flag, instead of failing the call ([#207])
+
 ## [2.0.1] - 2026-09-11
 
 _Upgrading from 1.x? Every tool is renamed, and `--allowed-orgs` is gone. See [Migrating from 1.x](MIGRATING.md)._
@@ -93,3 +100,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#188]: https://github.com/certinia/debug-log-analyzer-mcp/issues/188
 [#189]: https://github.com/certinia/debug-log-analyzer-mcp/issues/189
 [#191]: https://github.com/certinia/debug-log-analyzer-mcp/issues/191
+[#207]: https://github.com/certinia/debug-log-analyzer-mcp/issues/207

@@ -64,7 +64,7 @@ export const executeAnonymousInputSchema = {
     ])
     .optional()
     .describe(
-      `Trace flag log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: ${defaultLevelsClause()}.`,
+      `This run's log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: ${defaultLevelsClause()}.`,
     ),
 };
 
