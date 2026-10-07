@@ -32,17 +32,14 @@ import {
   createConfirmationLedger,
   type ConfirmationState,
 } from "./policy/orgExecutionPolicy.js";
-import { compileDenyOrgs, parseDenyOrgs } from "./policy/orgDenyList.js";
+import { compileDenyList, type DenyList } from "./policy/orgDenyList.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
 import packageJson from "../package.json" with { type: "json" };
 
 export type ServerConfig = {
   allowProductionOrgs?: boolean;
   apexExecutionDisabled?: boolean;
-  /** `--deny-orgs` identity patterns, cleaned. Compiled once per server. */
-  denyOrgs?: string[];
-  /** `--deny-orgs` `type:` entries. */
-  denyOrgTypes?: OrgClassification[];
+  denyList?: DenyList;
 };
 
 // An org id maps to one classification for the life of the process, so this
@@ -81,9 +78,7 @@ function definitionsVaryByConfig(config: Required<ServerConfig>): boolean {
 export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const allowProductionOrgs = config.allowProductionOrgs ?? false;
   const apexExecutionDisabled = config.apexExecutionDisabled ?? false;
-  const denyOrgs = config.denyOrgs ?? [];
-  const denyOrgTypes = config.denyOrgTypes ?? [];
-  const denyOrgPatterns = compileDenyOrgs(denyOrgs);
+  const denyList = config.denyList ?? { patterns: [], types: [] };
   const server = new McpServer(
     {
       name: "apex-log-mcp",
@@ -109,8 +104,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
           cacheScope: definitionsVaryByConfig({
             allowProductionOrgs,
             apexExecutionDisabled,
-            denyOrgs,
-            denyOrgTypes,
+            denyList,
           })
             ? "private"
             : "public",
@@ -153,8 +147,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       const { executeAnonymous } = await import("./tools/executeAnonymous.js");
       return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
         allowProductionOrgs,
-        denyOrgs: denyOrgPatterns,
-        denyOrgTypes,
+        denyList,
         apexExecutionDisabled,
         classificationCache,
         mintConfirmationState: (payload, ctx) =>
@@ -213,7 +206,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
       "deny-orgs": { type: "string", multiple: true },
     },
   });
-  const deny = parseDenyOrgs(values["deny-orgs"] ?? []);
+  const denyList = compileDenyList(values["deny-orgs"] ?? []);
 
   if (values["allowed-orgs"] !== undefined) {
     console.error(
@@ -225,7 +218,6 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   return {
     allowProductionOrgs: values["allow-production-orgs"] ?? false,
     apexExecutionDisabled: values["no-apex-execution"] ?? false,
-    denyOrgs: deny.patterns,
-    denyOrgTypes: deny.types,
+    denyList,
   };
 }

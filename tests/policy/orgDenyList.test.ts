@@ -3,12 +3,9 @@
  */
 
 import {
-  compileDenyOrgs,
-  denyOrgRefusal,
-  denyOrgTypeRefusal,
+  compileDenyList,
+  denyRefusal,
   matchDeniedOrg,
-  parseDenyOrgPatterns,
-  parseDenyOrgs,
   type OrgIdentity,
 } from "../../src/policy/orgDenyList";
 
@@ -20,38 +17,59 @@ const identity: OrgIdentity = {
   instanceUrl: "https://acme.my.salesforce.com",
 };
 
-/** A config's worth of patterns, cleaned and compiled the way the server does. */
+/** A config's identity patterns, compiled the way the server does. */
 function deny(...patterns: string[]) {
-  return compileDenyOrgs(parseDenyOrgPatterns(patterns));
+  return compileDenyList(patterns).patterns;
 }
 
-describe("parseDenyOrgPatterns", () => {
+const sources = (raw: string[]) =>
+  compileDenyList(raw).patterns.map((pattern) => pattern.source);
+
+describe("compileDenyList", () => {
   it("should split one comma-separated value", () => {
-    expect(parseDenyOrgPatterns(["a@x.com,b@x.com"])).toEqual([
-      "a@x.com",
-      "b@x.com",
-    ]);
+    expect(sources(["a@x.com,b@x.com"])).toEqual(["a@x.com", "b@x.com"]);
   });
 
   it("should gather a repeated flag", () => {
-    expect(parseDenyOrgPatterns(["a@x.com", "b@x.com"])).toEqual([
-      "a@x.com",
-      "b@x.com",
-    ]);
+    expect(sources(["a@x.com", "b@x.com"])).toEqual(["a@x.com", "b@x.com"]);
   });
 
   it("should trim and drop empty values", () => {
-    expect(parseDenyOrgPatterns([" a@x.com , ,b@x.com "])).toEqual([
-      "a@x.com",
-      "b@x.com",
-    ]);
+    expect(sources([" a@x.com , ,b@x.com "])).toEqual(["a@x.com", "b@x.com"]);
   });
 
   // The refusal echoes this back, so it has to be what the user typed.
   it("should leave the case the user wrote", () => {
-    expect(parseDenyOrgPatterns(["Prod-EU@Acme.com"])).toEqual([
-      "Prod-EU@Acme.com",
+    expect(sources(["Prod-EU@Acme.com"])).toEqual(["Prod-EU@Acme.com"]);
+  });
+
+  it("should split type: entries from identity patterns", () => {
+    const list = compileDenyList([
+      "euprod,type:production",
+      "type:unknown,*@x.com",
     ]);
+
+    expect(list.patterns.map((pattern) => pattern.source)).toEqual([
+      "euprod",
+      "*@x.com",
+    ]);
+    expect(list.types).toEqual(["production", "unknown"]);
+  });
+
+  it("should read a type: entry whatever the case", () => {
+    expect(compileDenyList(["TYPE: Sandbox"]).types).toEqual(["sandbox"]);
+  });
+
+  it("should throw on a type: entry that is not an org type", () => {
+    expect(() => compileDenyList(["type:prodction"])).toThrow(
+      "'type:prodction' is not an org type",
+    );
+  });
+
+  it("should name the type: entries it accepts", () => {
+    expect(() => compileDenyList(["type:nope"])).toThrow(
+      "type:sandbox, type:scratch, type:developer, type:trial, type:production, type:unknown",
+    );
   });
 });
 
@@ -63,6 +81,7 @@ describe("matchDeniedOrg", () => {
     ["alias", "euprod"],
     ["instance host", "acme.my.salesforce.com"],
     ["instance URL", "https://acme.my.salesforce.com/"],
+    ["pasted URL", "https://acme.my.salesforce.com:443/lightning/page/home"],
   ])("should deny on an exact %s", (_field, pattern) => {
     expect(matchDeniedOrg(deny(pattern), identity)?.source).toBe(pattern);
   });
@@ -94,23 +113,8 @@ describe("matchDeniedOrg", () => {
     expect(matchDeniedOrg(deny("acme--*"), identity)).toBeUndefined();
   });
 
-  it("should skip an instance URL that does not parse", () => {
-    expect(
-      matchDeniedOrg(deny("acme"), { ...identity, instanceUrl: "acme" }),
-    ).toBeUndefined();
-  });
-
   it("should match whatever the case", () => {
     expect(matchDeniedOrg(deny("EUPROD"), identity)?.source).toBe("EUPROD");
-  });
-
-  // A configuration built by hand never passes through parseServerConfig, and
-  // must not get a pattern that silently matches nothing.
-  it("should clean a pattern that was not parsed from a flag", () => {
-    expect(
-      matchDeniedOrg(compileDenyOrgs([" euprod , other@x.com "]), identity)
-        ?.source,
-    ).toBe("euprod");
   });
 
   it("should anchor a glob, so it cannot match a longer name", () => {
@@ -162,60 +166,18 @@ describe("matchDeniedOrg", () => {
   });
 });
 
-describe("parseDenyOrgs", () => {
-  it("should split type: entries from identity patterns", () => {
-    expect(
-      parseDenyOrgs(["euprod,type:production", "type:unknown,*@x.com"]),
-    ).toEqual({
-      patterns: ["euprod", "*@x.com"],
-      types: ["production", "unknown"],
-    });
-  });
+describe("denyRefusal", () => {
+  const refusal = denyRefusal("me@x.com", "prod-*");
 
-  it("should read a type: entry whatever the case", () => {
-    expect(parseDenyOrgs(["TYPE: Sandbox"]).types).toEqual(["sandbox"]);
-  });
-
-  it("should throw on a type: entry that is not an org type", () => {
-    expect(() => parseDenyOrgs(["type:prodction"])).toThrow(
-      "'type:prodction' is not an org type",
-    );
-  });
-
-  it("should name the type: entries it accepts", () => {
-    expect(() => parseDenyOrgs(["type:nope"])).toThrow(
-      "type:sandbox, type:scratch, type:developer, type:trial, type:production, type:unknown",
-    );
-  });
-});
-
-describe("the deny refusals", () => {
-  const pattern = deny("prod-*")[0]!;
-
-  it("should name the pattern that matched", () => {
-    expect(denyOrgRefusal("me@x.com", pattern)).toContain(
-      "--deny-orgs pattern 'prod-*'",
-    );
-  });
-
-  it("should name the type: entry that matched", () => {
-    expect(denyOrgTypeRefusal("me@x.com", "production")).toContain(
-      "--deny-orgs entry 'type:production'",
-    );
+  it("should name the entry that matched", () => {
+    expect(refusal).toContain("--deny-orgs entry 'prod-*'");
   });
 
   it("should say that nothing lifts a deny", () => {
-    expect(denyOrgRefusal("me@x.com", pattern)).toContain(
-      "no flag and no confirmation lifts it",
-    );
+    expect(refusal).toContain("no flag and no confirmation lifts it");
   });
 
   it("should not point at --allow-production-orgs, which cannot lift a deny", () => {
-    expect(denyOrgRefusal("me@x.com", pattern)).not.toContain(
-      "--allow-production-orgs",
-    );
-    expect(denyOrgTypeRefusal("me@x.com", "production")).not.toContain(
-      "--allow-production-orgs",
-    );
+    expect(refusal).not.toContain("--allow-production-orgs");
   });
 });

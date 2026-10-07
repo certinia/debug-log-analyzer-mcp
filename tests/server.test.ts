@@ -408,8 +408,7 @@ describe("createApexLogServer", () => {
         {
           allowProductionOrgs: false,
           apexExecutionDisabled: false,
-          denyOrgs: [],
-          denyOrgTypes: [],
+          denyList: { patterns: [], types: [] },
           classificationCache: expect.any(Map),
           mintConfirmationState: expect.any(Function),
           consumeConfirmation: expect.any(Function),
@@ -588,8 +587,7 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig([])).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
-      denyOrgs: [],
-      denyOrgTypes: [],
+      denyList: { patterns: [], types: [] },
     });
   });
 
@@ -597,8 +595,7 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig(["--allow-production-orgs"])).toEqual({
       allowProductionOrgs: true,
       apexExecutionDisabled: false,
-      denyOrgs: [],
-      denyOrgTypes: [],
+      denyList: { patterns: [], types: [] },
     });
   });
 
@@ -606,36 +603,36 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig(["--no-apex-execution"])).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: true,
-      denyOrgs: [],
-      denyOrgTypes: [],
+      denyList: { patterns: [], types: [] },
     });
   });
 
   it("should read --deny-orgs, comma-separated and repeated", () => {
-    expect(
-      parseServerConfig([
-        "--deny-orgs",
-        "A@x.com, b@x.com",
-        "--deny-orgs",
-        "prod-*@x.com",
-      ]),
-    ).toEqual({
-      allowProductionOrgs: false,
-      apexExecutionDisabled: false,
-      denyOrgs: ["A@x.com", "b@x.com", "prod-*@x.com"],
-      denyOrgTypes: [],
-    });
+    const { denyList } = parseServerConfig([
+      "--deny-orgs",
+      "A@x.com, b@x.com",
+      "--deny-orgs",
+      "prod-*@x.com",
+    ]);
+
+    expect(denyList?.patterns.map((pattern) => pattern.source)).toEqual([
+      "A@x.com",
+      "b@x.com",
+      "prod-*@x.com",
+    ]);
+    expect(denyList?.types).toEqual([]);
   });
 
   it("should read type: entries in --deny-orgs as org types", () => {
-    expect(
-      parseServerConfig(["--deny-orgs", "type:production,euprod,type:unknown"]),
-    ).toEqual({
-      allowProductionOrgs: false,
-      apexExecutionDisabled: false,
-      denyOrgs: ["euprod"],
-      denyOrgTypes: ["production", "unknown"],
-    });
+    const { denyList } = parseServerConfig([
+      "--deny-orgs",
+      "type:production,euprod,type:unknown",
+    ]);
+
+    expect(denyList?.patterns.map((pattern) => pattern.source)).toEqual([
+      "euprod",
+    ]);
+    expect(denyList?.types).toEqual(["production", "unknown"]);
   });
 
   // A pattern that matches nothing looks the same as one that has yet to match,
@@ -652,8 +649,7 @@ describe("parseServerConfig", () => {
     ).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
-      denyOrgs: [],
-      denyOrgTypes: [],
+      denyList: { patterns: [], types: [] },
     });
   });
 

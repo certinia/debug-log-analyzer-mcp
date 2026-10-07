@@ -34,9 +34,9 @@ import {
   type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
 import {
-  denyOrgRefusal,
+  denyRefusal,
   matchDeniedOrg,
-  type DenyPattern,
+  type DenyList,
 } from "../policy/orgDenyList.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
@@ -51,8 +51,7 @@ const NO_LOG_CAPTURED_WARNING =
 
 export type ExecuteAnonymousPolicy = {
   allowProductionOrgs: boolean;
-  denyOrgs: DenyPattern[];
-  denyOrgTypes: OrgClassification[];
+  denyList: DenyList;
   apexExecutionDisabled: boolean;
   classificationCache: Map<string, OrgClassification>;
   mintConfirmationState: MintConfirmationState;
@@ -149,14 +148,14 @@ export async function executeAnonymous(
   // Everything a pattern matches comes from the local auth file, so a denied
   // org is refused without being contacted at all.
   const orgId = org.getOrgId();
-  const denied = matchDeniedOrg(policy.denyOrgs, {
+  const denied = matchDeniedOrg(policy.denyList.patterns, {
     orgId,
     username,
     alias,
     instanceUrl: connection.instanceUrl,
   });
   if (denied) {
-    return toolError(denyOrgRefusal(orgLabel, denied));
+    return toolError(denyRefusal(orgLabel, denied.source));
   }
 
   // Authorize before creating any DebugLevel or TraceFlag records, so a refused
@@ -165,6 +164,10 @@ export async function executeAnonymous(
     org,
     policy.classificationCache,
   );
+  // Before authorizeExecution, so no flag and no confirmation can lift it.
+  if (policy.denyList.types.includes(classification)) {
+    return toolError(denyRefusal(orgLabel, `type:${classification}`));
+  }
   const decision = await authorizeExecution({
     ctx,
     mintConfirmationState: policy.mintConfirmationState,
@@ -174,7 +177,6 @@ export async function executeAnonymous(
     orgLabel,
     apex,
     allowProductionOrgs: policy.allowProductionOrgs,
-    denyOrgTypes: policy.denyOrgTypes,
     unverifiedReason,
   });
 

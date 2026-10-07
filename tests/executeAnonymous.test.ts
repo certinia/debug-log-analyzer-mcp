@@ -78,10 +78,7 @@ import { resolveOrg } from "../src/salesforce/connection";
 import { loadApexLog } from "../src/tools/apexLogSource";
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
-import {
-  compileDenyOrgs,
-  type DenyPattern,
-} from "../src/policy/orgDenyList";
+import { compileDenyList, type DenyList } from "../src/policy/orgDenyList";
 import {
   createConfirmationLedger,
   type ConfirmationState,
@@ -158,16 +155,14 @@ function policy(
   overrides: {
     allowProductionOrgs?: boolean;
     apexExecutionDisabled?: boolean;
-    denyOrgs?: DenyPattern[];
-    denyOrgTypes?: OrgClassification[];
+    denyList?: DenyList;
     classificationCache?: Map<string, OrgClassification>;
   } = {},
 ) {
   return {
     allowProductionOrgs: false,
     apexExecutionDisabled: false,
-    denyOrgs: [],
-    denyOrgTypes: [],
+    denyList: compileDenyList([]),
     classificationCache: new Map<string, OrgClassification>(),
     mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
     consumeConfirmation: createConfirmationLedger(),
@@ -936,11 +931,11 @@ describe("Execute Anonymous", () => {
         mockServer,
         args,
         ctx,
-        policy({ denyOrgs: compileDenyOrgs([p]) }),
+        policy({ denyList: compileDenyList([p]) }),
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain(`--deny-orgs pattern '${p}'`);
+      expect(result.content[0].text).toContain(`--deny-orgs entry '${p}'`);
       expect(mockRetrieveOrgInfo).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
@@ -953,7 +948,10 @@ describe("Execute Anonymous", () => {
         mockServer,
         args,
         ctx,
-        policy({ allowProductionOrgs: true, denyOrgTypes: ["production"] }),
+        policy({
+          allowProductionOrgs: true,
+          denyList: compileDenyList(["type:production"]),
+        }),
       );
 
       expect(result.isError).toBe(true);
@@ -961,6 +959,53 @@ describe("Execute Anonymous", () => {
         "--deny-orgs entry 'type:production'",
       );
       expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    // A refusal, not a confirmation request: no answer can lift a deny.
+    it.each([
+      [
+        "production",
+        () => mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO),
+      ],
+      [
+        "sandbox",
+        () => mockRetrieveOrgInfo.mockResolvedValue(SANDBOX_ORG_INFO),
+      ],
+      [
+        "unknown",
+        () => mockRetrieveOrgInfo.mockRejectedValue(new Error("expired")),
+      ],
+    ])("should refuse a denied %s org outright", async (type, arrange) => {
+      arrange();
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ denyList: compileDenyList([`type:${type}`]) }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(
+        `--deny-orgs entry 'type:${type}'`,
+      );
+      expect(result.requestState).toBeUndefined();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("should run an org whose type the list does not name", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(SANDBOX_ORG_INFO);
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ denyList: compileDenyList(["type:production"]) }),
+      );
+
+      expectPostedApex(testApexCode);
     });
 
     it("should ask for confirmation on the first production call", async () => {
