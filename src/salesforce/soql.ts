@@ -2,6 +2,9 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
+/** How far this machine's clock and the org's are allowed to differ. */
+export const CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 /**
  * A date the jsforce query builder renders as a SOQL date-time literal.
  *
