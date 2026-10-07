@@ -4,9 +4,11 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
+import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
-import { listOperations, type Operation } from "./operations.js";
+import { listOperations, operationName, type Operation } from "./operations.js";
+import { elide, NAME_LIMIT } from "./listSlowOperations.js";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
@@ -40,7 +42,7 @@ export type LogSummaryArgs = z.infer<
 export const getLogSummaryToolConfig = {
   title: "Get Apex Log Summary",
   description:
-    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category and the level each was logged at, every governor limit it and each namespace consumed, whether the log is complete, and what ended the transaction if it failed. Best for a quick overview.",
+    "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category and the level each was logged at, every governor limit it and each namespace consumed, whether the log is complete, the exceptions and flow errors it raised, and what ended the transaction if it failed. Best for a quick overview.",
   inputSchema: toolInputSchema(getLogSummaryInputSchema),
   annotations: {
     readOnlyHint: true,
@@ -158,6 +160,70 @@ function innermostFrames(description: string): string {
   return clip(shown, FATAL_FRAMES_LIMIT);
 }
 
+/** A loop with a new message per throw has no bound; 409 real logs peak at 9. */
+const EXCEPTION_ROW_LIMIT = 20;
+
+/** The frames an `EXCEPTION_THROWN` line number can belong to. */
+const THROWING_FRAMES = new Set<string | null>([
+  "METHOD_ENTRY",
+  "CONSTRUCTOR_ENTRY",
+  "CODE_UNIT_STARTED",
+]);
+
+/** One row per exception message, placed where it was first thrown. */
+interface ExceptionRow {
+  /** The exception class and message, clipped as a fatal's is. */
+  message: string;
+  /** The method, constructor or code unit the line is in; empty where none encloses it. */
+  thrownIn: string;
+  /** `EXTERNAL` where a managed package hides it, and empty where the log states none. */
+  lineNumber: number | string;
+  thrownCount: number;
+}
+
+// On the message as shown, so no two rows read the same; one real log throws one message from 6 frames.
+function exceptionRows(exceptions: LogEvent[]): ExceptionRow[] {
+  const rows = new Map<string, ExceptionRow>();
+
+  exceptions
+    .filter((event) => event.type === "EXCEPTION_THROWN")
+    .forEach((event) => {
+      const message = clip(event.text, FATAL_MESSAGE_LIMIT);
+      const row = rows.get(message);
+      if (row) {
+        row.thrownCount += 1;
+        return;
+      }
+      rows.set(message, {
+        message,
+        thrownIn: elide(frameName(event), NAME_LIMIT),
+        lineNumber: event.lineNumber ?? "",
+        thrownCount: 1,
+      });
+    });
+
+  // A stable sort, so a tie keeps the order the throws happened in.
+  return [...rows.values()].sort((a, b) => b.thrownCount - a.thrownCount);
+}
+
+// Named as a ranked operation is, so the caller can join the two.
+function frameName(event: LogEvent): string {
+  let frame = event.parent;
+  while (frame && !THROWING_FRAMES.has(frame.type)) {
+    frame = frame.parent;
+  }
+  return frame ? operationName(frame) : "";
+}
+
+// A flat pass over every event, cheaper than a second recursive walk of the tree.
+function flowErrorCount(apexLog: ApexLog): number {
+  return apexLog.eventsById.reduce(
+    (count, event) =>
+      event?.type === "FLOW_ELEMENT_ERROR" ? count + 1 : count,
+    0,
+  );
+}
+
 interface LogSummaryResult {
   fileSizeBytes: number;
   durationTotalMs: number;
@@ -176,6 +242,11 @@ interface LogSummaryResult {
    */
   skippedBytes?: number;
   thrownCount: number;
+  /** The distinct messages before the row cap, so a cut table says so. */
+  exceptionGroupCount: number;
+  exceptions?: ExceptionRow[];
+  /** `FLOW_ELEMENT_ERROR` only: every real log with a `WF_FLOW_ACTION_ERROR` also has one. */
+  flowErrorCount: number;
   fatalErrors?: FatalError[];
   namespaces: string[];
   governorLimits: LimitRow[];
@@ -194,6 +265,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
   // were a total is the worst answer this server can give.
   const truncated =
     apexLog.isTruncated || apexLog.truncatedEvents.length > 0;
+  const exceptions = exceptionRows(apexLog.exceptions);
 
   // Every limit and every category is reported, zeros included: the caller has
   // to be able to say "no DML statements ran" without guessing from what is
@@ -213,6 +285,9 @@ export async function getLogSummary(args: LogSummaryArgs) {
       skippedBytes: apexLog.truncation.totalSkippedBytes,
     }),
     thrownCount: apexLog.thrownCount.total,
+    exceptionGroupCount: exceptions.length,
+    ...omitEmpty({ exceptions: exceptions.slice(0, EXCEPTION_ROW_LIMIT) }),
+    flowErrorCount: flowErrorCount(apexLog),
     ...omitEmpty({ fatalErrors: fatalErrors(apexLog.logIssues) }),
     namespaces: apexLog.namespaces,
     governorLimits: toLimitRows(apexLog.governorLimits.peak),

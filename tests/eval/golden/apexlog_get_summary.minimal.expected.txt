@@ -2,6 +2,8 @@ fileSizeBytes: 1257
 durationTotalMs: 0.561
 truncated: false
 thrownCount: 0
+exceptionGroupCount: 0
+flowErrorCount: 0
 namespaces[1]: default
 governorLimits[13]{limit,used,max}:
   soqlQueries,0,100

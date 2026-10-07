@@ -109,6 +109,19 @@ const ANSWERABILITY = {
       columns: ["message", "frames"],
     },
     {
+      // Only where something was thrown. A transaction can finish with every
+      // throw caught, and then no other field names one.
+      fixture: "exceptions",
+      question: "What was thrown, where, and how often?",
+      fields: ["exceptionGroupCount"],
+      keys: ["exceptions"],
+      columns: ["message", "thrownIn", "lineNumber", "thrownCount"],
+    },
+    {
+      question: "Did a flow fail?",
+      fields: ["flowErrorCount"],
+    },
+    {
       // Only where the platform dropped content, which gates the field.
       fixture: "truncated",
       question: "How much of the log is missing?",
@@ -211,7 +224,7 @@ const MINIMAL_FIXTURE = "minimal";
 
 const MINIMAL_ZEROS = {
   apexlog_get_summary: {
-    fields: ["thrownCount"],
+    fields: ["thrownCount", "exceptionGroupCount", "flowErrorCount"],
     allLimitsZero: true,
   },
 };
@@ -260,6 +273,9 @@ const TOKEN_BUDGET = {
   "apexlog_list_slow_operations/heap-heavy": 207,
   "apexlog_get_summary/heap-heavy": 215,
   "apexlog_get_summary/truncated": 211,
+  // The thrown-exception table #208 added: four throws from two lines fold into
+  // two rows, as 4,501 throws from one line in a real log fold into one.
+  "apexlog_get_summary/exceptions": 289,
 };
 
 /**
@@ -291,9 +307,10 @@ const DEFINITION_BUDGET = {
   // record an allocation, a heap ranking's top ten holds a median six rows the
   // self-time top ten never returns.
   apexlog_list_slow_operations: 557,
-  // Covers the two facts the summary gained: per-namespace limit usage, and
-  // time by category.
-  apexlog_get_summary: 153,
+  // Covers the facts the summary gained: per-namespace limit usage, time by
+  // category, and the exceptions and flow errors #208 added, which a caller
+  // asking what failed would otherwise not look for here.
+  apexlog_get_summary: 163,
   apexlog_list_limit_risks: 158,
   apexlog_execute_anonymous: 428,
 };
@@ -349,7 +366,13 @@ const SELECTION_KEYWORDS = {
  * to measure one a plain case already covers.
  */
 const FIXTURES_BY_TOOL = {
-  apexlog_get_summary: ["governor-heavy", "minimal", "heap-heavy", "truncated"],
+  apexlog_get_summary: [
+    "governor-heavy",
+    "minimal",
+    "heap-heavy",
+    "truncated",
+    "exceptions",
+  ],
   apexlog_list_slow_operations: [
     "governor-heavy",
     "minimal",

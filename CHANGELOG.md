@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Added
 
 - Add `--deny-orgs`, which refuses anonymous Apex against named orgs, or against an org type with `type:production`. Nothing lifts a deny. A named org is refused before the server connects to it ([#186])
+- Report the exceptions a transaction threw, with where and how often, and how many flow elements failed, in `apexlog_get_summary` ([#208])
 
 ### Fixed
 
@@ -106,3 +107,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#191]: https://github.com/certinia/debug-log-analyzer-mcp/issues/191
 [#207]: https://github.com/certinia/debug-log-analyzer-mcp/issues/207
 [#186]: https://github.com/certinia/debug-log-analyzer-mcp/issues/186
+[#208]: https://github.com/certinia/debug-log-analyzer-mcp/issues/208

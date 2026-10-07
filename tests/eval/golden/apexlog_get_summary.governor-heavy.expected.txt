@@ -2,6 +2,8 @@ fileSizeBytes: 39532
 durationTotalMs: 24608.108
 truncated: false
 thrownCount: 0
+exceptionGroupCount: 0
+flowErrorCount: 0
 fatalErrors[1]{message,frames}:
   "System.LimitException: Apex CPU time limit exceeded","Class.RecursiveSearcher.search: line 31, column 1 | Class.RecursiveSearcher.search: line 23, column 1 | Class.RecursiveSearcher.search: line 23, column 1 | …"
 namespaces[3]: default,core_pkg,srm_pkg

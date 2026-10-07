@@ -126,7 +126,7 @@ export const listSlowOperationsInputSchema = {
  * about 4,900 tokens for one row. Eliding at 400 touches 2% of rows and takes
  * the whole tail with it.
  */
-const NAME_LIMIT = 400;
+export const NAME_LIMIT = 400;
 
 /**
  * The most one page of rows may cost, as characters.
@@ -303,7 +303,7 @@ function verdictOf(plan: QueryPlan): QueryPlanVerdict {
  * slicing rather than by walking the string: on a name of the length above,
  * that is 0.16 microseconds against 56.
  */
-function elide(text: string, maxChars: number): string {
+export function elide(text: string, maxChars: number): string {
   if (text.length <= maxChars) {
     return text;
   }

@@ -375,6 +375,50 @@ describe("parser contract", () => {
       ]);
       expect(log.thrownCount.total).toBe(1);
     });
+
+    // `apexlog_get_summary.exceptions` names a throw's frame by walking up from it.
+    it("parents a throw under the method it ran in, and reads its line as a number", () => {
+      const throws = parse(fixture("exceptions")).exceptions.filter(
+        (event) => event.type === "EXCEPTION_THROWN",
+      );
+
+      expect(
+        throws.map(({ parent, lineNumber }) => [
+          parent?.type,
+          parent?.text,
+          lineNumber,
+        ]),
+      ).toEqual([
+        ["METHOD_ENTRY", "SyncService.fetch(Integer)", 31],
+        ["METHOD_ENTRY", "SyncService.fetch(Integer)", 31],
+        ["METHOD_ENTRY", "SyncService.fetch(Integer)", 31],
+        ["METHOD_ENTRY", "SyncService.save()", 44],
+      ]);
+    });
+
+    // A managed package states a hidden line as `EXTERNAL`, which the summary passes on.
+    it("reads a hidden line as EXTERNAL", () => {
+      const log = parse(
+        failing(
+          "09:00:00.1 (2000)|EXCEPTION_THROWN|[EXTERNAL]|pkg.ApiException: denied",
+        ),
+      );
+
+      expect(log.exceptions[0]?.lineNumber).toBe("EXTERNAL");
+    });
+  });
+
+  describe("ApexLog.eventsById", () => {
+    // `apexlog_get_summary.flowErrorCount` counts this flat list, not the tree.
+    it("holds every event in the tree, flow element errors included", () => {
+      const log = parse(fixture("exceptions"));
+      const flowErrors = (events: LogEvent[]) =>
+        events.filter((event) => event?.type === "FLOW_ELEMENT_ERROR");
+
+      const listed = new Set(log.eventsById);
+      expect(flowErrors(log.eventsById)).toHaveLength(1);
+      expect(tree(log).every((event) => listed.has(event))).toBe(true);
+    });
   });
 
   describe("ApexLog.isTruncated", () => {

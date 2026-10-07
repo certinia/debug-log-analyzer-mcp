@@ -39,6 +39,7 @@ export type NodeSpec = {
   debugCategory?: string;
   text?: string | null;
   namespace?: string | null;
+  lineNumber?: number | "EXTERNAL" | null;
   totalNs?: number;
   selfNs?: number;
   soqlCount?: number;
@@ -75,7 +76,7 @@ export function node(spec: NodeSpec): unknown {
     debugCategory: spec.debugCategory ?? "",
     text: spec.text ?? null,
     namespace: spec.namespace ?? "default",
-    lineNumber: null,
+    lineNumber: spec.lineNumber ?? null,
     duration: { total, self: spec.selfNs ?? total },
     soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
     dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
