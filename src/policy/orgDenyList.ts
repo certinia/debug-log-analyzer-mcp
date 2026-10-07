@@ -14,10 +14,9 @@ import {
  * `source` is the pattern as the user wrote it. `RegExp.source` holds the
  * compiled form, which nobody typed and nobody would recognise.
  */
-export type DenyPattern = {
-  source: string;
-  regexp: RegExp;
-};
+export type DenyPattern =
+  | { source: string; kind: "glob"; regexp: RegExp }
+  | { source: string; kind: "orgId"; orgId15: string };
 
 /**
  * What is known about the target org before it is queried.
@@ -36,6 +35,21 @@ export type OrgIdentity = {
 /** Every character `RegExp` reads as syntax, less `*`, which is the glob. */
 const REGEXP_METACHARACTERS = /[.+?^${}()|[\]\\]/g;
 
+/** An org id: 15 chars as Setup shows it, or 18 as the auth file holds it. */
+const ORG_ID = /^00D[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/;
+
+// Only the first 15 chars identify the org, and they are case-sensitive.
+const toOrgId15 = (orgId: string): string => orgId.slice(0, 15);
+
+/** The host of an instance URL, or `undefined` when it does not parse. */
+function hostOf(instanceUrl: string): string | undefined {
+  try {
+    return new URL(instanceUrl).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
 export const DENY_IS_ABSOLUTE =
   "A deny is absolute: no flag and no confirmation lifts it.";
 
@@ -47,7 +61,10 @@ export const DENY_IS_ABSOLUTE =
  * and not `xprod-a@acme.com`.
  */
 function compile(source: string): RegExp {
+  // An instance URL is matched by its host, so a pasted URL must be too.
   const body = source
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
     .split("*")
     .map((literal) => literal.replace(REGEXP_METACHARACTERS, "\\$&"))
     .join(".*");
@@ -101,10 +118,12 @@ export function parseDenyOrgs(raw: string[]): {
 
 /** Cleans its input, so a hand-built configuration behaves like a parsed one. */
 export function compileDenyOrgs(sources: string[]): DenyPattern[] {
-  return parseDenyOrgPatterns(sources).map((source) => ({
-    source,
-    regexp: compile(source),
-  }));
+  return parseDenyOrgPatterns(sources).map(
+    (source): DenyPattern =>
+      ORG_ID.test(source)
+        ? { source, kind: "orgId", orgId15: toOrgId15(source) }
+        : { source, kind: "glob", regexp: compile(source) },
+  );
 }
 
 /**
@@ -121,11 +140,13 @@ export function matchDeniedOrg(
     identity.orgId,
     identity.username,
     identity.alias,
-    identity.instanceUrl,
+    identity.instanceUrl && hostOf(identity.instanceUrl),
   ].filter((field): field is string => !!field);
 
   return patterns.find((pattern) =>
-    fields.some((field) => pattern.regexp.test(field)),
+    pattern.kind === "orgId"
+      ? pattern.orgId15 === toOrgId15(identity.orgId)
+      : fields.some((field) => pattern.regexp.test(field)),
   );
 }
 

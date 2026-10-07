@@ -12,8 +12,9 @@ import {
   type OrgIdentity,
 } from "../../src/policy/orgDenyList";
 
+// The auth file holds the 18-char id.
 const identity: OrgIdentity = {
-  orgId: "00D000000000001",
+  orgId: "00D5g000004XyZaEAK",
   username: "prod-eu-org@mycompany.com",
   alias: "euProd",
   instanceUrl: "https://acme.my.salesforce.com",
@@ -56,12 +57,23 @@ describe("parseDenyOrgPatterns", () => {
 
 describe("matchDeniedOrg", () => {
   it.each([
-    ["org id", "00d000000000001"],
+    ["15-char org id", "00D5g000004XyZa"],
+    ["18-char org id", "00D5g000004XyZaEAK"],
     ["username", "prod-eu-org@mycompany.com"],
     ["alias", "euprod"],
-    ["instance URL", "https://acme.my.salesforce.com"],
+    ["instance host", "acme.my.salesforce.com"],
+    ["instance URL", "https://acme.my.salesforce.com/"],
   ])("should deny on an exact %s", (_field, pattern) => {
     expect(matchDeniedOrg(deny(pattern), identity)?.source).toBe(pattern);
+  });
+
+  // A 15-char id is case-sensitive: 00D5g000004xyza is another org.
+  it("should not deny an org id that differs only in case", () => {
+    expect(matchDeniedOrg(deny("00D5g000004xyza"), identity)).toBeUndefined();
+  });
+
+  it("should not deny on an org id that only shares the prefix", () => {
+    expect(matchDeniedOrg(deny("00D5g000004XyZb"), identity)).toBeUndefined();
   });
 
   it("should deny on a username glob", () => {
@@ -70,8 +82,22 @@ describe("matchDeniedOrg", () => {
     ).toBe("prod-*-org@mycompany.com");
   });
 
-  it("should deny on an instance URL glob", () => {
-    expect(matchDeniedOrg(deny("*.my.salesforce.com"), identity)).toBeDefined();
+  it("should deny every sandbox of a My Domain on a host glob", () => {
+    const sandbox = {
+      orgId: "00D000000000002",
+      username: "me@acme.com.uat",
+      instanceUrl: "https://acme--uat.sandbox.my.salesforce.com",
+    };
+
+    expect(matchDeniedOrg(deny("acme--*"), sandbox)?.source).toBe("acme--*");
+    expect(matchDeniedOrg(deny("acme--uat.*"), sandbox)).toBeDefined();
+    expect(matchDeniedOrg(deny("acme--*"), identity)).toBeUndefined();
+  });
+
+  it("should skip an instance URL that does not parse", () => {
+    expect(
+      matchDeniedOrg(deny("acme"), { ...identity, instanceUrl: "acme" }),
+    ).toBeUndefined();
   });
 
   it("should match whatever the case", () => {
