@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
-- Add `--deny-orgs` and `--deny-org-types`, which refuse anonymous Apex whatever the org type. Nothing lifts a deny, and a denied org is never contacted ([#186])
+- Add `--deny-orgs`, which refuses anonymous Apex against named orgs, or against an org type with `type:production`. Nothing lifts a deny, and a denied org is never contacted ([#186])
 
 ### Fixed
 

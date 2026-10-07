@@ -627,22 +627,22 @@ describe("parseServerConfig", () => {
     });
   });
 
-  it("should read --deny-org-types", () => {
+  it("should read type: entries in --deny-orgs as org types", () => {
     expect(
-      parseServerConfig(["--deny-org-types", "production,unknown"]),
+      parseServerConfig(["--deny-orgs", "type:production,euprod,type:unknown"]),
     ).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
-      denyOrgs: [],
+      denyOrgs: ["euprod"],
       denyOrgTypes: ["production", "unknown"],
     });
   });
 
   // A pattern that matches nothing looks the same as one that has yet to match,
   // so only the closed set can be checked, and it is checked before startup.
-  it("should refuse to start on a --deny-org-types value that is not an org type", () => {
-    expect(() => parseServerConfig(["--deny-org-types", "prodction"])).toThrow(
-      "'prodction' is not an org type",
+  it("should refuse to start on a type: entry that is not an org type", () => {
+    expect(() => parseServerConfig(["--deny-orgs", "type:prodction"])).toThrow(
+      "'type:prodction' is not an org type",
     );
   });
 

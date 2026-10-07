@@ -248,22 +248,20 @@ An org that cannot be identified is treated as production, so a network or permi
 
 ### Deny lists
 
-Org type says nothing about whose data an org holds: a customer sandbox runs with no prompt. Two flags refuse an org outright.
+Org type says nothing about whose data an org holds: a customer sandbox runs with no prompt. `--deny-orgs` refuses an org outright.
 
 ```json
 "args": [
   "-y",
   "@certinia/apex-log-mcp",
   "--deny-orgs",
-  "prod-*-org@mycompany.com,*.my.salesforce.com",
-  "--deny-org-types",
-  "production,unknown"
+  "prod-*-org@mycompany.com,type:production,type:unknown"
 ]
 ```
 
-`--deny-orgs` matches the org id, username, alias or instance URL. `*` is a glob, and the match is anchored and ignores case, so `prod-*@acme.com` denies `prod-eu@acme.com` and not `xprod-eu@acme.com`. Every value comes from the local auth file, so a denied org is never contacted.
+An entry matches the org id, username, alias or instance URL. `*` is a glob, and the match is anchored and ignores case, so `prod-*@acme.com` denies `prod-eu@acme.com` and not `xprod-eu@acme.com`. Every value comes from the local auth file, so a denied org is never contacted.
 
-`--deny-org-types` takes the types in the table above. An unknown value stops the server.
+A `type:` entry denies a type from the table above, e.g. `type:sandbox`. An unknown type stops the server.
 
 Nothing lifts a deny - not `--allow-production-orgs`, not a confirmation. The refusal names what matched.
 
@@ -275,8 +273,7 @@ Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `--allow-production-orgs` | Treat production orgs like any other - no confirmation, no refusal. Only set this if production targets are intentional. |
 | `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. The three analysis tools are unaffected.   |
-| `--deny-orgs`             | Refuse these orgs, whatever their type. Org id, username, alias or instance URL, with `*` as a glob. |
-| `--deny-org-types`        | Refuse these org types, from the table above. |
+| `--deny-orgs`             | Refuse these orgs: org id, username, alias or instance URL, with `*` as a glob, or `type:` and an org type. |
 
 For an analysis-only deployment:
 

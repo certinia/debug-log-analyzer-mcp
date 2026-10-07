@@ -957,7 +957,9 @@ describe("Execute Anonymous", () => {
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("its type is 'production'");
+      expect(result.content[0].text).toContain(
+        "--deny-orgs entry 'type:production'",
+      );
       expect(mockRequest).not.toHaveBeenCalled();
     });
 

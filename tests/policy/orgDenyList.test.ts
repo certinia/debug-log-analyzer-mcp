@@ -8,7 +8,7 @@ import {
   denyOrgTypeRefusal,
   matchDeniedOrg,
   parseDenyOrgPatterns,
-  parseDenyOrgTypes,
+  parseDenyOrgs,
   type OrgIdentity,
 } from "../../src/policy/orgDenyList";
 
@@ -136,23 +136,29 @@ describe("matchDeniedOrg", () => {
   });
 });
 
-describe("parseDenyOrgTypes", () => {
-  it("should accept a comma-separated list of classifications", () => {
-    expect(parseDenyOrgTypes(["production,unknown"])).toEqual([
-      "production",
-      "unknown",
-    ]);
+describe("parseDenyOrgs", () => {
+  it("should split type: entries from identity patterns", () => {
+    expect(
+      parseDenyOrgs(["euprod,type:production", "type:unknown,*@x.com"]),
+    ).toEqual({
+      patterns: ["euprod", "*@x.com"],
+      types: ["production", "unknown"],
+    });
   });
 
-  it("should throw on a value that is not an org type", () => {
-    expect(() => parseDenyOrgTypes(["prodction"])).toThrow(
-      "'prodction' is not an org type",
+  it("should read a type: entry whatever the case", () => {
+    expect(parseDenyOrgs(["TYPE: Sandbox"]).types).toEqual(["sandbox"]);
+  });
+
+  it("should throw on a type: entry that is not an org type", () => {
+    expect(() => parseDenyOrgs(["type:prodction"])).toThrow(
+      "'type:prodction' is not an org type",
     );
   });
 
-  it("should name the values it accepts", () => {
-    expect(() => parseDenyOrgTypes(["nope"])).toThrow(
-      "sandbox, scratch, developer, trial, production, unknown",
+  it("should name the type: entries it accepts", () => {
+    expect(() => parseDenyOrgs(["type:nope"])).toThrow(
+      "type:sandbox, type:scratch, type:developer, type:trial, type:production, type:unknown",
     );
   });
 });
@@ -166,9 +172,9 @@ describe("the deny refusals", () => {
     );
   });
 
-  it("should name the type that was denied", () => {
+  it("should name the type: entry that matched", () => {
     expect(denyOrgTypeRefusal("me@x.com", "production")).toContain(
-      "its type is 'production'",
+      "--deny-orgs entry 'type:production'",
     );
   });
 

@@ -175,11 +175,11 @@ function confirmationRequest(
 /**
  * Decide whether anonymous Apex may run against the classified target org.
  *
- * A denied org type refuses first, before any allow path: --deny-org-types is
- * absolute, and neither --allow-production-orgs nor a confirmation lifts it.
- * The --deny-orgs half is enforced by the caller instead, before it classifies
- * the org, because it reads the auth file alone and so refuses a denied org
- * without contacting it.
+ * A denied org type refuses first, before any allow path: a --deny-orgs `type:`
+ * entry is absolute, and neither --allow-production-orgs nor a confirmation
+ * lifts it. The identity entries are enforced by the caller instead, before it
+ * classifies the org, because they read the auth file alone and so refuse a
+ * denied org without contacting it.
  *
  * Otherwise non-production orgs run silently. Production orgs (and orgs whose
  * type could not be verified) need either the --allow-production-orgs flag or

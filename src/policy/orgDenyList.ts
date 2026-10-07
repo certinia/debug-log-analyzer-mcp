@@ -67,23 +67,36 @@ export function parseDenyOrgPatterns(raw: string[]): string[] {
     .filter((value) => value.length > 0);
 }
 
+const TYPE_PREFIX = "type:";
+
+function isTypeEntry(entry: string): boolean {
+  return entry.slice(0, TYPE_PREFIX.length).toLowerCase() === TYPE_PREFIX;
+}
+
 /**
- * Validate `--deny-org-types`.
+ * Read `--deny-orgs` into identity patterns and `type:` entries.
  *
- * Throws, so a typo fails the server at startup. A pattern cannot be validated
- * this way - one that matches nothing is indistinguishable from one that has
- * yet to match - which is why the two are separate flags.
+ * Throws on a `type:` entry that names no org type, so a typo fails the server
+ * at startup. An identity pattern cannot be validated this way - one that
+ * matches nothing is indistinguishable from one that has yet to match.
  */
-export function parseDenyOrgTypes(raw: string[]): OrgClassification[] {
-  return parseDenyOrgPatterns(raw).map((value) => {
-    const type = value.toLowerCase();
-    if (!isOrgClassification(type)) {
-      throw new Error(
-        `--deny-org-types: '${value}' is not an org type. Use one of: ${ORG_CLASSIFICATIONS.join(", ")}.`,
-      );
-    }
-    return type;
-  });
+export function parseDenyOrgs(raw: string[]): {
+  patterns: string[];
+  types: OrgClassification[];
+} {
+  const entries = parseDenyOrgPatterns(raw);
+  return {
+    patterns: entries.filter((entry) => !isTypeEntry(entry)),
+    types: entries.filter(isTypeEntry).map((entry) => {
+      const type = entry.slice(TYPE_PREFIX.length).trim().toLowerCase();
+      if (!isOrgClassification(type)) {
+        throw new Error(
+          `--deny-orgs: '${entry}' is not an org type. Use one of: ${ORG_CLASSIFICATIONS.map((t) => TYPE_PREFIX + t).join(", ")}.`,
+        );
+      }
+      return type;
+    }),
+  };
 }
 
 /** Cleans its input, so a hand-built configuration behaves like a parsed one. */
@@ -133,6 +146,6 @@ export function denyOrgTypeRefusal(
 ): string {
   return denyRefusal(
     orgLabel,
-    `its type is '${classification}', which --deny-org-types denies`,
+    `its type matches the --deny-orgs entry '${TYPE_PREFIX}${classification}'`,
   );
 }

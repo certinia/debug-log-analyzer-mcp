@@ -32,19 +32,16 @@ import {
   createConfirmationLedger,
   type ConfirmationState,
 } from "./policy/orgExecutionPolicy.js";
-import {
-  compileDenyOrgs,
-  parseDenyOrgPatterns,
-  parseDenyOrgTypes,
-} from "./policy/orgDenyList.js";
+import { compileDenyOrgs, parseDenyOrgs } from "./policy/orgDenyList.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
 import packageJson from "../package.json" with { type: "json" };
 
 export type ServerConfig = {
   allowProductionOrgs?: boolean;
   apexExecutionDisabled?: boolean;
-  /** `--deny-orgs` patterns, cleaned. Compiled once per server. */
+  /** `--deny-orgs` identity patterns, cleaned. Compiled once per server. */
   denyOrgs?: string[];
+  /** `--deny-orgs` `type:` entries. */
   denyOrgTypes?: OrgClassification[];
 };
 
@@ -203,8 +200,8 @@ export function runStdioServer(config: ServerConfig = {}): void {
  * parseArgs is strict: leaving it out would make existing client configurations
  * fail to start.
  *
- * Throws on an unrecognised `--deny-org-types` value, so a typo stops the server
- * rather than leaving a deny that silently never matches.
+ * Throws on a `--deny-orgs` `type:` entry that names no org type, so a typo
+ * stops the server rather than leaving a deny that silently never matches.
  */
 export function parseServerConfig(argv: string[]): ServerConfig {
   const { values } = parseArgs({
@@ -214,9 +211,9 @@ export function parseServerConfig(argv: string[]): ServerConfig {
       "allow-production-orgs": { type: "boolean" },
       "no-apex-execution": { type: "boolean" },
       "deny-orgs": { type: "string", multiple: true },
-      "deny-org-types": { type: "string", multiple: true },
     },
   });
+  const deny = parseDenyOrgs(values["deny-orgs"] ?? []);
 
   if (values["allowed-orgs"] !== undefined) {
     console.error(
@@ -228,7 +225,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   return {
     allowProductionOrgs: values["allow-production-orgs"] ?? false,
     apexExecutionDisabled: values["no-apex-execution"] ?? false,
-    denyOrgs: parseDenyOrgPatterns(values["deny-orgs"] ?? []),
-    denyOrgTypes: parseDenyOrgTypes(values["deny-org-types"] ?? []),
+    denyOrgs: deny.patterns,
+    denyOrgTypes: deny.types,
   };
 }
