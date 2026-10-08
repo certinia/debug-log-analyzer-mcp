@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+### Added
+
+- Add `--deny-orgs`, which refuses anonymous Apex against named orgs, or against an org type with `type:production`. Nothing lifts a deny. A named org is refused before the server connects to it ([#186])
+
 ### Fixed
 
 - Stop `apexlog_execute_anonymous` changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
@@ -101,3 +105,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#189]: https://github.com/certinia/debug-log-analyzer-mcp/issues/189
 [#191]: https://github.com/certinia/debug-log-analyzer-mcp/issues/191
 [#207]: https://github.com/certinia/debug-log-analyzer-mcp/issues/207
+[#186]: https://github.com/certinia/debug-log-analyzer-mcp/issues/186

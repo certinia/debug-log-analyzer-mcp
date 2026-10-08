@@ -26,7 +26,7 @@ pnpm start
 
 ### Core Components
 
-- **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else.
+- **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else. A bad flag exits 1 with one `[apex-log-mcp]` line, checked by `pnpm run eval`.
 - **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the four tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
 - **src/tools/responseShaping.ts**: the shared response helpers - `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`.
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
@@ -94,6 +94,8 @@ The tool definitions follow the same rule and are charged on every turn, called 
 
 `apexlog_execute_anonymous` writes the debug log under `.apex-log-mcp/`, or `outputDir`, and returns the path beside a summary, the org alias and the detected org type. `debugLevel` sets the run's log levels per category, or all of them at once. It never changes the user's trace flag.
 
-It is always registered so agents can discover it; each call is authorized in `src/policy/orgExecutionPolicy.ts`. A production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation, decided before any `DebugLevel` or `TraceFlag` is written. `--no-apex-execution` refuses every call; the 1.x `--allowed-orgs` is accepted, ignored and warned about.
+It is always registered so agents can discover it; each call passes the deny list below, then is authorized in `src/policy/orgExecutionPolicy.ts`. A production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation, decided before any `DebugLevel` or `TraceFlag` is written. `--no-apex-execution` refuses every call; the 1.x `--allowed-orgs` is accepted, ignored and warned about.
+
+`--deny-orgs` refuses outright, in `src/policy/orgDenyList.ts`. A deny beats `--allow-production-orgs` and beats a confirmation. The tool runs `identityRefusal` on what `readLocalOrg` reads from the local sf files, before `connectOrg`, because `Org.create` can call the org; `connectOrg` reuses that `AuthInfo`, so the org connected is the org checked. `typeRefusal` runs after `classifyOrg` and before `authorizeExecution`, which knows nothing of denies. Only an org id is unspoofable, so the README documents the rest as convenience.
 
 `@salesforce/core` loads only for this tool: `src/server.ts` reaches it through `await import()`, and `executeAnonymousDefinition.ts` holds the wire definition so registration stays synchronous. Startup is 55 ms, not 290 ms; an ESLint rule, `tests/salesforceCoreIsLazy.test.ts` and the `pnpm run eval` startup check keep it there.

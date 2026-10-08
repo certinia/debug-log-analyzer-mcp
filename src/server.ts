@@ -32,12 +32,14 @@ import {
   createConfirmationLedger,
   type ConfirmationState,
 } from "./policy/orgExecutionPolicy.js";
+import { compileDenyList, type DenyList } from "./policy/orgDenyList.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
 import packageJson from "../package.json" with { type: "json" };
 
 export type ServerConfig = {
   allowProductionOrgs?: boolean;
   apexExecutionDisabled?: boolean;
+  denyList?: DenyList;
 };
 
 // An org id maps to one classification for the life of the process, so this
@@ -76,6 +78,7 @@ function definitionsVaryByConfig(config: Required<ServerConfig>): boolean {
 export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const allowProductionOrgs = config.allowProductionOrgs ?? false;
   const apexExecutionDisabled = config.apexExecutionDisabled ?? false;
+  const denyList = config.denyList ?? { patterns: [], types: [] };
   const server = new McpServer(
     {
       name: "apex-log-mcp",
@@ -101,6 +104,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
           cacheScope: definitionsVaryByConfig({
             allowProductionOrgs,
             apexExecutionDisabled,
+            denyList,
           })
             ? "private"
             : "public",
@@ -143,6 +147,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       const { executeAnonymous } = await import("./tools/executeAnonymous.js");
       return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
         allowProductionOrgs,
+        denyList,
         apexExecutionDisabled,
         classificationCache,
         mintConfirmationState: (payload, ctx) =>
@@ -187,6 +192,9 @@ export function runStdioServer(config: ServerConfig = {}): void {
  * `--allowed-orgs` is deprecated and ignored, but is still declared here because
  * parseArgs is strict: leaving it out would make existing client configurations
  * fail to start.
+ *
+ * Throws on a `--deny-orgs` `type:` entry that names no org type, so a typo
+ * stops the server rather than leaving a deny that silently never matches.
  */
 export function parseServerConfig(argv: string[]): ServerConfig {
   const { values } = parseArgs({
@@ -195,8 +203,10 @@ export function parseServerConfig(argv: string[]): ServerConfig {
       "allowed-orgs": { type: "string" },
       "allow-production-orgs": { type: "boolean" },
       "no-apex-execution": { type: "boolean" },
+      "deny-orgs": { type: "string", multiple: true },
     },
   });
+  const denyList = compileDenyList(values["deny-orgs"] ?? []);
 
   if (values["allowed-orgs"] !== undefined) {
     console.error(
@@ -208,5 +218,6 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   return {
     allowProductionOrgs: values["allow-production-orgs"] ?? false,
     apexExecutionDisabled: values["no-apex-execution"] ?? false,
+    denyList,
   };
 }

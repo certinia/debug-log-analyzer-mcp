@@ -30,7 +30,8 @@ jest.mock("../src/salesforce/traceFlags", () => ({
 }));
 
 jest.mock("../src/salesforce/connection", () => ({
-  resolveOrg: jest.fn(),
+  readLocalOrg: jest.fn(),
+  connectOrg: jest.fn(),
 }));
 
 // The written file is never on disk here, so the parse cannot be the real one.
@@ -45,9 +46,6 @@ jest.mock("@salesforce/core", () => {
     ConfigAggregator: {
       create: jest.fn(),
     },
-    StateAggregator: {
-      getInstance: jest.fn(),
-    },
   };
 });
 
@@ -60,7 +58,7 @@ import {
   type InputRequiredResult,
   type ServerContext,
 } from "@modelcontextprotocol/server";
-import { ConfigAggregator, StateAggregator } from "@salesforce/core";
+import { ConfigAggregator, type AuthInfo } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import { executeAnonymous } from "../src/tools/executeAnonymous";
 import type { ExecuteAnonymousArgs } from "../src/tools/executeAnonymousDefinition";
@@ -74,10 +72,15 @@ import {
   deleteTraceFlag,
   hasActiveTraceFlag,
 } from "../src/salesforce/traceFlags";
-import { resolveOrg } from "../src/salesforce/connection";
+import {
+  connectOrg,
+  readLocalOrg,
+  type LocalOrg,
+} from "../src/salesforce/connection";
 import { loadApexLog } from "../src/tools/apexLogSource";
 import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
+import { compileDenyList, type DenyList } from "../src/policy/orgDenyList";
 import {
   createConfirmationLedger,
   type ConfirmationState,
@@ -87,7 +90,7 @@ const mockMkdir = fs.mkdir as jest.MockedFunction<typeof fs.mkdir>;
 const mockWriteFile = fs.writeFile as jest.MockedFunction<typeof fs.writeFile>;
 const mockStat = fs.stat as jest.MockedFunction<typeof fs.stat>;
 
-const mockResolveOrg = resolveOrg as jest.MockedFunction<typeof resolveOrg>;
+const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
 const mockEnsureDebugLevel = ensureDebugLevel as jest.MockedFunction<
   typeof ensureDebugLevel
 >;
@@ -102,7 +105,9 @@ const mockDeleteTraceFlag = deleteTraceFlag as jest.MockedFunction<
   typeof deleteTraceFlag
 >;
 const mockConfigAggregatorCreate = ConfigAggregator.create as jest.Mock;
-const mockStateAggregatorGetInstance = StateAggregator.getInstance as jest.Mock;
+const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<
+  typeof readLocalOrg
+>;
 
 const SANDBOX_ORG_INFO = {
   Name: "Test",
@@ -119,6 +124,14 @@ const TEST_ORG_ID = "00D000000000001";
 const TEST_SESSION_ID = `${TEST_ORG_ID}!sessionpart`;
 const TEST_INSTANCE_URL = "https://example.my.salesforce.com";
 const TEST_API_VERSION = "67.0";
+
+const LOCAL_ORG: LocalOrg = {
+  orgId: TEST_ORG_ID,
+  username: "test@example.com",
+  aliases: [],
+  instanceUrl: TEST_INSTANCE_URL,
+  authInfo: {} as AuthInfo,
+};
 
 /** A log header carrying exactly the levels the DebugLevel record holds. */
 /** The slack `findStoredLogId` allows between this clock and the org's. */
@@ -154,12 +167,14 @@ function policy(
   overrides: {
     allowProductionOrgs?: boolean;
     apexExecutionDisabled?: boolean;
+    denyList?: DenyList;
     classificationCache?: Map<string, OrgClassification>;
   } = {},
 ) {
   return {
     allowProductionOrgs: false,
     apexExecutionDisabled: false,
+    denyList: compileDenyList([]),
     classificationCache: new Map<string, OrgClassification>(),
     mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
     consumeConfirmation: createConfirmationLedger(),
@@ -193,7 +208,6 @@ describe("Execute Anonymous", () => {
   let mockServer: McpServer;
   let mockConnection: any;
   let mockRequest: any;
-  let mockGetUsername: any;
   let mockSobject: any;
   let mockFindOne: any;
   let mockOrg: any;
@@ -247,7 +261,6 @@ describe("Execute Anonymous", () => {
     } as unknown as McpServer;
 
     mockRequest = jest.fn().mockResolvedValue(soapResponse());
-    mockGetUsername = jest.fn().mockReturnValue("test@example.com");
 
     mockFindOne = jest.fn().mockResolvedValue({ Id: testLogId });
     mockSobject = jest.fn().mockReturnValue({ findOne: mockFindOne });
@@ -255,7 +268,6 @@ describe("Execute Anonymous", () => {
     mockConnection = {
       sobject: mockSobject,
       request: mockRequest,
-      getUsername: mockGetUsername,
       accessToken: TEST_SESSION_ID,
       instanceUrl: TEST_INSTANCE_URL,
       version: TEST_API_VERSION,
@@ -271,14 +283,9 @@ describe("Execute Anonymous", () => {
       retrieveOrganizationInformation: mockRetrieveOrgInfo,
     };
 
-    mockResolveOrg.mockResolvedValue(mockOrg);
+    mockConnectOrg.mockResolvedValue(mockOrg);
 
-    mockStateAggregatorGetInstance.mockResolvedValue({
-      aliases: {
-        resolveUsername: jest.fn((input: string) => input),
-        get: jest.fn(() => null),
-      },
-    });
+    mockReadLocalOrg.mockResolvedValue(LOCAL_ORG);
 
     mockConfigAggregatorCreate.mockResolvedValue({
       getPropertyValue: jest.fn(() => undefined),
@@ -409,18 +416,16 @@ describe("Execute Anonymous", () => {
       expect(toonDecode(result).levelsOverridden).toBe(true);
     });
 
-    it("should throw error when connection username cannot be determined", async () => {
-      mockGetUsername.mockReturnValue(null);
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+    it("should connect to the org it checked, through the same auth", async () => {
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
 
-      await expect(
-        executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Could not determine username from connection");
-
-      expect(getUserIdByUsername).not.toHaveBeenCalled();
-      expect(ensureDebugLevel).not.toHaveBeenCalled();
-      expect(createTraceFlag).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockReadLocalOrg).toHaveBeenCalledWith(undefined, undefined);
+      expect(mockConnectOrg).toHaveBeenCalledWith(LOCAL_ORG);
     });
 
     it("should throw error when Apex compilation fails", async () => {
@@ -798,7 +803,7 @@ describe("Execute Anonymous", () => {
     it("should throw error when connect() fails (no default org)", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      mockResolveOrg.mockRejectedValue(
+      mockConnectOrg.mockRejectedValue(
         new Error(
           "No default org configured. Please set a default org using 'sf config set target-org <username>'.",
         ),
@@ -911,6 +916,134 @@ describe("Execute Anonymous", () => {
       const result = await executeAnonymous(mockServer, args, ctx, policy());
 
       expect(toonDecode(result).orgType).toBe("sandbox");
+      expectPostedApex(testApexCode);
+    });
+
+    // Org.create can call the org, so a deny on what the local files know
+    // must land before it.
+    it.each([
+      ["org id", TEST_ORG_ID],
+      ["username", "test@*.com"],
+      ["instance URL", "*.my.salesforce.com"],
+    ])("should deny on the %s before connecting", async (_f, p) => {
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ denyList: compileDenyList([p]) }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(`--deny-orgs entry '${p}'`);
+      expect(mockConnectOrg).not.toHaveBeenCalled();
+      expect(mockRetrieveOrgInfo).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("should deny on any alias of the username, not only the first", async () => {
+      mockReadLocalOrg.mockResolvedValue({
+        ...LOCAL_ORG,
+        aliases: ["myprod", "prod"],
+      });
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode, targetOrg: "prod" },
+        ctx,
+        policy({ denyList: compileDenyList(["prod"]) }),
+      );
+
+      expect(result.content[0].text).toContain("--deny-orgs entry 'prod'");
+      expect(mockConnectOrg).not.toHaveBeenCalled();
+    });
+
+    it("should deny an org type even with --allow-production-orgs", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({
+          allowProductionOrgs: true,
+          denyList: compileDenyList(["type:production"]),
+        }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(
+        "--deny-orgs entry 'type:production'",
+      );
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    // A refusal, not a confirmation request: no answer can lift a deny.
+    it.each([
+      [
+        "production",
+        () => mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO),
+      ],
+      [
+        "sandbox",
+        () => mockRetrieveOrgInfo.mockResolvedValue(SANDBOX_ORG_INFO),
+      ],
+      [
+        "unknown",
+        () => mockRetrieveOrgInfo.mockRejectedValue(new Error("expired")),
+      ],
+    ])("should refuse a denied %s org outright", async (type, arrange) => {
+      arrange();
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ denyList: compileDenyList([`type:${type}`]) }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain(
+        `--deny-orgs entry 'type:${type}'`,
+      );
+      expect(result.requestState).toBeUndefined();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    // A failed classification must not turn a deny into a confirmation.
+    it("should refuse an unclassifiable org under type:production", async () => {
+      mockRetrieveOrgInfo.mockRejectedValue(new Error("expired"));
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy({ denyList: compileDenyList(["type:production"]) }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("its type could not be read");
+      expect(result.content[0].text).toContain(
+        "--deny-orgs entry 'type:production'",
+      );
+      expect(result.requestState).toBeUndefined();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("should run an org whose type the list does not name", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(SANDBOX_ORG_INFO);
+      const args: ExecuteAnonymousArgs = { apex: testApexCode };
+
+      await executeAnonymous(
+        mockServer,
+        args,
+        ctx,
+        policy({ denyList: compileDenyList(["type:production"]) }),
+      );
+
       expectPostedApex(testApexCode);
     });
 
@@ -1118,7 +1251,7 @@ describe("Execute Anonymous", () => {
       expect(result.content[0].text).toContain(
         "disabled by server configuration (--no-apex-execution)",
       );
-      expect(mockResolveOrg).not.toHaveBeenCalled();
+      expect(mockConnectOrg).not.toHaveBeenCalled();
       expect(mockServer.server.listRoots).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
     });
@@ -1134,11 +1267,9 @@ describe("Execute Anonymous", () => {
     });
 
     it("should include org username and alias in response when alias exists", async () => {
-      mockStateAggregatorGetInstance.mockResolvedValue({
-        aliases: {
-          resolveUsername: jest.fn((input: string) => input),
-          get: jest.fn(() => "myalias"),
-        },
+      mockReadLocalOrg.mockResolvedValue({
+        ...LOCAL_ORG,
+        aliases: ["myalias", "other"],
       });
 
       const args: ExecuteAnonymousArgs = { apex: testApexCode };

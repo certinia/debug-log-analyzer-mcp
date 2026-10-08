@@ -246,12 +246,36 @@ For a production org, `--allow-production-orgs` runs it anyway. Otherwise the se
 
 An org that cannot be identified is treated as production, so a network or permissions problem can never quietly downgrade one.
 
+### Deny lists
+
+Org type says nothing about whose data an org holds: a customer sandbox runs with no prompt. `--deny-orgs` refuses an org outright.
+
+```json
+"args": [
+  "-y",
+  "@certinia/apex-log-mcp",
+  "--deny-orgs",
+  "prod-*-org@mycompany.com,acme--*,type:production"
+]
+```
+
+An entry matches the org id, username, alias or instance URL. `*` is a glob, and the match is anchored and ignores case, so `prod-*@acme.com` denies `prod-eu@acme.com` and not `xprod-eu@acme.com`. A deny on any alias of a username holds, whichever name the agent uses. Every value comes from the local sf files, so the server refuses a named org before it connects to it.
+
+An org id matches in its 15- or 18-char form, whatever its case. An instance URL matches by its host, so `acme--*` denies every sandbox of the `acme` My Domain.
+
+A `type:` entry denies a type from the table above, e.g. `type:sandbox`. `type:production` also denies an org whose type cannot be read, because the server treats that org as production. The server contacts the org before it refuses on type: it connects, and it queries the org type. No Apex runs and no record is written. A `type:` entry that names no org type stops the server.
+
+Nothing lifts a deny - not `--allow-production-orgs`, not a confirmation. The refusal names what matched.
+
+Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as convenience, not a security boundary.
+
 ### Server flags
 
 | Flag                      | Description                                                                                                              |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `--allow-production-orgs` | Treat production orgs like any other - no confirmation, no refusal. Only set this if production targets are intentional. |
 | `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. The three analysis tools are unaffected.   |
+| `--deny-orgs`             | Refuse these orgs: org id, username, alias or instance URL, with `*` as a glob, or `type:` and an org type. |
 
 For an analysis-only deployment:
 

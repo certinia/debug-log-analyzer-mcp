@@ -408,6 +408,7 @@ describe("createApexLogServer", () => {
         {
           allowProductionOrgs: false,
           apexExecutionDisabled: false,
+          denyList: { patterns: [], types: [] },
           classificationCache: expect.any(Map),
           mintConfirmationState: expect.any(Function),
           consumeConfirmation: expect.any(Function),
@@ -586,6 +587,7 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig([])).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
+      denyList: { patterns: [], types: [] },
     });
   });
 
@@ -593,6 +595,7 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig(["--allow-production-orgs"])).toEqual({
       allowProductionOrgs: true,
       apexExecutionDisabled: false,
+      denyList: { patterns: [], types: [] },
     });
   });
 
@@ -600,7 +603,44 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig(["--no-apex-execution"])).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: true,
+      denyList: { patterns: [], types: [] },
     });
+  });
+
+  it("should read --deny-orgs, comma-separated and repeated", () => {
+    const { denyList } = parseServerConfig([
+      "--deny-orgs",
+      "A@x.com, b@x.com",
+      "--deny-orgs",
+      "prod-*@x.com",
+    ]);
+
+    expect(denyList?.patterns.map((pattern) => pattern.source)).toEqual([
+      "A@x.com",
+      "b@x.com",
+      "prod-*@x.com",
+    ]);
+    expect(denyList?.types).toEqual([]);
+  });
+
+  it("should read type: entries in --deny-orgs as org types", () => {
+    const { denyList } = parseServerConfig([
+      "--deny-orgs",
+      "type:production,euprod,type:unknown",
+    ]);
+
+    expect(denyList?.patterns.map((pattern) => pattern.source)).toEqual([
+      "euprod",
+    ]);
+    expect(denyList?.types).toEqual(["production", "unknown"]);
+  });
+
+  // A pattern that matches nothing looks the same as one that has yet to match,
+  // so only the closed set can be checked, and it is checked before startup.
+  it("should refuse to start on a type: entry that is not an org type", () => {
+    expect(() => parseServerConfig(["--deny-orgs", "type:prodction"])).toThrow(
+      "'type:prodction' is not an org type",
+    );
   });
 
   it("should still start when the deprecated --allowed-orgs is passed", () => {
@@ -609,6 +649,7 @@ describe("parseServerConfig", () => {
     ).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
+      denyList: { patterns: [], types: [] },
     });
   });
 

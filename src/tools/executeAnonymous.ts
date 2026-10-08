@@ -4,8 +4,7 @@ import "../salesforce/logging.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { StateAggregator, type Connection } from "@salesforce/core";
+import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import { ensureDebugLevel } from "../salesforce/debugLevels.js";
@@ -20,7 +19,7 @@ import {
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
-import { resolveOrg } from "../salesforce/connection.js";
+import { connectOrg, readLocalOrg } from "../salesforce/connection.js";
 import { CLOCK_SKEW_MS, toDateTimeLiteral } from "../salesforce/soql.js";
 import {
   classifyOrg,
@@ -33,6 +32,11 @@ import {
   type ConsumeConfirmation,
   type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
+import {
+  identityRefusal,
+  typeRefusal,
+  type DenyList,
+} from "../policy/orgDenyList.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */
@@ -46,6 +50,7 @@ const NO_LOG_CAPTURED_WARNING =
 
 export type ExecuteAnonymousPolicy = {
   allowProductionOrgs: boolean;
+  denyList: DenyList;
   apexExecutionDisabled: boolean;
   classificationCache: Map<string, OrgClassification>;
   mintConfirmationState: MintConfirmationState;
@@ -99,13 +104,6 @@ async function warnIfOutsideRoots(
   return warning;
 }
 
-async function getAliasForUsername(
-  username: string,
-): Promise<string | undefined> {
-  const stateAggregator = await StateAggregator.getInstance();
-  return stateAggregator.aliases.get(username) ?? undefined;
-}
-
 export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
@@ -127,17 +125,20 @@ export async function executeAnonymous(
   const rootPaths = await getRootPaths(server);
   const projectPath = rootPaths[0];
 
-  await report("Connecting to the org");
-  const org = await resolveOrg(projectPath, targetOrg);
-  const connection = org.getConnection();
+  const local = await readLocalOrg(projectPath, targetOrg);
+  const { orgId, username } = local;
+  const alias = local.aliases[0];
+  const orgLabel = alias ? `${username} (${alias})` : username;
 
-  const username = connection.getUsername();
-  if (!username) {
-    throw new Error("Could not determine username from connection");
+  // Before connecting, because Org.create can call the org.
+  const deniedUnseen = identityRefusal(policy.denyList, orgLabel, local);
+  if (deniedUnseen) {
+    return toolError(deniedUnseen);
   }
 
-  const alias = await getAliasForUsername(username);
-  const orgLabel = alias ? `${username} (${alias})` : username;
+  await report("Connecting to the org");
+  const org = await connectOrg(local);
+  const connection = org.getConnection();
 
   // Authorize before creating any DebugLevel or TraceFlag records, so a refused
   // call leaves the target org untouched.
@@ -145,12 +146,17 @@ export async function executeAnonymous(
     org,
     policy.classificationCache,
   );
+  // Before authorizeExecution, so no flag and no confirmation can lift it.
+  const deniedType = typeRefusal(policy.denyList, orgLabel, classification);
+  if (deniedType) {
+    return toolError(deniedType);
+  }
   const decision = await authorizeExecution({
     ctx,
     mintConfirmationState: policy.mintConfirmationState,
     consumeConfirmation: policy.consumeConfirmation,
     classification,
-    orgId: org.getOrgId(),
+    orgId,
     orgLabel,
     apex,
     allowProductionOrgs: policy.allowProductionOrgs,
