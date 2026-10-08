@@ -169,16 +169,19 @@ The governor limits nearest their ceiling, worst first.
 
 Runs anonymous Apex against an authenticated org, saves the debug log locally, and returns the path. Pass that path to any analysis tool.
 
+Give the Apex inline in `apex`, or the absolute path to a file of it in `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. Give exactly one. A file outside the roots your client declares is refused, as is anything but a regular file. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path, up to its first 2,000 characters.
+
 The response also gives the org username, its alias if set, the org type, and a summary of the run. Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
 
 <!-- params-apexlog_execute_anonymous:start -->
 
-| Parameter    | Type             | Required | Description |
-| ------------ | ---------------- | -------- | --- |
-| `apex`       | string           | Yes      | The anonymous Apex to be executed |
-| `targetOrg`  | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `outputDir`  | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root. |
-| `debugLevel` | string \| object | No       | This run's log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
+| Parameter      | Type             | Required | Description |
+| -------------- | ---------------- | -------- | --- |
+| `apex`         | string           | No       | The anonymous Apex to execute, or use apexFilePath |
+| `apexFilePath` | string           | No       | Absolute path to a file of anonymous Apex |
+| `targetOrg`    | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `outputDir`    | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root. |
+| `debugLevel`   | string \| object | No       | This run's log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
 
@@ -206,10 +209,10 @@ Every request carries all four tool definitions, whether you call them or not. E
 | Tool                           | Tokens                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
 | `apexlog_list_slow_operations` | ~530                                                        |
-| `apexlog_execute_anonymous`    | ~407                                                        |
+| `apexlog_execute_anonymous`    | ~429                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~1,242** (0.6% of a 200K context), **-19% vs 1.x ~1,529** |
+| **Total**                      | **~1,264** (0.6% of a 200K context), **-17% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 

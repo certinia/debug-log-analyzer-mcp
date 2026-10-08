@@ -1,8 +1,9 @@
 // This module is the entry point of the lazy chunk, so the guard travels with
 // it - `src/index.ts` covers the `bin` alone.
 import "../salesforce/logging.js";
-import { promises as fs } from "node:fs";
+import { promises as fs, constants as fsConstants } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
@@ -18,6 +19,7 @@ import {
   hasActiveTraceFlag,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
+import { fileReadError } from "./localFile.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
 import { connectOrg, readLocalOrg } from "../salesforce/connection.js";
 import { CLOCK_SKEW_MS, toDateTimeLiteral } from "../salesforce/soql.js";
@@ -45,6 +47,9 @@ const PROGRESS_STEPS = 4;
 // Outlives a long run plus the clock skew; the flag is deleted once the id is matched.
 const RUN_TRACE_FLAG_MS = 15 * 60 * 1000;
 
+const ONE_APEX_SOURCE =
+  "Give exactly one of apex and apexFilePath: the Apex inline, or the absolute path to a file of it.";
+
 const NO_LOG_CAPTURED_WARNING =
   "Salesforce returned no debug log for this run, so the saved file is empty and durationMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
 
@@ -60,7 +65,10 @@ export type ExecuteAnonymousPolicy = {
 async function getRootPaths(server: McpServer): Promise<string[]> {
   try {
     const { roots } = await server.server.listRoots();
-    return roots.map((root) => new URL(root.uri).pathname);
+    // fileURLToPath decodes `%20` and drops the slash before a Windows drive, which `pathname` keeps.
+    return roots
+      .filter((root) => root.uri.startsWith("file:"))
+      .map((root) => fileURLToPath(root.uri));
   } catch {
     return [];
   }
@@ -86,16 +94,8 @@ async function warnIfOutsideRoots(
   outputDir: string,
   rootPaths: string[],
 ): Promise<string | undefined> {
-  if (rootPaths.length === 0) {
-    return undefined;
-  }
-
-  const target = await realPathOrSelf(outputDir);
-  const roots = await Promise.all(rootPaths.map(realPathOrSelf));
-  const inside = roots.some(
-    (root) => target === root || target.startsWith(root + path.sep),
-  );
-  if (inside) {
+  const target = await outsideRoots(outputDir, rootPaths);
+  if (target === undefined) {
     return undefined;
   }
 
@@ -104,13 +104,82 @@ async function warnIfOutsideRoots(
   return warning;
 }
 
+/** `target` with symlinks followed when it is outside every root, else undefined. No roots, no check. */
+async function outsideRoots(
+  target: string,
+  rootPaths: string[],
+): Promise<string | undefined> {
+  if (rootPaths.length === 0) {
+    return undefined;
+  }
+
+  const resolved = await realPathOrSelf(target);
+  const roots = await Promise.all(rootPaths.map(realPathOrSelf));
+  const inside = roots.some(
+    (root) => resolved === root || resolved.startsWith(root + path.sep),
+  );
+  return inside ? undefined : resolved;
+}
+
+// Refused where `outputDir` only warns: the file's text goes to the org, and a compile error can echo it.
+async function readApexFile(
+  apexFilePath: string,
+  rootPaths: string[],
+): Promise<string> {
+  const outside = await outsideRoots(apexFilePath, rootPaths);
+  if (outside !== undefined) {
+    throw new Error(
+      `Apex file ${outside} is outside every root this client declared.`,
+    );
+  }
+
+  // One handle for the check and the read, as in `loadApexLog`; O_NONBLOCK so a FIFO cannot block the open.
+  let handle;
+  let text;
+  try {
+    handle = await fs.open(
+      apexFilePath,
+      fsConstants.O_RDONLY | fsConstants.O_NONBLOCK,
+    );
+    if ((await handle.stat()).isFile()) {
+      text = await handle.readFile("utf8");
+    }
+  } catch (error) {
+    throw fileReadError("Apex file", apexFilePath, error);
+  } finally {
+    await handle?.close();
+  }
+  // A device reads without end, and a FIFO would block the one stdio process.
+  if (text === undefined) {
+    throw new Error(
+      `Cannot read Apex file ${apexFilePath}: not a regular file`,
+    );
+  }
+  // Salesforce fails a leading byte order mark at line 1, column 1.
+  return text.replace(/^\uFEFF/, "");
+}
+
+// A function, so the file is read only once the org passes the identity deny.
+function apexSource({
+  apex,
+  apexFilePath,
+}: ExecuteAnonymousArgs): ((rootPaths: string[]) => Promise<string>) | undefined {
+  if (apex !== undefined && apexFilePath === undefined) {
+    return async () => apex;
+  }
+  if (apexFilePath !== undefined && apex === undefined) {
+    return (rootPaths) => readApexFile(apexFilePath, rootPaths);
+  }
+  return undefined;
+}
+
 export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
   ctx: ServerContext,
   policy: ExecuteAnonymousPolicy,
 ) {
-  const { apex, targetOrg, debugLevel } = args;
+  const { targetOrg, debugLevel } = args;
 
   // Short-circuit before touching the client or the org, so a server running with
   // --no-apex-execution makes no Salesforce calls at all. `src/server.ts` asks
@@ -119,6 +188,11 @@ export async function executeAnonymous(
   const refused = apexExecutionRefusal(policy.apexExecutionDisabled);
   if (refused) {
     return refused;
+  }
+
+  const readApex = apexSource(args);
+  if (!readApex) {
+    return toolError(ONE_APEX_SOURCE);
   }
 
   const report = progressReporter(ctx);
@@ -135,6 +209,9 @@ export async function executeAnonymous(
   if (deniedUnseen) {
     return toolError(deniedUnseen);
   }
+
+  // Before connecting, so a bad path costs no call to the org.
+  const apex = await readApex(rootPaths);
 
   await report("Connecting to the org");
   const org = await connectOrg(local);

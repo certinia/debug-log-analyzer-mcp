@@ -312,7 +312,9 @@ const DEFINITION_BUDGET = {
   // asking what failed would otherwise not look for here.
   apexlog_get_summary: 163,
   apexlog_list_limit_risks: 158,
-  apexlog_execute_anonymous: 428,
+  // Raised for `apexFilePath` (#212): without it, a script in a file is read
+  // into context and then written out again as `apex`, paid for twice.
+  apexlog_execute_anonymous: 450,
 };
 
 /**

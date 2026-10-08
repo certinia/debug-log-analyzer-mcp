@@ -7,9 +7,11 @@ jest.mock("node:fs", () => ({
     mkdir: jest.fn().mockResolvedValue(undefined),
     writeFile: jest.fn().mockResolvedValue(undefined),
     stat: jest.fn().mockResolvedValue({ size: 1024 }),
+    open: jest.fn(),
     // No symlinks in the test filesystem, so every path resolves to itself.
     realpath: jest.fn((target: string) => Promise.resolve(target)),
   },
+  constants: { O_RDONLY: 0, O_NONBLOCK: 4 },
 }));
 
 jest.mock("../src/salesforce/users", () => ({
@@ -61,7 +63,10 @@ import {
 import { ConfigAggregator, type AuthInfo } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import { executeAnonymous } from "../src/tools/executeAnonymous";
-import type { ExecuteAnonymousArgs } from "../src/tools/executeAnonymousDefinition";
+import {
+  executeAnonymousInputSchema,
+  type ExecuteAnonymousArgs,
+} from "../src/tools/executeAnonymousDefinition";
 import { getUserIdByUsername } from "../src/salesforce/users";
 import {
   ensureDebugLevel,
@@ -816,6 +821,178 @@ describe("Execute Anonymous", () => {
       expect(getUserIdByUsername).not.toHaveBeenCalled();
       expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(createTraceFlag).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("apexFilePath", () => {
+    const apexFilePath = "/project/scripts/apex/hello.apex";
+    const mockOpen = fs.open as unknown as jest.Mock;
+    const mockReadFile = jest.fn();
+    const mockHandleStat = jest.fn();
+    const mockClose = jest.fn();
+
+    beforeEach(() => {
+      mockReadFile.mockReset();
+      mockHandleStat.mockReset().mockResolvedValue({ isFile: () => true });
+      mockClose.mockReset().mockResolvedValue(undefined);
+      mockOpen.mockResolvedValue({
+        readFile: mockReadFile,
+        stat: mockHandleStat,
+        close: mockClose,
+      });
+    });
+
+    const errno = (code: string) =>
+      Object.assign(new Error(`${code}: failed`), { code });
+
+    it("should refuse a relative path rather than resolve it against the server's cwd", () => {
+      const result = executeAnonymousInputSchema.apexFilePath.safeParse(
+        "scripts/apex/hello.apex",
+      );
+
+      expect(result.error?.issues[0]?.message).toBe("must be an absolute path");
+    });
+
+    it("should run the Apex the file holds", async () => {
+      mockReadFile.mockResolvedValue(testApexCode);
+
+      await executeAnonymous(mockServer, { apexFilePath }, ctx, policy());
+
+      expect(mockOpen).toHaveBeenCalledWith(apexFilePath, expect.any(Number));
+      expectPostedApex(testApexCode);
+    });
+
+    it.each([
+      ["both", { apex: testApexCode, apexFilePath }],
+      ["neither", {}],
+    ])("should refuse a call that gives %s, before any work", async (_c, args) => {
+      const result: any = await executeAnonymous(
+        mockServer,
+        args as ExecuteAnonymousArgs,
+        ctx,
+        policy(),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("apex and apexFilePath");
+      expect(mockReadLocalOrg).not.toHaveBeenCalled();
+      expect(mockOpen).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["ENOENT", `Apex file not found: ${apexFilePath}`],
+      ["EACCES", `Cannot read Apex file ${apexFilePath}: EACCES`],
+    ])("should name why the file could not be read (%s), before connecting", async (code, message) => {
+      mockOpen.mockRejectedValueOnce(errno(code));
+
+      await expect(
+        executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
+      ).rejects.toThrow(message);
+      expect(mockConnectOrg).not.toHaveBeenCalled();
+    });
+
+    it("should strip a byte order mark, which Salesforce fails to compile", async () => {
+      mockReadFile.mockResolvedValue(`\uFEFF${testApexCode}`);
+
+      await executeAnonymous(mockServer, { apexFilePath }, ctx, policy());
+
+      expectPostedApex(testApexCode);
+    });
+
+    it("should refuse a device or a FIFO without reading it", async () => {
+      mockHandleStat.mockResolvedValueOnce({ isFile: () => false });
+
+      await expect(
+        executeAnonymous(mockServer, { apexFilePath: "/dev/zero" }, ctx, policy()),
+      ).rejects.toThrow("Cannot read Apex file /dev/zero: not a regular file");
+      expect(mockReadFile).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalled();
+    });
+
+    describe("outside the client roots", () => {
+      beforeEach(() => {
+        (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
+          roots: [{ uri: "file:///project" }],
+        });
+      });
+
+      it("should refuse it without reading it, since its text goes to the org", async () => {
+        await expect(
+          executeAnonymous(
+            mockServer,
+            { apexFilePath: "/home/me/.ssh/id_rsa" },
+            ctx,
+            policy(),
+          ),
+        ).rejects.toThrow(
+          "Apex file /home/me/.ssh/id_rsa is outside every root this client declared.",
+        );
+        expect(mockOpen).not.toHaveBeenCalled();
+        expect(mockConnectOrg).not.toHaveBeenCalled();
+      });
+
+      it("should follow symlinks, so a link inside a root that leaves one is refused", async () => {
+        (fs.realpath as unknown as jest.Mock).mockImplementationOnce(() =>
+          Promise.resolve("/home/me/.ssh/id_rsa"),
+        );
+
+        await expect(
+          executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
+        ).rejects.toThrow("/home/me/.ssh/id_rsa is outside every root");
+        expect(mockOpen).not.toHaveBeenCalled();
+      });
+
+      it("should read a file inside a root", async () => {
+        mockReadFile.mockResolvedValue(testApexCode);
+
+        await executeAnonymous(mockServer, { apexFilePath }, ctx, policy());
+
+        expectPostedApex(testApexCode);
+      });
+
+      it("should decode a percent-encoded root, so a file inside it is read", async () => {
+        (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
+          roots: [{ uri: "file:///my%20project" }],
+        });
+        mockReadFile.mockResolvedValue(testApexCode);
+
+        await executeAnonymous(
+          mockServer,
+          { apexFilePath: "/my project/a.apex" },
+          ctx,
+          policy(),
+        );
+
+        expectPostedApex(testApexCode);
+      });
+    });
+
+    it("should refuse a denied org without reading the file", async () => {
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apexFilePath },
+        ctx,
+        policy({ denyList: compileDenyList([TEST_ORG_ID]) }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(mockOpen).not.toHaveBeenCalled();
+    });
+
+    it("should show the file's Apex, not its path, when production asks to confirm", async () => {
+      // The user confirms the code that will run, not a name for it.
+      mockReadFile.mockResolvedValue(testApexCode);
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apexFilePath },
+        ctx,
+        policy(),
+      );
+
+      expect(JSON.stringify(result)).toContain(testApexCode);
       expect(mockRequest).not.toHaveBeenCalled();
     });
   });
