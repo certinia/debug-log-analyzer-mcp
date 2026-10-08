@@ -7,7 +7,11 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
-import { ensureDebugLevel } from "../salesforce/debugLevels.js";
+import {
+  ensureDebugLevel,
+  TRACE_CATEGORIES,
+  type DebugLevelInput,
+} from "../salesforce/debugLevels.js";
 import {
   executeAnonymousWithLog,
   levelsWereOverridden,
@@ -150,13 +154,36 @@ function apexSource({
   return undefined;
 }
 
+// In category order, so the same levels read and digest the same whatever order the client sent.
+function describeLevels(debugLevel: DebugLevelInput | undefined): string {
+  if (debugLevel === undefined) {
+    return "as the last run left them";
+  }
+  if (debugLevel === "default") {
+    return "the defaults";
+  }
+  if (typeof debugLevel === "string") {
+    return `${debugLevel} for every category`;
+  }
+  const named = TRACE_CATEGORIES.filter(
+    (category) => debugLevel[category] !== undefined,
+  ).map((category) => `${category} ${debugLevel[category]}`);
+  return `${named.join(", ")}; the rest as the last run left them`;
+}
+
 // All of it, never cut, between markers and with its size, so Apex cannot pass for the end of the prompt.
-function apexConfirmable(apex: string, orgLabel: string): Confirmable {
+function apexConfirmable(
+  apex: string,
+  debugLevel: DebugLevelInput | undefined,
+  orgLabel: string,
+): Confirmable {
   const lines = apex.split("\n").length;
   const linesText = `${lines} line${lines === 1 ? "" : "s"}`;
+  // Before the Apex, so the Apex cannot pass for it. The levels set the tool's own debug level record.
+  const levels = `Log levels: ${describeLevels(debugLevel)}.`;
   return {
-    effect: apex,
-    detail: `Apex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----`,
+    effect: `${levels}\0${apex}`,
+    detail: `${levels}\n\nApex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----`,
     // The size again, in the schema, where the Apex cannot reach.
     title: `Run ${linesText} of Apex`,
     unshowable:
@@ -203,7 +230,8 @@ export async function executeAnonymous(
           ? `Cannot check Apex file ${args.apexFilePath}: ${reason}. Pass the Apex inline in apex.`
           : undefined,
       prepare: readApex,
-      confirm: ({ value, orgLabel }) => apexConfirmable(value, orgLabel),
+      confirm: ({ value, orgLabel }) =>
+        apexConfirmable(value, debugLevel, orgLabel),
     },
     policy,
   );

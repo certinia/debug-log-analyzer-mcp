@@ -1623,6 +1623,86 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
+    it.each<[string, ExecuteAnonymousArgs["debugLevel"], string]>([
+      ["no levels", undefined, "as the last run left them"],
+      ["the defaults", "default", "the defaults"],
+      ["one level", "FINEST", "FINEST for every category"],
+      [
+        "some categories",
+        { database: "INFO", apexCode: "FINEST" },
+        "apexCode FINEST, database INFO; the rest as the last run left them",
+      ],
+    ])("should show the log levels before the Apex, for %s", async (_name, debugLevel, shown) => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+
+      const params = confirmRequest(
+        assertInputRequired(
+          await executeAnonymous(
+            mockServer,
+            { apex: testApexCode, debugLevel },
+            ctx,
+            policy(),
+          ),
+        ),
+      );
+
+      expect(params.message).toContain(
+        `PRODUCTION org 'test@example.com'.\n\nLog levels: ${shown}.\n\nApex, `,
+      );
+    });
+
+    // The levels set the tool's DebugLevel record, so they are part of what was confirmed.
+    it("should refuse a retry that asks for different log levels", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const asked = assertInputRequired(
+        await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: "INFO" },
+          ctx,
+          policy(),
+        ),
+      );
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode, debugLevel: "FINEST" },
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("does not match this call");
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("should accept a retry that names the same levels in another order", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const asked = assertInputRequired(
+        await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: { database: "INFO", apexCode: "FINEST" } },
+          ctx,
+          policy(),
+        ),
+      );
+
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode, debugLevel: { apexCode: "FINEST", database: "INFO" } },
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
+
+      expectPostedApex(testApexCode);
+    });
+
     it("should treat an unverifiable org as production and surface the reason", async () => {
       mockRetrieveOrgInfo.mockRejectedValue(
         new Error("Unable to refresh session due to: inactive organization"),
