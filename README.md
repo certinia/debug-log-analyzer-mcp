@@ -263,7 +263,7 @@ An entry matches the org id, username, alias or instance URL. `*` is a glob, and
 
 An org id matches in its 15- or 18-char form, whatever its case. An instance URL matches by its host, so `acme--*` denies every sandbox of the `acme` My Domain.
 
-A `type:` entry denies a type from the table above, e.g. `type:sandbox`. `type:production` also denies an org whose type cannot be read, because the server treats that org as production. It needs one query to read the org type, but no Apex runs and no record is written. A `type:` entry that names no org type stops the server.
+A `type:` entry denies a type from the table above, e.g. `type:sandbox`. `type:production` also denies an org whose type cannot be read, because the server treats that org as production. The server contacts the org before it refuses on type: it connects, and it queries the org type. No Apex runs and no record is written. A `type:` entry that names no org type stops the server.
 
 Nothing lifts a deny - not `--allow-production-orgs`, not a confirmation. The refusal names what matched.
 
