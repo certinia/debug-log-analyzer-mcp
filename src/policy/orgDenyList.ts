@@ -44,39 +44,23 @@ export type OrgIdentity = {
 const REGEXP_METACHARACTERS = /[.+?^${}()|[\]\\]/g;
 
 /** An org id: 15 chars as Setup shows it, or 18 as the auth file holds it. */
-const ORG_ID = /^00D[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/;
+const ORG_ID = /^00D[a-z0-9]{12}(?:[a-z0-9]{3})?$/i;
 
 const TYPE_ENTRY = /^type:/i;
 
 const DENY_IS_ABSOLUTE =
   "A deny is absolute: no flag and no confirmation lifts it.";
 
-// Only the first 15 chars identify the org, and they are case-sensitive.
+// The 18-char suffix only encodes the case of the first 15.
 const toOrgId15 = (orgId: string): string => orgId.slice(0, 15);
 
-/**
- * The host of a URL, or the value unchanged when it has no scheme.
- *
- * Applied to patterns and instance URLs alike, so a pasted URL - path, port and
- * all - matches the org it names. A regex and not `URL`, because a pattern may
- * hold a `*`.
- */
+// A regex and not `URL`, because a pattern may hold a `*`.
 const toHost = (value: string): string =>
   value.replace(/^[a-z][a-z0-9+.-]*:\/\/([^/?#:]*).*$/i, "$1");
 
-/**
- * Compile one pattern.
- *
- * An org id compiles to its 15-char form, matched with its case. Anything else
- * is a glob: `*` matches any run of characters and every other metacharacter
- * is literal. Anchored and case-insensitive, so `prod-*@acme.com` denies
- * `PROD-a@acme.com` and not `xprod-a@acme.com`.
- */
+// Ignoring case can only over-deny; a cased miss would let a run through.
 function compile(source: string): RegExp {
-  if (ORG_ID.test(source)) {
-    return new RegExp(`^${toOrgId15(source)}$`);
-  }
-  const body = toHost(source)
+  const body = toHost(ORG_ID.test(source) ? toOrgId15(source) : source)
     .split("*")
     .map((literal) => literal.replace(REGEXP_METACHARACTERS, "\\$&"))
     .join(".*");
@@ -139,7 +123,7 @@ export function matchDeniedOrg(
   );
 }
 
-/** The refusal for an org that `entry`, as the user wrote it, denies. */
+/** The refusal naming the `--deny-orgs` entry that denies the org. */
 export function denyRefusal(orgLabel: string, entry: string): string {
   return `Cannot execute anonymous Apex against org '${orgLabel}': it matches the --deny-orgs entry '${entry}'.\n${DENY_IS_ABSOLUTE}`;
 }

@@ -88,9 +88,18 @@ describe("matchDeniedOrg", () => {
     expect(matchDeniedOrg(deny(pattern), identity)?.source).toBe(pattern);
   });
 
-  // A 15-char id is case-sensitive: 00D5g000004xyza is another org.
-  it("should not deny an org id that differs only in case", () => {
-    expect(matchDeniedOrg(deny("00D5g000004xyza"), identity)).toBeUndefined();
+  // A miss lets the Apex run, so case may only widen a deny, never narrow it.
+  it.each([
+    ["an 18-char id", "00D5G000004XYZAEAK"],
+    ["a 15-char id", "00d5g000004xyza"],
+  ])("should deny on %s in another case", (_form, pattern) => {
+    expect(matchDeniedOrg(deny(pattern), identity)?.source).toBe(pattern);
+  });
+
+  it("should match an id on its first 15 chars, not as a glob of 18", () => {
+    expect(
+      matchDeniedOrg(deny("00D5g000004XyZaZZZ"), identity)?.source,
+    ).toBe("00D5g000004XyZaZZZ");
   });
 
   it("should not deny on an org id that only shares the prefix", () => {
