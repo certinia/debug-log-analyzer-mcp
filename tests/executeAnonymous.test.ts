@@ -195,6 +195,7 @@ function makeCtx(
 ) {
   return {
     mcpReq: {
+      signal: new AbortController().signal,
       requestState: () => state,
       inputResponses,
       ...extra,
@@ -261,7 +262,6 @@ describe("Execute Anonymous", () => {
 
     mockServer = {
       server: {
-        getClientCapabilities: jest.fn().mockReturnValue({ roots: {} }),
         listRoots: jest.fn().mockResolvedValue({ roots: [] }),
       },
     } as unknown as McpServer;
@@ -909,6 +909,22 @@ describe("Execute Anonymous", () => {
       ).rejects.toThrow("Cannot read Apex file /dev/zero: not a regular file");
       expect(mockReadFile).not.toHaveBeenCalled();
       expect(mockClose).toHaveBeenCalled();
+    });
+
+    it("should read a file anywhere when the client cannot list roots, as no root bounds it", async () => {
+      (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
+        new Error("Client does not support listing roots"),
+      );
+      mockReadFile.mockResolvedValue(testApexCode);
+
+      await executeAnonymous(
+        mockServer,
+        { apexFilePath: "/elsewhere/a.apex" },
+        ctx,
+        policy(),
+      );
+
+      expectPostedApex(testApexCode);
     });
 
     describe("outside the client roots", () => {
@@ -1584,10 +1600,24 @@ describe("Execute Anonymous", () => {
         expect(textOf(result)).not.toContain("warning");
       });
 
-      it("does not ask a client that never declared roots, which may never answer", async () => {
-        (
-          mockServer.server.getClientCapabilities as jest.Mock
-        ).mockReturnValue({});
+      it("waits a bounded time for the roots, and stops when the call is cancelled", async () => {
+        await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        );
+
+        expect(mockServer.server.listRoots).toHaveBeenCalledWith(undefined, {
+          timeout: 5_000,
+          signal: ctx.mcpReq.signal,
+        });
+      });
+
+      it("stays silent when the client cannot list roots", async () => {
+        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
+          new Error("Client does not support listing roots"),
+        );
 
         const result = await executeAnonymous(
           mockServer,
@@ -1596,11 +1626,26 @@ describe("Execute Anonymous", () => {
           policy(),
         );
 
-        expect(mockServer.server.listRoots).not.toHaveBeenCalled();
         expect(textOf(result)).not.toContain("warning");
       });
 
-            it("follows symlinks, so a link inside a root that leaves one warns", async () => {
+      it("stops a cancelled call rather than running on with no roots", async () => {
+        const controller = new AbortController();
+        controller.abort();
+        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
+          new Error("aborted"),
+        );
+        const cancelled = {
+          mcpReq: { ...ctx.mcpReq, signal: controller.signal },
+        } as unknown as ServerContext;
+
+        await expect(
+          executeAnonymous(mockServer, { apex: testApexCode }, cancelled, policy()),
+        ).rejects.toThrow("aborted");
+        expect(mockReadLocalOrg).not.toHaveBeenCalled();
+      });
+
+      it("follows symlinks, so a link inside a root that leaves one warns", async () => {
         // The first call resolves outputDir; the roots after it keep the
         // resolves-to-itself default.
         (fs.realpath as unknown as jest.Mock).mockImplementationOnce(() =>

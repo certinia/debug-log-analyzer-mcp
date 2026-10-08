@@ -44,6 +44,8 @@ import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 /** Connect, set the trace flag, execute, write. */
 const PROGRESS_STEPS = 4;
 
+const ROOTS_TIMEOUT_MS = 5_000;
+
 // Outlives a long run plus the clock skew; the flag is deleted once the id is matched.
 const RUN_TRACE_FLAG_MS = 15 * 60 * 1000;
 
@@ -62,18 +64,25 @@ export type ExecuteAnonymousPolicy = {
   consumeConfirmation: ConsumeConfirmation;
 };
 
-async function getRootPaths(server: McpServer): Promise<string[]> {
-  // A client that never declared roots may never answer, which stalls the run for the SDK's 60 s timeout.
-  if (!server.server.getClientCapabilities()?.roots) {
-    return [];
-  }
+async function getRootPaths(
+  server: McpServer,
+  signal: AbortSignal,
+): Promise<string[]> {
   try {
-    const { roots } = await server.server.listRoots();
+    // Bounded, so a client that never answers costs seconds, not the SDK's 60 s default.
+    const { roots } = await server.server.listRoots(undefined, {
+      timeout: ROOTS_TIMEOUT_MS,
+      signal,
+    });
     // fileURLToPath decodes `%20` and drops the slash before a Windows drive, which `pathname` keeps.
     return roots
       .filter((root) => root.uri.startsWith("file:"))
       .map((root) => fileURLToPath(root.uri));
-  } catch {
+  } catch (error) {
+    // A cancelled call stops here, rather than running on with no roots.
+    if (signal.aborted) {
+      throw error;
+    }
     return [];
   }
 }
@@ -200,7 +209,7 @@ export async function executeAnonymous(
   }
 
   const report = progressReporter(ctx);
-  const rootPaths = await getRootPaths(server);
+  const rootPaths = await getRootPaths(server, ctx.mcpReq.signal);
   const projectPath = rootPaths[0];
 
   const local = await readLocalOrg(projectPath, targetOrg);

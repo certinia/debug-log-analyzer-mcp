@@ -237,6 +237,7 @@ describe("createApexLogServer", () => {
           capabilities: {
             tools: {},
           },
+          enforceStrictCapabilities: true,
           instructions: expect.any(String),
           // Verifies a confirmation before any handler sees it.
           requestState: { verify: expect.any(Function) },
