@@ -9,8 +9,8 @@ import {
   LogSummaryArgs,
   getLogSummaryToolConfig,
 } from "../src/tools/getLogSummary";
-import { logEvent } from "./support/logEvents";
-import { clearApexLogCache } from "../src/tools/apexLogSource";
+import { logEvent, type NodeSpec } from "./support/logEvents";
+import { clearApexLogCache, walkLog } from "../src/tools/apexLogSource";
 import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type {
@@ -125,6 +125,8 @@ describe("getLogSummary", () => {
       debugLevels: {},
       namespaces: ["default", "MyNamespace"],
       logIssues: [] as LogIssue[],
+      exceptions: [] as LogEvent[],
+      eventsById: [] as LogEvent[],
       isTruncated: false,
       truncation: { regions: [], totalSkippedBytes: 0 },
       truncatedEvents: [] as LogEvent[],
@@ -149,6 +151,22 @@ describe("getLogSummary", () => {
     mockParse.mockReturnValue(createMockApexLog(overrides));
 
     return toonDecode(await getLogSummary({ logFilePath } as LogSummaryArgs));
+  };
+
+  // The lists the parser fills beside the tree: every event, and every throw and fatal.
+  const logOf = (...frames: NodeSpec[]): Partial<ApexLog> => {
+    const children = frames.map(logEvent);
+    const eventsById: LogEvent[] = [];
+    children.forEach((child) =>
+      walkLog<void>(child, (event) => {
+        eventsById.push(event);
+      }),
+    );
+    const exceptions = eventsById.filter(
+      (event) =>
+        event.type === "EXCEPTION_THROWN" || event.type === "FATAL_ERROR",
+    );
+    return { children, eventsById, exceptions };
   };
 
   describe("the transaction", () => {
@@ -407,6 +425,228 @@ describe("getLogSummary", () => {
 
       expect(summary.file).toBeUndefined();
       expect(summary.logFilePath).toBeUndefined();
+    });
+  });
+
+  describe("exceptions", () => {
+    const thrown = (
+      text: string,
+      lineNumber: NodeSpec["lineNumber"] = 31,
+    ): NodeSpec => ({ type: "EXCEPTION_THROWN", text, lineNumber });
+
+    const method = (text: string, ...children: NodeSpec[]): NodeSpec => ({
+      type: "METHOD_ENTRY",
+      text,
+      children,
+    });
+
+    it("should fold repeated throws into one row, most thrown first", async () => {
+      // One real log throws 4,501 times from one line: a row per throw would
+      // be 4,501 rows that say one thing.
+      const summary = await summaryOf(
+        logOf(
+          method(
+            "Service.save()",
+            thrown(
+              "System.NullPointerException: Attempt to de-reference a null object",
+              44,
+            ),
+          ),
+          method(
+            "Service.fetch(Integer)",
+            thrown("System.CalloutException: Read timed out"),
+            thrown("System.CalloutException: Read timed out"),
+          ),
+        ),
+      );
+
+      expect(summary.exceptionGroupCount).toBe(2);
+      expect(summary.exceptions).toEqual([
+        {
+          message: "System.CalloutException: Read timed out",
+          thrownIn: "Service.fetch(Integer)",
+          lineNumber: 31,
+          thrownCount: 2,
+        },
+        {
+          message:
+            "System.NullPointerException: Attempt to de-reference a null object",
+          thrownIn: "Service.save()",
+          lineNumber: 44,
+          thrownCount: 1,
+        },
+      ]);
+    });
+
+    it("should fold one message thrown from several frames into one row, where it was first thrown", async () => {
+      // A row per frame cost one real log 15 rows for 4 messages.
+      const summary = await summaryOf(
+        logOf(
+          method("A.run()", thrown("System.QueryException: no rows", 12)),
+          method("B.run()", thrown("System.QueryException: no rows", 40)),
+        ),
+      );
+
+      expect(summary.exceptions).toEqual([
+        {
+          message: "System.QueryException: no rows",
+          thrownIn: "A.run()",
+          lineNumber: 12,
+          thrownCount: 2,
+        },
+      ]);
+    });
+
+    it("should name the Apex frame, not the system call or query it was inside", async () => {
+      const summary = await summaryOf(
+        logOf({
+          type: "CODE_UNIT_STARTED",
+          text: "OrderTrigger on Order trigger event AfterUpdate",
+          children: [
+            {
+              type: "SYSTEM_METHOD_ENTRY",
+              text: "System.JSON.deserialize(String, System.Type)",
+              children: [thrown("System.JSONException: Unexpected character")],
+            },
+          ],
+        }),
+      );
+
+      expect(summary.exceptions[0].thrownIn).toBe(
+        "OrderTrigger on Order trigger event AfterUpdate",
+      );
+    });
+
+    it("should state an empty frame and line where the log gives none", async () => {
+      // `EXTERNAL` is what a managed package states for a line it hides.
+      const summary = await summaryOf(
+        logOf(
+          thrown("System.TypeException: Invalid id", null),
+          method(
+            "pkg.Api.call()",
+            thrown("pkg.ApiException: denied", "EXTERNAL"),
+          ),
+        ),
+      );
+
+      expect(summary.exceptions).toEqual([
+        {
+          message: "System.TypeException: Invalid id",
+          thrownIn: "",
+          lineNumber: "",
+          thrownCount: 1,
+        },
+        {
+          message: "pkg.ApiException: denied",
+          thrownIn: "pkg.Api.call()",
+          lineNumber: "EXTERNAL",
+          thrownCount: 1,
+        },
+      ]);
+    });
+
+    it("should clip a message as a fatal's is clipped", async () => {
+      const summary = await summaryOf(
+        logOf(thrown(`System.DmlException: Insert failed. ${"x".repeat(400)}`)),
+      );
+
+      const { message } = summary.exceptions[0];
+      expect(message).toHaveLength(201);
+      expect(message.endsWith("…")).toBe(true);
+    });
+
+    it("should fold messages that differ only past the clip, so no two rows read the same", async () => {
+      const prefix = `System.DmlException: Insert failed. ${"x".repeat(200)}`;
+      const summary = await summaryOf(
+        logOf(thrown(`${prefix} record 1`), thrown(`${prefix} record 2`)),
+      );
+
+      expect(summary.exceptions).toHaveLength(1);
+      expect(summary.exceptions[0].thrownCount).toBe(2);
+    });
+
+    it("should show and fold on the first line, as a fatal does", async () => {
+      const first =
+        "System.DmlException: Insert failed. First exception on row 0; first error: CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY, OrderTrigger: execution of AfterInsert";
+      const summary = await summaryOf(
+        logOf(
+          thrown(`${first}\ncaused by: System.NullPointerException: Attempt to de-reference a null object\nTrigger.OrderTrigger: line 12, column 1: []`),
+          thrown(`${first}\ncaused by: System.QueryException: List has no rows for assignment to SObject\nTrigger.OrderTrigger: line 20, column 1: []`),
+        ),
+      );
+
+      expect(summary.exceptions).toHaveLength(1);
+      expect(summary.exceptions[0]).toMatchObject({ message: first, thrownCount: 2 });
+    });
+
+    it("should cap the rows and state how many there were", async () => {
+      // A loop that puts a record id in each message has no bound.
+      const throws = Array.from({ length: 25 }, (_, i) =>
+        thrown(`System.DmlException: row ${i}`),
+      );
+      const summary = await summaryOf(
+        logOf(method("Batch.execute()", ...throws)),
+      );
+
+      expect(summary.exceptions).toHaveLength(20);
+      expect(summary.exceptionGroupCount).toBe(25);
+    });
+
+    it("should leave out the table, and count zero, when nothing was thrown", async () => {
+      // A fatal alone is not a throw: `fatalErrors` reports it.
+      const summary = await summaryOf(
+        logOf({
+          type: "FATAL_ERROR",
+          text: "System.LimitException: Apex CPU time limit exceeded",
+        }),
+      );
+
+      expect(summary.exceptions).toBeUndefined();
+      expect(summary.exceptionGroupCount).toBe(0);
+    });
+  });
+
+  describe("flowErrorCount", () => {
+    it("should count the flow element errors at any depth", async () => {
+      // A flow can fail with no throw and no fatal, so nothing else reports it.
+      const summary = await summaryOf(
+        logOf(
+          {
+            type: "FLOW_START_INTERVIEWS_BEGIN",
+            children: [
+              { type: "FLOW_ELEMENT_ERROR" },
+              { type: "FLOW_ELEMENT_ERROR" },
+            ],
+          },
+          {
+            type: "CODE_UNIT_STARTED",
+            children: [{ type: "FLOW_ELEMENT_ERROR" }],
+          },
+        ),
+      );
+
+      expect(summary.flowErrorCount).toBe(3);
+    });
+
+    it("should not count a workflow flow action error twice", async () => {
+      // Every real log with a `WF_FLOW_ACTION_ERROR` also has the
+      // `FLOW_ELEMENT_ERROR` of the same failure.
+      const summary = await summaryOf(
+        logOf({
+          type: "CODE_UNIT_STARTED",
+          children: [
+            { type: "FLOW_ELEMENT_ERROR" },
+            { type: "WF_FLOW_ACTION_ERROR" },
+            { type: "WF_FLOW_ACTION_ERROR_DETAIL" },
+          ],
+        }),
+      );
+
+      expect(summary.flowErrorCount).toBe(1);
+    });
+
+    it("should report zero when no flow failed", async () => {
+      expect((await summaryOf()).flowErrorCount).toBe(0);
     });
   });
 

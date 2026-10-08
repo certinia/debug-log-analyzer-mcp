@@ -127,6 +127,10 @@ All thirteen governor limits are listed, zeros included.
 
 `thrownCount` counts the exceptions thrown, zero included.
 
+`exceptions` appears when something was thrown: `{message, thrownIn, lineNumber, thrownCount}`, one row per exception message, most thrown first. A message is the first line of the exception, cut at 200 characters, so two messages that differ only after that share a row. `thrownIn` and `lineNumber` say where the message was first thrown. `thrownIn` is the nearest method, constructor or code unit that the log recorded. Below `APEX_CODE,FINE` the log records no method, so `thrownIn` can be a code unit while `lineNumber` is a line in a method that it called. A managed package states its line as `EXTERNAL`. The table stops at 20 rows. `exceptionGroupCount` counts the messages, zero included, so a cut table says so. The log does not say whether a throw was caught.
+
+`flowErrorCount` counts the flow elements that failed, zero included. A flow can fail with no exception and no fatal error.
+
 `fatalErrors` appears once per failure that ended the transaction, with the innermost three frames and a trailing `…` where there were more. It is the only field that says a transaction did not finish, because a fatal error need not breach any limit.
 
 <!-- params-apexlog_get_summary:start -->
@@ -203,9 +207,9 @@ Every request carries all four tool definitions, whether you call them or not. E
 | ------------------------------ | ----------------------------------------------------------- |
 | `apexlog_list_slow_operations` | ~530                                                        |
 | `apexlog_execute_anonymous`    | ~407                                                        |
+| `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| `apexlog_get_summary`          | ~145                                                        |
-| **Total**                      | **~1,232** (0.6% of a 200K context), **-19% vs 1.x ~1,529** |
+| **Total**                      | **~1,242** (0.6% of a 200K context), **-19% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
@@ -213,13 +217,13 @@ Only the total compares with 1.x: per tool it would compare different tools, sin
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 
-Cost does not grow with the log size. The figures below are measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log). On the full 19.7 MB original, `apexlog_get_summary` returns ~374 tokens instead of ~364, and `apexlog_list_limit_risks` the same ~35.
+Cost does not grow with the log size. The figures below are measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log). On the full 19.7 MB original, `apexlog_get_summary` returns ~387 tokens instead of ~335, and `apexlog_list_limit_risks` the same ~35.
 
 <!-- token-cost-answers:start -->
 
 | Tool                           | Response | 1.x  | Change |
 | ------------------------------ | -------- | ---- | ------ |
-| `apexlog_get_summary`          | ~325     | ~293 | +11%   |
+| `apexlog_get_summary`          | ~335     | ~293 | +14%   |
 | `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
 

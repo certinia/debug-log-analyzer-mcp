@@ -1,0 +1,42 @@
+64.0 APEX_CODE,FINE;APEX_PROFILING,INFO;CALLOUT,INFO;DATA_ACCESS,INFO;DB,INFO;NBA,INFO;SYSTEM,DEBUG;VALIDATION,INFO;VISUALFORCE,INFO;WAVE,INFO;WORKFLOW,INFO
+Execute Anonymous: SyncService.run();
+12:00:00.0 (1000000)|USER_INFO|[EXTERNAL]|005Ea00000R6orz|first-last@example.com|(GMT+00:00) Greenwich Mean Time (Europe/London)|GMT+00:00
+12:00:00.0 (2000000)|EXECUTION_STARTED
+12:00:00.0 (3000000)|CODE_UNIT_STARTED|[EXTERNAL]|execute_anonymous_apex
+12:00:00.0 (4000000)|METHOD_ENTRY|[1]|01pEa00000SyncS|SyncService.run()
+12:00:00.0 (5000000)|METHOD_ENTRY|[8]|01pEa00000SyncS|SyncService.fetch(Integer)
+12:00:00.0 (6000000)|EXCEPTION_THROWN|[31]|System.CalloutException: Read timed out
+12:00:00.0 (7000000)|METHOD_EXIT|[8]|SyncService.fetch(Integer)
+12:00:00.0 (8000000)|METHOD_ENTRY|[8]|01pEa00000SyncS|SyncService.fetch(Integer)
+12:00:00.0 (9000000)|EXCEPTION_THROWN|[31]|System.CalloutException: Read timed out
+12:00:00.0 (10000000)|METHOD_EXIT|[8]|SyncService.fetch(Integer)
+12:00:00.0 (11000000)|METHOD_ENTRY|[8]|01pEa00000SyncS|SyncService.fetch(Integer)
+12:00:00.0 (12000000)|EXCEPTION_THROWN|[31]|System.CalloutException: Read timed out
+12:00:00.0 (13000000)|METHOD_EXIT|[8]|SyncService.fetch(Integer)
+12:00:00.0 (14000000)|METHOD_ENTRY|[15]|01pEa00000SyncS|SyncService.save()
+12:00:00.0 (15000000)|EXCEPTION_THROWN|[44]|System.NullPointerException: Attempt to de-reference a null object
+12:00:00.0 (16000000)|METHOD_EXIT|[15]|SyncService.save()
+12:00:00.0 (17000000)|METHOD_EXIT|[1]|SyncService.run()
+12:00:00.0 (18000000)|FLOW_START_INTERVIEWS_BEGIN|1
+12:00:00.0 (19000000)|FLOW_ELEMENT_ERROR|This error occurred: FIELD_CUSTOM_VALIDATION_EXCEPTION: Amount is required.|FlowRecordUpdate|Update_Opportunity
+12:00:00.0 (20000000)|FLOW_START_INTERVIEWS_END|1
+12:00:00.0 (21000000)|CUMULATIVE_LIMIT_USAGE
+12:00:00.0 (21000000)|LIMIT_USAGE_FOR_NS|(default)|
+  Number of SOQL queries: 0 out of 100
+  Number of query rows: 0 out of 50000
+  Number of SOSL queries: 0 out of 20
+  Number of DML statements: 0 out of 150
+  Number of Publish Immediate DML: 0 out of 150
+  Number of DML rows: 0 out of 10000
+  Maximum CPU time: 18 out of 10000
+  Maximum heap size: 0 out of 6000000
+  Number of callouts: 3 out of 100
+  Number of Email Invocations: 0 out of 10
+  Number of future calls: 0 out of 50
+  Number of queueable jobs added to the queue: 0 out of 50
+  Number of Mobile Apex push calls: 0 out of 10
+
+12:00:00.0 (21000000)|CUMULATIVE_LIMIT_USAGE_END
+
+12:00:00.0 (22000000)|CODE_UNIT_FINISHED|execute_anonymous_apex
+12:00:00.0 (23000000)|EXECUTION_FINISHED

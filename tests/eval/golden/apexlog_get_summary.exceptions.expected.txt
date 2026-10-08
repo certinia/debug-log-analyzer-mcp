@@ -1,0 +1,39 @@
+fileSizeBytes: 2553
+durationTotalMs: 21
+truncated: false
+thrownCount: 4
+exceptionGroupCount: 2
+exceptions[2]{message,thrownIn,lineNumber,thrownCount}:
+  "System.CalloutException: Read timed out",SyncService.fetch(Integer),31,3
+  "System.NullPointerException: Attempt to de-reference a null object",SyncService.save(),44,1
+flowErrorCount: 1
+namespaces[1]: default
+governorLimits[13]{limit,used,max}:
+  soqlQueries,0,100
+  soslQueries,0,20
+  queryRows,0,50000
+  dmlStatements,0,150
+  publishImmediateDml,0,150
+  dmlRows,0,10000
+  cpuTime,18,10000
+  heapSize,0,6000000
+  callouts,3,100
+  emailInvocations,0,10
+  futureCalls,0,50
+  queueableJobsAddedToQueue,0,50
+  mobileApexPushCalls,0,10
+limitsByNamespace[2]{namespace,limit,used}:
+  default,cpuTime,18
+  default,callouts,3
+categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,FINE,6,17,81
+  apexProfiling,INFO,1,0,0
+  callout,INFO,0,0,0
+  dataAccess,INFO,0,0,0
+  database,INFO,0,0,0
+  nba,INFO,0,0,0
+  system,DEBUG,0,0,0
+  validation,INFO,0,0,0
+  visualforce,INFO,0,0,0
+  wave,INFO,0,0,0
+  workflow,INFO,1,2,9.5

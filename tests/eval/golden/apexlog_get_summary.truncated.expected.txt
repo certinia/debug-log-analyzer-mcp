@@ -4,6 +4,8 @@ truncated: true
 truncatedBy[2]: skipped-lines,max-size
 skippedBytes: 14680064
 thrownCount: 0
+exceptionGroupCount: 0
+flowErrorCount: 0
 namespaces[1]: default
 governorLimits[13]{limit,used,max}:
   soqlQueries,0,0
