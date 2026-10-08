@@ -244,6 +244,12 @@ export async function executeAnonymous(
       `Cannot check Apex file ${args.apexFilePath} against the client's roots: they could not be read, as ${roots.unreadable}. Pass the Apex inline in apex.`,
     );
   }
+  // The default org is the project's, and with its roots unread the cwd may not be that project.
+  if (roots.unreadable !== undefined && targetOrg === undefined) {
+    throw new Error(
+      `Cannot tell which project's default org to use: the client's roots could not be read, as ${roots.unreadable}. Pass targetOrg.`,
+    );
+  }
   const rootPaths = roots.paths;
   const projectPath = rootPaths[0];
 

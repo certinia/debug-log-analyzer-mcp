@@ -947,7 +947,7 @@ describe("Execute Anonymous", () => {
       it("should say an outputDir was not checked, rather than stay silent", async () => {
         const result = await executeAnonymous(
           mockServer,
-          { apex: testApexCode, outputDir: "/elsewhere/logs" },
+          { apex: testApexCode, outputDir: "/elsewhere/logs", targetOrg: "psa" },
           ctx,
           policy(),
         );
@@ -970,10 +970,19 @@ describe("Execute Anonymous", () => {
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
       });
 
-      it("should still run inline Apex", async () => {
+      it("should refuse to guess the default org, since the cwd may not be the client's project", async () => {
+        await expect(
+          executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
+        ).rejects.toThrow(
+          "Cannot tell which project's default org to use: the client's roots could not be read, as this server cannot yet ask a 2026-07-28 client for them. Pass targetOrg.",
+        );
+        expect(mockReadLocalOrg).not.toHaveBeenCalled();
+      });
+
+      it("should still run inline Apex against a named org", async () => {
         await executeAnonymous(
           mockServer,
-          { apex: testApexCode },
+          { apex: testApexCode, targetOrg: "psa" },
           ctx,
           policy(),
         );
