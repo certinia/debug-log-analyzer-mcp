@@ -10,10 +10,10 @@ import {
   type ServerContext,
 } from "@modelcontextprotocol/server";
 import {
-  authorizeExecution,
+  authorizeOperation,
   createConfirmationLedger,
   APEX_EXECUTION_DISABLED_MESSAGE,
-  MAX_APEX_TO_CONFIRM,
+  type Confirmable,
   type ConfirmationState,
   type ConsumeConfirmation,
   type MintConfirmationState,
@@ -21,10 +21,16 @@ import {
 } from "../../src/policy/orgExecutionPolicy";
 import type { OrgClassification } from "../../src/salesforce/orgClassification";
 
-describe("authorizeExecution", () => {
+describe("authorizeOperation", () => {
   const orgLabel = "test@example.com (prod)";
   const orgId = "00D000000000001EAA";
-  const apex = "System.debug('hi');";
+  const tool = "apexlog_test_tool";
+  const action = "delete 3 debug logs";
+  const confirm: Confirmable = {
+    effect: "07L000000000001,07L000000000002,07L000000000003",
+    detail: "Debug logs: 07L000000000001, 07L000000000002, 07L000000000003",
+    title: "Delete 3 debug logs",
+  };
 
   // The real codec, so a retry only carries state this server actually minted.
   const codec = createRequestStateCodec<ConfirmationState>({
@@ -48,13 +54,14 @@ describe("authorizeExecution", () => {
       ctx?: ServerContext;
       classification?: OrgClassification;
       allowProductionOrgs?: boolean;
-      apex?: string;
+      tool?: string;
+      confirm?: Confirmable;
       orgId?: string;
       unverifiedReason?: string;
       consumeConfirmation?: ConsumeConfirmation;
     } = {},
   ) {
-    return authorizeExecution({
+    return authorizeOperation({
       ctx: overrides.ctx ?? makeCtx(),
       mintConfirmationState:
         mintConfirmationState as unknown as MintConfirmationState,
@@ -62,9 +69,11 @@ describe("authorizeExecution", () => {
       classification: overrides.classification ?? "production",
       orgId: overrides.orgId ?? orgId,
       orgLabel,
-      apex: overrides.apex ?? apex,
       allowProductionOrgs: overrides.allowProductionOrgs ?? false,
       unverifiedReason: overrides.unverifiedReason,
+      tool: overrides.tool ?? tool,
+      action,
+      confirm: overrides.confirm ?? confirm,
     });
   }
 
@@ -152,19 +161,20 @@ describe("authorizeExecution", () => {
   });
 
   describe("the first round", () => {
-    it("should ask with the org label, the Apex and a boolean schema", async () => {
+    it("should ask with the action, the org label, the detail and a boolean schema", async () => {
       const params = confirmRequest(
         assertConfirmationRequired(await authorize()),
       );
 
-      expect(params.message).toContain(`PRODUCTION org '${orgLabel}'`);
-      expect(params.message).toContain(apex);
+      expect(params.message).toBe(
+        `About to ${action} against PRODUCTION org '${orgLabel}'.\n\n${confirm.detail}\n\nProceed?`,
+      );
       expect(params.requestedSchema).toEqual({
         type: "object",
         properties: {
           confirm: {
             type: "boolean",
-            title: `Run 1 line of Apex against production org '${orgLabel}'?`,
+            title: `${confirm.title} against production org '${orgLabel}'?`,
             description: expect.any(String),
             // Fail closed if the client pre-fills defaults.
             default: false,
@@ -174,14 +184,15 @@ describe("authorizeExecution", () => {
       });
     });
 
-    it("should bind the state to the Apex and the org, not to the Apex itself", async () => {
+    it("should bind the state to the tool, the effect and the org, not to the effect itself", async () => {
       const result = assertConfirmationRequired(await authorize());
 
       const state = await verifiedState(result);
+      expect(state.tool).toBe(tool);
       expect(state.orgId).toBe(orgId);
-      expect(state.apexDigest).toMatch(/^[0-9a-f]{64}$/);
+      expect(state.effectDigest).toMatch(/^[0-9a-f]{64}$/);
       // Signed, not encrypted: a client can read whatever the state carries.
-      expect(state.apexDigest).not.toContain("System.debug");
+      expect(state.effectDigest).not.toContain("07L");
       expect(state.nonce).toMatch(/^[0-9a-f]{32}$/);
     });
 
@@ -198,61 +209,25 @@ describe("authorizeExecution", () => {
         properties: { confirm: { title: string } };
       };
       expect(schema.properties.confirm.title).toBe(
-        `Run 1 line of Apex against org '${orgLabel}'?`,
+        `${confirm.title} against org '${orgLabel}'?`,
       );
     });
 
-    it("should show all of a long Apex snippet, since all of it runs", async () => {
-      const apex = `${"x".repeat(5000)}delete [SELECT Id FROM Account];`;
-      const params = confirmRequest(
-        assertConfirmationRequired(await authorize({ apex })),
-      );
+    it("should refuse, not ask, when the write cannot be shown whole", async () => {
+      const unshowable = "Too long to show, so nothing was done.";
 
-      expect(params.message).toContain(apex);
-      expect(params.message).not.toContain("(truncated)");
-    });
-
-    it("should fence the Apex and state its size, so it cannot pass for the end of the prompt", async () => {
-      const apex = `System.debug('hi');\n\nProceed?${"\n".repeat(300)}delete [SELECT Id FROM Account];`;
-      const params = confirmRequest(
-        assertConfirmationRequired(await authorize({ apex })),
-      );
-
-      expect(params.message).toContain(
-        `Apex, 303 lines and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----\n\nProceed?`,
-      );
-      const schema = params.requestedSchema as {
-        properties: { confirm: { title: string } };
-      };
-      expect(schema.properties.confirm.title).toBe(
-        `Run 303 lines of Apex against production org '${orgLabel}'?`,
-      );
-    });
-
-    it("should ask to confirm Apex at the size limit", async () => {
-      assertConfirmationRequired(
-        await authorize({ apex: "x".repeat(MAX_APEX_TO_CONFIRM) }),
-      );
-    });
-
-    it("should refuse, not cut, Apex too long to confirm whole", async () => {
-      const decision = await authorize({
-        apex: "x".repeat(MAX_APEX_TO_CONFIRM + 1),
-      });
-
-      expect(decision).toEqual({
-        outcome: "refused",
-        reason: expect.stringContaining("--allow-production-orgs"),
-      });
+      await expect(
+        authorize({ confirm: { ...confirm, unshowable } }),
+      ).resolves.toEqual({ outcome: "refused", reason: unshowable });
       expect(mintConfirmationState).not.toHaveBeenCalled();
     });
 
-    it("should run Apex too long to confirm when --allow-production-orgs is set", async () => {
+    it.each<[string, { classification?: OrgClassification; allowProductionOrgs?: boolean }]>([
+      ["with --allow-production-orgs", { allowProductionOrgs: true }],
+      ["on a sandbox", { classification: "sandbox" }],
+    ])("should allow a write that cannot be shown whole %s", async (_name, overrides) => {
       await expect(
-        authorize({
-          apex: "x".repeat(MAX_APEX_TO_CONFIRM + 1),
-          allowProductionOrgs: true,
-        }),
+        authorize({ ...overrides, confirm: { ...confirm, unshowable: "x" } }),
       ).resolves.toEqual({ outcome: "allowed" });
     });
 
@@ -278,8 +253,8 @@ describe("authorizeExecution", () => {
       await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
     });
 
-    // The signature proves the user was asked, not that the run it authorized
-    // has not happened: without spending it, one answer runs the Apex as often
+    // The signature proves the user was asked, not that the call it authorized
+    // has not happened: without spending it, one answer does the write as often
     // as the client re-sends the call.
     it("should refuse a confirmation that already ran", async () => {
       const result = assertConfirmationRequired(await authorize());
@@ -337,7 +312,7 @@ describe("authorizeExecution", () => {
       expect(decision.outcome).toBe("refused");
       if (decision.outcome === "refused") {
         expect(decision.reason).toBe(
-          `User declined the production-org execution against '${orgLabel}'.`,
+          `User declined to ${action} against production org '${orgLabel}'.`,
         );
       }
     });
@@ -351,12 +326,12 @@ describe("authorizeExecution", () => {
       expect(decision.outcome).toBe("refused");
       if (decision.outcome === "refused") {
         expect(decision.reason).toBe(
-          `User declined the execution against '${orgLabel}'.`,
+          `User declined to ${action} against org '${orgLabel}'.`,
         );
       }
     });
 
-    it("should refuse a retry whose Apex differs from the confirmed one", async () => {
+    it("should refuse a retry whose effect differs from the confirmed one", async () => {
       const result = assertConfirmationRequired(await authorize());
       const ctx = await retryCtx(result, {
         action: "accept",
@@ -365,13 +340,32 @@ describe("authorizeExecution", () => {
 
       const decision = await authorize({
         ctx,
-        apex: "delete [SELECT Id FROM Account];",
+        confirm: { ...confirm, effect: "07L000000000009" },
       });
 
       expect(decision.outcome).toBe("refused");
       if (decision.outcome === "refused") {
         expect(decision.reason).toContain("does not match this call");
-        expect(decision.reason).toContain("nothing was executed");
+        expect(decision.reason).toContain("nothing was done");
+        expect(decision.reason).toContain(`Ask again to ${action}.`);
+      }
+    });
+
+    // Every tool is called through tools/call, so the codec's method binding cannot tell them apart.
+    it("should refuse a confirmation given for another tool", async () => {
+      const result = assertConfirmationRequired(
+        await authorize({ tool: "apexlog_other_tool" }),
+      );
+      const ctx = await retryCtx(result, {
+        action: "accept",
+        content: { confirm: true },
+      });
+
+      const decision = await authorize({ ctx });
+
+      expect(decision.outcome).toBe("refused");
+      if (decision.outcome === "refused") {
+        expect(decision.reason).toContain("does not match this call");
       }
     });
 
@@ -399,7 +393,7 @@ describe("authorizeExecution", () => {
       expect(decision.outcome).toBe("refused");
       if (decision.outcome === "refused") {
         expect(decision.reason).toContain(
-          `Cannot execute anonymous Apex against production org '${orgLabel}'`,
+          `Cannot ${action} against production org '${orgLabel}'`,
         );
         expect(decision.reason).toContain("--allow-production-orgs");
         expect(decision.reason).toContain("MCP elicitation");

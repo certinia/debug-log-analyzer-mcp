@@ -21,15 +21,29 @@ export type PolicyDecision =
 
 /**
  * What a confirmation is bound to. Signed, not encrypted, so it carries a
- * digest of the Apex rather than the Apex: the client can read it.
+ * digest of the effect rather than the effect: the client can read it.
  *
  * `nonce` names this one confirmation, so the answer can be spent. The rest is
- * what the re-sent call is checked against.
+ * what the re-sent call is checked against. `tool` is there because every tool
+ * is called through the one method the codec binds, `tools/call`.
  */
 export type ConfirmationState = {
-  apexDigest: string;
+  tool: string;
   orgId: string;
+  effectDigest: string;
   nonce: string;
+};
+
+/** A write, as a production confirmation shows it and binds it. */
+export type Confirmable = {
+  /** What the confirmation is bound to; only its digest is signed. */
+  effect: string;
+  /** Shown in full between the preamble and the question. */
+  detail: string;
+  /** The confirm field's title, before " against … org '…'?". */
+  title: string;
+  /** When set, the refusal to return instead of asking: the write cannot be shown whole. */
+  unshowable?: string;
 };
 
 /** How long a confirmation stays answerable. */
@@ -48,11 +62,11 @@ export type MintConfirmationState = (
 export type ConsumeConfirmation = (nonce: string) => boolean;
 
 /**
- * One answer authorizes one run.
+ * One answer authorizes one call.
  *
- * The signed state proves the user was asked, not that the run it authorized
- * has not happened yet: a client that re-sends the same confirmed call runs the
- * Apex again, as often as it likes until the signature expires. So each answer
+ * The signed state proves the user was asked, not that the call it authorized
+ * has not happened yet: a client that re-sends the same confirmed call does
+ * the write again, as often as it likes until the signature expires. So each answer
  * is spent on first use, and the ledger holds nothing past the point the codec
  * refuses the signature anyway.
  */
@@ -79,9 +93,6 @@ export function createConfirmationLedger(
 const CONFIRM_KEY = "confirm";
 
 const confirmSchema = z.object({ confirm: z.boolean() });
-
-/** Above this, a dialog is too long to read whole, so the confirmation is refused rather than cut. */
-export const MAX_APEX_TO_CONFIRM = 10_000;
 
 /** Underlying API errors can be verbose; keep the actionable part. */
 const MAX_REASON = 300;
@@ -115,18 +126,22 @@ function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n... (truncated)`;
 }
 
-function digestOf(apex: string): string {
-  return createHash("sha256").update(apex, "utf8").digest("hex");
+function digestOf(effect: string): string {
+  return createHash("sha256").update(effect, "utf8").digest("hex");
 }
 
 const ENABLE_HINT =
   "To proceed anyway: restart the server with --allow-production-orgs, or use a client " +
   "that supports MCP elicitation for per-call confirmation.";
 
-function refusal(orgLabel: string, unverifiedReason?: string): string {
+function refusal(
+  action: string,
+  orgLabel: string,
+  unverifiedReason?: string,
+): string {
   if (unverifiedReason) {
     return (
-      `Cannot execute anonymous Apex against org '${orgLabel}': its type could not be verified, ` +
+      `Cannot ${action} against org '${orgLabel}': its type could not be verified, ` +
       "so it is treated as production to prevent accidental data loss.\n" +
       `Reason: ${truncate(unverifiedReason, MAX_REASON)}\n` +
       "If the org's authentication has expired, re-authenticate it (for example " +
@@ -136,35 +151,32 @@ function refusal(orgLabel: string, unverifiedReason?: string): string {
   }
 
   return (
-    `Cannot execute anonymous Apex against production org '${orgLabel}'.\n` +
+    `Cannot ${action} against production org '${orgLabel}'.\n` +
     "This server blocks production targets by default to prevent accidental data loss.\n" +
     ENABLE_HINT
   );
 }
 
 function confirmationRequest(
+  action: string,
   orgLabel: string,
-  apex: string,
+  confirm: Confirmable,
   unverifiedReason?: string,
 ) {
-  const lines = apex.split("\n").length;
-  const linesText = `${lines} line${lines === 1 ? "" : "s"}`;
   const preamble = unverifiedReason
-    ? `About to execute anonymous Apex against org '${orgLabel}', whose type could not be ` +
+    ? `About to ${action} against org '${orgLabel}', whose type could not be ` +
       `verified (treated as production).\nReason: ${truncate(unverifiedReason, MAX_REASON)}`
-    : `About to execute anonymous Apex against PRODUCTION org '${orgLabel}'.`;
+    : `About to ${action} against PRODUCTION org '${orgLabel}'.`;
 
   return inputRequired.elicit({
-    // All of it, never cut, between markers and with its size, so Apex cannot pass for the end of the prompt.
-    message: `${preamble}\n\nApex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----\n\nProceed?`,
+    message: `${preamble}\n\n${confirm.detail}\n\nProceed?`,
     requestedSchema: {
       type: "object",
       properties: {
         confirm: {
           type: "boolean",
           // Drop the classification when it could not be verified.
-          // The size again, in the schema, where the Apex cannot reach.
-          title: `Run ${linesText} of Apex against ${unverifiedReason ? "" : "production "}org '${orgLabel}'?`,
+          title: `${confirm.title} against ${unverifiedReason ? "" : "production "}org '${orgLabel}'?`,
           description: "true to run, false to cancel",
           // A client that applies defaults should pre-fill "no".
           default: false,
@@ -176,34 +188,44 @@ function confirmationRequest(
 }
 
 /**
- * Decide whether anonymous Apex may run against the classified target org.
+ * Decide whether a write may go ahead against the classified target org.
  *
- * Non-production orgs run silently. Production orgs (and orgs whose type could
- * not be verified) need either the --allow-production-orgs flag or an explicit,
- * per-call user confirmation.
+ * Non-production orgs go ahead silently. Production orgs (and orgs whose type
+ * could not be verified) need either the --allow-production-orgs flag or an
+ * explicit, per-call user confirmation.
  *
  * The confirmation is a multi-round-trip: the first call returns the request,
  * and the client re-sends the same call carrying the answer. The whole handler
  * runs again on that second call, so this decides afresh both times. The SDK
  * has already proven the state's integrity by the time it reaches here; what it
- * cannot know is whether the retry asks for the same run, which is why the
- * state binds the Apex and the org and is compared against the re-sent call,
- * nor that the run it authorized has not already happened, which is why the
+ * cannot know is whether the retry asks for the same write, which is why the
+ * state binds the tool, its effect and the org and is compared against the re-sent call,
+ * nor that the call it authorized has not already happened, which is why the
  * answer is spent on first use.
  */
-export async function authorizeExecution(opts: {
+export async function authorizeOperation(opts: {
   ctx: ServerContext;
   mintConfirmationState: MintConfirmationState;
   classification: OrgClassification;
   orgId: string;
   orgLabel: string;
-  apex: string;
   allowProductionOrgs: boolean;
   consumeConfirmation: ConsumeConfirmation;
   unverifiedReason?: string;
+  tool: string;
+  action: string;
+  confirm: Confirmable;
 }): Promise<PolicyDecision> {
-  const { ctx, classification, orgId, orgLabel, apex, allowProductionOrgs } =
-    opts;
+  const {
+    ctx,
+    classification,
+    orgId,
+    orgLabel,
+    allowProductionOrgs,
+    tool,
+    action,
+    confirm,
+  } = opts;
 
   if (classification !== "production" && classification !== "unknown") {
     return { outcome: "allowed" };
@@ -219,13 +241,8 @@ export async function authorizeExecution(opts: {
       ? (opts.unverifiedReason ?? "The reason was not reported.")
       : undefined;
 
-  if (apex.length > MAX_APEX_TO_CONFIRM) {
-    return {
-      outcome: "refused",
-      reason:
-        `The Apex is ${apex.length} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
-        `so nothing was executed against '${orgLabel}'. To run it, restart the server with --allow-production-orgs.`,
-    };
+  if (confirm.unshowable !== undefined) {
+    return { outcome: "refused", reason: confirm.unshowable };
   }
 
   const confirmed = ctx.mcpReq.requestState<ConfirmationState>();
@@ -235,12 +252,18 @@ export async function authorizeExecution(opts: {
       outcome: "confirmationRequired",
       result: inputRequired({
         inputRequests: {
-          [CONFIRM_KEY]: confirmationRequest(orgLabel, apex, unverifiedReason),
+          [CONFIRM_KEY]: confirmationRequest(
+            action,
+            orgLabel,
+            confirm,
+            unverifiedReason,
+          ),
         },
         requestState: await opts.mintConfirmationState(
           {
-            apexDigest: digestOf(apex),
+            tool,
             orgId,
+            effectDigest: digestOf(confirm.effect),
             nonce: randomBytes(16).toString("hex"),
           },
           ctx,
@@ -249,19 +272,26 @@ export async function authorizeExecution(opts: {
     };
   }
 
-  if (confirmed.orgId !== orgId || confirmed.apexDigest !== digestOf(apex)) {
+  if (
+    confirmed.tool !== tool ||
+    confirmed.orgId !== orgId ||
+    confirmed.effectDigest !== digestOf(confirm.effect)
+  ) {
     return {
       outcome: "refused",
       reason:
-        `The confirmation does not match this call: the Apex or the target org changed after it ` +
-        `was given, so nothing was executed against '${orgLabel}'. Ask again to run this Apex.`,
+        `The confirmation does not match this call: the tool, what it would do or the target org ` +
+        `changed after it was given, so nothing was done against '${orgLabel}'. Ask again to ${action}.`,
     };
   }
 
   // A client that echoes the state but carries no answer cannot confirm at all,
   // so it gets the routes that need no confirmation rather than a decline.
   if (inputResponse(ctx.mcpReq.inputResponses, CONFIRM_KEY).kind === "missing") {
-    return { outcome: "refused", reason: refusal(orgLabel, unverifiedReason) };
+    return {
+      outcome: "refused",
+      reason: refusal(action, orgLabel, unverifiedReason),
+    };
   }
 
   const answer = acceptedContent(
@@ -275,8 +305,8 @@ export async function authorizeExecution(opts: {
       return {
         outcome: "refused",
         reason:
-          `The confirmation has already been used, and one confirmation authorizes one run, ` +
-          `so nothing was executed against '${orgLabel}'. Ask again to run this Apex.`,
+          `The confirmation has already been used, and one confirmation authorizes one call, ` +
+          `so nothing was done against '${orgLabel}'. Ask again to ${action}.`,
       };
     }
     return { outcome: "allowed" };
@@ -285,7 +315,7 @@ export async function authorizeExecution(opts: {
   return {
     outcome: "refused",
     reason: unverifiedReason
-      ? `User declined the execution against '${orgLabel}'.`
-      : `User declined the production-org execution against '${orgLabel}'.`,
+      ? `User declined to ${action} against org '${orgLabel}'.`
+      : `User declined to ${action} against production org '${orgLabel}'.`,
   };
 }
