@@ -20,6 +20,7 @@ import {
 } from "../salesforce/debugLevels.js";
 import { APEX_EXECUTION_DISABLED_MESSAGE } from "../policy/orgExecutionPolicy.js";
 import { toolInputSchema } from "./inputSchema.js";
+import { absolutePathSchema } from "./localFile.js";
 
 const logLevelSchema = z.enum(LOG_LEVELS);
 
@@ -41,7 +42,13 @@ function defaultLevelsClause(): string {
 }
 
 export const executeAnonymousInputSchema = {
-  apex: z.string().describe("The anonymous Apex to be executed"),
+  apex: z
+    .string()
+    .optional()
+    .describe("The anonymous Apex to execute, or use apexFilePath"),
+  apexFilePath: absolutePathSchema
+    .optional()
+    .describe("Absolute path to a file of anonymous Apex"),
   targetOrg: z
     .string()
     .optional()

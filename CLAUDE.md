@@ -29,6 +29,7 @@ pnpm start
 - **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else. A bad flag exits 1 with one `[apex-log-mcp]` line, checked by `pnpm run eval`.
 - **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the four tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
 - **src/tools/responseShaping.ts**: the shared response helpers - `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`, `elide`, `NAME_LIMIT`.
+- **src/tools/localFile.ts**: `absolutePathSchema` and `fileReadError`, shared by every tool that reads a local file - a log or a file of Apex.
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
 - **`@apexdevtools/apex-log-parser`**: the parser, as a dependency - nothing here parses a log. Runtime values come from the package root, every type and const from `@apexdevtools/apex-log-parser/types`. Read `debugCategory` for an event's category, never `category`: that one is a UI grouping slated for deprecation, and `src/tools/operations.ts` reads it only as the flag that says an event has a duration.
 

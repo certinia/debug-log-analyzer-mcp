@@ -3,28 +3,15 @@
  */
 
 import { promises as fs, type BigIntStats } from "fs";
-import { isAbsolute } from "path";
-import { z } from "zod";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+import { absolutePathSchema, fileReadError } from "./localFile.js";
 
 /**
- * The one declaration of the log path, shared by every tool that takes one, so
- * all three enforce it the same way.
- *
- * A relative path is refused rather than resolved: it would resolve against the
- * server's working directory, which is where the client happened to spawn us
- * and not where the caller is. Resolving would read a different file, or none,
- * and report neither. Refinements do not reach the JSON schema, so this costs
- * no tokens in the tool definition - `pnpm run eval` holds that to its budget.
- *
  * Two words of describe: the server `instructions` state the absolute `.log`
  * path once, which is where a fact true of every tool belongs.
  */
-export const logFilePathSchema = z
-  .string()
-  .refine(isAbsolute, "must be an absolute path")
-  .describe("Absolute path");
+export const logFilePathSchema = absolutePathSchema.describe("Absolute path");
 
 type CachedLog = {
   path: string;
@@ -97,16 +84,7 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
     fingerprint = fingerprintOf(await handle.stat({ bigint: true }));
   } catch (error) {
     await handle?.close();
-    // A missing file is one of several ways this fails. Reporting all of them
-    // as "not found" sends the caller to look for a file that is there, when
-    // the real cause was a permission, a directory in place of a file, or a
-    // full descriptor table. Name the cause, and keep the original as `cause`.
-    const code = (error as NodeJS.ErrnoException).code ?? String(error);
-    const message =
-      code === "ENOENT"
-        ? `Log file not found: ${logFilePath}`
-        : `Cannot read log file ${logFilePath}: ${code}`;
-    throw new Error(message, { cause: error });
+    throw fileReadError("log file", logFilePath, error);
   }
 
   try {
