@@ -80,8 +80,8 @@ const CONFIRM_KEY = "confirm";
 
 const confirmSchema = z.object({ confirm: z.boolean() });
 
-/** Keep the prompt readable, and out of the way of client UI limits. */
-const MAX_APEX_IN_PROMPT = 2000;
+/** Above this, a dialog is too long to read whole, so the confirmation is refused rather than cut. */
+export const MAX_APEX_TO_CONFIRM = 10_000;
 
 /** Underlying API errors can be verbose; keep the actionable part. */
 const MAX_REASON = 300;
@@ -111,8 +111,8 @@ export function apexExecutionRefusal(apexExecutionDisabled: boolean) {
     : undefined;
 }
 
-function truncate(apex: string, max: number): string {
-  return apex.length <= max ? apex : `${apex.slice(0, max)}\n... (truncated)`;
+function truncate(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max)}\n... (truncated)`;
 }
 
 function digestOf(apex: string): string {
@@ -147,20 +147,24 @@ function confirmationRequest(
   apex: string,
   unverifiedReason?: string,
 ) {
+  const lines = apex.split("\n").length;
+  const linesText = `${lines} line${lines === 1 ? "" : "s"}`;
   const preamble = unverifiedReason
     ? `About to execute anonymous Apex against org '${orgLabel}', whose type could not be ` +
       `verified (treated as production).\nReason: ${truncate(unverifiedReason, MAX_REASON)}`
     : `About to execute anonymous Apex against PRODUCTION org '${orgLabel}'.`;
 
   return inputRequired.elicit({
-    message: `${preamble}\n\nApex:\n${truncate(apex, MAX_APEX_IN_PROMPT)}\n\nProceed?`,
+    // All of it, never cut, between markers and with its size, so Apex cannot pass for the end of the prompt.
+    message: `${preamble}\n\nApex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----\n\nProceed?`,
     requestedSchema: {
       type: "object",
       properties: {
         confirm: {
           type: "boolean",
           // Drop the classification when it could not be verified.
-          title: `Run against ${unverifiedReason ? "" : "production "}org '${orgLabel}'?`,
+          // The size again, in the schema, where the Apex cannot reach.
+          title: `Run ${linesText} of Apex against ${unverifiedReason ? "" : "production "}org '${orgLabel}'?`,
           description: "true to run, false to cancel",
           // A client that applies defaults should pre-fill "no".
           default: false,
@@ -214,6 +218,15 @@ export async function authorizeExecution(opts: {
     classification === "unknown"
       ? (opts.unverifiedReason ?? "The reason was not reported.")
       : undefined;
+
+  if (apex.length > MAX_APEX_TO_CONFIRM) {
+    return {
+      outcome: "refused",
+      reason:
+        `The Apex is ${apex.length} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
+        `so nothing was executed against '${orgLabel}'. To run it, restart the server with --allow-production-orgs.`,
+    };
+  }
 
   const confirmed = ctx.mcpReq.requestState<ConfirmationState>();
 
