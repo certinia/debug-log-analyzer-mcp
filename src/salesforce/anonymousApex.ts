@@ -1,10 +1,9 @@
 import type { Connection } from "@salesforce/core";
+import type { DebugLevels } from "@apexdevtools/apex-log-parser";
 
 import {
   CATEGORY_LOG_NAMES,
   TRACE_CATEGORIES,
-  type LogCategory,
-  type LogLevel,
   type TraceConfig,
 } from "./debugLevels.js";
 
@@ -56,36 +55,19 @@ export async function executeAnonymousWithLog(
   };
 }
 
-/** The log levels the returned log opens with, as the log spells them. */
-export function parseLogHeaderLevels(
-  debugLog: string,
-): Partial<Record<LogCategory, LogLevel>> {
-  const [header = ""] = debugLog.split("\n", 1);
-  const entries = header
-    .split(";")
-    .map((pair) => pair.trim().split(","))
-    .filter((parts): parts is [string, string] => parts.length === 2)
-    .map(([category, level]) => [
-      // The first pair carries the API version - `67.0 APEX_CODE`.
-      category.slice(category.lastIndexOf(" ") + 1),
-      level,
-    ]);
-  return Object.fromEntries(entries);
-}
-
 /**
  * True when the org logged at levels other than the ones asked for.
  *
- * Only the categories asked for are compared: a log always reports
+ * `logged` is the parsed log's header levels, and absent when no log came
+ * back. Only the categories asked for are compared: a log always reports
  * `DATA_ACCESS`, which no `DebugLevel` field can set.
  */
 export function levelsWereOverridden(
   requested: Required<TraceConfig>,
-  debugLog: string,
+  logged: DebugLevels | undefined,
 ): boolean {
-  const logged = parseLogHeaderLevels(debugLog);
   return TRACE_CATEGORIES.some((category) => {
-    const actual = logged[CATEGORY_LOG_NAMES[category]];
+    const actual = logged?.[category];
     return actual !== undefined && actual !== requested[category];
   });
 }

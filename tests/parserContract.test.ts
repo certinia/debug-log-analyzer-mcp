@@ -61,6 +61,22 @@ describe("parser contract", () => {
     });
   });
 
+  describe("ApexLog.debugLevels", () => {
+    // `apexlog_execute_anonymous.levelsOverridden` compares these with the
+    // levels it asked for, by the `DebugLevels` key and not the header token.
+    it("reads the header's levels under the DebugLevels keys", () => {
+      const { debugLevels } = parse(
+        [HEADER, "09:00:00.1 (1000)|EXECUTION_STARTED", ""].join("\n"),
+      );
+
+      expect(debugLevels).toMatchObject({
+        apexCode: "FINE",
+        database: "INFO",
+        dataAccess: "NONE",
+      });
+    });
+  });
+
   describe("ApexLog.duration", () => {
     const log = [
       HEADER,
