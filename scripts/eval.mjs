@@ -38,7 +38,7 @@
  *   node scripts/eval.mjs --report <log>   # token report for one log, no assertions
  */
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -891,6 +891,31 @@ async function checkNoSdkAtStartup(failures) {
   }
 }
 
+/**
+ * A mistyped flag must stop the server with one line and exit code 1.
+ *
+ * Driven against `dist/index.js`, because the catch lives in the `bin` entry
+ * point, which no jest suite imports. The client shows stderr to the user as
+ * is, so a stack trace there is noise in place of the one fact they need.
+ */
+function checkBadFlagExits(failures) {
+  const { status, stderr } = spawnSync(
+    process.execPath,
+    [SERVER, "--deny-orgs", "type:prodction"],
+    { encoding: "utf8" },
+  );
+  const lines = stderr.trim().split("\n");
+  if (
+    status !== 1 ||
+    lines.length !== 1 ||
+    !lines[0].startsWith("[apex-log-mcp] --deny-orgs: 'type:prodction'")
+  ) {
+    failures.push(
+      `bad flag: expected exit 1 and one [apex-log-mcp] line, got exit ${status} and ${lines.length} line(s), starting: ${lines[0]}`,
+    );
+  }
+}
+
 function checkSelectionKeywords(costs, failures) {
   for (const { name, description } of costs) {
     const lowered = description.toLowerCase();
@@ -1113,6 +1138,9 @@ async function main() {
 
   await checkNoSdkAtStartup(failures);
   console.log("checked startup - the Salesforce SDK is not loaded to list tools");
+
+  checkBadFlagExits(failures);
+  console.log("checked startup - a mistyped flag exits 1 with one line");
 
   const responses = [];
   const publishedToon = {};
