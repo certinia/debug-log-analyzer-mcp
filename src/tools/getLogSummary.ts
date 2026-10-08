@@ -66,7 +66,7 @@ export const getLogSummaryToolConfig = {
  * rather than off - naming a default would state a level the log did not, and
  * `NONE` typechecks, so the goldens are what hold the cell empty.
  *
- * A last `platform` row holds the time no event spans, such as the time
+ * A last `unattributed` row holds the time no event spans, such as the time
  * between the `USER_INFO` line and the transaction. No category gates it, so
  * its level is empty. With it, the rows add up to the whole log.
  */
@@ -78,7 +78,7 @@ interface CategoryRow {
   selfPercentage: number;
 }
 
-const UNATTRIBUTED_CATEGORY = "platform";
+const UNATTRIBUTED_CATEGORY = "unattributed";
 
 /** Frames beyond this cost more than they say; one real log states 52,009 characters of stack. */
 const FATAL_FRAME_LIMIT = 3;

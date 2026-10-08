@@ -42,4 +42,4 @@ categories[12]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}
   visualforce,FINE,0,0,0
   wave,FINE,0,0,0
   workflow,FINE,0,0,0
-  platform,"",0,0.921,0
+  unattributed,"",0,0.921,0

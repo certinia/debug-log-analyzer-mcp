@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
-- apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `platform` row holds the time no event spans
+- apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `unattributed` row holds the time no event spans
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction
 
 ### Added

@@ -37,4 +37,4 @@ categories[12]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}
   visualforce,INFO,0,0,0
   wave,INFO,0,0,0
   workflow,INFO,1,2,9.1
-  platform,"",0,1,4.5
+  unattributed,"",0,1,4.5

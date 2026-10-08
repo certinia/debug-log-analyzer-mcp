@@ -123,7 +123,7 @@ All thirteen governor limits are listed, zeros included.
 
 `dataAccess`, `wave` and `validation` are always zero. No timed event carries them.
 
-A last `platform` row holds the time no event spans, such as the time before the transaction starts. With it, the rows add up to the whole log.
+A last `unattributed` row holds the time no event spans, such as the time before the transaction starts. With it, the rows add up to the whole log.
 
 `truncated` says whether the log is complete. In a partial log, every figure is a floor. Where the platform cut it, `truncatedBy` says how - `skipped-lines` for a hole, `max-size` for a missing tail - and `skippedBytes` says how much went. Both are absent when a log merely stops mid-frame.
 
@@ -228,7 +228,7 @@ Cost does not grow with the log size. The figures below are measured against a 4
 
 | Tool                           | Response | 1.x  | Change |
 | ------------------------------ | -------- | ---- | ------ |
-| `apexlog_get_summary`          | ~341     | ~293 | +16%   |
+| `apexlog_get_summary`          | ~342     | ~293 | +17%   |
 | `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
 

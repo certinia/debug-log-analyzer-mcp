@@ -756,13 +756,13 @@ describe("getLogSummary", () => {
         summary.categories.map(
           (row: { debugCategory: string }) => row.debugCategory,
         ),
-      ).toEqual([...DEBUG_CATEGORIES, "platform"]);
+      ).toEqual([...DEBUG_CATEGORIES, "unattributed"]);
     });
 
     // A frame is not ranked, but its own time is the transaction's, and the
     // root's own time is the time no event spans. Either left out, the rows
     // would not add up to the log.
-    it("should file a frame's self time under its category, and the root's under platform", async () => {
+    it("should file a frame's self time under its category, and the root's as unattributed", async () => {
       const summary = await summaryOf({
         duration: { total: 10_000_000_000, self: 1_000_000_000 },
         children: [
@@ -790,8 +790,8 @@ describe("getLogSummary", () => {
         durationSelfMs: 9000,
         selfPercentage: 90,
       });
-      expect(rowOf(summary, "platform")).toEqual({
-        debugCategory: "platform",
+      expect(rowOf(summary, "unattributed")).toEqual({
+        debugCategory: "unattributed",
         level: "",
         operationCount: 0,
         durationSelfMs: 1000,

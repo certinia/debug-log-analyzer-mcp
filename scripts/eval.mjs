@@ -245,9 +245,9 @@ const TOKEN_BUDGET = {
   // column from every row of the time table - the row key is now the category
   // itself, and by #191, which folded the level table into it, so a category is
   // stated once rather than in two tables keyed the same way. Raised for the
-  // `platform` row, the time no event spans, without which the rows do not add
+  // `unattributed` row, the time no event spans, without which the rows do not add
   // up to the log.
-  "apexlog_get_summary/governor-heavy": 341,
+  "apexlog_get_summary/governor-heavy": 359,
   "apexlog_get_summary/minimal": 221,
   // Raised for the grouped default #126 made: every row now carries its call
   // count and the self time of its slowest call, and for the capture levels
@@ -273,7 +273,7 @@ const TOKEN_BUDGET = {
   // classification columns every ranked row now states, and again for the
   // `returnedHeapPercentage` scalar beside them.
   "apexlog_list_slow_operations/heap-heavy": 207,
-  // Raised for the `platform` row, as the summary budgets above.
+  // Raised for the `unattributed` row, as the summary budgets above.
   "apexlog_get_summary/heap-heavy": 232,
   "apexlog_get_summary/truncated": 227,
   // The thrown-exception table #208 added: four throws from two lines fold into
