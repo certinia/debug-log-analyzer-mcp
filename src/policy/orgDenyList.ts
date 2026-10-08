@@ -123,9 +123,13 @@ export function matchDeniedOrg(
   );
 }
 
+function refusal(orgLabel: string, because: string): string {
+  return `Cannot execute anonymous Apex against org '${orgLabel}': ${because}.\n${DENY_IS_ABSOLUTE}`;
+}
+
 /** The refusal naming the `--deny-orgs` entry that denies the org. */
 export function denyRefusal(orgLabel: string, entry: string): string {
-  return `Cannot execute anonymous Apex against org '${orgLabel}': it matches the --deny-orgs entry '${entry}'.\n${DENY_IS_ABSOLUTE}`;
+  return refusal(orgLabel, `it matches the --deny-orgs entry '${entry}'`);
 }
 
 /** The refusal when an identity entry denies this org, or `undefined`. */
@@ -144,7 +148,15 @@ export function typeRefusal(
   orgLabel: string,
   classification: OrgClassification,
 ): string | undefined {
-  return list.types.includes(classification)
-    ? denyRefusal(orgLabel, `type:${classification}`)
-    : undefined;
+  if (list.types.includes(classification)) {
+    return denyRefusal(orgLabel, `type:${classification}`);
+  }
+  // Unknown is treated as production everywhere; it must not slip past this deny.
+  if (classification === "unknown" && list.types.includes("production")) {
+    return refusal(
+      orgLabel,
+      "its type could not be read, so it is treated as production and the --deny-orgs entry 'type:production' denies it",
+    );
+  }
+  return undefined;
 }

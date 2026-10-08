@@ -210,6 +210,19 @@ describe("identityRefusal and typeRefusal", () => {
   it("should refuse no type the list does not name", () => {
     expect(typeRefusal(list, "me", "sandbox")).toBeUndefined();
   });
+
+  it("should deny an org of unknown type under type:production", () => {
+    const refusal = typeRefusal(list, "me", "unknown");
+
+    expect(refusal).toContain("its type could not be read");
+    expect(refusal).toContain("--deny-orgs entry 'type:production'");
+  });
+
+  it("should not deny an org of unknown type without type:production", () => {
+    expect(
+      typeRefusal(compileDenyList(["type:sandbox"]), "me", "unknown"),
+    ).toBeUndefined();
+  });
 });
 
 describe("denyRefusal", () => {

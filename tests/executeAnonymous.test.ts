@@ -1013,6 +1013,26 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
+    // A failed classification must not turn a deny into a confirmation.
+    it("should refuse an unclassifiable org under type:production", async () => {
+      mockRetrieveOrgInfo.mockRejectedValue(new Error("expired"));
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy({ denyList: compileDenyList(["type:production"]) }),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("its type could not be read");
+      expect(result.content[0].text).toContain(
+        "--deny-orgs entry 'type:production'",
+      );
+      expect(result.requestState).toBeUndefined();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
     it("should run an org whose type the list does not name", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(SANDBOX_ORG_INFO);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
