@@ -69,11 +69,11 @@ export type ExecuteAnonymousPolicy = {
   consumeConfirmation: ConsumeConfirmation;
 };
 
-/** The client's roots, or undefined on a protocol that gives a tool call none (2026-07-28). */
+// `unreadable` says why a client's roots could not be read; a client that declared none has `paths: []` only.
 async function getRootPaths(
   server: McpServer,
   signal: AbortSignal,
-): Promise<string[] | undefined> {
+): Promise<{ paths: string[]; unreadable?: string }> {
   try {
     // Bounded, so a client that never answers costs seconds, not the SDK's 60 s default.
     const { roots } = await server.server.listRoots(undefined, {
@@ -81,21 +81,31 @@ async function getRootPaths(
       signal,
     });
     // fileURLToPath decodes `%20` and drops the slash before a Windows drive, which `pathname` keeps.
-    return roots
-      .filter((root) => root.uri.startsWith("file:"))
-      .map((root) => fileURLToPath(root.uri));
+    return {
+      paths: roots
+        .filter((root) => root.uri.startsWith("file:"))
+        .map((root) => fileURLToPath(root.uri)),
+    };
   } catch (error) {
     // A cancelled call stops here, rather than running on with no roots.
     if (signal.aborted) {
       throw error;
     }
-    if (
-      error instanceof SdkError &&
-      error.code === SdkErrorCode.MethodNotSupportedByProtocolVersion
-    ) {
-      return undefined;
+    if (!(error instanceof SdkError)) {
+      return { paths: [], unreadable: String(error) };
     }
-    return [];
+    switch (error.code) {
+      // Only a client that declared no roots has none to check against.
+      case SdkErrorCode.CapabilityNotSupported:
+        return { paths: [] };
+      case SdkErrorCode.MethodNotSupportedByProtocolVersion:
+        return {
+          paths: [],
+          unreadable: "this server cannot yet ask a 2026-07-28 client for them",
+        };
+      default:
+        return { paths: [], unreadable: error.message };
+    }
   }
 }
 
@@ -117,14 +127,20 @@ async function realPathOrSelf(target: string): Promise<string> {
  */
 async function warnIfOutsideRoots(
   outputDir: string,
-  rootPaths: string[],
+  roots: { paths: string[]; unreadable?: string },
 ): Promise<string | undefined> {
-  const target = await outsideRoots(outputDir, rootPaths);
+  const target =
+    roots.unreadable === undefined
+      ? await outsideRoots(outputDir, roots.paths)
+      : outputDir;
   if (target === undefined) {
     return undefined;
   }
 
-  const warning = `Debug log written to ${target}, which is outside every root this client declared.`;
+  const warning =
+    roots.unreadable === undefined
+      ? `Debug log written to ${target}, which is outside every root this client declared.`
+      : `Debug log written to ${target}, which was not checked against the client's roots: they could not be read, as ${roots.unreadable}.`;
   console.error(`[apex-log-mcp] ${warning}`);
   return warning;
 }
@@ -149,14 +165,8 @@ async function outsideRoots(
 // Refused where `outputDir` only warns: the file's text goes to the org, and a compile error can echo it.
 async function readApexFile(
   apexFilePath: string,
-  rootPaths: string[] | undefined,
+  rootPaths: string[],
 ): Promise<string> {
-  // Fail closed: with no way to ask for roots, nothing can show the file is inside one.
-  if (rootPaths === undefined) {
-    throw new Error(
-      `Cannot read Apex file ${apexFilePath}: this protocol gives a tool call no roots to check it against. Pass the Apex inline in apex.`,
-    );
-  }
   const outside = await outsideRoots(apexFilePath, rootPaths);
   if (outside !== undefined) {
     throw new Error(
@@ -194,9 +204,7 @@ async function readApexFile(
 function apexSource({
   apex,
   apexFilePath,
-}: ExecuteAnonymousArgs):
-  | ((rootPaths: string[] | undefined) => Promise<string>)
-  | undefined {
+}: ExecuteAnonymousArgs): ((rootPaths: string[]) => Promise<string>) | undefined {
   if (apex !== undefined && apexFilePath === undefined) {
     return async () => apex;
   }
@@ -229,8 +237,15 @@ export async function executeAnonymous(
   }
 
   const report = progressReporter(ctx);
-  const rootPaths = await getRootPaths(server, ctx.mcpReq.signal);
-  const projectPath = rootPaths?.[0];
+  const roots = await getRootPaths(server, ctx.mcpReq.signal);
+  // Fail closed, before any local work: unread roots cannot show a file is inside one.
+  if (roots.unreadable !== undefined && args.apexFilePath !== undefined) {
+    throw new Error(
+      `Cannot check Apex file ${args.apexFilePath} against the client's roots: they could not be read, as ${roots.unreadable}. Pass the Apex inline in apex.`,
+    );
+  }
+  const rootPaths = roots.paths;
+  const projectPath = rootPaths[0];
 
   const local = await readLocalOrg(projectPath, targetOrg);
   const { orgId, username } = local;
@@ -352,7 +367,7 @@ export async function executeAnonymous(
     // Only for a caller-given directory: the default is inside the project root
     // by construction, so checking it could only ever say the obvious.
     args.outputDir
-      ? await warnIfOutsideRoots(outputDir, rootPaths ?? [])
+      ? await warnIfOutsideRoots(outputDir, roots)
       : undefined,
   ].filter((text): text is string => text !== undefined);
 

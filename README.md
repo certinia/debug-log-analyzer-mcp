@@ -169,7 +169,7 @@ The governor limits nearest their ceiling, worst first.
 
 Runs anonymous Apex against an authenticated org, saves the debug log locally, and returns the path. Pass that path to any analysis tool.
 
-Give the Apex inline in `apex`, or the absolute path to a file of it in `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. Give exactly one. A file outside the roots your client declares is refused, as is anything but a regular file. On protocol 2026-07-28, which gives a tool call no roots to check against, a file is refused. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
+Give the Apex inline in `apex`, or the absolute path to a file of it in `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. Give exactly one. A file outside the roots your client declares is refused, as is anything but a regular file. If your client declares roots but they cannot be read - on protocol 2026-07-28, or with no answer in 5 seconds - a file is refused. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
 
 The response also gives the org username, its alias if set, the org type, and a summary of the run. Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
 

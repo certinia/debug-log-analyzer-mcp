@@ -913,7 +913,7 @@ describe("Execute Anonymous", () => {
       expect(mockClose).toHaveBeenCalled();
     });
 
-    describe("on a protocol that gives a tool call no roots", () => {
+    describe("when the client's roots cannot be read", () => {
       beforeEach(() => {
         (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
           new SdkError(
@@ -923,12 +923,51 @@ describe("Execute Anonymous", () => {
         );
       });
 
-      it("should refuse a file, since nothing can show it is inside a root", async () => {
+      it("should refuse a file before any local work on 2026-07-28, since nothing can show it is inside a root", async () => {
         await expect(
           executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
-        ).rejects.toThrow("Pass the Apex inline in apex.");
+        ).rejects.toThrow(
+          "they could not be read, as this server cannot yet ask a 2026-07-28 client for them. Pass the Apex inline in apex.",
+        );
+        expect(mockReadLocalOrg).not.toHaveBeenCalled();
         expect(mockOpen).not.toHaveBeenCalled();
-        expect(mockConnectOrg).not.toHaveBeenCalled();
+      });
+
+      it("should refuse a file when a client that declared roots does not answer", async () => {
+        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
+          new SdkError(SdkErrorCode.RequestTimeout, "Request timed out"),
+        );
+
+        await expect(
+          executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
+        ).rejects.toThrow("as Request timed out.");
+        expect(mockOpen).not.toHaveBeenCalled();
+      });
+
+      it("should say an outputDir was not checked, rather than stay silent", async () => {
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, outputDir: "/elsewhere/logs" },
+          ctx,
+          policy(),
+        );
+
+        expect(result.content[0]?.text).toContain(
+          "Debug log written to /elsewhere/logs, which was not checked against the client's roots",
+        );
+      });
+
+      it("should stop a cancelled call, not treat it as unreadable roots", async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const cancelled = {
+          mcpReq: { ...ctx.mcpReq, signal: controller.signal },
+        } as unknown as ServerContext;
+
+        await expect(
+          executeAnonymous(mockServer, { apex: testApexCode }, cancelled, policy()),
+        ).rejects.toThrow("roots/list cannot be sent on 2026-07-28");
+        expect(mockReadLocalOrg).not.toHaveBeenCalled();
       });
 
       it("should still run inline Apex", async () => {
@@ -945,7 +984,10 @@ describe("Execute Anonymous", () => {
 
     it("should read a file anywhere when the client cannot list roots, as no root bounds it", async () => {
       (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
-        new Error("Client does not support listing roots"),
+        new SdkError(
+            SdkErrorCode.CapabilityNotSupported,
+            "Client does not support listing roots",
+          ),
       );
       mockReadFile.mockResolvedValue(testApexCode);
 
@@ -1648,7 +1690,10 @@ describe("Execute Anonymous", () => {
 
       it("stays silent when the client cannot list roots", async () => {
         (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
-          new Error("Client does not support listing roots"),
+          new SdkError(
+            SdkErrorCode.CapabilityNotSupported,
+            "Client does not support listing roots",
+          ),
         );
 
         const result = await executeAnonymous(
