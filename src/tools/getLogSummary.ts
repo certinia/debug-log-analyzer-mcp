@@ -7,7 +7,6 @@ import { encode } from "@toon-format/toon";
 import type {
   ApexLog,
   DebugCategory,
-  DebugLevels,
   LineNumber,
   LogEvent,
   LogEventType,
@@ -15,7 +14,7 @@ import type {
 } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
-import { listOperations, operationName, type Operation } from "./operations.js";
+import { frameSelfTimes, listOperations, operationName } from "./operations.js";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
@@ -66,14 +65,20 @@ export const getLogSummaryToolConfig = {
  * is most logs for `dataAccess`. A level has no zero, so empty says unstated
  * rather than off - naming a default would state a level the log did not, and
  * `NONE` typechecks, so the goldens are what hold the cell empty.
+ *
+ * A last `platform` row holds the time no event spans, such as the time
+ * between the `USER_INFO` line and the transaction. No category gates it, so
+ * its level is empty. With it, the rows add up to the whole log.
  */
 interface CategoryRow {
-  debugCategory: DebugLevelCategory;
+  debugCategory: DebugLevelCategory | typeof UNATTRIBUTED_CATEGORY;
   level: LogLevel | "";
   operationCount: number;
   durationSelfMs: number;
   selfPercentage: number;
 }
+
+const UNATTRIBUTED_CATEGORY = "platform";
 
 /** Frames beyond this cost more than they say; one real log states 52,009 characters of stack. */
 const FATAL_FRAME_LIMIT = 3;
@@ -297,11 +302,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
     namespaces: apexLog.namespaces,
     governorLimits: toLimitRows(apexLog.governorLimits.peak),
     limitsByNamespace: toNamespaceLimitRows(apexLog.governorLimits.byNamespace),
-    categories: categories(
-      apexLog.debugLevels,
-      listOperations(apexLog),
-      durationTotalNs,
-    ),
+    categories: categories(apexLog),
   };
 
   return {
@@ -314,11 +315,8 @@ export async function getLogSummary(args: LogSummaryArgs) {
   };
 }
 
-function categories(
-  debugLevels: DebugLevels,
-  operations: Operation[],
-  durationTotalNs: number,
-): CategoryRow[] {
+function categories(apexLog: ApexLog): CategoryRow[] {
+  const { debugLevels, duration } = apexLog;
   // One total per category up front, so the categories nothing ran under are
   // still reported, at zero. The row set is the parser's `DebugLevels` keys
   // rather than a shorter list of our own, so a category it starts timing needs
@@ -332,7 +330,7 @@ function categories(
     totals.map((total) => [total.debugCategory, total]),
   );
 
-  operations.forEach(({ debugCategory, durationSelfNs }) => {
+  listOperations(apexLog).forEach(({ debugCategory, durationSelfNs }) => {
     // Only `""` misses, which the parser never stamps on a timed event.
     const total = byCategory.get(debugCategory);
     if (total) {
@@ -341,14 +339,40 @@ function categories(
     }
   });
 
+  // A frame is time, not an operation, so it adds to no count.
+  frameSelfTimes(apexLog).forEach(({ debugCategory, durationSelfNs }) => {
+    const total = byCategory.get(debugCategory);
+    if (total) {
+      total.selfNs += durationSelfNs;
+    }
+  });
+
+  const row = (
+    debugCategory: CategoryRow["debugCategory"],
+    level: CategoryRow["level"],
+    operationCount: number,
+    selfNs: number,
+  ): CategoryRow => ({
+    debugCategory,
+    level,
+    operationCount,
+    durationSelfMs: roundMs(selfNs / NS_TO_MS),
+    selfPercentage: roundPercent(percentageOf(selfNs, duration.total)),
+  });
+
   // The header record is read directly rather than through `declaredLevels`,
   // which drops the categories it left unstated - the row set here is fixed, so
   // dropping them only to put them back says nothing.
-  return totals.map(({ debugCategory, operationCount, selfNs }) => ({
-    debugCategory,
-    level: debugLevels[debugCategory] ?? "",
-    operationCount,
-    durationSelfMs: roundMs(selfNs / NS_TO_MS),
-    selfPercentage: roundPercent(percentageOf(selfNs, durationTotalNs)),
-  }));
+  return [
+    ...totals.map(({ debugCategory, operationCount, selfNs }) =>
+      row(
+        debugCategory,
+        debugLevels[debugCategory] ?? "",
+        operationCount,
+        selfNs,
+      ),
+    ),
+    // The root's own time is what no event under it spans.
+    row(UNATTRIBUTED_CATEGORY, "", 0, duration.self),
+  ];
 }

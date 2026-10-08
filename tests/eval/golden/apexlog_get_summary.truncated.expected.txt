@@ -22,8 +22,8 @@ governorLimits[13]{limit,used,max}:
   queueableJobsAddedToQueue,0,0
   mobileApexPushCalls,0,0
 limitsByNamespace: []
-categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,FINE,3,2096,95.3
+categories[12]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,FINE,3,2097,95.4
   apexProfiling,NONE,0,0,0
   callout,NONE,0,0,0
   dataAccess,NONE,0,0,0
@@ -34,3 +34,4 @@ categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}
   visualforce,NONE,0,0,0
   wave,NONE,0,0,0
   workflow,NONE,0,0,0
+  platform,"",0,1,0

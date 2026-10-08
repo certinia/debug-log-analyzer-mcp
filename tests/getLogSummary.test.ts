@@ -756,7 +756,47 @@ describe("getLogSummary", () => {
         summary.categories.map(
           (row: { debugCategory: string }) => row.debugCategory,
         ),
-      ).toEqual([...DEBUG_CATEGORIES]);
+      ).toEqual([...DEBUG_CATEGORIES, "platform"]);
+    });
+
+    // A frame is not ranked, but its own time is the transaction's, and the
+    // root's own time is the time no event spans. Either left out, the rows
+    // would not add up to the log.
+    it("should file a frame's self time under its category, and the root's under platform", async () => {
+      const summary = await summaryOf({
+        duration: { total: 10_000_000_000, self: 1_000_000_000 },
+        children: [
+          logEvent({ type: "USER_INFO", debugCategory: "apexCode" }),
+          logEvent({
+            type: "EXECUTION_STARTED",
+            category: "Apex",
+            debugCategory: "apexCode",
+            totalNs: 9_000_000_000,
+            selfNs: 2_000_000_000,
+            children: [
+              {
+                type: "METHOD_ENTRY",
+                category: "Apex",
+                debugCategory: "apexCode",
+                totalNs: 7_000_000_000,
+              },
+            ],
+          }),
+        ],
+      });
+
+      expect(rowOf(summary, "apexCode")).toMatchObject({
+        operationCount: 1,
+        durationSelfMs: 9000,
+        selfPercentage: 90,
+      });
+      expect(rowOf(summary, "platform")).toEqual({
+        debugCategory: "platform",
+        level: "",
+        operationCount: 0,
+        durationSelfMs: 1000,
+        selfPercentage: 10,
+      });
     });
 
     it("should count the operations of a category and sum their self time", async () => {

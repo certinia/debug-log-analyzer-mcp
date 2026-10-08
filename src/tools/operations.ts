@@ -181,6 +181,22 @@ function isRankable({ category, type }: LogEvent): boolean {
 }
 
 /**
+ * The self time of each transaction frame, under the frame's own category. No
+ * operation holds it, because a frame is not ranked, but it is still time the
+ * transaction spent. The parser puts every frame directly on the root.
+ */
+export function frameSelfTimes(
+  apexLog: ApexLog,
+): Pick<Operation, "debugCategory" | "durationSelfNs">[] {
+  return apexLog.children
+    .filter(({ type }) => type && FRAME_TYPES.has(type))
+    .map(({ debugCategory, duration }) => ({
+      debugCategory,
+      durationSelfNs: duration.self,
+    }));
+}
+
+/**
  * What a row calls an operation. Shared, so a query plan names its query with
  * the name the ranked row carries and the caller can join the two.
  */

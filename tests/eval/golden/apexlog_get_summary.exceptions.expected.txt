@@ -25,8 +25,8 @@ governorLimits[13]{limit,used,max}:
 limitsByNamespace[2]{namespace,limit,used}:
   default,cpuTime,18
   default,callouts,3
-categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,FINE,6,17,77.3
+categories[12]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,FINE,6,19,86.4
   apexProfiling,INFO,1,0,0
   callout,INFO,0,0,0
   dataAccess,INFO,0,0,0
@@ -37,3 +37,4 @@ categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}
   visualforce,INFO,0,0,0
   wave,INFO,0,0,0
   workflow,INFO,1,2,9.1
+  platform,"",0,1,4.5

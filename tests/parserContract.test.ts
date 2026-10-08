@@ -77,6 +77,21 @@ describe("parser contract", () => {
     it("runs from USER_INFO, not from EXECUTION_STARTED", () => {
       expect(parse(log).duration.total).toBe(9500);
     });
+
+    // `apexlog_get_summary` reads frame self time off the root's children
+    // alone. A frame nested deeper would drop its time from every row.
+    it.each(TIMED_FIXTURES)(
+      "puts every EXECUTION_STARTED directly on the root (%s)",
+      (name) => {
+        const parsed = parse(fixture(name));
+        const frames = tree(parsed).filter(
+          (node) => node.type === "EXECUTION_STARTED",
+        );
+
+        expect(frames.length).toBeGreaterThan(0);
+        expect(frames.every((frame) => frame.parent === parsed)).toBe(true);
+      },
+    );
   });
 
   describe("governorLimits.peak.heapSize", () => {
