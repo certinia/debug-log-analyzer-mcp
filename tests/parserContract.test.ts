@@ -95,7 +95,7 @@ describe("parser contract", () => {
     });
 
     // `apexlog_get_summary` reads frame self time off the root's children
-    // alone. A frame nested deeper would drop its time from every row.
+    // alone. A frame nested deeper would file its time as unattributed.
     it.each(TIMED_FIXTURES)(
       "puts every EXECUTION_STARTED directly on the root (%s)",
       (name) => {

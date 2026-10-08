@@ -14,7 +14,12 @@ import type {
 } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
-import { frameSelfTimes, listOperations, operationName } from "./operations.js";
+import {
+  frameSelfTimes,
+  listOperations,
+  operationName,
+  type Operation,
+} from "./operations.js";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
@@ -330,49 +335,51 @@ function categories(apexLog: ApexLog): CategoryRow[] {
     totals.map((total) => [total.debugCategory, total]),
   );
 
-  listOperations(apexLog).forEach(({ debugCategory, durationSelfNs }) => {
+  const add = (
+    {
+      debugCategory,
+      durationSelfNs,
+    }: Pick<Operation, "debugCategory" | "durationSelfNs">,
+    operationCount: number,
+  ) => {
     // Only `""` misses, which the parser never stamps on a timed event.
     const total = byCategory.get(debugCategory);
     if (total) {
-      total.operationCount += 1;
+      total.operationCount += operationCount;
       total.selfNs += durationSelfNs;
     }
-  });
-
+  };
+  listOperations(apexLog).forEach((operation) => add(operation, 1));
   // A frame is time, not an operation, so it adds to no count.
-  frameSelfTimes(apexLog).forEach(({ debugCategory, durationSelfNs }) => {
-    const total = byCategory.get(debugCategory);
-    if (total) {
-      total.selfNs += durationSelfNs;
-    }
-  });
+  frameSelfTimes(apexLog).forEach((frame) => add(frame, 0));
 
-  const row = (
-    debugCategory: CategoryRow["debugCategory"],
-    level: CategoryRow["level"],
-    operationCount: number,
-    selfNs: number,
-  ): CategoryRow => ({
+  const attributedNs = totals.reduce((sum, { selfNs }) => sum + selfNs, 0);
+
+  // The header record is read directly rather than through `declaredLevels`,
+  // which drops the categories it left unstated - the row set here is fixed, so
+  // dropping them only to put them back says nothing.
+  type RowTotal = Pick<
+    CategoryRow,
+    "debugCategory" | "level" | "operationCount"
+  > & { selfNs: number };
+  const rows: RowTotal[] = [
+    ...totals.map((total) => ({
+      ...total,
+      level: debugLevels[total.debugCategory] ?? "",
+    })),
+    // The rest of the log is what no event spans, so the rows add up to it.
+    {
+      debugCategory: UNATTRIBUTED_CATEGORY,
+      level: "",
+      operationCount: 0,
+      selfNs: duration.total - attributedNs,
+    },
+  ];
+  return rows.map(({ debugCategory, level, operationCount, selfNs }) => ({
     debugCategory,
     level,
     operationCount,
     durationSelfMs: roundMs(selfNs / NS_TO_MS),
     selfPercentage: roundPercent(percentageOf(selfNs, duration.total)),
-  });
-
-  // The header record is read directly rather than through `declaredLevels`,
-  // which drops the categories it left unstated - the row set here is fixed, so
-  // dropping them only to put them back says nothing.
-  return [
-    ...totals.map(({ debugCategory, operationCount, selfNs }) =>
-      row(
-        debugCategory,
-        debugLevels[debugCategory] ?? "",
-        operationCount,
-        selfNs,
-      ),
-    ),
-    // The root's own time is what no event under it spans.
-    row(UNATTRIBUTED_CATEGORY, "", 0, duration.self),
-  ];
+  }));
 }

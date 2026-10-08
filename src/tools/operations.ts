@@ -167,6 +167,10 @@ export interface Operation {
  */
 const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
 
+function isFrame({ type }: LogEvent): boolean {
+  return !!type && FRAME_TYPES.has(type);
+}
+
 /**
  * Whether the event is a thing the transaction spent time on.
  *
@@ -176,8 +180,8 @@ const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
  * `debugCategory` and `type`. Untimed events are most of a log, so this is both
  * the cheap test and the first one.
  */
-function isRankable({ category, type }: LogEvent): boolean {
-  return category !== "" && !(type && FRAME_TYPES.has(type));
+function isRankable(event: LogEvent): boolean {
+  return event.category !== "" && !isFrame(event);
 }
 
 /**
@@ -189,7 +193,7 @@ export function frameSelfTimes(
   apexLog: ApexLog,
 ): Pick<Operation, "debugCategory" | "durationSelfNs">[] {
   return apexLog.children
-    .filter(({ type }) => type && FRAME_TYPES.has(type))
+    .filter(isFrame)
     .map(({ debugCategory, duration }) => ({
       debugCategory,
       durationSelfNs: duration.self,
