@@ -127,7 +127,7 @@ All thirteen governor limits are listed, zeros included.
 
 `thrownCount` counts the exceptions thrown, zero included.
 
-`exceptions` appears when something was thrown: `{message, thrownIn, lineNumber, thrownCount}`, one row per exception message, most thrown first. `thrownIn` and `lineNumber` say where the message was first thrown: the method, constructor or code unit, and the line in it. A managed package states its line as `EXTERNAL`. The table stops at 20 rows. `exceptionGroupCount` counts the messages, zero included, so a cut table says so. The log does not say whether a throw was caught.
+`exceptions` appears when something was thrown: `{message, thrownIn, lineNumber, thrownCount}`, one row per exception message, most thrown first. A message is the first line of the exception, cut at 200 characters, so two messages that differ only after that share a row. `thrownIn` and `lineNumber` say where the message was first thrown. `thrownIn` is the nearest method, constructor or code unit that the log recorded. Below `APEX_CODE,FINE` the log records no method, so `thrownIn` can be a code unit while `lineNumber` is a line in a method that it called. A managed package states its line as `EXTERNAL`. The table stops at 20 rows. `exceptionGroupCount` counts the messages, zero included, so a cut table says so. The log does not say whether a throw was caught.
 
 `flowErrorCount` counts the flow elements that failed, zero included. A flow can fail with no exception and no fatal error.
 

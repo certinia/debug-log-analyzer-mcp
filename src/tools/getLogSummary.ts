@@ -177,7 +177,7 @@ const THROWING_FRAMES: ReadonlySet<LogEventType | null> = new Set([
 interface ExceptionRow {
   /** The exception class and message, clipped as a fatal's is. */
   message: string;
-  /** The method, constructor or code unit the line is in; empty where none encloses it. */
+  /** The nearest frame the log recorded, and empty where none encloses it. Below `APEX_CODE,FINE` the line can be in a method under it. */
   thrownIn: string;
   /** `EXTERNAL` where a managed package hides it, and empty where the log states none. */
   lineNumber: NonNullable<LineNumber> | "";
