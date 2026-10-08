@@ -53,6 +53,7 @@ jest.mock("@salesforce/core", () => {
 
 import { promises as fs } from "node:fs";
 import { randomBytes } from "node:crypto";
+import path from "node:path";
 import {
   createRequestStateCodec,
   McpServer,
@@ -954,6 +955,19 @@ describe("Execute Anonymous", () => {
 
         expect(result.content[0]?.text).toContain(
           "Debug log written to /elsewhere/logs, which was not checked against the client's roots",
+        );
+      });
+
+      it("should say the default outputDir was not checked, since it falls back to the cwd", async () => {
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, targetOrg: "psa" },
+          ctx,
+          policy(),
+        );
+
+        expect(result.content[0]?.text).toContain(
+          `Debug log written to ${path.join(process.cwd(), ".apex-log-mcp")}, which was not checked against the client's roots`,
         );
       });
 

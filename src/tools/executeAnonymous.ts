@@ -370,9 +370,9 @@ export async function executeAnonymous(
     // as a run that did nothing rather than a log that was never captured.
     apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
     ...traceFlagWarnings,
-    // Only for a caller-given directory: the default is inside the project root
-    // by construction, so checking it could only ever say the obvious.
-    args.outputDir
+    // The default sits in the first root when the roots were read, so checking
+    // it then could only say the obvious; unread, it sits in the cwd, unchecked.
+    args.outputDir || roots.unreadable !== undefined
       ? await warnIfOutsideRoots(outputDir, roots)
       : undefined,
   ].filter((text): text is string => text !== undefined);
