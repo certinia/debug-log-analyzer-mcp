@@ -55,6 +55,7 @@ import { promises as fs } from "node:fs";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import {
+  CLIENT_CAPABILITIES_META_KEY,
   createRequestStateCodec,
   McpServer,
   SdkError,
@@ -209,6 +210,10 @@ describe("Execute Anonymous", () => {
   const testApexCode = "System.debug('Hello World');";
 
   let mockServer: McpServer;
+  const rejectRoots = (code: SdkErrorCode, message: string) =>
+    (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
+      new SdkError(code, message),
+    );
   let mockConnection: any;
   let mockRequest: any;
   let mockSobject: any;
@@ -259,7 +264,15 @@ describe("Execute Anonymous", () => {
 
     mockServer = {
       server: {
-        listRoots: jest.fn().mockResolvedValue({ roots: [] }),
+        // The SDK's answer, under enforceStrictCapabilities, for a client that declared no roots.
+        listRoots: jest
+          .fn()
+          .mockRejectedValue(
+            new SdkError(
+              SdkErrorCode.CapabilityNotSupported,
+              "Client does not support listing roots",
+            ),
+          ),
       },
     } as unknown as McpServer;
 
@@ -913,32 +926,35 @@ describe("Execute Anonymous", () => {
 
     describe("when the client's roots cannot be read", () => {
       beforeEach(() => {
-        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
-          new SdkError(
-            SdkErrorCode.MethodNotSupportedByProtocolVersion,
-            "roots/list cannot be sent on 2026-07-28",
-          ),
+        rejectRoots(
+          SdkErrorCode.MethodNotSupportedByProtocolVersion,
+          "roots/list cannot be sent on 2026-07-28",
         );
+        // A 2026-07-28 client declares its capabilities on each request.
+        ctx = {
+          mcpReq: {
+            ...ctx.mcpReq,
+            envelope: { [CLIENT_CAPABILITIES_META_KEY]: { roots: {} } },
+          },
+        } as unknown as ServerContext;
       });
 
       it("should refuse a file before any local work on 2026-07-28, since nothing can show it is inside a root", async () => {
         await expect(
           executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
         ).rejects.toThrow(
-          "they could not be read, as this server cannot yet ask a 2026-07-28 client for them. Pass the Apex inline in apex.",
+          `Cannot check Apex file ${apexFilePath}: this server cannot yet ask a 2026-07-28 client for its roots. Pass the Apex inline in apex.`,
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
         expect(mockOpen).not.toHaveBeenCalled();
       });
 
       it("should refuse a file when a client that declared roots does not answer", async () => {
-        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
-          new SdkError(SdkErrorCode.RequestTimeout, "Request timed out"),
-        );
+        rejectRoots(SdkErrorCode.RequestTimeout, "Request timed out");
 
         await expect(
           executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
-        ).rejects.toThrow("as Request timed out.");
+        ).rejects.toThrow("the client's roots could not be read: Request timed out.");
         expect(mockOpen).not.toHaveBeenCalled();
       });
 
@@ -951,7 +967,7 @@ describe("Execute Anonymous", () => {
         );
 
         expect(result.content[0]?.text).toContain(
-          "Debug log written to /elsewhere/logs, which was not checked against the client's roots",
+          "Debug log written to /elsewhere/logs, which was not checked against the client's roots: this server cannot yet ask a 2026-07-28 client for its roots.",
         );
       });
 
@@ -968,26 +984,29 @@ describe("Execute Anonymous", () => {
         );
       });
 
-      it("should stop a cancelled call, not treat it as unreadable roots", async () => {
-        const controller = new AbortController();
-        controller.abort();
-        const cancelled = {
-          mcpReq: { ...ctx.mcpReq, signal: controller.signal },
-        } as unknown as ServerContext;
-
-        await expect(
-          executeAnonymous(mockServer, { apex: testApexCode }, cancelled, policy()),
-        ).rejects.toThrow("roots/list cannot be sent on 2026-07-28");
-        expect(mockReadLocalOrg).not.toHaveBeenCalled();
-      });
-
       it("should refuse to guess the default org, since the cwd may not be the client's project", async () => {
         await expect(
           executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
         ).rejects.toThrow(
-          "Cannot tell which project's default org to use: the client's roots could not be read, as this server cannot yet ask a 2026-07-28 client for them. Pass targetOrg.",
+          "Cannot tell which project's default org to use: this server cannot yet ask a 2026-07-28 client for its roots. Pass targetOrg.",
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
+      });
+
+      it("should read a file anywhere for a 2026-07-28 client that declared no roots", async () => {
+        ctx = {
+          mcpReq: { ...ctx.mcpReq, envelope: { [CLIENT_CAPABILITIES_META_KEY]: {} } },
+        } as unknown as ServerContext;
+        mockReadFile.mockResolvedValue(testApexCode);
+
+        await executeAnonymous(
+          mockServer,
+          { apexFilePath: "/elsewhere/a.apex" },
+          ctx,
+          policy(),
+        );
+
+        expectPostedApex(testApexCode);
       });
 
       it("should still run inline Apex against a named org", async () => {
@@ -1002,12 +1021,27 @@ describe("Execute Anonymous", () => {
       });
     });
 
+    it("should stop a cancelled call, not treat it as unreadable roots", async () => {
+      rejectRoots(
+        SdkErrorCode.MethodNotSupportedByProtocolVersion,
+        "roots/list cannot be sent on 2026-07-28",
+      );
+      const controller = new AbortController();
+      controller.abort();
+      const cancelled = {
+        mcpReq: { ...ctx.mcpReq, signal: controller.signal },
+      } as unknown as ServerContext;
+
+      await expect(
+        executeAnonymous(mockServer, { apex: testApexCode }, cancelled, policy()),
+      ).rejects.toThrow("roots/list cannot be sent on 2026-07-28");
+      expect(mockReadLocalOrg).not.toHaveBeenCalled();
+    });
+
     it("should read a file anywhere when the client cannot list roots, as no root bounds it", async () => {
-      (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
-        new SdkError(
-            SdkErrorCode.CapabilityNotSupported,
-            "Client does not support listing roots",
-          ),
+      rejectRoots(
+        SdkErrorCode.CapabilityNotSupported,
+        "Client does not support listing roots",
       );
       mockReadFile.mockResolvedValue(testApexCode);
 
@@ -1052,6 +1086,17 @@ describe("Execute Anonymous", () => {
           executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
         ).rejects.toThrow("/home/me/.ssh/id_rsa is outside every root");
         expect(mockOpen).not.toHaveBeenCalled();
+      });
+
+      it("should keep the usable roots when one cannot be used here", async () => {
+        (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
+          roots: [{ uri: "file://server/share" }, { uri: "file:///project" }],
+        });
+        mockReadFile.mockResolvedValue(testApexCode);
+
+        await executeAnonymous(mockServer, { apexFilePath }, ctx, policy());
+
+        expectPostedApex(testApexCode);
       });
 
       it("should read a file inside a root", async () => {
@@ -1679,19 +1724,21 @@ describe("Execute Anonymous", () => {
         expect(textOf(await withRoot())).not.toContain("warning");
       });
 
-      it("stays silent when the client declares no roots", async () => {
+      it("says it could not check, when the client lists no roots on this machine", async () => {
         (mockServer.server.listRoots as jest.Mock).mockResolvedValue({
-          roots: [],
+          roots: [{ uri: "https://example.com/project" }],
         });
 
         const result = await executeAnonymous(
           mockServer,
-          { apex: testApexCode, outputDir: "/elsewhere/logs" },
+          { apex: testApexCode, outputDir: "/elsewhere/logs", targetOrg: "psa" },
           ctx,
           policy(),
         );
 
-        expect(textOf(result)).not.toContain("warning");
+        expect(textOf(result)).toContain(
+          "which was not checked against the client's roots: the client lists no roots on this machine.",
+        );
       });
 
       it("waits a bounded time for the roots, and stops when the call is cancelled", async () => {
@@ -1709,11 +1756,9 @@ describe("Execute Anonymous", () => {
       });
 
       it("stays silent when the client cannot list roots", async () => {
-        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
-          new SdkError(
-            SdkErrorCode.CapabilityNotSupported,
-            "Client does not support listing roots",
-          ),
+        rejectRoots(
+          SdkErrorCode.CapabilityNotSupported,
+          "Client does not support listing roots",
         );
 
         const result = await executeAnonymous(

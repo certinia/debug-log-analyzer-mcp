@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: stop changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
 - apexlog_execute_anonymous: run the Apex with a warning when the org refuses a trace flag, instead of failing the call ([#207])
 - apexlog_execute_anonymous: stop a 60-second stall waiting on roots ([#222])
+- apexlog_execute_anonymous: require `targetOrg` when the client's roots can't be used ([#225])
 - apexlog_get_summary, apexlog_list_slow_operations: time a method that the log never closes up to the end of the log, instead of reporting it too short ([#226])
 
 ## [2.0.1] - 2026-09-11
@@ -121,3 +122,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#221]: https://github.com/certinia/debug-log-analyzer-mcp/issues/221
 [#222]: https://github.com/certinia/debug-log-analyzer-mcp/issues/222
 [#226]: https://github.com/certinia/debug-log-analyzer-mcp/pull/226
+[#225]: https://github.com/certinia/debug-log-analyzer-mcp/pull/225
