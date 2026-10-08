@@ -56,6 +56,8 @@ import { randomBytes } from "node:crypto";
 import {
   createRequestStateCodec,
   McpServer,
+  SdkError,
+  SdkErrorCode,
   type ElicitRequest,
   type InputRequiredResult,
   type ServerContext,
@@ -909,6 +911,36 @@ describe("Execute Anonymous", () => {
       ).rejects.toThrow("Cannot read Apex file /dev/zero: not a regular file");
       expect(mockReadFile).not.toHaveBeenCalled();
       expect(mockClose).toHaveBeenCalled();
+    });
+
+    describe("on a protocol that gives a tool call no roots", () => {
+      beforeEach(() => {
+        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
+          new SdkError(
+            SdkErrorCode.MethodNotSupportedByProtocolVersion,
+            "roots/list cannot be sent on 2026-07-28",
+          ),
+        );
+      });
+
+      it("should refuse a file, since nothing can show it is inside a root", async () => {
+        await expect(
+          executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
+        ).rejects.toThrow("Pass the Apex inline in apex.");
+        expect(mockOpen).not.toHaveBeenCalled();
+        expect(mockConnectOrg).not.toHaveBeenCalled();
+      });
+
+      it("should still run inline Apex", async () => {
+        await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        );
+
+        expectPostedApex(testApexCode);
+      });
     });
 
     it("should read a file anywhere when the client cannot list roots, as no root bounds it", async () => {

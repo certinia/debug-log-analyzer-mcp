@@ -4,7 +4,12 @@ import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
+import {
+  McpServer,
+  SdkError,
+  SdkErrorCode,
+  type ServerContext,
+} from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
@@ -64,10 +69,11 @@ export type ExecuteAnonymousPolicy = {
   consumeConfirmation: ConsumeConfirmation;
 };
 
+/** The client's roots, or undefined on a protocol that gives a tool call none (2026-07-28). */
 async function getRootPaths(
   server: McpServer,
   signal: AbortSignal,
-): Promise<string[]> {
+): Promise<string[] | undefined> {
   try {
     // Bounded, so a client that never answers costs seconds, not the SDK's 60 s default.
     const { roots } = await server.server.listRoots(undefined, {
@@ -82,6 +88,12 @@ async function getRootPaths(
     // A cancelled call stops here, rather than running on with no roots.
     if (signal.aborted) {
       throw error;
+    }
+    if (
+      error instanceof SdkError &&
+      error.code === SdkErrorCode.MethodNotSupportedByProtocolVersion
+    ) {
+      return undefined;
     }
     return [];
   }
@@ -137,8 +149,14 @@ async function outsideRoots(
 // Refused where `outputDir` only warns: the file's text goes to the org, and a compile error can echo it.
 async function readApexFile(
   apexFilePath: string,
-  rootPaths: string[],
+  rootPaths: string[] | undefined,
 ): Promise<string> {
+  // Fail closed: with no way to ask for roots, nothing can show the file is inside one.
+  if (rootPaths === undefined) {
+    throw new Error(
+      `Cannot read Apex file ${apexFilePath}: this protocol gives a tool call no roots to check it against. Pass the Apex inline in apex.`,
+    );
+  }
   const outside = await outsideRoots(apexFilePath, rootPaths);
   if (outside !== undefined) {
     throw new Error(
@@ -176,7 +194,9 @@ async function readApexFile(
 function apexSource({
   apex,
   apexFilePath,
-}: ExecuteAnonymousArgs): ((rootPaths: string[]) => Promise<string>) | undefined {
+}: ExecuteAnonymousArgs):
+  | ((rootPaths: string[] | undefined) => Promise<string>)
+  | undefined {
   if (apex !== undefined && apexFilePath === undefined) {
     return async () => apex;
   }
@@ -210,7 +230,7 @@ export async function executeAnonymous(
 
   const report = progressReporter(ctx);
   const rootPaths = await getRootPaths(server, ctx.mcpReq.signal);
-  const projectPath = rootPaths[0];
+  const projectPath = rootPaths?.[0];
 
   const local = await readLocalOrg(projectPath, targetOrg);
   const { orgId, username } = local;
@@ -332,7 +352,7 @@ export async function executeAnonymous(
     // Only for a caller-given directory: the default is inside the project root
     // by construction, so checking it could only ever say the obvious.
     args.outputDir
-      ? await warnIfOutsideRoots(outputDir, rootPaths)
+      ? await warnIfOutsideRoots(outputDir, rootPaths ?? [])
       : undefined,
   ].filter((text): text is string => text !== undefined);
 
