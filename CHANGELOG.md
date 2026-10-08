@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Fixed
 
+- apexlog_execute_anonymous: show all of the Apex in a production confirmation, not only its first 2,000 characters ([#221])
 - apexlog_execute_anonymous: stop changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
 - apexlog_execute_anonymous: run the Apex with a warning when the org refuses a trace flag, instead of failing the call ([#207])
 
@@ -110,3 +111,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#186]: https://github.com/certinia/debug-log-analyzer-mcp/issues/186
 [#208]: https://github.com/certinia/debug-log-analyzer-mcp/issues/208
 [#212]: https://github.com/certinia/debug-log-analyzer-mcp/issues/212
+[#221]: https://github.com/certinia/debug-log-analyzer-mcp/issues/221

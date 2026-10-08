@@ -80,9 +80,6 @@ const CONFIRM_KEY = "confirm";
 
 const confirmSchema = z.object({ confirm: z.boolean() });
 
-/** Keep the prompt readable, and out of the way of client UI limits. */
-const MAX_APEX_IN_PROMPT = 2000;
-
 /** Underlying API errors can be verbose; keep the actionable part. */
 const MAX_REASON = 300;
 
@@ -111,8 +108,8 @@ export function apexExecutionRefusal(apexExecutionDisabled: boolean) {
     : undefined;
 }
 
-function truncate(apex: string, max: number): string {
-  return apex.length <= max ? apex : `${apex.slice(0, max)}\n... (truncated)`;
+function truncate(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max)}\n... (truncated)`;
 }
 
 function digestOf(apex: string): string {
@@ -153,7 +150,8 @@ function confirmationRequest(
     : `About to execute anonymous Apex against PRODUCTION org '${orgLabel}'.`;
 
   return inputRequired.elicit({
-    message: `${preamble}\n\nApex:\n${truncate(apex, MAX_APEX_IN_PROMPT)}\n\nProceed?`,
+    // All of it, never cut: the confirmation authorizes every character the digest binds.
+    message: `${preamble}\n\nApex:\n${apex}\n\nProceed?`,
     requestedSchema: {
       type: "object",
       properties: {

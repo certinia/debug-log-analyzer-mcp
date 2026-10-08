@@ -201,13 +201,14 @@ describe("authorizeExecution", () => {
       );
     });
 
-    it("should truncate a long Apex snippet", async () => {
+    it("should show all of a long Apex snippet, since all of it runs", async () => {
+      const apex = `${"x".repeat(5000)}delete [SELECT Id FROM Account];`;
       const params = confirmRequest(
-        assertConfirmationRequired(await authorize({ apex: "x".repeat(5000) })),
+        assertConfirmationRequired(await authorize({ apex })),
       );
 
-      expect(params.message).toContain("(truncated)");
-      expect(params.message.length).toBeLessThan(3000);
+      expect(params.message).toContain(apex);
+      expect(params.message).not.toContain("(truncated)");
     });
 
     it("should truncate an excessively long reason", async () => {
