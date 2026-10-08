@@ -2,8 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
-import type { DebugLevels } from "@apexdevtools/apex-log-parser/types";
+import type { ApexLog, DebugLevels } from "@apexdevtools/apex-log-parser";
 import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
 import {
   capturedAt,

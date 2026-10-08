@@ -18,7 +18,7 @@ import {
   type LimitMetricUnit,
   type Limits,
   type NamespaceLimits,
-} from "@apexdevtools/apex-log-parser/types";
+} from "@apexdevtools/apex-log-parser";
 
 /** The parser works in nanoseconds; every reported duration is milliseconds. */
 export const NS_TO_MS = 1_000_000;
