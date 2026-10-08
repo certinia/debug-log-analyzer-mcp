@@ -16,6 +16,8 @@ import {
 import type {
   DebugCategory,
   DebugLevels,
+  LineNumber,
+  LogEventType,
   LogIssue,
 } from "@apexdevtools/apex-log-parser/types";
 import {
@@ -165,7 +167,7 @@ function innermostFrames(description: string): string {
 const EXCEPTION_ROW_LIMIT = 20;
 
 /** The frames an `EXCEPTION_THROWN` line number can belong to. */
-const THROWING_FRAMES = new Set<string | null>([
+const THROWING_FRAMES: ReadonlySet<LogEventType | null> = new Set([
   "METHOD_ENTRY",
   "CONSTRUCTOR_ENTRY",
   "CODE_UNIT_STARTED",
@@ -178,7 +180,7 @@ interface ExceptionRow {
   /** The method, constructor or code unit the line is in; empty where none encloses it. */
   thrownIn: string;
   /** `EXTERNAL` where a managed package hides it, and empty where the log states none. */
-  lineNumber: number | string;
+  lineNumber: NonNullable<LineNumber> | "";
   thrownCount: number;
 }
 
@@ -221,7 +223,7 @@ function frameName(event: LogEvent): string {
 function flowErrorCount(apexLog: ApexLog): number {
   return apexLog.eventsById.reduce(
     (count, event) =>
-      event?.type === "FLOW_ELEMENT_ERROR" ? count + 1 : count,
+      event.type === "FLOW_ELEMENT_ERROR" ? count + 1 : count,
     0,
   );
 }
