@@ -4,7 +4,13 @@ import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  McpServer,
+  SdkError,
+  SdkErrorCode,
+  type ServerContext,
+} from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
@@ -64,27 +70,77 @@ export type ExecuteAnonymousPolicy = {
   consumeConfirmation: ConsumeConfirmation;
 };
 
-async function getRootPaths(
+// `unknown` when the client declared roots this server could not use: then nothing can be checked against them.
+type Workspace =
+  | { kind: "roots"; paths: string[] }
+  | { kind: "none" }
+  | { kind: "unknown"; reason: string };
+
+async function getWorkspace(
   server: McpServer,
-  signal: AbortSignal,
-): Promise<string[]> {
+  ctx: ServerContext,
+): Promise<Workspace> {
+  const { signal } = ctx.mcpReq;
   try {
     // Bounded, so a client that never answers costs seconds, not the SDK's 60 s default.
     const { roots } = await server.server.listRoots(undefined, {
       timeout: ROOTS_TIMEOUT_MS,
       signal,
     });
-    // fileURLToPath decodes `%20` and drops the slash before a Windows drive, which `pathname` keeps.
-    return roots
-      .filter((root) => root.uri.startsWith("file:"))
-      .map((root) => fileURLToPath(root.uri));
+    // One by one, so a root this machine cannot use costs only that root.
+    const paths = roots.flatMap((root) => {
+      try {
+        // fileURLToPath decodes `%20` and drops the slash before a Windows drive, which `pathname` keeps.
+        return root.uri.startsWith("file:") ? [fileURLToPath(root.uri)] : [];
+      } catch {
+        return [];
+      }
+    });
+    return paths.length > 0
+      ? { kind: "roots", paths }
+      : { kind: "unknown", reason: "the client lists no roots on this machine" };
   } catch (error) {
     // A cancelled call stops here, rather than running on with no roots.
     if (signal.aborted) {
       throw error;
     }
-    return [];
+    if (!(error instanceof SdkError)) {
+      return {
+        kind: "unknown",
+        reason: `the client's roots could not be read: ${String(error)}`,
+      };
+    }
+    switch (error.code) {
+      // Only a client that declared no roots has none to check against.
+      case SdkErrorCode.CapabilityNotSupported:
+        return { kind: "none" };
+      case SdkErrorCode.MethodNotSupportedByProtocolVersion: {
+        // 2026-07-28 fails before the capability check, so read the request's own declaration.
+        const declared = (
+          ctx.mcpReq.envelope as
+            | Record<string, { roots?: unknown } | undefined>
+            | undefined
+        )?.[CLIENT_CAPABILITIES_META_KEY];
+        return declared?.roots
+          ? {
+              kind: "unknown",
+              reason:
+                "this server cannot yet ask a 2026-07-28 client for its roots",
+            }
+          : { kind: "none" };
+      }
+      default:
+        return {
+          kind: "unknown",
+          reason: `the client's roots could not be read: ${error.message}`,
+        };
+    }
   }
+}
+
+function logWarning(warning: string): string {
+  console.error(`[apex-log-mcp] ${warning}`);
+  return warning;
 }
 
 /** The resolved path, or the path itself when it does not resolve. */
@@ -108,13 +164,11 @@ async function warnIfOutsideRoots(
   rootPaths: string[],
 ): Promise<string | undefined> {
   const target = await outsideRoots(outputDir, rootPaths);
-  if (target === undefined) {
-    return undefined;
-  }
-
-  const warning = `Debug log written to ${target}, which is outside every root this client declared.`;
-  console.error(`[apex-log-mcp] ${warning}`);
-  return warning;
+  return target === undefined
+    ? undefined
+    : logWarning(
+        `Debug log written to ${target}, which is outside every root this client declared.`,
+      );
 }
 
 /** `target` with symlinks followed when it is outside every root, else undefined. No roots, no check. */
@@ -209,7 +263,21 @@ export async function executeAnonymous(
   }
 
   const report = progressReporter(ctx);
-  const rootPaths = await getRootPaths(server, ctx.mcpReq.signal);
+  const workspace = await getWorkspace(server, ctx);
+  // Fail closed, before any local work: unusable roots bound no file and name no project.
+  if (workspace.kind === "unknown") {
+    if (args.apexFilePath !== undefined) {
+      throw new Error(
+        `Cannot check Apex file ${args.apexFilePath}: ${workspace.reason}. Pass the Apex inline in apex.`,
+      );
+    }
+    if (targetOrg === undefined) {
+      throw new Error(
+        `Cannot tell which project's default org to use: ${workspace.reason}. Pass targetOrg.`,
+      );
+    }
+  }
+  const rootPaths = workspace.kind === "roots" ? workspace.paths : [];
   const projectPath = rootPaths[0];
 
   const local = await readLocalOrg(projectPath, targetOrg);
@@ -329,11 +397,14 @@ export async function executeAnonymous(
     // as a run that did nothing rather than a log that was never captured.
     apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
     ...traceFlagWarnings,
-    // Only for a caller-given directory: the default is inside the project root
-    // by construction, so checking it could only ever say the obvious.
-    args.outputDir
-      ? await warnIfOutsideRoots(outputDir, rootPaths)
-      : undefined,
+    // Unusable roots leave even the default, in the cwd, unchecked; usable, the default is inside the first root.
+    workspace.kind === "unknown"
+      ? logWarning(
+          `Debug log written to ${outputDir}, which was not checked against the client's roots: ${workspace.reason}.`,
+        )
+      : args.outputDir
+        ? await warnIfOutsideRoots(outputDir, rootPaths)
+        : undefined,
   ].filter((text): text is string => text !== undefined);
 
   return {
