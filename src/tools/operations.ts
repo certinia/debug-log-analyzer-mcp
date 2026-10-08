@@ -2,11 +2,12 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 import type {
+  ApexLog,
   DebugCategory,
+  LogEvent,
   LogEventType,
-} from "@apexdevtools/apex-log-parser/types";
+} from "@apexdevtools/apex-log-parser";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
@@ -166,6 +167,10 @@ export interface Operation {
  */
 const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
 
+function isFrame({ type }: LogEvent): boolean {
+  return !!type && FRAME_TYPES.has(type);
+}
+
 /**
  * Whether the event is a thing the transaction spent time on.
  *
@@ -175,8 +180,24 @@ const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
  * `debugCategory` and `type`. Untimed events are most of a log, so this is both
  * the cheap test and the first one.
  */
-function isRankable({ category, type }: LogEvent): boolean {
-  return category !== "" && !(type && FRAME_TYPES.has(type));
+function isRankable(event: LogEvent): boolean {
+  return event.category !== "" && !isFrame(event);
+}
+
+/**
+ * The self time of each transaction frame, under the frame's own category. No
+ * operation holds it, because a frame is not ranked, but it is still time the
+ * transaction spent. The parser puts every frame directly on the root.
+ */
+export function frameSelfTimes(
+  apexLog: ApexLog,
+): Pick<Operation, "debugCategory" | "durationSelfNs">[] {
+  return apexLog.children
+    .filter(isFrame)
+    .map(({ debugCategory, duration }) => ({
+      debugCategory,
+      durationSelfNs: duration.self,
+    }));
 }
 
 /**

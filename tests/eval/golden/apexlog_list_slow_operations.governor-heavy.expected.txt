@@ -1,4 +1,4 @@
-durationTotalMs: 24608.108
+durationTotalMs: 24608.14
 returnedSelfPercentage: 100
 matchedCount: 24
 capturedAt[3]{debugCategory,level}:

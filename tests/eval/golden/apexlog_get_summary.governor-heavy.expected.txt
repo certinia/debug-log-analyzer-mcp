@@ -1,5 +1,5 @@
 fileSizeBytes: 39532
-durationTotalMs: 24608.108
+durationTotalMs: 24608.14
 truncated: false
 thrownCount: 0
 exceptionGroupCount: 0
@@ -30,8 +30,8 @@ limitsByNamespace[8]{namespace,limit,used}:
   default,heapSize,219591
   core_pkg,soqlQueries,1
   core_pkg,queryRows,2
-categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,FINE,12,23762.275,96.6
+categories[12]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,FINE,12,23762.301,96.6
   apexProfiling,FINE,2,0,0
   callout,FINEST,0,0,0
   dataAccess,INFO,0,0,0
@@ -42,3 +42,4 @@ categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}
   visualforce,FINE,0,0,0
   wave,FINE,0,0,0
   workflow,FINE,0,0,0
+  unattributed,"",0,0.921,0

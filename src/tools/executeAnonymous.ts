@@ -356,7 +356,7 @@ export async function executeAnonymous(
           // True when a Developer Console trace flag outranked the levels asked
           // for, which is the one thing that can silently change what was
           // captured. Reported either way, for the same reason as below.
-          levelsOverridden: levelsWereOverridden(levels, apexResult.debugLog),
+          levelsOverridden: levelsWereOverridden(levels, parsedLog?.debugLevels),
           // A fact about this run, not advice about it: the directory is new, so
           // nothing yet ignores it. Reported either way, because an absent field
           // cannot be told apart from one this server never worked out.

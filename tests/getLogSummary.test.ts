@@ -12,19 +12,16 @@ import {
 import { logEvent, type NodeSpec } from "./support/logEvents";
 import { clearApexLogCache, walkLog } from "../src/tools/apexLogSource";
 import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
-import { parse } from "@apexdevtools/apex-log-parser";
+import { ALL_LIMIT_METRICS, parse } from "@apexdevtools/apex-log-parser";
 import type {
   ApexLog,
   ApexLogParser,
+  GovernorLimits,
+  Limits,
   LogEvent,
+  LogIssue,
+  NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-import {
-  ALL_LIMIT_METRICS,
-  type GovernorLimits,
-  type Limits,
-  type LogIssue,
-  type NamespaceLimits,
-} from "@apexdevtools/apex-log-parser/types";
 import { decode } from "@toon-format/toon";
 
 // Mock the dependencies
@@ -47,6 +44,7 @@ jest.mock("fs", () => {
 });
 
 jest.mock("@apexdevtools/apex-log-parser", () => ({
+  ...jest.requireActual("@apexdevtools/apex-log-parser"),
   parse: jest.fn(),
 }));
 
@@ -758,7 +756,47 @@ describe("getLogSummary", () => {
         summary.categories.map(
           (row: { debugCategory: string }) => row.debugCategory,
         ),
-      ).toEqual([...DEBUG_CATEGORIES]);
+      ).toEqual([...DEBUG_CATEGORIES, "unattributed"]);
+    });
+
+    // A frame is not ranked, but its own time is the transaction's, and the
+    // root's own time is the time no event spans. Either left out, the rows
+    // would not add up to the log.
+    it("should file a frame's self time under its category, and the root's as unattributed", async () => {
+      const summary = await summaryOf({
+        duration: { total: 10_000_000_000, self: 1_000_000_000 },
+        children: [
+          logEvent({ type: "USER_INFO", debugCategory: "apexCode" }),
+          logEvent({
+            type: "EXECUTION_STARTED",
+            category: "Apex",
+            debugCategory: "apexCode",
+            totalNs: 9_000_000_000,
+            selfNs: 2_000_000_000,
+            children: [
+              {
+                type: "METHOD_ENTRY",
+                category: "Apex",
+                debugCategory: "apexCode",
+                totalNs: 7_000_000_000,
+              },
+            ],
+          }),
+        ],
+      });
+
+      expect(rowOf(summary, "apexCode")).toMatchObject({
+        operationCount: 1,
+        durationSelfMs: 9000,
+        selfPercentage: 90,
+      });
+      expect(rowOf(summary, "unattributed")).toEqual({
+        debugCategory: "unattributed",
+        level: "",
+        operationCount: 0,
+        durationSelfMs: 1000,
+        selfPercentage: 10,
+      });
     });
 
     it("should count the operations of a category and sum their self time", async () => {

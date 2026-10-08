@@ -1,7 +1,7 @@
 export default {
   testEnvironment: "node",
   // The parser ships ESM only and declares no `require` condition, so jest's
-  // CommonJS resolver cannot load it by name. The mappers below point at its
+  // CommonJS resolver cannot load it by name. The mapper below points at its
   // build directly and this pattern lets the transform compile it.
   transformIgnorePatterns: ["node_modules/(?!(\\.pnpm/)?@apexdevtools)"],
   roots: ["<rootDir>/src", "<rootDir>/tests"],
@@ -28,8 +28,6 @@ export default {
     "^@toon-format/toon$": "<rootDir>/tests/__mocks__/@toon-format/toon.ts",
     "^@apexdevtools/apex-log-parser$":
       "<rootDir>/node_modules/@apexdevtools/apex-log-parser/dist/index.js",
-    "^@apexdevtools/apex-log-parser/types$":
-      "<rootDir>/node_modules/@apexdevtools/apex-log-parser/dist/publicTypes.js",
   },
   collectCoverageFrom: [
     "src/**/*.ts",

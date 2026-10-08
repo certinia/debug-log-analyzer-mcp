@@ -144,12 +144,6 @@ const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 const DEFAULT_LOG_HEADER = `${TEST_API_VERSION} APEX_CODE,FINE;APEX_PROFILING,FINE;CALLOUT,DEBUG;DATA_ACCESS,FINEST;DB,FINEST;NBA,INFO;SYSTEM,DEBUG;VALIDATION,DEBUG;VISUALFORCE,FINE;WAVE,INFO;WORKFLOW,FINE`;
 
-/** The same log with APEX_CODE lowered, as a Developer Console flag would. */
-const OVERRIDDEN_LOG_HEADER = DEFAULT_LOG_HEADER.replace(
-  "APEX_CODE,FINE",
-  "APEX_CODE,ERROR",
-);
-
 const XML_ESCAPES: Record<string, string> = {
   "<": "&lt;",
   ">": "&gt;",
@@ -309,6 +303,7 @@ describe("Execute Anonymous", () => {
     mockDeleteTraceFlag.mockResolvedValue();
     mockLoadApexLog.mockResolvedValue({
       duration: { total: 150_000_000 },
+      debugLevels: DEFAULT_TRACE_CONFIG,
     } as ApexLog);
   });
 
@@ -407,10 +402,12 @@ describe("Execute Anonymous", () => {
       expect(envelope).not.toContain("Data_access");
     });
 
+    // APEX_CODE lowered, as a Developer Console flag would.
     it("reports levelsOverridden when the log came back at other levels", async () => {
-      mockRequest.mockResolvedValue(
-        soapResponse({}, `${OVERRIDDEN_LOG_HEADER}\nCONTENT\n`),
-      );
+      mockLoadApexLog.mockResolvedValue({
+        duration: { total: 150_000_000 },
+        debugLevels: { ...DEFAULT_TRACE_CONFIG, apexCode: "ERROR" },
+      } as ApexLog);
 
       const result = await executeAnonymous(
         mockServer,

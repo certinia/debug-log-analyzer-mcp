@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
 import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
@@ -20,7 +20,6 @@ import {
   type Operation,
 } from "./operations.js";
 import { DEBUG_CATEGORIES } from "../salesforce/debugLevels.js";
-import type { DebugCategory } from "@apexdevtools/apex-log-parser/types";
 import {
   canCarryPlan,
   listQueryPlans,

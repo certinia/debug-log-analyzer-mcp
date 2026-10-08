@@ -13,13 +13,12 @@ import {
   type LimitRisksArgs,
   type LimitRiskResult,
 } from "../src/tools/listLimitRisks";
-import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
-import {
-  ALL_LIMIT_METRICS,
-  type GovernorLimits,
-  type Limits,
-} from "@apexdevtools/apex-log-parser/types";
+import { ALL_LIMIT_METRICS, parse } from "@apexdevtools/apex-log-parser";
+import type {
+  ApexLog,
+  GovernorLimits,
+  Limits,
+} from "@apexdevtools/apex-log-parser";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
@@ -40,6 +39,7 @@ jest.mock("fs", () => {
 });
 
 jest.mock("@apexdevtools/apex-log-parser", () => ({
+  ...jest.requireActual("@apexdevtools/apex-log-parser"),
   parse: jest.fn(),
 }));
 

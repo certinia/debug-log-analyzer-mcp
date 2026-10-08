@@ -4,10 +4,7 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
-import type {
-  DebugCategory,
-  Limits,
-} from "@apexdevtools/apex-log-parser/types";
+import type { DebugCategory, Limits } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { capturedAt, type DeclaredLevel } from "./operations.js";

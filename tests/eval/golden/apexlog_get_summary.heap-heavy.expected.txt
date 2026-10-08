@@ -1,5 +1,5 @@
 fileSizeBytes: 2052
-durationTotalMs: 22
+durationTotalMs: 23
 truncated: false
 thrownCount: 0
 exceptionGroupCount: 0
@@ -21,8 +21,8 @@ governorLimits[13]{limit,used,max}:
   mobileApexPushCalls,0,10
 limitsByNamespace[1]{namespace,limit,used}:
   default,cpuTime,42
-categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,FINEST,4,20,90.9
+categories[12]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
+  apexCode,FINEST,4,22,95.7
   apexProfiling,FINEST,1,0,0
   callout,NONE,0,0,0
   dataAccess,NONE,0,0,0
@@ -33,3 +33,4 @@ categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}
   visualforce,NONE,0,0,0
   wave,NONE,0,0,0
   workflow,NONE,0,0,0
+  unattributed,"",0,1,4.3
