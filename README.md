@@ -249,7 +249,7 @@ The [Quick Start](#quick-start) config gives you all four tools.
 | `production` | Anything else                     | Confirmation required |
 | `unknown`    | The org could not be queried      | Confirmation required |
 
-For a production org, `--allow-production-orgs` runs it anyway. Otherwise the server asks you to confirm, naming the org and showing the Apex. That needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one run.
+For a production org, `--allow-production-orgs` runs it anyway. Otherwise the server asks you to confirm, naming the org and showing all of the Apex with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one run.
 
 An org that cannot be identified is treated as production, so a network or permissions problem can never quietly downgrade one.
 

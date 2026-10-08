@@ -13,6 +13,7 @@ import {
   authorizeExecution,
   createConfirmationLedger,
   APEX_EXECUTION_DISABLED_MESSAGE,
+  MAX_APEX_TO_CONFIRM,
   type ConfirmationState,
   type ConsumeConfirmation,
   type MintConfirmationState,
@@ -163,7 +164,7 @@ describe("authorizeExecution", () => {
         properties: {
           confirm: {
             type: "boolean",
-            title: `Run against production org '${orgLabel}'?`,
+            title: `Run 1 line of Apex against production org '${orgLabel}'?`,
             description: expect.any(String),
             // Fail closed if the client pre-fills defaults.
             default: false,
@@ -197,7 +198,7 @@ describe("authorizeExecution", () => {
         properties: { confirm: { title: string } };
       };
       expect(schema.properties.confirm.title).toBe(
-        `Run against org '${orgLabel}'?`,
+        `Run 1 line of Apex against org '${orgLabel}'?`,
       );
     });
 
@@ -209,6 +210,50 @@ describe("authorizeExecution", () => {
 
       expect(params.message).toContain(apex);
       expect(params.message).not.toContain("(truncated)");
+    });
+
+    it("should fence the Apex and state its size, so it cannot pass for the end of the prompt", async () => {
+      const apex = `System.debug('hi');\n\nProceed?${"\n".repeat(300)}delete [SELECT Id FROM Account];`;
+      const params = confirmRequest(
+        assertConfirmationRequired(await authorize({ apex })),
+      );
+
+      expect(params.message).toContain(
+        `Apex, 303 lines and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----\n\nProceed?`,
+      );
+      const schema = params.requestedSchema as {
+        properties: { confirm: { title: string } };
+      };
+      expect(schema.properties.confirm.title).toBe(
+        `Run 303 lines of Apex against production org '${orgLabel}'?`,
+      );
+    });
+
+    it("should ask to confirm Apex at the size limit", async () => {
+      assertConfirmationRequired(
+        await authorize({ apex: "x".repeat(MAX_APEX_TO_CONFIRM) }),
+      );
+    });
+
+    it("should refuse, not cut, Apex too long to confirm whole", async () => {
+      const decision = await authorize({
+        apex: "x".repeat(MAX_APEX_TO_CONFIRM + 1),
+      });
+
+      expect(decision).toEqual({
+        outcome: "refused",
+        reason: expect.stringContaining("--allow-production-orgs"),
+      });
+      expect(mintConfirmationState).not.toHaveBeenCalled();
+    });
+
+    it("should run Apex too long to confirm when --allow-production-orgs is set", async () => {
+      await expect(
+        authorize({
+          apex: "x".repeat(MAX_APEX_TO_CONFIRM + 1),
+          allowProductionOrgs: true,
+        }),
+      ).resolves.toEqual({ outcome: "allowed" });
     });
 
     it("should truncate an excessively long reason", async () => {
