@@ -259,11 +259,11 @@ Org type says nothing about whose data an org holds: a customer sandbox runs wit
 ]
 ```
 
-An entry matches the org id, username, alias or instance URL. `*` is a glob, and the match is anchored and ignores case, so `prod-*@acme.com` denies `prod-eu@acme.com` and not `xprod-eu@acme.com`. Every value comes from the local auth file, so a denied org is never contacted.
+An entry matches the org id, username, alias or instance URL. `*` is a glob, and the match is anchored and ignores case, so `prod-*@acme.com` denies `prod-eu@acme.com` and not `xprod-eu@acme.com`. A deny on any alias of a username holds, whichever name the agent uses. Every value comes from the local sf files, so the server refuses a named org before it connects to it.
 
 An org id matches in its 15- or 18-char form, and with its case. An instance URL matches by its host, so `acme--*` denies every sandbox of the `acme` My Domain.
 
-A `type:` entry denies a type from the table above, e.g. `type:sandbox`. An unknown type stops the server.
+A `type:` entry denies a type from the table above, e.g. `type:sandbox`. It needs one query to read the org type, but no Apex runs and no record is written. An unknown type stops the server.
 
 Nothing lifts a deny - not `--allow-production-orgs`, not a confirmation. The refusal names what matched.
 

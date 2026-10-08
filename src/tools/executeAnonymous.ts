@@ -4,8 +4,7 @@ import "../salesforce/logging.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { McpServer, type ServerContext } from "@modelcontextprotocol/server";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { StateAggregator, type Connection } from "@salesforce/core";
+import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
 import { ensureDebugLevel } from "../salesforce/debugLevels.js";
@@ -20,7 +19,7 @@ import {
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
-import { resolveOrg } from "../salesforce/connection.js";
+import { connectOrg, readLocalOrg } from "../salesforce/connection.js";
 import { CLOCK_SKEW_MS, toDateTimeLiteral } from "../salesforce/soql.js";
 import {
   classifyOrg,
@@ -34,8 +33,8 @@ import {
   type MintConfirmationState,
 } from "../policy/orgExecutionPolicy.js";
 import {
-  denyRefusal,
-  matchDeniedOrg,
+  identityRefusal,
+  typeRefusal,
   type DenyList,
 } from "../policy/orgDenyList.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
@@ -105,13 +104,6 @@ async function warnIfOutsideRoots(
   return warning;
 }
 
-async function getAliasForUsername(
-  username: string,
-): Promise<string | undefined> {
-  const stateAggregator = await StateAggregator.getInstance();
-  return stateAggregator.aliases.get(username) ?? undefined;
-}
-
 export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
@@ -133,30 +125,20 @@ export async function executeAnonymous(
   const rootPaths = await getRootPaths(server);
   const projectPath = rootPaths[0];
 
-  await report("Connecting to the org");
-  const org = await resolveOrg(projectPath, targetOrg);
-  const connection = org.getConnection();
-
-  const username = connection.getUsername();
-  if (!username) {
-    throw new Error("Could not determine username from connection");
-  }
-
-  const alias = await getAliasForUsername(username);
+  const local = await readLocalOrg(projectPath, targetOrg);
+  const { orgId, username } = local;
+  const alias = local.aliases[0];
   const orgLabel = alias ? `${username} (${alias})` : username;
 
-  // Everything a pattern matches comes from the local auth file, so a denied
-  // org is refused without being contacted at all.
-  const orgId = org.getOrgId();
-  const denied = matchDeniedOrg(policy.denyList.patterns, {
-    orgId,
-    username,
-    alias,
-    instanceUrl: connection.instanceUrl,
-  });
-  if (denied) {
-    return toolError(denyRefusal(orgLabel, denied.source));
+  // Before connecting, because Org.create can call the org.
+  const deniedUnseen = identityRefusal(policy.denyList, orgLabel, local);
+  if (deniedUnseen) {
+    return toolError(deniedUnseen);
   }
+
+  await report("Connecting to the org");
+  const org = await connectOrg(local);
+  const connection = org.getConnection();
 
   // Authorize before creating any DebugLevel or TraceFlag records, so a refused
   // call leaves the target org untouched.
@@ -165,8 +147,9 @@ export async function executeAnonymous(
     policy.classificationCache,
   );
   // Before authorizeExecution, so no flag and no confirmation can lift it.
-  if (policy.denyList.types.includes(classification)) {
-    return toolError(denyRefusal(orgLabel, `type:${classification}`));
+  const deniedType = typeRefusal(policy.denyList, orgLabel, classification);
+  if (deniedType) {
+    return toolError(deniedType);
   }
   const decision = await authorizeExecution({
     ctx,

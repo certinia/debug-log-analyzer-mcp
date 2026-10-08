@@ -28,14 +28,15 @@ export type DenyList = {
 /**
  * What is known about the target org before it is queried.
  *
- * Every field comes from the local auth file, so a deny is decided without
+ * Every field comes from the local sf files, so a deny is decided without
  * contacting the org. Only `orgId` is unspoofable - an alias can be re-pointed
  * at another org - so the rest are a convenience, not a security boundary.
  */
 export type OrgIdentity = {
   orgId: string;
   username: string;
-  alias?: string;
+  /** Every alias of the username, so a deny on any one of them holds. */
+  aliases: string[];
   instanceUrl?: string;
 };
 
@@ -129,7 +130,7 @@ export function matchDeniedOrg(
   const fields = [
     toOrgId15(identity.orgId),
     identity.username,
-    identity.alias,
+    ...identity.aliases,
     identity.instanceUrl && toHost(identity.instanceUrl),
   ].filter((field): field is string => !!field);
 
@@ -141,4 +142,25 @@ export function matchDeniedOrg(
 /** The refusal for an org that `entry`, as the user wrote it, denies. */
 export function denyRefusal(orgLabel: string, entry: string): string {
   return `Cannot execute anonymous Apex against org '${orgLabel}': it matches the --deny-orgs entry '${entry}'.\n${DENY_IS_ABSOLUTE}`;
+}
+
+/** The refusal when an identity entry denies this org, or `undefined`. */
+export function identityRefusal(
+  list: DenyList,
+  orgLabel: string,
+  identity: OrgIdentity,
+): string | undefined {
+  const pattern = matchDeniedOrg(list.patterns, identity);
+  return pattern && denyRefusal(orgLabel, pattern.source);
+}
+
+/** The refusal when a `type:` entry denies this org type, or `undefined`. */
+export function typeRefusal(
+  list: DenyList,
+  orgLabel: string,
+  classification: OrgClassification,
+): string | undefined {
+  return list.types.includes(classification)
+    ? denyRefusal(orgLabel, `type:${classification}`)
+    : undefined;
 }

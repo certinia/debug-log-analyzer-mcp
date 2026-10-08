@@ -5,7 +5,9 @@
 import {
   compileDenyList,
   denyRefusal,
+  identityRefusal,
   matchDeniedOrg,
+  typeRefusal,
   type OrgIdentity,
 } from "../../src/policy/orgDenyList";
 
@@ -13,7 +15,7 @@ import {
 const identity: OrgIdentity = {
   orgId: "00D5g000004XyZaEAK",
   username: "prod-eu-org@mycompany.com",
-  alias: "euProd",
+  aliases: ["euProd"],
   instanceUrl: "https://acme.my.salesforce.com",
 };
 
@@ -103,7 +105,7 @@ describe("matchDeniedOrg", () => {
 
   it("should deny every sandbox of a My Domain on a host glob", () => {
     const sandbox = {
-      orgId: "00D000000000002",
+      ...identity,
       username: "me@acme.com.uat",
       instanceUrl: "https://acme--uat.sandbox.my.salesforce.com",
     };
@@ -120,7 +122,7 @@ describe("matchDeniedOrg", () => {
   it("should anchor a glob, so it cannot match a longer name", () => {
     expect(
       matchDeniedOrg(deny("prod-*-org@mycompany.com"), {
-        orgId: "00D000000000002",
+        ...identity,
         username: "xprod-eu-org@mycompany.com",
       }),
     ).toBeUndefined();
@@ -129,14 +131,17 @@ describe("matchDeniedOrg", () => {
   it("should read a dot as a dot and not as any character", () => {
     expect(
       matchDeniedOrg(deny("prod-eu-org@mycompany.com"), {
-        orgId: "00D000000000002",
+        ...identity,
         username: "prod-eu-org@mycompanyxcom",
       }),
     ).toBeUndefined();
   });
 
   it("should read every other regex metacharacter literally", () => {
-    const plus = { orgId: "00D000000000002", username: "a+b@x.com" };
+    const plus = {
+      ...identity,
+      username: "a+b@x.com",
+    };
 
     expect(matchDeniedOrg(deny("a+b@x.com"), plus)?.source).toBe("a+b@x.com");
     expect(matchDeniedOrg(deny("aab@x.com"), plus)).toBeUndefined();
@@ -161,8 +166,40 @@ describe("matchDeniedOrg", () => {
       matchDeniedOrg(deny("euprod"), {
         orgId: identity.orgId,
         username: identity.username,
+        aliases: [],
       }),
     ).toBeUndefined();
+  });
+
+  it("should deny on any alias, not only the first", () => {
+    expect(
+      matchDeniedOrg(deny("prod"), { ...identity, aliases: ["myprod", "prod"] })
+        ?.source,
+    ).toBe("prod");
+  });
+});
+
+describe("identityRefusal and typeRefusal", () => {
+  const list = compileDenyList(["euprod", "type:production"]);
+
+  it("should refuse on an identity entry", () => {
+    expect(identityRefusal(list, "me", identity)).toContain(
+      "--deny-orgs entry 'euprod'",
+    );
+  });
+
+  // A type: entry needs the org classified, so only typeRefusal reads it.
+  it("should leave a type: entry to typeRefusal", () => {
+    const other = { ...identity, username: "x@y.com", aliases: [] };
+
+    expect(identityRefusal(list, "me", other)).toBeUndefined();
+    expect(typeRefusal(list, "me", "production")).toContain(
+      "--deny-orgs entry 'type:production'",
+    );
+  });
+
+  it("should refuse no type the list does not name", () => {
+    expect(typeRefusal(list, "me", "sandbox")).toBeUndefined();
   });
 });
 
