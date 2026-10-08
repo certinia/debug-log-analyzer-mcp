@@ -3,14 +3,7 @@
 import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import {
-  CLIENT_CAPABILITIES_META_KEY,
-  McpServer,
-  SdkError,
-  SdkErrorCode,
-  type ServerContext,
-} from "@modelcontextprotocol/server";
+import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
@@ -27,30 +20,20 @@ import {
 import { loadApexLog } from "./apexLogSource.js";
 import { fileReadError } from "./localFile.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
-import { connectOrg, readLocalOrg } from "../salesforce/connection.js";
 import { CLOCK_SKEW_MS, toDateTimeLiteral } from "../salesforce/soql.js";
-import {
-  classifyOrg,
-  type OrgClassification,
-} from "../salesforce/orgClassification.js";
+import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import {
   apexExecutionRefusal,
-  authorizeExecution,
   toolError,
-  type ConsumeConfirmation,
-  type MintConfirmationState,
+  type Confirmable,
 } from "../policy/orgExecutionPolicy.js";
-import {
-  identityRefusal,
-  typeRefusal,
-  type DenyList,
-} from "../policy/orgDenyList.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */
 const PROGRESS_STEPS = 4;
 
-const ROOTS_TIMEOUT_MS = 5_000;
+/** Above this, a dialog is too long to read whole, so the confirmation is refused rather than cut. */
+export const MAX_APEX_TO_CONFIRM = 10_000;
 
 // Outlives a long run plus the clock skew; the flag is deleted once the id is matched.
 const RUN_TRACE_FLAG_MS = 15 * 60 * 1000;
@@ -61,82 +44,9 @@ const ONE_APEX_SOURCE =
 const NO_LOG_CAPTURED_WARNING =
   "Salesforce returned no debug log for this run, so the saved file is empty and durationMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
 
-export type ExecuteAnonymousPolicy = {
-  allowProductionOrgs: boolean;
-  denyList: DenyList;
+export type ExecuteAnonymousPolicy = OrgAccessPolicy & {
   apexExecutionDisabled: boolean;
-  classificationCache: Map<string, OrgClassification>;
-  mintConfirmationState: MintConfirmationState;
-  consumeConfirmation: ConsumeConfirmation;
 };
-
-// `unknown` when the client declared roots this server could not use: then nothing can be checked against them.
-type Workspace =
-  | { kind: "roots"; paths: string[] }
-  | { kind: "none" }
-  | { kind: "unknown"; reason: string };
-
-async function getWorkspace(
-  server: McpServer,
-  ctx: ServerContext,
-): Promise<Workspace> {
-  const { signal } = ctx.mcpReq;
-  try {
-    // Bounded, so a client that never answers costs seconds, not the SDK's 60 s default.
-    const { roots } = await server.server.listRoots(undefined, {
-      timeout: ROOTS_TIMEOUT_MS,
-      signal,
-    });
-    // One by one, so a root this machine cannot use costs only that root.
-    const paths = roots.flatMap((root) => {
-      try {
-        // fileURLToPath decodes `%20` and drops the slash before a Windows drive, which `pathname` keeps.
-        return root.uri.startsWith("file:") ? [fileURLToPath(root.uri)] : [];
-      } catch {
-        return [];
-      }
-    });
-    return paths.length > 0
-      ? { kind: "roots", paths }
-      : { kind: "unknown", reason: "the client lists no roots on this machine" };
-  } catch (error) {
-    // A cancelled call stops here, rather than running on with no roots.
-    if (signal.aborted) {
-      throw error;
-    }
-    if (!(error instanceof SdkError)) {
-      return {
-        kind: "unknown",
-        reason: `the client's roots could not be read: ${String(error)}`,
-      };
-    }
-    switch (error.code) {
-      // Only a client that declared no roots has none to check against.
-      case SdkErrorCode.CapabilityNotSupported:
-        return { kind: "none" };
-      case SdkErrorCode.MethodNotSupportedByProtocolVersion: {
-        // 2026-07-28 fails before the capability check, so read the request's own declaration.
-        const declared = (
-          ctx.mcpReq.envelope as
-            | Record<string, { roots?: unknown } | undefined>
-            | undefined
-        )?.[CLIENT_CAPABILITIES_META_KEY];
-        return declared?.roots
-          ? {
-              kind: "unknown",
-              reason:
-                "this server cannot yet ask a 2026-07-28 client for its roots",
-            }
-          : { kind: "none" };
-      }
-      default:
-        return {
-          kind: "unknown",
-          reason: `the client's roots could not be read: ${error.message}`,
-        };
-    }
-  }
-}
 
 function logWarning(warning: string): string {
   console.error(`[apex-log-mcp] ${warning}`);
@@ -240,6 +150,23 @@ function apexSource({
   return undefined;
 }
 
+// All of it, never cut, between markers and with its size, so Apex cannot pass for the end of the prompt.
+function apexConfirmable(apex: string, orgLabel: string): Confirmable {
+  const lines = apex.split("\n").length;
+  const linesText = `${lines} line${lines === 1 ? "" : "s"}`;
+  return {
+    effect: apex,
+    detail: `Apex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----`,
+    // The size again, in the schema, where the Apex cannot reach.
+    title: `Run ${linesText} of Apex`,
+    unshowable:
+      apex.length > MAX_APEX_TO_CONFIRM
+        ? `The Apex is ${apex.length} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
+          `so nothing was executed against '${orgLabel}'. To run it, restart the server with --allow-production-orgs.`
+        : undefined,
+  };
+}
+
 export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
@@ -263,71 +190,37 @@ export async function executeAnonymous(
   }
 
   const report = progressReporter(ctx);
-  const workspace = await getWorkspace(server, ctx);
-  // Fail closed, before any local work: unusable roots bound no file and name no project.
-  if (workspace.kind === "unknown") {
-    if (args.apexFilePath !== undefined) {
-      throw new Error(
-        `Cannot check Apex file ${args.apexFilePath}: ${workspace.reason}. Pass the Apex inline in apex.`,
-      );
-    }
-    if (targetOrg === undefined) {
-      throw new Error(
-        `Cannot tell which project's default org to use: ${workspace.reason}. Pass targetOrg.`,
-      );
-    }
-  }
-  const rootPaths = workspace.kind === "roots" ? workspace.paths : [];
-  const projectPath = rootPaths[0];
-
-  const local = await readLocalOrg(projectPath, targetOrg);
-  const { orgId, username } = local;
-  const alias = local.aliases[0];
-  const orgLabel = alias ? `${username} (${alias})` : username;
-
-  // Before connecting, because Org.create can call the org.
-  const deniedUnseen = identityRefusal(policy.denyList, orgLabel, local);
-  if (deniedUnseen) {
-    return toolError(deniedUnseen);
-  }
-
-  // Before connecting, so a bad path costs no call to the org.
-  const apex = await readApex(rootPaths);
-
-  await report("Connecting to the org");
-  const org = await connectOrg(local);
-  const connection = org.getConnection();
-
-  // Authorize before creating any DebugLevel or TraceFlag records, so a refused
-  // call leaves the target org untouched.
-  const { classification, unverifiedReason } = await classifyOrg(
-    org,
-    policy.classificationCache,
-  );
-  // Before authorizeExecution, so no flag and no confirmation can lift it.
-  const deniedType = typeRefusal(policy.denyList, orgLabel, classification);
-  if (deniedType) {
-    return toolError(deniedType);
-  }
-  const decision = await authorizeExecution({
+  const access = await openOrg(
+    server,
     ctx,
-    mintConfirmationState: policy.mintConfirmationState,
-    consumeConfirmation: policy.consumeConfirmation,
-    classification,
-    orgId,
+    {
+      tool: "apexlog_execute_anonymous",
+      action: "execute anonymous Apex",
+      targetOrg,
+      report,
+      unknownRoots: (reason) =>
+        args.apexFilePath !== undefined
+          ? `Cannot check Apex file ${args.apexFilePath}: ${reason}. Pass the Apex inline in apex.`
+          : undefined,
+      prepare: readApex,
+      confirm: ({ value, orgLabel }) => apexConfirmable(value, orgLabel),
+    },
+    policy,
+  );
+  // Before any DebugLevel or TraceFlag is written, so a refused call leaves the org untouched.
+  if (!access.granted) {
+    return access.result;
+  }
+  const {
+    value: apex,
+    connection,
+    local: { username },
     orgLabel,
-    apex,
-    allowProductionOrgs: policy.allowProductionOrgs,
-    unverifiedReason,
-  });
-
-  if (decision.outcome === "confirmationRequired") {
-    return decision.result;
-  }
-
-  if (decision.outcome === "refused") {
-    return toolError(decision.reason);
-  }
+    classification,
+    workspace,
+    rootPaths,
+  } = access;
+  const projectPath = rootPaths[0];
 
   await report("Setting the trace flag");
   const userId = await getUserIdByUsername(connection, username);

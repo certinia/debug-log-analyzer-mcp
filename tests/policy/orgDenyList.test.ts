@@ -188,11 +188,13 @@ describe("matchDeniedOrg", () => {
   });
 });
 
+const action = "execute anonymous Apex";
+
 describe("identityRefusal and typeRefusal", () => {
   const list = compileDenyList(["euprod", "type:production"]);
 
   it("should refuse on an identity entry", () => {
-    expect(identityRefusal(list, "me", identity)).toContain(
+    expect(identityRefusal(list, action, "me", identity)).toContain(
       "--deny-orgs entry 'euprod'",
     );
   });
@@ -201,18 +203,18 @@ describe("identityRefusal and typeRefusal", () => {
   it("should leave a type: entry to typeRefusal", () => {
     const other = { ...identity, username: "x@y.com", aliases: [] };
 
-    expect(identityRefusal(list, "me", other)).toBeUndefined();
-    expect(typeRefusal(list, "me", "production")).toContain(
+    expect(identityRefusal(list, action, "me", other)).toBeUndefined();
+    expect(typeRefusal(list, action, "me", "production")).toContain(
       "--deny-orgs entry 'type:production'",
     );
   });
 
   it("should refuse no type the list does not name", () => {
-    expect(typeRefusal(list, "me", "sandbox")).toBeUndefined();
+    expect(typeRefusal(list, action, "me", "sandbox")).toBeUndefined();
   });
 
   it("should deny an org of unknown type under type:production", () => {
-    const refusal = typeRefusal(list, "me", "unknown");
+    const refusal = typeRefusal(list, action, "me", "unknown");
 
     expect(refusal).toContain("its type could not be read");
     expect(refusal).toContain("--deny-orgs entry 'type:production'");
@@ -220,13 +222,17 @@ describe("identityRefusal and typeRefusal", () => {
 
   it("should not deny an org of unknown type without type:production", () => {
     expect(
-      typeRefusal(compileDenyList(["type:sandbox"]), "me", "unknown"),
+      typeRefusal(compileDenyList(["type:sandbox"]), action, "me", "unknown"),
     ).toBeUndefined();
   });
 });
 
 describe("denyRefusal", () => {
-  const refusal = denyRefusal("me@x.com", "prod-*");
+  const refusal = denyRefusal(action, "me@x.com", "prod-*");
+
+  it("should build the refusal from the action", () => {
+    expect(refusal).toMatch(/^Cannot execute anonymous Apex against org 'me@x.com': /);
+  });
 
   it("should name the entry that matched", () => {
     expect(refusal).toContain("--deny-orgs entry 'prod-*'");

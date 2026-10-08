@@ -66,7 +66,10 @@ import {
 } from "@modelcontextprotocol/server";
 import { ConfigAggregator, type AuthInfo } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
-import { executeAnonymous } from "../src/tools/executeAnonymous";
+import {
+  executeAnonymous,
+  MAX_APEX_TO_CONFIRM,
+} from "../src/tools/executeAnonymous";
 import {
   executeAnonymousInputSchema,
   type ExecuteAnonymousArgs,
@@ -940,9 +943,15 @@ describe("Execute Anonymous", () => {
       });
 
       it("should refuse a file before any local work on 2026-07-28, since nothing can show it is inside a root", async () => {
-        await expect(
-          executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
-        ).rejects.toThrow(
+        const result: any = await executeAnonymous(
+          mockServer,
+          { apexFilePath },
+          ctx,
+          policy(),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toBe(
           `Cannot check Apex file ${apexFilePath}: this server cannot yet ask a 2026-07-28 client for its roots. Pass the Apex inline in apex.`,
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
@@ -952,9 +961,17 @@ describe("Execute Anonymous", () => {
       it("should refuse a file when a client that declared roots does not answer", async () => {
         rejectRoots(SdkErrorCode.RequestTimeout, "Request timed out");
 
-        await expect(
-          executeAnonymous(mockServer, { apexFilePath }, ctx, policy()),
-        ).rejects.toThrow("the client's roots could not be read: Request timed out.");
+        const result: any = await executeAnonymous(
+          mockServer,
+          { apexFilePath },
+          ctx,
+          policy(),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain(
+          "the client's roots could not be read: Request timed out.",
+        );
         expect(mockOpen).not.toHaveBeenCalled();
       });
 
@@ -985,9 +1002,15 @@ describe("Execute Anonymous", () => {
       });
 
       it("should refuse to guess the default org, since the cwd may not be the client's project", async () => {
-        await expect(
-          executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
-        ).rejects.toThrow(
+        const result: any = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toBe(
           "Cannot tell which project's default org to use: this server cannot yet ask a 2026-07-28 client for its roots. Pass targetOrg.",
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
@@ -1392,6 +1415,86 @@ describe("Execute Anonymous", () => {
       expect(params.message).toContain("PRODUCTION org 'test@example.com'");
       expect(params.message).toContain(testApexCode);
       expect(typeof result.requestState).toBe("string");
+    });
+
+    it("should show all of a long Apex snippet, since all of it runs", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const apex = `${"x".repeat(5000)}delete [SELECT Id FROM Account];`;
+
+      const params = confirmRequest(
+        assertInputRequired(
+          await executeAnonymous(mockServer, { apex }, ctx, policy()),
+        ),
+      );
+
+      expect(params.message).toContain(apex);
+      expect(params.message).not.toContain("(truncated)");
+    });
+
+    it("should fence the Apex and state its size, so it cannot pass for the end of the prompt", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const apex = `System.debug('hi');\n\nProceed?${"\n".repeat(300)}delete [SELECT Id FROM Account];`;
+
+      const params = confirmRequest(
+        assertInputRequired(
+          await executeAnonymous(mockServer, { apex }, ctx, policy()),
+        ),
+      );
+
+      expect(params.message).toContain(
+        `Apex, 303 lines and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----\n\nProceed?`,
+      );
+      const schema = params.requestedSchema as {
+        properties: { confirm: { title: string } };
+      };
+      expect(schema.properties.confirm.title).toBe(
+        "Run 303 lines of Apex against production org 'test@example.com'?",
+      );
+    });
+
+    it("should ask to confirm Apex at the size limit", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+
+      assertInputRequired(
+        await executeAnonymous(
+          mockServer,
+          { apex: "x".repeat(MAX_APEX_TO_CONFIRM) },
+          ctx,
+          policy(),
+        ),
+      );
+    });
+
+    it("should refuse, not cut, Apex too long to confirm whole", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: "x".repeat(MAX_APEX_TO_CONFIRM + 1) },
+        ctx,
+        policy(),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toBe(
+        `The Apex is ${MAX_APEX_TO_CONFIRM + 1} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
+          "so nothing was executed against 'test@example.com'. To run it, restart the server with --allow-production-orgs.",
+      );
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("should run Apex too long to confirm when --allow-production-orgs is set", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const apex = "x".repeat(MAX_APEX_TO_CONFIRM + 1);
+
+      await executeAnonymous(
+        mockServer,
+        { apex },
+        ctx,
+        policy({ allowProductionOrgs: true }),
+      );
+
+      expectPostedApex(apex);
     });
 
     it("should refuse a production call whose client carried no answer", async () => {
