@@ -63,6 +63,10 @@ export type ExecuteAnonymousPolicy = {
 };
 
 async function getRootPaths(server: McpServer): Promise<string[]> {
+  // A client that never declared roots may never answer, which stalls the run for the SDK's 60 s timeout.
+  if (!server.server.getClientCapabilities()?.roots) {
+    return [];
+  }
   try {
     const { roots } = await server.server.listRoots();
     // fileURLToPath decodes `%20` and drops the slash before a Windows drive, which `pathname` keeps.

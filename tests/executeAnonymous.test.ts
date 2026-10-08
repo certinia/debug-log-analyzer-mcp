@@ -261,6 +261,7 @@ describe("Execute Anonymous", () => {
 
     mockServer = {
       server: {
+        getClientCapabilities: jest.fn().mockReturnValue({ roots: {} }),
         listRoots: jest.fn().mockResolvedValue({ roots: [] }),
       },
     } as unknown as McpServer;
@@ -1583,7 +1584,23 @@ describe("Execute Anonymous", () => {
         expect(textOf(result)).not.toContain("warning");
       });
 
-      it("follows symlinks, so a link inside a root that leaves one warns", async () => {
+      it("does not ask a client that never declared roots, which may never answer", async () => {
+        (
+          mockServer.server.getClientCapabilities as jest.Mock
+        ).mockReturnValue({});
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, outputDir: "/elsewhere/logs" },
+          ctx,
+          policy(),
+        );
+
+        expect(mockServer.server.listRoots).not.toHaveBeenCalled();
+        expect(textOf(result)).not.toContain("warning");
+      });
+
+            it("follows symlinks, so a link inside a root that leaves one warns", async () => {
         // The first call resolves outputDir; the roots after it keep the
         // resolves-to-itself default.
         (fs.realpath as unknown as jest.Mock).mockImplementationOnce(() =>
