@@ -1,5 +1,5 @@
 fileSizeBytes: 972
-durationTotalMs: 2098
+durationTotalMs: 2199
 truncated: true
 truncatedBy[2]: skipped-lines,max-size
 skippedBytes: 14680064
@@ -23,11 +23,11 @@ governorLimits[13]{limit,used,max}:
   mobileApexPushCalls,0,0
 limitsByNamespace: []
 categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,FINE,3,1996,95.1
+  apexCode,FINE,3,2096,95.3
   apexProfiling,NONE,0,0,0
   callout,NONE,0,0,0
   dataAccess,NONE,0,0,0
-  database,INFO,2,101,4.8
+  database,INFO,2,101,4.6
   nba,NONE,0,0,0
   system,DEBUG,0,0,0
   validation,NONE,0,0,0

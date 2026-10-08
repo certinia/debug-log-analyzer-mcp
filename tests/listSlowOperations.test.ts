@@ -35,6 +35,7 @@ jest.mock("fs", () => {
 });
 
 jest.mock("@apexdevtools/apex-log-parser", () => ({
+  ...jest.requireActual("@apexdevtools/apex-log-parser"),
   parse: jest.fn(),
 }));
 

@@ -1,5 +1,5 @@
 fileSizeBytes: 39532
-durationTotalMs: 24608.108
+durationTotalMs: 24608.14
 truncated: false
 thrownCount: 0
 exceptionGroupCount: 0

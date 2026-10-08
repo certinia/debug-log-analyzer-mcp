@@ -1,5 +1,5 @@
 fileSizeBytes: 1257
-durationTotalMs: 0.561
+durationTotalMs: 0.598
 truncated: false
 thrownCount: 0
 exceptionGroupCount: 0
@@ -21,7 +21,7 @@ governorLimits[13]{limit,used,max}:
   mobileApexPushCalls,0,10
 limitsByNamespace: []
 categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,FINE,1,0.546,97.3
+  apexCode,FINE,1,0.546,91.4
   apexProfiling,NONE,1,0,0
   callout,NONE,0,0,0
   dataAccess,"",0,0,0

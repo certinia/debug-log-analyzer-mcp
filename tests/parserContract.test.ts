@@ -12,12 +12,12 @@
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { parse } from "@apexdevtools/apex-log-parser";
-import type { LogEvent } from "@apexdevtools/apex-log-parser";
 import {
   ALL_LIMIT_METRICS,
   LOG_LEVEL,
-} from "@apexdevtools/apex-log-parser/types";
+  parse,
+} from "@apexdevtools/apex-log-parser";
+import type { LogEvent } from "@apexdevtools/apex-log-parser";
 
 const FIXTURES = join(__dirname, "eval", "fixtures");
 
@@ -58,6 +58,24 @@ describe("parser contract", () => {
 
       expect(size).toBe(Buffer.byteLength(log, "utf8"));
       expect(size).toBeGreaterThan(log.length);
+    });
+  });
+
+  describe("ApexLog.duration", () => {
+    const log = [
+      HEADER,
+      "09:00:00.0 (500)|USER_INFO|[EXTERNAL]|005000000000001|user@example.com|(GMT+00:00) Greenwich Mean Time (GMT)|GMT+00:00",
+      "09:00:00.1 (1000)|EXECUTION_STARTED",
+      "09:00:00.1 (10000)|EXECUTION_FINISHED",
+      "",
+    ].join("\n");
+
+    // Every tool publishes it as `durationTotalMs` and divides each
+    // `selfPercentage` by it. The root starts at `USER_INFO`, not at
+    // `EXECUTION_STARTED`, so the header gap is in the total and in no
+    // category, and the category rows need not sum to 100.
+    it("runs from USER_INFO, not from EXECUTION_STARTED", () => {
+      expect(parse(log).duration.total).toBe(9500);
     });
   });
 

@@ -2,11 +2,12 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 import type {
+  ApexLog,
   DebugCategory,
+  LogEvent,
   LogEventType,
-} from "@apexdevtools/apex-log-parser/types";
+} from "@apexdevtools/apex-log-parser";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,

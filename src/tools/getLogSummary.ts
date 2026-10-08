@@ -4,7 +4,15 @@
 
 import { z } from "zod";
 import { encode } from "@toon-format/toon";
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+import type {
+  ApexLog,
+  DebugCategory,
+  DebugLevels,
+  LineNumber,
+  LogEvent,
+  LogEventType,
+  LogIssue,
+} from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { listOperations, operationName, type Operation } from "./operations.js";
@@ -13,13 +21,6 @@ import {
   type DebugLevelCategory,
   type LogLevel,
 } from "../salesforce/debugLevels.js";
-import type {
-  DebugCategory,
-  DebugLevels,
-  LineNumber,
-  LogEventType,
-  LogIssue,
-} from "@apexdevtools/apex-log-parser/types";
 import {
   elide,
   NAME_LIMIT,

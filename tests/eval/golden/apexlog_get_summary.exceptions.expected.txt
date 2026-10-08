@@ -1,5 +1,5 @@
 fileSizeBytes: 2553
-durationTotalMs: 21
+durationTotalMs: 22
 truncated: false
 thrownCount: 4
 exceptionGroupCount: 2
@@ -26,7 +26,7 @@ limitsByNamespace[2]{namespace,limit,used}:
   default,cpuTime,18
   default,callouts,3
 categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}:
-  apexCode,FINE,6,17,81
+  apexCode,FINE,6,17,77.3
   apexProfiling,INFO,1,0,0
   callout,INFO,0,0,0
   dataAccess,INFO,0,0,0
@@ -36,4 +36,4 @@ categories[11]{debugCategory,level,operationCount,durationSelfMs,selfPercentage}
   validation,INFO,0,0,0
   visualforce,INFO,0,0,0
   wave,INFO,0,0,0
-  workflow,INFO,1,2,9.5
+  workflow,INFO,1,2,9.1

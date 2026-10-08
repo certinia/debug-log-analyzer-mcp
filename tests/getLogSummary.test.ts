@@ -12,19 +12,16 @@ import {
 import { logEvent, type NodeSpec } from "./support/logEvents";
 import { clearApexLogCache, walkLog } from "../src/tools/apexLogSource";
 import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
-import { parse } from "@apexdevtools/apex-log-parser";
+import { ALL_LIMIT_METRICS, parse } from "@apexdevtools/apex-log-parser";
 import type {
   ApexLog,
   ApexLogParser,
+  GovernorLimits,
+  Limits,
   LogEvent,
+  LogIssue,
+  NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-import {
-  ALL_LIMIT_METRICS,
-  type GovernorLimits,
-  type Limits,
-  type LogIssue,
-  type NamespaceLimits,
-} from "@apexdevtools/apex-log-parser/types";
 import { decode } from "@toon-format/toon";
 
 // Mock the dependencies
@@ -47,6 +44,7 @@ jest.mock("fs", () => {
 });
 
 jest.mock("@apexdevtools/apex-log-parser", () => ({
+  ...jest.requireActual("@apexdevtools/apex-log-parser"),
   parse: jest.fn(),
 }));
 

@@ -5,9 +5,9 @@
 import type {
   ApexLog,
   LogEvent,
+  LogEventType,
   SOQLExecuteExplainLine,
 } from "@apexdevtools/apex-log-parser";
-import type { LogEventType } from "@apexdevtools/apex-log-parser/types";
 import { walkLog } from "./apexLogSource.js";
 import { operationName } from "./operations.js";
 
