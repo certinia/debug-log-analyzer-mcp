@@ -565,6 +565,20 @@ describe("getLogSummary", () => {
       expect(summary.exceptions[0].thrownCount).toBe(2);
     });
 
+    it("should show and fold on the first line, as a fatal does", async () => {
+      const first =
+        "System.DmlException: Insert failed. First exception on row 0; first error: CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY, OrderTrigger: execution of AfterInsert";
+      const summary = await summaryOf(
+        logOf(
+          thrown(`${first}\ncaused by: System.NullPointerException: Attempt to de-reference a null object\nTrigger.OrderTrigger: line 12, column 1: []`),
+          thrown(`${first}\ncaused by: System.QueryException: List has no rows for assignment to SObject\nTrigger.OrderTrigger: line 20, column 1: []`),
+        ),
+      );
+
+      expect(summary.exceptions).toHaveLength(1);
+      expect(summary.exceptions[0]).toMatchObject({ message: first, thrownCount: 2 });
+    });
+
     it("should cap the rows and state how many there were", async () => {
       // A loop that puts a record id in each message has no bound.
       const throws = Array.from({ length: 25 }, (_, i) =>

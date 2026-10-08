@@ -189,7 +189,8 @@ function exceptionRows(exceptions: LogEvent[]): ExceptionRow[] {
   exceptions
     .filter((event) => event.type === "EXCEPTION_THROWN")
     .forEach((event) => {
-      const message = clip(event.text, FATAL_MESSAGE_LIMIT);
+      // The parser appends the "caused by" and stack lines; a fatal shows the first alone.
+      const message = clip(event.text.split("\n", 1)[0] ?? "", FATAL_MESSAGE_LIMIT);
       const row = rows.get(message);
       if (row) {
         row.thrownCount += 1;
