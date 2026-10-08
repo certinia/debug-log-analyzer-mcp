@@ -29,6 +29,8 @@ import {
   type QueryPlanVerdict,
 } from "./queryPlans.js";
 import {
+  elide,
+  NAME_LIMIT,
   NS_TO_MS,
   omitEmpty,
   percentageOf,
@@ -117,16 +119,6 @@ export const listSlowOperationsInputSchema = {
     .optional()
     .describe("Default durationSelfMs. heapSelfNetBytes adds that column."),
 };
-
-/**
- * The longest query text reported on a row.
- *
- * Names are short until they are not: across 23,456 rows of a 124-log corpus
- * the median is 50 characters and the p90 is 100, but the longest is 19,593 -
- * about 4,900 tokens for one row. Eliding at 400 touches 2% of rows and takes
- * the whole tail with it.
- */
-export const NAME_LIMIT = 400;
 
 /**
  * The most one page of rows may cost, as characters.
@@ -290,34 +282,6 @@ function verdictOf(plan: QueryPlan): QueryPlanVerdict {
     cardinality: plan.cardinality,
     sObjectCardinality: plan.sObjectCardinality,
   };
-}
-
-/**
- * Keep the head and the tail of an over-long name, and say so in the middle.
- *
- * The middle goes rather than the end, because a query names its columns first
- * and its object last, and dropping the `FROM` clause would leave a row the
- * caller cannot identify.
- *
- * Measured in UTF-16 units, which is what the name costs to send, and cut by
- * slicing rather than by walking the string: on a name of the length above,
- * that is 0.16 microseconds against 56.
- */
-export function elide(text: string, maxChars: number): string {
-  if (text.length <= maxChars) {
-    return text;
-  }
-  const head = Math.ceil((maxChars - 1) / 2);
-  const tail = maxChars - 1 - head;
-  // A cut inside a surrogate pair would send half a character, so step off it.
-  const first = text.charCodeAt(head - 1);
-  const from = first >= 0xd800 && first <= 0xdbff ? head - 1 : head;
-  const last = text.charCodeAt(text.length - tail);
-  const to =
-    last >= 0xdc00 && last <= 0xdfff
-      ? text.length - tail + 1
-      : text.length - tail;
-  return `${text.slice(0, from)}…${text.slice(to)}`;
 }
 
 /**

@@ -8,7 +8,6 @@ import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { listOperations, operationName, type Operation } from "./operations.js";
-import { elide, NAME_LIMIT } from "./listSlowOperations.js";
 import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
@@ -20,6 +19,8 @@ import type {
   LogIssue,
 } from "@apexdevtools/apex-log-parser/types";
 import {
+  elide,
+  NAME_LIMIT,
   NS_TO_MS,
   omitEmpty,
   percentageOf,
