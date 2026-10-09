@@ -8,6 +8,9 @@ import path from "node:path";
 import { Connection } from "@salesforce/core";
 import {
   ensureDebugLevel,
+  levelsClause,
+  requestedLevels,
+  toTraceConfig,
   CATEGORY_LOG_NAMES,
   DEFAULT_TRACE_CONFIG,
   LOG_CATEGORIES,
@@ -61,244 +64,98 @@ describe("Debug Levels", () => {
   };
 
   describe("ensureDebugLevel", () => {
-    describe("when no debug level exists", () => {
-      beforeEach(() => {
-        mockQuery.mockResolvedValue({ records: [] });
-        mockCreate.mockResolvedValue({ success: true, id: testId });
-      });
+    // The header sets every run's levels, so the record's own never need changing.
+    it("should return the existing record without writing to it", async () => {
+      mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
 
-      it("should create with all defaults when debugLevel is undefined", async () => {
-        const result = await ensureDebugLevel(mockConnection);
+      await expect(ensureDebugLevel(mockConnection)).resolves.toBe(testId);
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
 
-        expect(result.id).toBe(testId);
-        expect(mockCreate).toHaveBeenCalledWith({
-          DeveloperName: "Apex_Log_MCP_Debug_Level",
-          MasterLabel: "Apex_Log_MCP_Debug_Level",
-          ...allDefaults,
-        });
-      });
+    it("should create one at the defaults when none exists", async () => {
+      mockQuery.mockResolvedValue({ records: [] });
+      mockCreate.mockResolvedValue({ success: true, id: testId });
 
-      it('should create with all defaults when debugLevel is "default"', async () => {
-        const result = await ensureDebugLevel(mockConnection, "default");
-
-        expect(result.id).toBe(testId);
-        expect(mockCreate).toHaveBeenCalledWith({
-          DeveloperName: "Apex_Log_MCP_Debug_Level",
-          MasterLabel: "Apex_Log_MCP_Debug_Level",
-          ...allDefaults,
-        });
-      });
-
-      it("should create with defaults merged with overrides", async () => {
-        const result = await ensureDebugLevel(mockConnection, {
-          apexCode: "FINEST",
-          nba: "FINEST",
-        });
-
-        expect(result.id).toBe(testId);
-        expect(mockCreate).toHaveBeenCalledWith({
-          DeveloperName: "Apex_Log_MCP_Debug_Level",
-          MasterLabel: "Apex_Log_MCP_Debug_Level",
-          ...allDefaults,
-          ApexCode: "FINEST",
-          Nba: "FINEST",
-        });
-      });
-
-      it("should create with all categories at specified level when debugLevel is a log level string", async () => {
-        const result = await ensureDebugLevel(mockConnection, "FINEST");
-
-        expect(result.id).toBe(testId);
-        const createArg = mockCreate.mock.calls[0][0];
-        expect(createArg.ApexCode).toBe("FINEST");
-        expect(createArg.ApexProfiling).toBe("FINEST");
-        expect(createArg.Callout).toBe("FINEST");
-        expect(createArg.Database).toBe("FINEST");
-        expect(createArg.Nba).toBe("FINEST");
-        expect(createArg.System).toBe("FINEST");
-        expect(createArg.Validation).toBe("FINEST");
-        expect(createArg.Visualforce).toBe("FINEST");
-        expect(createArg.Wave).toBe("FINEST");
-        expect(createArg.Workflow).toBe("FINEST");
-      });
-
-      it("should create when existing record has null Id", async () => {
-        mockQuery.mockResolvedValue({ records: [{ Id: null }] });
-
-        const result = await ensureDebugLevel(mockConnection);
-
-        expect(result.id).toBe(testId);
-        expect(mockCreate).toHaveBeenCalled();
+      await expect(ensureDebugLevel(mockConnection)).resolves.toBe(testId);
+      expect(mockCreate).toHaveBeenCalledWith({
+        DeveloperName: "Apex_Log_MCP_Debug_Level",
+        MasterLabel: "Apex_Log_MCP_Debug_Level",
+        ...allDefaults,
       });
     });
 
-    describe("when debug level already exists", () => {
-      beforeEach(() => {
-        mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
-        mockUpdate.mockResolvedValue({ success: true });
-      });
+    it("should query by DeveloperName with LIMIT 1", async () => {
+      mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
 
-      it("should not update when debugLevel is undefined", async () => {
-        const result = await ensureDebugLevel(mockConnection);
+      await ensureDebugLevel(mockConnection);
 
-        expect(result.id).toBe(testId);
-        expect(mockUpdate).not.toHaveBeenCalled();
-        expect(mockCreate).not.toHaveBeenCalled();
-      });
-
-      it('should update all categories to defaults when debugLevel is "default"', async () => {
-        const result = await ensureDebugLevel(mockConnection, "default");
-
-        expect(result.id).toBe(testId);
-        expect(mockUpdate).toHaveBeenCalledWith({
-          Id: testId,
-          ...allDefaults,
-        });
-      });
-
-      it("should only update specified categories", async () => {
-        const result = await ensureDebugLevel(mockConnection, {
-          apexCode: "FINEST",
-        });
-
-        expect(result.id).toBe(testId);
-        expect(mockUpdate).toHaveBeenCalledWith({
-          Id: testId,
-          ApexCode: "FINEST",
-        });
-      });
-
-      it("should update all categories to specified level when debugLevel is a log level string", async () => {
-        const result = await ensureDebugLevel(mockConnection, "FINEST");
-
-        expect(result.id).toBe(testId);
-        const updateArg = mockUpdate.mock.calls[0][0];
-        expect(updateArg.ApexCode).toBe("FINEST");
-        expect(updateArg.ApexProfiling).toBe("FINEST");
-        expect(updateArg.Callout).toBe("FINEST");
-        expect(updateArg.Database).toBe("FINEST");
-        expect(updateArg.Nba).toBe("FINEST");
-        expect(updateArg.System).toBe("FINEST");
-        expect(updateArg.Validation).toBe("FINEST");
-        expect(updateArg.Visualforce).toBe("FINEST");
-        expect(updateArg.Wave).toBe("FINEST");
-        expect(updateArg.Workflow).toBe("FINEST");
-      });
-
-      it("should update multiple specified categories", async () => {
-        const result = await ensureDebugLevel(mockConnection, {
-          apexCode: "FINEST",
-          database: "NONE",
-          nba: "FINE",
-        });
-
-        expect(result.id).toBe(testId);
-        expect(mockUpdate).toHaveBeenCalledWith({
-          Id: testId,
-          ApexCode: "FINEST",
-          Database: "NONE",
-          Nba: "FINE",
-        });
-      });
-
-      // The header the log comes back under has to carry the levels the org
-      // will apply, and a partial update leaves the rest as the record has them.
-      it("reports the record's own levels merged with the update", async () => {
-        mockQuery.mockResolvedValue({
-          records: [
-            { Id: testId, ...allDefaults, Database: "NONE", Workflow: "NONE" },
-          ],
-        });
-
-        const result = await ensureDebugLevel(mockConnection, {
-          apexCode: "FINEST",
-        });
-
-        expect(result.levels).toEqual({
-          ...DEFAULT_TRACE_CONFIG,
-          apexCode: "FINEST",
-          database: "NONE",
-          workflow: "NONE",
-        });
-      });
+      const query = mockQuery.mock.calls[0][0] as string;
+      expect(query).toContain("WHERE DeveloperName = 'Apex_Log_MCP_Debug_Level'");
+      expect(query).toContain("LIMIT 1");
     });
 
-    describe("query behavior", () => {
-      it("should query by DeveloperName with LIMIT 1", async () => {
-        mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
-        mockUpdate.mockResolvedValue({ success: true });
+    it("should throw when creation fails", async () => {
+      mockQuery.mockResolvedValue({ records: [] });
+      mockCreate.mockResolvedValue({ success: false, errors: ["Creation failed"] });
 
-        await ensureDebugLevel(mockConnection);
-
-        const query = mockQuery.mock.calls[0][0] as string;
-        expect(query).toContain(
-          "WHERE DeveloperName = 'Apex_Log_MCP_Debug_Level'",
-        );
-        expect(query).toContain("LIMIT 1");
-      });
-
-      it("should select every category field", async () => {
-        mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
-
-        await ensureDebugLevel(mockConnection);
-
-        const query = mockQuery.mock.calls[0][0] as string;
-        Object.keys(allDefaults).forEach((field) =>
-          expect(query).toContain(field),
-        );
-      });
+      await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
+        "Failed to create DebugLevel",
+      );
     });
 
-    describe("error handling", () => {
-      it("should throw error when creation fails", async () => {
-        mockQuery.mockResolvedValue({ records: [] });
-        mockCreate.mockResolvedValue({
-          success: false,
-          errors: ["Creation failed"],
-        });
+    it("should throw when creation returns no ID", async () => {
+      mockQuery.mockResolvedValue({ records: [] });
+      mockCreate.mockResolvedValue({ success: true, id: null });
 
-        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
-          "Failed to create DebugLevel",
-        );
+      await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
+        "Failed to create DebugLevel",
+      );
+    });
+
+    it("should propagate query errors", async () => {
+      mockQuery.mockRejectedValue(new Error("Query failed"));
+
+      await expect(ensureDebugLevel(mockConnection)).rejects.toThrow("Query failed");
+    });
+  });
+
+  describe("toTraceConfig", () => {
+    it("should read an empty field, or no record, as the defaults", () => {
+      expect(toTraceConfig({ ApexCode: "ERROR", Nba: null })).toEqual({
+        ...DEFAULT_TRACE_CONFIG,
+        apexCode: "ERROR",
       });
+      expect(toTraceConfig(null)).toEqual(DEFAULT_TRACE_CONFIG);
+    });
 
-      it("should throw error when creation returns no ID", async () => {
-        mockQuery.mockResolvedValue({ records: [] });
-        mockCreate.mockResolvedValue({ success: true, id: null });
+    it("should read every category from a DebugLevel record's fields", () => {
+      expect(
+        toTraceConfig({ ...allDefaults, ApexCode: "ERROR", Database: "INFO" }),
+      ).toEqual({ ...DEFAULT_TRACE_CONFIG, apexCode: "ERROR", database: "INFO" });
+    });
+  });
 
-        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
-          "Failed to create DebugLevel",
-        );
+  describe("requestedLevels", () => {
+    it("should set every category to a bare level", () => {
+      const levels = requestedLevels("FINEST");
+
+      TRACE_CATEGORIES.forEach((category) => expect(levels[category]).toBe("FINEST"));
+    });
+
+    it("should set the categories an object names over the defaults", () => {
+      expect(requestedLevels({ apexCode: "ERROR" })).toEqual({
+        ...DEFAULT_TRACE_CONFIG,
+        apexCode: "ERROR",
       });
+    });
+  });
 
-      it("should throw error when update fails", async () => {
-        mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
-        mockUpdate.mockResolvedValue({
-          success: false,
-          errors: ["Update failed"],
-        });
-
-        await expect(
-          ensureDebugLevel(mockConnection, "default"),
-        ).rejects.toThrow("Failed to update DebugLevel");
-      });
-
-      it("should propagate query errors", async () => {
-        mockQuery.mockRejectedValue(new Error("Query failed"));
-
-        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
-          "Query failed",
-        );
-      });
-
-      it("should propagate creation errors", async () => {
-        mockQuery.mockResolvedValue({ records: [] });
-        mockCreate.mockRejectedValue(new Error("Creation failed"));
-
-        await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
-          "Creation failed",
-        );
-      });
+  describe("levelsClause", () => {
+    it("should group the categories by level, in category order", () => {
+      expect(levelsClause(DEFAULT_TRACE_CONFIG)).toBe(
+        "apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO",
+      );
     });
   });
 
