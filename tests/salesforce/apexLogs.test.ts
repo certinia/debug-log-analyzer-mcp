@@ -144,6 +144,15 @@ describe("apexLogs", () => {
       expect(pageQuery()).toContain("Operation LIKE '%50\\%\\_off\\'%'");
     });
 
+    // A raw newline or tab ends the query's string literal as surely as a quote.
+    it("should escape control characters and double quotes", async () => {
+      answer([]);
+
+      await list({ filters: { request: 'a\nb\tc"d' } });
+
+      expect(pageQuery()).toContain("Request = 'a\\nb\\tc\\\"d'");
+    });
+
     it("should return rows with ISO start times and the count of every match", async () => {
       answer([record("07L000000000001AAA")], 39);
 

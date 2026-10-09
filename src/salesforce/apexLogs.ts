@@ -4,7 +4,12 @@
 
 import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
-import { CLOCK_SKEW_MS, toDateTimeLiteral } from "./soql.js";
+import {
+  CLOCK_SKEW_MS,
+  escapeSoql,
+  quote,
+  toDateTimeLiteral,
+} from "./soql.js";
 
 const APEX_LOG_SOBJECT = "ApexLog";
 
@@ -97,14 +102,9 @@ export function toLongId(id: string): string {
   return id + suffix;
 }
 
-/** A SOQL string literal. */
-function quote(value: string): string {
-  return `'${value.replace(/[\\']/g, "\\$&")}'`;
-}
-
 /** A SOQL `LIKE` pattern matching `value` anywhere: its own `%` and `_` match only themselves. */
 function containing(value: string): string {
-  return `'%${value.replace(/[\\'%_]/g, "\\$&")}%'`;
+  return `'%${escapeSoql(value).replace(/[%_]/g, "\\$&")}%'`;
 }
 
 // The org returns `+0000`, which SOQL does not read back as a date-time literal.

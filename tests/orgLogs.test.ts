@@ -20,7 +20,7 @@ jest.mock("../src/salesforce/apexLogs", () => ({
   downloadApexLog: jest.fn(),
 }));
 
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
@@ -285,6 +285,56 @@ describe("getOrgLogs", () => {
     expect(decode(text(result as never))).toMatchObject({
       logs: [{ id: "07L000000000001AAA" }],
     });
+  });
+
+  it("should make no directory when the org holds no logs", async () => {
+    mockLatest.mockResolvedValue([]);
+
+    const result = await getOrgLogs(server(), { latest: 5 }, ctx, policy());
+
+    expect(decode(text(result as never))).toEqual({
+      org: "me@example.com (psa)",
+      logs: [],
+      outputDirCreated: false,
+    });
+    expect(existsSync(path.join(root, ".apex-log-mcp"))).toBe(false);
+  });
+
+  it("should report each log saved as progress, out of every log asked for", async () => {
+    mockDownload.mockResolvedValue("log");
+    const notify = jest.fn().mockResolvedValue(undefined);
+
+    await getOrgLogs(
+      server(),
+      { ids: ["07L000000000001AAA", "07L000000000002AAA"] },
+      { mcpReq: { ...ctx.mcpReq, _meta: { progressToken: 7 }, notify } } as unknown as ServerContext,
+      policy(),
+    );
+
+    expect(notify.mock.calls.map(([note]) => note.params)).toEqual([
+      { progressToken: 7, progress: 1, total: 2, message: "1 of 2 logs" },
+      { progressToken: 7, progress: 2, total: 2, message: "2 of 2 logs" },
+    ]);
+  });
+
+  // No result reaches a client that cancelled, so what counts is the work that stops.
+  it("should download nothing more once the call is cancelled", async () => {
+    const controller = new AbortController();
+    mockDownload.mockImplementation(async () => {
+      controller.abort();
+      return "log";
+    });
+    const ids = Array.from({ length: 6 }, (_, i) => `07L00000000000${i}AAA`);
+
+    await getOrgLogs(
+      server(),
+      { ids },
+      { mcpReq: { ...ctx.mcpReq, signal: controller.signal } } as unknown as ServerContext,
+      policy(),
+    );
+
+    // The four already running when it was cancelled.
+    expect(mockDownload).toHaveBeenCalledTimes(4);
   });
 
   it("should refuse ids and latest together, before touching the org", async () => {

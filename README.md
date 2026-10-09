@@ -230,7 +230,7 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 
 ### apexlog_get_org_logs
 
-Downloads logs by `ids`, or the newest `latest` of them - the newest one when you pass neither, as `sf apex get log` does - and returns each saved path, which the analysis tools accept. Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save.
+Downloads logs by `ids`, or the newest `latest` of them - the newest one when you pass neither, as `sf apex get log` does - and returns each saved path, which the analysis tools accept. Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved.
 
 <!-- params-apexlog_get_org_logs:start -->
 
