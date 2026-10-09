@@ -526,6 +526,26 @@ describe("Execute Anonymous", () => {
         ).rejects.toThrow("has no active USER_DEBUG trace flag");
       });
 
+      // It outranks the header, so its levels are the run's whatever was asked for.
+      it("should run at a live Developer Console flag's levels, and say so", async () => {
+        mockFindActiveTraceFlags.mockResolvedValue({
+          storesLogs: true,
+          developerConsoleLevels: FLAG_LEVELS,
+        });
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: "FINEST" },
+          ctx,
+          policy(),
+        );
+
+        expect(postedEnvelope()).toContain(
+          "<apex:category>Apex_code</apex:category><apex:level>Error</apex:level>",
+        );
+        expect(toonDecode(result).levelsSource).toBe("developerConsole");
+      });
+
       it('should run at the defaults for "default", even with a flag', async () => {
         withFlag();
 
@@ -1796,6 +1816,29 @@ describe("Execute Anonymous", () => {
 
       expect(params.message).toContain(
         `Log levels, your trace flag's: ${levelsClause(FLAG_LEVELS)}.`,
+      );
+    });
+
+    it("should show a Developer Console flag's levels over the ones asked for", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      mockFindActiveTraceFlags.mockResolvedValue({
+        storesLogs: true,
+        developerConsoleLevels: FLAG_LEVELS,
+      });
+
+      const params = confirmRequest(
+        assertInputRequired(
+          await executeAnonymous(
+            mockServer,
+            { apex: testApexCode, debugLevel: "FINEST" },
+            ctx,
+            policy(),
+          ),
+        ),
+      );
+
+      expect(params.message).toContain(
+        `Log levels, your Developer Console trace flag's: ${levelsClause(FLAG_LEVELS)}.`,
       );
     });
 

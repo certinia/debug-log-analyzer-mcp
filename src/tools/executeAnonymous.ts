@@ -23,6 +23,7 @@ import {
   createTraceFlag,
   deleteTraceFlag,
   findActiveTraceFlags,
+  type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
 import { fileReadError } from "./localFile.js";
@@ -157,8 +158,8 @@ function apexSource({
   return undefined;
 }
 
-/** Where a run's levels came from: the user's trace flag, the defaults, or the call. */
-type LevelsSource = "traceFlag" | "default" | "request";
+/** Where a run's levels came from: the user's trace flag, the defaults, the call, or a Developer Console flag. */
+type LevelsSource = "traceFlag" | "default" | "request" | "developerConsole";
 
 type RunLevels = { levels: Required<TraceConfig>; source: LevelsSource };
 
@@ -166,10 +167,24 @@ const SOURCE_TEXT: Record<LevelsSource, string> = {
   traceFlag: "your trace flag's",
   default: "the defaults",
   request: "as requested",
+  developerConsole: "your Developer Console trace flag's",
 };
 
-// Read from the flag and sent, not left to it: with no header the returned log is empty.
+// A Developer Console flag outranks the header (.claude/rules/trace-flags.md), so its levels are the ones confirmed and run.
 function resolveRunLevels(
+  debugLevel: DebugLevelInput | undefined,
+  flags: ActiveTraceFlags,
+  username: string,
+): RunLevels {
+  // First, so a bad debugLevel or a missing USER_DEBUG flag is refused even when the console wins.
+  const asked = askedLevels(debugLevel, flags.userDebugLevels, username);
+  return flags.developerConsoleLevels
+    ? { levels: flags.developerConsoleLevels, source: "developerConsole" }
+    : asked;
+}
+
+// Read from the flag and sent, not left to it: with no header the returned log is empty.
+function askedLevels(
   debugLevel: DebugLevelInput | undefined,
   userDebugLevels: Required<TraceConfig> | undefined,
   username: string,
@@ -256,11 +271,7 @@ export async function executeAnonymous(
         const userId = await getUserIdByUsername(connection, local.username);
         // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
         const flags = await findActiveTraceFlags(connection, userId);
-        const run = resolveRunLevels(
-          debugLevel,
-          flags.userDebugLevels,
-          local.username,
-        );
+        const run = resolveRunLevels(debugLevel, flags, local.username);
         return {
           value: { apex, userId, storesLogs: flags.storesLogs, run },
           confirm: apexConfirmable(apex, run, orgLabel),
@@ -375,9 +386,9 @@ export async function executeAnonymous(
           durationMs: parsedLog
             ? roundMs(parsedLog.duration.total / NS_TO_MS)
             : 0,
-          // True when a Developer Console trace flag outranked the levels asked
-          // for, which is the one thing that can silently change what was
-          // captured. Reported either way, for the same reason as below.
+          // True when the log carries levels other than the ones levelsSource
+          // names - a Developer Console flag set during the run, say. Reported
+          // either way, for the same reason as below.
           levelsOverridden: levelsWereOverridden(
             run.levels,
             parsedLog?.debugLevels,
