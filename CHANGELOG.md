@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, or at the defaults - never at the levels a previous run left. Pass `"traceFlag"` to require the flag ([#230])
+- apexlog_execute_anonymous: set the categories an object `debugLevel` names over the defaults, not over the levels a previous run left ([#230])
+- apexlog_execute_anonymous: show a live Developer Console trace flag's levels in a production confirmation, and report them as `levelsSource` `developerConsole` rather than as `levelsOverridden` ([#230])
 - apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `unattributed` row holds the time no event spans ([#226])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
 
@@ -20,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 
 - apexlog_execute_anonymous: show all of the Apex in a production confirmation, and refuse Apex too long to show ([#221])
+- apexlog_execute_anonymous: show the log levels in a production confirmation, and refuse a run at levels other than the ones confirmed ([#228])
 - apexlog_execute_anonymous: stop changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
 - apexlog_execute_anonymous: run the Apex with a warning when the org refuses a trace flag, instead of failing the call ([#207])
 - apexlog_execute_anonymous: stop a 60-second stall waiting on roots ([#222])
@@ -123,3 +127,5 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#222]: https://github.com/certinia/debug-log-analyzer-mcp/issues/222
 [#226]: https://github.com/certinia/debug-log-analyzer-mcp/pull/226
 [#225]: https://github.com/certinia/debug-log-analyzer-mcp/pull/225
+[#228]: https://github.com/certinia/debug-log-analyzer-mcp/issues/228
+[#230]: https://github.com/certinia/debug-log-analyzer-mcp/issues/230

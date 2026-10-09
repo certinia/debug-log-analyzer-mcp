@@ -7,7 +7,14 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
-import { ensureDebugLevel } from "../salesforce/debugLevels.js";
+import {
+  DEFAULT_TRACE_CONFIG,
+  ensureDebugLevel,
+  levelsClause,
+  requestedLevels,
+  type DebugLevelInput,
+  type TraceConfig,
+} from "../salesforce/debugLevels.js";
 import {
   executeAnonymousWithLog,
   levelsWereOverridden,
@@ -15,7 +22,8 @@ import {
 import {
   createTraceFlag,
   deleteTraceFlag,
-  hasActiveTraceFlag,
+  findActiveTraceFlags,
+  type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
 import { fileReadError } from "./localFile.js";
@@ -150,13 +158,69 @@ function apexSource({
   return undefined;
 }
 
+/** Where a run's levels came from: the user's trace flag, the defaults, the call, or a Developer Console flag. */
+type LevelsSource = "traceFlag" | "default" | "request" | "developerConsole";
+
+type RunLevels = { levels: Required<TraceConfig>; source: LevelsSource };
+
+const SOURCE_TEXT: Record<LevelsSource, string> = {
+  traceFlag: "your trace flag's",
+  default: "the defaults",
+  request: "as requested",
+  developerConsole: "your Developer Console trace flag's",
+};
+
+// A Developer Console flag outranks the header (.claude/rules/trace-flags.md), so its levels are the ones confirmed and run.
+function resolveRunLevels(
+  debugLevel: DebugLevelInput | undefined,
+  flags: ActiveTraceFlags,
+  username: string,
+): RunLevels {
+  // First, so a bad debugLevel or a missing USER_DEBUG flag is refused even when the console wins.
+  const asked = askedLevels(debugLevel, flags.userDebugLevels, username);
+  return flags.developerConsoleLevels
+    ? { levels: flags.developerConsoleLevels, source: "developerConsole" }
+    : asked;
+}
+
+// Read from the flag and sent, not left to it: with no header the returned log is empty.
+function askedLevels(
+  debugLevel: DebugLevelInput | undefined,
+  userDebugLevels: Required<TraceConfig> | undefined,
+  username: string,
+): RunLevels {
+  if (debugLevel === "default") {
+    return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
+  }
+  if (debugLevel !== undefined && debugLevel !== "traceFlag") {
+    return { levels: requestedLevels(debugLevel), source: "request" };
+  }
+  if (userDebugLevels !== undefined) {
+    return { levels: userDebugLevels, source: "traceFlag" };
+  }
+  // Asked for by name, so a flag that has expired is said, not papered over with the defaults.
+  if (debugLevel === "traceFlag") {
+    throw new Error(
+      `${username} has no active USER_DEBUG trace flag, so there are no levels to use. Create one, or leave out debugLevel to run at the defaults.`,
+    );
+  }
+  return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
+}
+
 // All of it, never cut, between markers and with its size, so Apex cannot pass for the end of the prompt.
-function apexConfirmable(apex: string, orgLabel: string): Confirmable {
+function apexConfirmable(
+  apex: string,
+  run: RunLevels,
+  orgLabel: string,
+): Confirmable {
   const lines = apex.split("\n").length;
   const linesText = `${lines} line${lines === 1 ? "" : "s"}`;
+  const clause = levelsClause(run.levels);
   return {
-    effect: apex,
-    detail: `Apex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----`,
+    // The levels, not where they came from, so a flag that expires to the same levels keeps the confirmation.
+    effect: `${clause}\0${apex}`,
+    // Before the Apex, so the Apex cannot pass for it.
+    detail: `Log levels, ${SOURCE_TEXT[run.source]}: ${clause}.\n\nApex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----`,
     // The size again, in the schema, where the Apex cannot reach.
     title: `Run ${linesText} of Apex`,
     unshowable:
@@ -203,7 +267,16 @@ export async function executeAnonymous(
           ? `Cannot check Apex file ${args.apexFilePath}: ${reason}. Pass the Apex inline in apex.`
           : undefined,
       prepare: readApex,
-      confirm: ({ value, orgLabel }) => apexConfirmable(value, orgLabel),
+      write: async ({ value: apex, connection, local, orgLabel }) => {
+        const userId = await getUserIdByUsername(connection, local.username);
+        // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
+        const flags = await findActiveTraceFlags(connection, userId);
+        const run = resolveRunLevels(debugLevel, flags, local.username);
+        return {
+          value: { apex, userId, storesLogs: flags.storesLogs, run },
+          confirm: apexConfirmable(apex, run, orgLabel),
+        };
+      },
     },
     policy,
   );
@@ -212,9 +285,8 @@ export async function executeAnonymous(
     return access.result;
   }
   const {
-    value: apex,
+    value: { apex, userId, storesLogs, run },
     connection,
-    local: { username },
     orgLabel,
     classification,
     workspace,
@@ -223,12 +295,9 @@ export async function executeAnonymous(
   const projectPath = rootPaths[0];
 
   await report("Setting the trace flag");
-  const userId = await getUserIdByUsername(connection, username);
-  // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
-  const [{ id: debugLevelId, levels }, alreadyTraced] = await Promise.all([
-    ensureDebugLevel(connection, debugLevel),
-    hasActiveTraceFlag(connection, userId),
-  ]);
+  const debugLevelId = storesLogs
+    ? undefined
+    : await ensureDebugLevel(connection);
 
   const {
     value: { apexResult, logId },
@@ -236,14 +305,14 @@ export async function executeAnonymous(
   } = await withTraceFlagForRun(
     connection,
     userId,
-    alreadyTraced ? undefined : debugLevelId,
+    debugLevelId,
     async () => {
       await report("Executing the Apex");
       const startedAt = new Date();
       const apexResult = await executeAnonymousWithLog(
         connection,
         apex,
-        levels,
+        run.levels,
       );
 
       if (!apexResult.compiled) {
@@ -317,10 +386,15 @@ export async function executeAnonymous(
           durationMs: parsedLog
             ? roundMs(parsedLog.duration.total / NS_TO_MS)
             : 0,
-          // True when a Developer Console trace flag outranked the levels asked
-          // for, which is the one thing that can silently change what was
-          // captured. Reported either way, for the same reason as below.
-          levelsOverridden: levelsWereOverridden(levels, parsedLog?.debugLevels),
+          // True when the log carries levels other than the ones levelsSource
+          // names - a Developer Console flag set during the run, say. Reported
+          // either way, for the same reason as below.
+          levelsOverridden: levelsWereOverridden(
+            run.levels,
+            parsedLog?.debugLevels,
+          ),
+          // Where the levels came from, so a log far thinner or fuller than expected explains itself.
+          levelsSource: run.source,
           // A fact about this run, not advice about it: the directory is new, so
           // nothing yet ignores it. Reported either way, because an absent field
           // cannot be told apart from one this server never worked out.

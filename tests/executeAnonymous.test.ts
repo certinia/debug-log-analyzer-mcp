@@ -26,7 +26,7 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 }));
 
 jest.mock("../src/salesforce/traceFlags", () => ({
-  hasActiveTraceFlag: jest.fn(),
+  findActiveTraceFlags: jest.fn(),
   createTraceFlag: jest.fn(),
   deleteTraceFlag: jest.fn(),
 }));
@@ -78,11 +78,13 @@ import { getUserIdByUsername } from "../src/salesforce/users";
 import {
   ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
+  levelsClause,
+  requestedLevels,
 } from "../src/salesforce/debugLevels";
 import {
   createTraceFlag,
   deleteTraceFlag,
-  hasActiveTraceFlag,
+  findActiveTraceFlags,
 } from "../src/salesforce/traceFlags";
 import {
   connectOrg,
@@ -107,9 +109,17 @@ const mockEnsureDebugLevel = ensureDebugLevel as jest.MockedFunction<
   typeof ensureDebugLevel
 >;
 const mockLoadApexLog = loadApexLog as jest.MockedFunction<typeof loadApexLog>;
-const mockHasActiveTraceFlag = hasActiveTraceFlag as jest.MockedFunction<
-  typeof hasActiveTraceFlag
+const mockFindActiveTraceFlags = findActiveTraceFlags as jest.MockedFunction<
+  typeof findActiveTraceFlags
 >;
+
+/** A user's own trace flag levels, unlike the defaults in every category. */
+const FLAG_LEVELS = {
+  ...requestedLevels("NONE"),
+  apexCode: "ERROR",
+  database: "INFO",
+  system: "WARN",
+} as const;
 const mockCreateTraceFlag = createTraceFlag as jest.MockedFunction<
   typeof createTraceFlag
 >;
@@ -313,11 +323,8 @@ describe("Execute Anonymous", () => {
     (
       getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
     ).mockResolvedValue(testUserId);
-    mockEnsureDebugLevel.mockResolvedValue({
-      id: testDebugLevelId,
-      levels: DEFAULT_TRACE_CONFIG,
-    });
-    mockHasActiveTraceFlag.mockResolvedValue(false);
+    mockEnsureDebugLevel.mockResolvedValue(testDebugLevelId);
+    mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: false });
     mockCreateTraceFlag.mockResolvedValue(testTraceFlagId);
     mockDeleteTraceFlag.mockResolvedValue();
     mockLoadApexLog.mockResolvedValue({
@@ -336,7 +343,7 @@ describe("Execute Anonymous", () => {
         mockConnection,
         "test@example.com",
       );
-      expect(ensureDebugLevel).toHaveBeenCalledWith(mockConnection, undefined);
+      expect(ensureDebugLevel).toHaveBeenCalledWith(mockConnection);
       expect(createTraceFlag).toHaveBeenCalledWith(
         mockConnection,
         testUserId,
@@ -399,7 +406,7 @@ describe("Execute Anonymous", () => {
       );
     });
 
-    it("asks for every category at the level the DebugLevel record carries", async () => {
+    it("asks for every category at the defaults when the user has no trace flag", async () => {
       await executeAnonymous(
         mockServer,
         { apex: testApexCode },
@@ -436,6 +443,144 @@ describe("Execute Anonymous", () => {
       );
 
       expect(toonDecode(result).levelsOverridden).toBe(true);
+    });
+
+    describe("log levels", () => {
+      const withFlag = () =>
+        mockFindActiveTraceFlags.mockResolvedValue({
+          storesLogs: true,
+          userDebugLevels: FLAG_LEVELS,
+        });
+
+      // With no header the returned log is empty, so the flag's levels are read and sent.
+      it("should run at the user's trace flag levels when debugLevel is left out", async () => {
+        withFlag();
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        );
+
+        expect(postedEnvelope()).toContain(
+          "<apex:category>Apex_code</apex:category><apex:level>Error</apex:level>",
+        );
+        expect(postedEnvelope()).toContain(
+          "<apex:category>Db</apex:category><apex:level>Info</apex:level>",
+        );
+        expect(toonDecode(result).levelsSource).toBe("traceFlag");
+      });
+
+      it("should run at the defaults when debugLevel is left out and the user has no flag", async () => {
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        );
+
+        expect(toonDecode(result).levelsSource).toBe("default");
+      });
+
+      it('should run at the trace flag levels for "traceFlag"', async () => {
+        withFlag();
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: "traceFlag" },
+          ctx,
+          policy(),
+        );
+
+        expect(toonDecode(result).levelsSource).toBe("traceFlag");
+      });
+
+      // Flags expire within a day, and a caller who named the flag must hear it is gone.
+      it('should refuse "traceFlag" when the user has no flag, before the org is written to', async () => {
+        await expect(
+          executeAnonymous(
+            mockServer,
+            { apex: testApexCode, debugLevel: "traceFlag" },
+            ctx,
+            policy(),
+          ),
+        ).rejects.toThrow(
+          "test@example.com has no active USER_DEBUG trace flag, so there are no levels to use. Create one, or leave out debugLevel to run at the defaults.",
+        );
+        expect(ensureDebugLevel).not.toHaveBeenCalled();
+        expect(createTraceFlag).not.toHaveBeenCalled();
+        expect(mockRequest).not.toHaveBeenCalled();
+      });
+
+      it('should refuse "traceFlag" when only a Developer Console flag is live', async () => {
+        mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: true });
+
+        await expect(
+          executeAnonymous(
+            mockServer,
+            { apex: testApexCode, debugLevel: "traceFlag" },
+            ctx,
+            policy(),
+          ),
+        ).rejects.toThrow("has no active USER_DEBUG trace flag");
+      });
+
+      // It outranks the header, so its levels are the run's whatever was asked for.
+      it("should run at a live Developer Console flag's levels, and say so", async () => {
+        mockFindActiveTraceFlags.mockResolvedValue({
+          storesLogs: true,
+          developerConsoleLevels: FLAG_LEVELS,
+        });
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: "FINEST" },
+          ctx,
+          policy(),
+        );
+
+        expect(postedEnvelope()).toContain(
+          "<apex:category>Apex_code</apex:category><apex:level>Error</apex:level>",
+        );
+        expect(toonDecode(result).levelsSource).toBe("developerConsole");
+      });
+
+      it('should run at the defaults for "default", even with a flag', async () => {
+        withFlag();
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: "default" },
+          ctx,
+          policy(),
+        );
+
+        expect(postedEnvelope()).toContain(
+          "<apex:category>Apex_code</apex:category><apex:level>Fine</apex:level>",
+        );
+        expect(toonDecode(result).levelsSource).toBe("default");
+      });
+
+      // Over the defaults, never over the flag or a previous run.
+      it("should set the categories an object names over the defaults", async () => {
+        withFlag();
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: { apexCode: "FINEST" } },
+          ctx,
+          policy(),
+        );
+
+        expect(postedEnvelope()).toContain(
+          "<apex:category>Apex_code</apex:category><apex:level>Finest</apex:level>",
+        );
+        expect(postedEnvelope()).toContain(
+          "<apex:category>Db</apex:category><apex:level>Finest</apex:level>",
+        );
+        expect(toonDecode(result).levelsSource).toBe("request");
+      });
     });
 
     it("should connect to the org it checked, through the same auth", async () => {
@@ -661,7 +806,7 @@ describe("Execute Anonymous", () => {
 
     // A live flag already stores the log, and the header sets this run's levels.
     it("runs on the user's live trace flag and leaves it untouched", async () => {
-      mockHasActiveTraceFlag.mockResolvedValue(true);
+      mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: true });
 
       const result = await executeAnonymous(
         mockServer,
@@ -670,10 +815,11 @@ describe("Execute Anonymous", () => {
         policy(),
       );
 
-      expect(hasActiveTraceFlag).toHaveBeenCalledWith(
+      expect(findActiveTraceFlags).toHaveBeenCalledWith(
         mockConnection,
         testUserId,
       );
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(createTraceFlag).not.toHaveBeenCalled();
       expect(deleteTraceFlag).not.toHaveBeenCalled();
       expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
@@ -1621,6 +1767,185 @@ describe("Execute Anonymous", () => {
       expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it.each<[string, ExecuteAnonymousArgs["debugLevel"], string]>([
+      [
+        "no levels and no trace flag",
+        undefined,
+        `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`,
+      ],
+      ["the defaults", "default", `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`],
+      ["one level", "FINEST", `as requested: ${levelsClause(requestedLevels("FINEST"))}`],
+      [
+        "some categories",
+        { database: "INFO", apexCode: "FINEST" },
+        `as requested: ${levelsClause(requestedLevels({ database: "INFO", apexCode: "FINEST" }))}`,
+      ],
+    ])("should show the log levels before the Apex, for %s", async (_name, debugLevel, shown) => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+
+      const params = confirmRequest(
+        assertInputRequired(
+          await executeAnonymous(
+            mockServer,
+            { apex: testApexCode, debugLevel },
+            ctx,
+            policy(),
+          ),
+        ),
+      );
+
+      expect(params.message).toContain(
+        `PRODUCTION org 'test@example.com'.\n\nLog levels, ${shown}.\n\nApex, `,
+      );
+    });
+
+    it("should show the trace flag's levels, read before asking", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      mockFindActiveTraceFlags.mockResolvedValue({
+        storesLogs: true,
+        userDebugLevels: FLAG_LEVELS,
+      });
+
+      const params = confirmRequest(
+        assertInputRequired(
+          await executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
+        ),
+      );
+
+      expect(params.message).toContain(
+        `Log levels, your trace flag's: ${levelsClause(FLAG_LEVELS)}.`,
+      );
+    });
+
+    it("should show a Developer Console flag's levels over the ones asked for", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      mockFindActiveTraceFlags.mockResolvedValue({
+        storesLogs: true,
+        developerConsoleLevels: FLAG_LEVELS,
+      });
+
+      const params = confirmRequest(
+        assertInputRequired(
+          await executeAnonymous(
+            mockServer,
+            { apex: testApexCode, debugLevel: "FINEST" },
+            ctx,
+            policy(),
+          ),
+        ),
+      );
+
+      expect(params.message).toContain(
+        `Log levels, your Developer Console trace flag's: ${levelsClause(FLAG_LEVELS)}.`,
+      );
+    });
+
+    // The levels are bound, not where they came from.
+    it("should accept a retry whose flag expired to the same levels", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      mockFindActiveTraceFlags.mockResolvedValue({
+        storesLogs: true,
+        userDebugLevels: DEFAULT_TRACE_CONFIG,
+      });
+      const asked = assertInputRequired(
+        await executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
+      );
+      mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: false });
+
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
+
+      expectPostedApex(testApexCode);
+    });
+
+    it("should refuse a retry after the trace flag's levels changed", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      mockFindActiveTraceFlags.mockResolvedValue({
+        storesLogs: true,
+        userDebugLevels: FLAG_LEVELS,
+      });
+      const asked = assertInputRequired(
+        await executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
+      );
+      mockFindActiveTraceFlags.mockResolvedValue({
+        storesLogs: true,
+        userDebugLevels: { ...FLAG_LEVELS, apexCode: "FINEST" },
+      });
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("does not match this call");
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    // The levels decide what the run logs, so they are part of what was confirmed.
+    it("should refuse a retry that asks for different log levels", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const asked = assertInputRequired(
+        await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: "INFO" },
+          ctx,
+          policy(),
+        ),
+      );
+
+      const result: any = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode, debugLevel: "FINEST" },
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("does not match this call");
+      expect(ensureDebugLevel).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it("should accept a retry that names the same levels in another order", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
+      const asked = assertInputRequired(
+        await executeAnonymous(
+          mockServer,
+          { apex: testApexCode, debugLevel: { database: "INFO", apexCode: "FINEST" } },
+          ctx,
+          policy(),
+        ),
+      );
+
+      await executeAnonymous(
+        mockServer,
+        { apex: testApexCode, debugLevel: { apexCode: "FINEST", database: "INFO" } },
+        await retryCtx(asked, {
+          action: "accept",
+          content: { confirm: true },
+        }),
+        policy(),
+      );
+
+      expectPostedApex(testApexCode);
     });
 
     it("should treat an unverifiable org as production and surface the reason", async () => {

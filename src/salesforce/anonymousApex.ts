@@ -56,7 +56,7 @@ export async function executeAnonymousWithLog(
 }
 
 /**
- * True when the org logged at levels other than the ones asked for.
+ * True when the org logged at levels other than the ones the run resolved to.
  *
  * `logged` is the parsed log's header levels, and absent when no log came
  * back. Only the categories asked for are compared: a log always reports
