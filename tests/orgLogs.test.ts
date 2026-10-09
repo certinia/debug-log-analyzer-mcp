@@ -83,6 +83,16 @@ const ctx = {
   mcpReq: { signal: new AbortController().signal, requestState: () => undefined },
 } as unknown as ServerContext;
 
+// A call that asked for progress, as the spec has it ask.
+function progressCtx(
+  notify: jest.Mock,
+  signal: AbortSignal = ctx.mcpReq.signal,
+): ServerContext {
+  return {
+    mcpReq: { ...ctx.mcpReq, signal, _meta: { progressToken: 7 }, notify },
+  } as unknown as ServerContext;
+}
+
 function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
   return {
     allowProductionOrgs: false,
@@ -314,7 +324,7 @@ describe("getOrgLogs", () => {
     await getOrgLogs(
       server(),
       { ids: ["07L000000000001AAA", "07L000000000002AAA"] },
-      { mcpReq: { ...ctx.mcpReq, _meta: { progressToken: 7 }, notify } } as unknown as ServerContext,
+      progressCtx(notify),
       policy(),
     );
 
@@ -445,10 +455,77 @@ describe("deleteOrgLogs", () => {
       deletedCount: 2,
       deletedBytes: 150,
       remainingCount: 0,
+      notFoundCount: 0,
     });
   });
 
-  it("should report a failed delete and an id that names no log as rows, and count the rest", async () => {
+  // Failed logs still hold storage, so an agent looping until zero must see them.
+  it("should report failed deletes by cause, in the form sent, and count them as remaining", async () => {
+    mockFind.mockResolvedValue({
+      logs: [
+        { id: "07L000000000001EAA", fileSizeBytes: 100 },
+        { id: "07L000000000002EAA", fileSizeBytes: 50 },
+        { id: "07L000000000003EAA", fileSizeBytes: 25 },
+      ],
+      matchedCount: 3,
+    });
+    mockDelete.mockResolvedValue([
+      { id: "07L000000000001EAA" },
+      { id: "07L000000000002EAA", error: "insufficient access rights" },
+      { id: "07L000000000003EAA", error: "insufficient access rights" },
+    ]);
+
+    const result = await deleteOrgLogs(
+      server(),
+      { ids: ["07L000000000001EAA", "07L000000000002", "07L000000000003EAA"] },
+      ctx,
+      policy(),
+    );
+
+    expect(decode(text(result as never))).toEqual({
+      org: "me@example.com (psa)",
+      deletedCount: 1,
+      deletedBytes: 100,
+      remainingCount: 2,
+      notFoundCount: 0,
+      failed: [
+        {
+          error: "insufficient access rights",
+          logCount: 2,
+          ids: ["07L000000000002", "07L000000000003EAA"],
+        },
+      ],
+    });
+  });
+
+  // A caller by id can retry just those; a filter's caller lists the same filters again.
+  it.each([
+    ["every id, when sent by id", true, 7],
+    ["the first 5, when sent by filter", false, 5],
+  ])("should list %s that failed for one cause", async (_name, byId, shownCount) => {
+    const ids = Array.from({ length: 7 }, (_, index) => `07L00000000000${index}EAA`);
+    mockFind.mockResolvedValue({
+      logs: ids.map((id) => ({ id, fileSizeBytes: 1 })),
+      matchedCount: 7,
+    });
+    mockDelete.mockResolvedValue(ids.map((id) => ({ id, error: "insufficient access rights" })));
+
+    const result = await deleteOrgLogs(
+      server(),
+      byId ? { ids } : { succeeded: true },
+      ctx,
+      policy(),
+    );
+
+    expect(decode(text(result as never))).toMatchObject({
+      failed: [
+        { error: "insufficient access rights", logCount: 7, ids: ids.slice(0, shownCount) },
+      ],
+    });
+  });
+
+  // Gone since the find: deleted by another call, or expired; it frees nothing now.
+  it("should list a log gone before its delete reached it as not found, not deleted", async () => {
     mockFind.mockResolvedValue({
       logs: [
         { id: "07L000000000001EAA", fileSizeBytes: 100 },
@@ -458,33 +535,29 @@ describe("deleteOrgLogs", () => {
     });
     mockDelete.mockResolvedValue([
       { id: "07L000000000001EAA" },
-      { id: "07L000000000002EAA", error: "insufficient access rights" },
+      { id: "07L000000000002EAA", alreadyGone: true },
     ]);
 
-    const result = await deleteOrgLogs(
-      server(),
-      { ids: ["07L000000000001EAA", "07L000000000002EAA", "07L000000000009EAA"] },
-      ctx,
-      policy(),
-    );
+    const result = await deleteOrgLogs(server(), { succeeded: true }, ctx, policy());
 
-    expect(decode(text(result as never))).toMatchObject({
+    expect(decode(text(result as never))).toEqual({
+      org: "me@example.com (psa)",
       deletedCount: 1,
       deletedBytes: 100,
-      failed: [
-        { id: "07L000000000002EAA", error: "insufficient access rights" },
-        { id: "07L000000000009EAA", error: "no stored log has this id" },
-      ],
+      remainingCount: 0,
+      notFoundCount: 1,
+      notFoundIds: ["07L000000000002EAA"],
     });
   });
 
-  it("should report an unknown id in the form it was sent", async () => {
+  // Not a failure: a retry after a lost response finds the logs it deleted gone.
+  it("should list an id that names no stored log apart from failures, in the form it was sent, once", async () => {
     mockFind.mockResolvedValue({ logs: [], matchedCount: 0 });
     mockDelete.mockResolvedValue([]);
 
     const result = await deleteOrgLogs(
       server(),
-      { ids: ["07L000000000009"] },
+      { ids: ["07L000000000009", "07L000000000009EAA"] },
       ctx,
       policy(),
     );
@@ -492,8 +565,13 @@ describe("deleteOrgLogs", () => {
     expect(mockFind).toHaveBeenCalledWith(connection, {
       ids: ["07L000000000009EAA"],
     });
-    expect(decode(text(result as never))).toMatchObject({
-      failed: [{ id: "07L000000000009", error: "no stored log has this id" }],
+    expect(decode(text(result as never))).toEqual({
+      org: "me@example.com (psa)",
+      deletedCount: 0,
+      deletedBytes: 0,
+      remainingCount: 0,
+      notFoundCount: 1,
+      notFoundIds: ["07L000000000009EAA"],
     });
   });
 
@@ -517,6 +595,7 @@ describe("deleteOrgLogs", () => {
       deletedCount: 0,
       deletedBytes: 0,
       remainingCount: 0,
+      notFoundCount: 0,
     });
   });
 
@@ -537,7 +616,8 @@ describe("deleteOrgLogs", () => {
     expect(decode(text(result as never))).toMatchObject({ remainingCount: 10_000 });
   });
 
-  const PAST = "2026-10-09T09:00:00Z";
+  // Years back, so no clock running behind can make it recent.
+  const PAST = "2020-01-01T00:00:00Z";
 
   it("should ask before deleting from production, naming the count and the condition, and delete nothing yet", async () => {
     mockClassifyOrg.mockResolvedValue({ classification: "production" });
@@ -560,7 +640,9 @@ describe("deleteOrgLogs", () => {
 
     const shown = JSON.stringify(result);
     expect(shown).toContain(
-      "3 debug logs, 175 bytes. Every log where LogUser.Username = 'me@example.com' AND StartTime <= 2026-10-09T09:00:00.000Z.",
+      JSON.stringify(
+        '3 debug logs, 175 bytes. Every log with user = "me@example.com", startTimeTo <= "2020-01-01T00:00:00Z".',
+      ).slice(1, -1),
     );
     expect(shown).toContain("cannot be restored");
     expect(mockDelete).not.toHaveBeenCalled();
@@ -570,6 +652,8 @@ describe("deleteOrgLogs", () => {
   it.each([
     ["no startTimeTo", {}],
     ["a startTimeTo in the future", { startTimeTo: "2099-01-01T00:00:00Z" }],
+    // The org's clock can run behind this machine's.
+    ["a startTimeTo a minute ago", { startTimeTo: new Date(Date.now() - 60_000).toISOString() }],
   ])("should refuse a production delete by filter with %s", async (_name, extra) => {
     mockClassifyOrg.mockResolvedValue({ classification: "production" });
     mockFind.mockResolvedValue({
@@ -584,7 +668,7 @@ describe("deleteOrgLogs", () => {
       policy(),
     );
 
-    expect(text(result as never)).toContain("needs startTimeTo, no later than now");
+    expect(text(result as never)).toContain("needs startTimeTo at least 5 minutes ago");
     expect(mockDelete).not.toHaveBeenCalled();
   });
 
@@ -624,6 +708,23 @@ describe("deleteOrgLogs", () => {
     expect(JSON.stringify(result)).toContain("By id: 07L000000000001EAA.");
   });
 
+  it("should show the first ids and count the rest", async () => {
+    mockClassifyOrg.mockResolvedValue({ classification: "production" });
+    // Sent in the 15-character form; the org answers in the 18.
+    const ids = Array.from({ length: 7 }, (_, index) => `07L00000000000${index}`);
+    mockFind.mockResolvedValue({
+      logs: ids.map((id) => ({ id: `${id}EAA`, fileSizeBytes: 1 })),
+      matchedCount: 7,
+    });
+
+    const result = await deleteOrgLogs(server(), { ids }, ctx, policy());
+
+    const shown = JSON.stringify(result);
+    expect(shown).toContain(`By id: ${ids.slice(0, 5).join(", ")} and 2 more.`);
+    // Ids name a fixed set, so no log filed meanwhile can join it.
+    expect(shown).not.toContain("needs startTimeTo");
+  });
+
   it("should show how many match in all when one call deletes only some", async () => {
     mockClassifyOrg.mockResolvedValue({ classification: "production" });
     mockFind.mockResolvedValue({
@@ -643,45 +744,62 @@ describe("deleteOrgLogs", () => {
     );
   });
 
-  // Failed logs still hold storage, so an agent looping until zero must see them.
-  it("should count failed deletes as still remaining", async () => {
-    mockFind.mockResolvedValue({
-      logs: [
-        { id: "07L000000000001EAA", fileSizeBytes: 1 },
-        { id: "07L000000000002EAA", fileSizeBytes: 1 },
-      ],
-      matchedCount: 2,
-    });
-    mockDelete.mockResolvedValue([
-      { id: "07L000000000001EAA" },
-      { id: "07L000000000002EAA", error: "insufficient access rights" },
-    ]);
-
-    const result = await deleteOrgLogs(server(), { succeeded: true }, ctx, policy());
-
-    expect(decode(text(result as never))).toMatchObject({
-      deletedCount: 1,
-      remainingCount: 1,
-    });
-  });
-
-  it("should pass the call's cancel signal to the delete", async () => {
+  it("should pass the call's cancel signal to the delete, and report no progress once it aborts", async () => {
     mockFind.mockResolvedValue({
       logs: [{ id: "07L000000000001EAA", fileSizeBytes: 1 }],
       matchedCount: 1,
     });
-    mockDelete.mockResolvedValue([{ id: "07L000000000001EAA" }]);
+    const controller = new AbortController();
+    mockDelete.mockImplementation(async (_connection, ids, { onBatchDone } = {}) => {
+      onBatchDone?.(1);
+      controller.abort();
+      onBatchDone?.(1);
+      return ids.map((id) => ({ id }));
+    });
+    const notify = jest.fn();
 
-    await deleteOrgLogs(server(), { succeeded: true }, ctx, policy());
+    await deleteOrgLogs(
+      server(),
+      { succeeded: true },
+      progressCtx(notify, controller.signal),
+      policy(),
+    );
 
     expect(mockDelete).toHaveBeenCalledWith(
       connection,
       ["07L000000000001EAA"],
-      ctx.mcpReq.signal,
+      expect.objectContaining({ signal: controller.signal }),
     );
+    expect(notify).toHaveBeenCalledTimes(1);
   });
 
-  it("should refuse a denied org before connecting", async () => {
+  it("should report each batch deleted as progress, out of every log found", async () => {
+    mockFind.mockResolvedValue({
+      logs: Array.from({ length: 201 }, (_, index) => ({ id: `07L${index}`, fileSizeBytes: 1 })),
+      matchedCount: 201,
+    });
+    mockDelete.mockImplementation(async (_connection, ids, { onBatchDone } = {}) => {
+      onBatchDone?.(200);
+      onBatchDone?.(1);
+      return ids.map((id) => ({ id }));
+    });
+    const notify = jest.fn();
+
+    await deleteOrgLogs(
+      server(),
+      { succeeded: true },
+      progressCtx(notify),
+      policy(),
+    );
+
+    expect(notify.mock.calls.map(([notification]) => notification.params)).toEqual([
+      { progressToken: 7, progress: 200, total: 201, message: "200 of 201 logs" },
+      { progressToken: 7, progress: 201, total: 201, message: "201 of 201 logs" },
+    ]);
+  });
+
+  // The order of the checks is openOrg's, tested there; this pins the action named.
+  it("should name the delete in a deny refusal", async () => {
     const result = await deleteOrgLogs(
       server(),
       { succeeded: true },
@@ -692,7 +810,5 @@ describe("deleteOrgLogs", () => {
     expect(text(result as never)).toContain(
       "Cannot delete debug logs against org 'me@example.com (psa)'",
     );
-    expect(mockConnectOrg).not.toHaveBeenCalled();
-    expect(mockFind).not.toHaveBeenCalled();
   });
 });
