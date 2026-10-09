@@ -102,7 +102,7 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
 
 3. **Run against a production org:**
 
-   All four tools are available by default. Production orgs need a per-call confirmation, or this flag:
+   All six tools are available by default. Running Apex against a production org needs a per-call confirmation, or this flag; reading its logs does not:
 
    ```zsh
    node dist/index.js --allow-production-orgs
@@ -130,7 +130,7 @@ The result is what the caller plans around. The work is invisible to it.
 
 | Verb | The caller gets back |
 | --- | --- |
-| `get_` | exactly one thing, identified by the input |
+| `get_` | one or more things, each named by the input: by id, or as a count of the latest |
 | `list_` | a collection; filters, thresholds and ranking are allowed |
 | `search_` | a collection matched to a query the caller supplies |
 | `create_` / `update_` / `delete_` / `write_` | one resource, written |

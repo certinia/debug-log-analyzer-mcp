@@ -6,6 +6,8 @@ jest.mock("node:fs", () => ({
   promises: {
     mkdir: jest.fn().mockResolvedValue(undefined),
     writeFile: jest.fn().mockResolvedValue(undefined),
+    link: jest.fn().mockResolvedValue(undefined),
+    rm: jest.fn().mockResolvedValue(undefined),
     stat: jest.fn().mockResolvedValue({ size: 1024 }),
     open: jest.fn(),
     // No symlinks in the test filesystem, so every path resolves to itself.
@@ -102,6 +104,7 @@ import {
 
 const mockMkdir = fs.mkdir as jest.MockedFunction<typeof fs.mkdir>;
 const mockWriteFile = fs.writeFile as jest.MockedFunction<typeof fs.writeFile>;
+const mockLink = fs.link as jest.MockedFunction<typeof fs.link>;
 const mockStat = fs.stat as jest.MockedFunction<typeof fs.stat>;
 
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
@@ -230,7 +233,7 @@ describe("Execute Anonymous", () => {
   let mockConnection: any;
   let mockRequest: any;
   let mockSobject: any;
-  let mockFindOne: any;
+  let mockFind: any;
   let mockOrg: any;
   let mockRetrieveOrgInfo: jest.Mock;
   let ctx: ServerContext;
@@ -291,12 +294,13 @@ describe("Execute Anonymous", () => {
 
     mockRequest = jest.fn().mockResolvedValue(soapResponse());
 
-    mockFindOne = jest.fn().mockResolvedValue({ Id: testLogId });
-    mockSobject = jest.fn().mockReturnValue({ findOne: mockFindOne });
+    mockFind = jest.fn().mockResolvedValue([{ Id: testLogId }]);
+    mockSobject = jest.fn().mockReturnValue({ find: mockFind });
 
     mockConnection = {
       sobject: mockSobject,
       request: mockRequest,
+      getApiVersion: () => TEST_API_VERSION,
       accessToken: TEST_SESSION_ID,
       instanceUrl: TEST_INSTANCE_URL,
       version: TEST_API_VERSION,
@@ -631,7 +635,7 @@ describe("Execute Anonymous", () => {
     });
 
     it("names the file with a timestamp when no stored log matches", async () => {
-      mockFindOne.mockResolvedValue(null);
+      mockFind.mockResolvedValue([]);
 
       const result = await executeAnonymous(
         mockServer,
@@ -650,7 +654,7 @@ describe("Execute Anonymous", () => {
       const consoleError = jest
         .spyOn(console, "error")
         .mockImplementation(() => {});
-      mockFindOne.mockRejectedValue(new Error("Query failed"));
+      mockFind.mockRejectedValue(new Error("Query failed"));
 
       const result = await executeAnonymous(
         mockServer,
@@ -677,15 +681,61 @@ describe("Execute Anonymous", () => {
         policy(),
       );
 
-      expect(mockFindOne).toHaveBeenCalledWith(
+      expect(mockFind).toHaveBeenCalledWith(
         {
           LogUserId: customUserId,
           LogLength: Buffer.byteLength(testLogBody, "utf-8"),
           StartTime: { $gte: expect.anything() },
         },
         ["Id"],
-        { sort: { StartTime: -1 } },
+        { sort: { StartTime: -1 }, limit: 5 },
       );
+    });
+
+    // A repeat run of the same Apex matches the earlier run's log too; only its body tells them apart.
+    describe("when more than one stored log matches", () => {
+      const earlierLogId = "07L000000000002AAA";
+
+      function storedBodies(bodies: Record<string, string>) {
+        const run = mockRequest.getMockImplementation();
+        mockRequest.mockImplementation(async (request: unknown) => {
+          const id = typeof request === "string" && /ApexLog\/(\w+)\/Body$/.exec(request)?.[1];
+          return id ? bodies[id] : run!(request);
+        });
+      }
+
+      it("names the file after the log whose body is this run's", async () => {
+        mockFind.mockResolvedValue([{ Id: earlierLogId }, { Id: testLogId }]);
+        storedBodies({
+          // Same length, as a repeat run's log is, with its own content.
+          [earlierLogId]: testLogBody.replace("HERE", "HER2"),
+          [testLogId]: testLogBody,
+        });
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        );
+
+        expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
+      });
+
+      // `apexlog_get_org_logs` reuses a file saved under an id, so a guess must not be made.
+      it("names the file with a timestamp when no body is this run's", async () => {
+        mockFind.mockResolvedValue([{ Id: earlierLogId }, { Id: testLogId }]);
+        storedBodies({ [earlierLogId]: "other", [testLogId]: "other" });
+
+        const result = await executeAnonymous(
+          mockServer,
+          { apex: testApexCode },
+          ctx,
+          policy(),
+        );
+
+        expect(toonDecode(result).filePath).toMatch(/apex-\d+\.log$/);
+      });
     });
 
     // Without the bound, a log of the same length from any earlier run answers
@@ -700,7 +750,7 @@ describe("Execute Anonymous", () => {
         policy(),
       );
 
-      const { StartTime } = mockFindOne.mock.calls[0][0] as {
+      const { StartTime } = mockFind.mock.calls[0][0] as {
         StartTime: { $gte: { toString(): string } };
       };
       // The builder renders the bound with `String()`, and only a bare ISO 8601
@@ -718,7 +768,7 @@ describe("Execute Anonymous", () => {
         .spyOn(console, "error")
         .mockImplementation(() => {});
       const exists = Object.assign(new Error("EEXIST"), { code: "EEXIST" });
-      mockWriteFile.mockRejectedValueOnce(exists);
+      mockLink.mockRejectedValueOnce(exists);
 
       const result = await executeAnonymous(
         mockServer,
@@ -727,11 +777,9 @@ describe("Execute Anonymous", () => {
         policy(),
       );
 
-      expect(mockWriteFile).toHaveBeenNthCalledWith(
-        1,
-        expect.stringContaining(`${testLogId}.log`),
-        testLogBody,
-        { encoding: "utf-8", flag: "wx" },
+      expect(mockLink).toHaveBeenCalledWith(
+        expect.stringMatching(new RegExp(`${testLogId}\\.log\\.[\\w-]+\\.part$`)),
+        expect.stringMatching(new RegExp(`${testLogId}\\.log$`)),
       );
       expect(toonDecode(result).filePath).toMatch(/apex-\d+\.log$/);
       consoleError.mockRestore();
@@ -753,6 +801,8 @@ describe("Execute Anonymous", () => {
       expect(payload.warning).toContain("no debug log");
       expect(payload.durationMs).toBe(0);
       expect(mockLoadApexLog).not.toHaveBeenCalled();
+      // An empty log has no stored twin, so an earlier run's empty log must not name it.
+      expect(mockFind).not.toHaveBeenCalled();
     });
 
     it("should handle multi-line Apex code", async () => {
@@ -836,9 +886,9 @@ describe("Execute Anonymous", () => {
         order.push("run");
         return soapResponse();
       });
-      mockFindOne.mockImplementation(async () => {
+      mockFind.mockImplementation(async () => {
         order.push("match");
-        return { Id: testLogId };
+        return [{ Id: testLogId }];
       });
       mockDeleteTraceFlag.mockImplementation(async () => {
         order.push("delete");
@@ -908,11 +958,40 @@ describe("Execute Anonymous", () => {
       );
 
       const decoded = toonDecode(result);
-      expect(mockRequest).toHaveBeenCalledTimes(1);
+      const runs = mockRequest.mock.calls.filter(
+        ([request]: [unknown]) => typeof request !== "string",
+      );
+      expect(runs).toHaveLength(1);
       expect(deleteTraceFlag).not.toHaveBeenCalled();
       expect(decoded.succeeded).toBe(true);
       expect(decoded.warning).toContain("Could not set a trace flag");
       expect(decoded.warning).toContain("overlapping trace flag");
+      // Another run's flag may have stored it, or nothing did, so the one match is checked.
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.stringMatching(new RegExp(`ApexLog/${testLogId}/Body$`)),
+      );
+      // The stored body here is not this run's, so the file is named by time.
+      expect(decoded.filePath).toMatch(/apex-\d+\.log$/);
+    });
+
+    // Two runs at once: the first run's flag refuses the second's, and stores its log.
+    it("names the file by id when the run's flag is refused but its log was stored", async () => {
+      mockCreateTraceFlag.mockRejectedValue(
+        new Error("FIELD_INTEGRITY_EXCEPTION: already being traced"),
+      );
+      const run = mockRequest.getMockImplementation();
+      mockRequest.mockImplementation(async (request: unknown) =>
+        typeof request === "string" ? testLogBody : run!(request),
+      );
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
     it("should handle errors from the SOAP call", async () => {
@@ -2061,7 +2140,7 @@ describe("Execute Anonymous", () => {
       expect(mockWriteFile).toHaveBeenCalledWith(
         expect.stringContaining(`${testLogId}.log`),
         testLogBody,
-        { encoding: "utf-8", flag: "wx" },
+        "utf-8",
       );
     });
 
@@ -2077,9 +2156,9 @@ describe("Execute Anonymous", () => {
         recursive: true,
       });
       expect(mockWriteFile).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/custom\/output\/.+\.log$/),
+        expect.stringMatching(/^\/custom\/output\/.+\.log\b/),
         testLogBody,
-        { encoding: "utf-8", flag: "wx" },
+        "utf-8",
       );
     });
 
@@ -2099,9 +2178,9 @@ describe("Execute Anonymous", () => {
         recursive: true,
       });
       expect(mockWriteFile).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/my\/project\/logs\/.+\.log$/),
+        expect.stringMatching(/^\/my\/project\/logs\/.+\.log\b/),
         testLogBody,
-        { encoding: "utf-8", flag: "wx" },
+        "utf-8",
       );
     });
 

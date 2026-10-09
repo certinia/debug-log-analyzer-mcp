@@ -204,9 +204,48 @@ Set a `USER_DEBUG` trace flag on your user - in Setup, for example - and every r
 - "Execute this Apex with all debug levels set to FINEST"
 - "Run this Apex against my QA org with database logging set to FINEST"
 
+### apexlog_list_org_logs
+
+Lists the debug logs stored in an org - a slow UI action, an integration user's request, a Queueable - so an agent can find one it did not run itself. Filters, sorting and paging all run in the org, so a page costs what `limit` asks for, however many logs the org holds. `matchedCount` is how many logs the filters match.
+
+`operation` matches part of the operation in any case, so `aura` finds `/aura`. `succeeded: false` finds the failed logs, and `exceptionMessage` says why each failed. Pass `nextCursor` back as `cursor`, with the same filters and `sortBy`, for the next page; it is absent on the last one. A cursor pages past the 2,000 rows SOQL's `OFFSET` stops at.
+
+<!-- params-apexlog_list_org_logs:start -->
+
+| Parameter          | Type    | Required | Description |
+| ------------------ | ------- | -------- | --- |
+| `targetOrg`        | string  | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `user`             | string  | No       | Username whose activity was logged |
+| `operation`        | string  | No       | Part of the operation, any case, e.g. "aura" for /aura |
+| `request`          | string  | No       | e.g. "Api" or "Application" |
+| `succeeded`        | boolean | No       | false for failed logs only |
+| `startTimeFrom`    | string  | No       | ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z |
+| `startTimeTo`      | string  | No       |  |
+| `minFileSizeBytes` | number  | No       |  |
+| `sortBy`           | string  | No       | Newest, slowest or largest first (default: startTime) |
+| `limit`            | number  | No       | Rows per page (default: 20) |
+| `cursor`           | string  | No       | nextCursor from the previous page, with the same filters and sortBy |
+
+<!-- params-apexlog_list_org_logs:end -->
+
+### apexlog_get_org_logs
+
+Downloads logs by `ids`, or the newest `latest` of them - the newest one when you pass neither, as `sf apex get log` does - and returns each saved path, which the analysis tools accept. Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save.
+
+<!-- params-apexlog_get_org_logs:start -->
+
+| Parameter   | Type     | Required | Description |
+| ----------- | -------- | -------- | --- |
+| `targetOrg` | string   | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `ids`       | string[] | No       | Log ids, from apexlog_list_org_logs |
+| `latest`    | number   | No       | The newest N logs, in place of ids (default: 1) |
+| `outputDir` | string   | No       | Directory to save the debug log files. Defaults to .apex-log-mcp/ in the project root. |
+
+<!-- params-apexlog_get_org_logs:end -->
+
 ## Token Cost
 
-Every request carries all four tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
+Every request carries all six tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
 
 <!-- token-cost-definitions:start -->
 
@@ -214,13 +253,15 @@ Every request carries all four tool definitions, whether you call them or not. E
 | ------------------------------ | ----------------------------------------------------------- |
 | `apexlog_list_slow_operations` | ~530                                                        |
 | `apexlog_execute_anonymous`    | ~447                                                        |
+| `apexlog_list_org_logs`        | ~322                                                        |
+| `apexlog_get_org_logs`         | ~203                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~1,282** (0.6% of a 200K context), **-16% vs 1.x ~1,529** |
+| **Total**                      | **~1,807** (0.9% of a 200K context), **+18% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
-Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event.
+Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the two org log tools, which reach logs 1.x could not; the four tools 1.x also had cost ~1,282.
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 
@@ -238,7 +279,7 @@ Cost does not grow with the log size. The figures below are measured against a 4
 
 ## Configuration
 
-The [Quick Start](#quick-start) config gives you all four tools.
+The [Quick Start](#quick-start) config gives you all six tools.
 
 ### Production safety
 
@@ -277,6 +318,8 @@ An org id matches in its 15- or 18-char form, whatever its case. An instance URL
 A `type:` entry denies a type from the table above, e.g. `type:sandbox`. `type:production` also denies an org whose type cannot be read, because the server treats that org as production. The server contacts the org before it refuses on type: it connects, and it queries the org type. No Apex runs and no record is written. A `type:` entry that names no org type stops the server.
 
 Nothing lifts a deny - not `--allow-production-orgs`, not a confirmation. The refusal names what matched.
+
+A deny covers every org tool, listing and downloading logs as well as running Apex, since a log holds the org's data. `--deny-orgs '*'` refuses them all, and the analysis tools keep working.
 
 Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as convenience, not a security boundary.
 
