@@ -27,8 +27,8 @@ pnpm start
 ### Core Components
 
 - **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else. A bad flag exits 1 with one `[apex-log-mcp]` line, checked by `pnpm run eval`.
-- **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the ten tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
-- **src/tools/responseShaping.ts**: the shared response helpers - `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`, `elide`, `NAME_LIMIT`.
+- **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the eleven tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
+- **src/tools/responseShaping.ts**: the shared response helpers - `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`, `elide`, `NAME_LIMIT`, and the page every analysis table stops at - `fitPage`, `rowCost`, `PAGE_CHAR_BUDGET` - with the `matches` filter they share.
 - **src/tools/localFile.ts**: `absolutePathSchema` and `fileReadError`, shared by every tool that reads a local file - a log or a file of Apex.
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
 - **`@apexdevtools/apex-log-parser`**: the parser, as a dependency - nothing here parses a log. Every value, type and const comes from the package root; 0.2.0 removed the `/types` entry point. Read `debugCategory` for an event's category, never `category`: that one is a UI grouping slated for deprecation, and `src/tools/operations.ts` reads it only as the flag that says an event has a duration.
@@ -71,15 +71,16 @@ dist/               # Compiled JavaScript output
 1. **`apexlog_list_slow_operations`**: ranks every timed operation by self time
 2. **`apexlog_get_summary`**: execution statistics and governor limit usage
 3. **`apexlog_list_limit_risks`**: the limits nearest their ceiling
-4. **`apexlog_execute_anonymous`**: runs Apex, saves the log, returns its path
-5. **`apexlog_list_org_logs`**: the debug logs stored in an org, filtered, sorted and paged in SOQL
-6. **`apexlog_get_org_logs`**: downloads stored logs by id or the newest N, returns their paths
-7. **`apexlog_delete_org_logs`**: deletes stored logs by id or by the list tool's filters, to free the org's log storage
-8. **`apexlog_list_trace_flags`**: the trace flags not yet expired, with their levels
-9. **`apexlog_create_trace_flag`**: traces a user, or sets a class's or trigger's levels, for a while; refused when the entity has a flag of its log type already
-10. **`apexlog_delete_trace_flags`**: deletes trace flags by id, to stop logging now
+4. **`apexlog_search_events`**: a log's events in log order, filtered and paged, with their text and place but no timing
+5. **`apexlog_execute_anonymous`**: runs Apex, saves the log, returns its path
+6. **`apexlog_list_org_logs`**: the debug logs stored in an org, filtered, sorted and paged in SOQL
+7. **`apexlog_get_org_logs`**: downloads stored logs by id or the newest N, returns their paths
+8. **`apexlog_delete_org_logs`**: deletes stored logs by id or by the list tool's filters, to free the org's log storage
+9. **`apexlog_list_trace_flags`**: the trace flags not yet expired, with their levels
+10. **`apexlog_create_trace_flag`**: traces a user, or sets a class's or trigger's levels, for a while; refused when the entity has a flag of its log type already
+11. **`apexlog_delete_trace_flags`**: deletes trace flags by id, to stop logging now
 
-Tools 1-3 take an absolute path to a `.log` file. Tools 4-10 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all of them; only a write (4, 7, 9 and 10) meets the production gate.
+Tools 1-4 take an absolute path to a `.log` file. Tools 5-11 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all of them; only a write (5, 8, 10 and 11) meets the production gate.
 
 ## Naming
 

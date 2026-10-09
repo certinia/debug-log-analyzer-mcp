@@ -1,0 +1,19 @@
+matchedCount: 5
+capturedAt[11]{debugCategory,level}:
+  apexCode,FINE
+  apexProfiling,INFO
+  callout,INFO
+  dataAccess,INFO
+  database,INFO
+  nba,INFO
+  system,DEBUG
+  validation,INFO
+  visualforce,INFO
+  wave,INFO
+  workflow,INFO
+events[5]{eventIndex,parentEventIndex,type,debugCategory,namespace,lineNumber,text}:
+  6,5,EXCEPTION_THROWN,apexCode,default,31,"System.CalloutException: Read timed out"
+  9,8,EXCEPTION_THROWN,apexCode,default,31,"System.CalloutException: Read timed out"
+  12,11,EXCEPTION_THROWN,apexCode,default,31,"System.CalloutException: Read timed out"
+  15,14,EXCEPTION_THROWN,apexCode,default,44,"System.NullPointerException: Attempt to de-reference a null object"
+  19,18,FLOW_ELEMENT_ERROR,workflow,default,null,"This error occurred: FIELD_CUSTOM_VALIDATION_EXCEPTION: Amount is required. FlowRecordUpdate Update_Opportunity"

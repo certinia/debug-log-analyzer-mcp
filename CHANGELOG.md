@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- apexlog_search_events: search a log's events in log order - what the code printed, the validation rules, or everything under one method - filtered by type, category, level, namespace or text, and paged ([#144])
 - apexlog_list_org_logs, apexlog_get_org_logs: list the debug logs stored in an org, filtered, sorted and paged in the org, and download them by id or the newest N for the analysis tools ([#209])
 - apexlog_delete_org_logs: delete stored logs by id or by the list's filters, so an org whose log storage is full can set a trace flag again ([#210])
 - apexlog_list_trace_flags, apexlog_create_trace_flag, apexlog_delete_trace_flags: see which users, classes and triggers are traced, start logging a user or set a class's levels, and stop it now ([#211])
@@ -135,3 +136,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#211]: https://github.com/certinia/debug-log-analyzer-mcp/issues/211
 [#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
+[#144]: https://github.com/certinia/debug-log-analyzer-mcp/issues/144

@@ -35,6 +35,7 @@ Then ask your assistant to analyze a log. `apexlog_execute_anonymous` also needs
 - "Give me a summary of this debug log"
 - "Show me the 5 slowest methods in the default namespace"
 - "Are we approaching any governor limits in this transaction?"
+- "What did my System.debug calls print?"
 - "Run this Apex against my scratch org and analyze the performance"
 
 Keeping the server connected costs ~1,232 tokens, 0.6% of a 200K context. See [Token Cost](#token-cost).
@@ -166,6 +167,38 @@ The governor limits nearest their ceiling, worst first.
 | `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
 
 <!-- params-apexlog_list_limit_risks:end -->
+
+### apexlog_search_events
+
+Searches a log's events in log order, for what the other tools rank or total: what the code printed (`USER_DEBUG`), the validation rules, the statements, or every event under one method. Filters combine, and `offset` walks a long log a page at a time.
+
+<!-- shape-apexlog_search_events:start -->
+
+- `capturedAt` - `{debugCategory, level}`
+- `events` - `{eventIndex, parentEventIndex, type, debugCategory, namespace, lineNumber, text}`
+
+<!-- shape-apexlog_search_events:end -->
+
+A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventIndex` names an event and `parentEventIndex` the one it sits under, so a row found here can be opened up with `parentEventIndex`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
+
+Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision. `maxLevel` reads a `USER_DEBUG` line at the level the code logged it at. A page stops early when it would be too large, and `matchedCount` says how many events matched in all. `capturedAt` gives the level of each category `debugCategory` names, or that the matches came from when every `type` named matched or you asked for one event. Otherwise, or when those name no category the header declared, it gives every level the header declared, because a search that found no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
+
+<!-- params-apexlog_search_events:start -->
+
+| Parameter          | Type     | Required | Description |
+| ------------------ | -------- | -------- | --- |
+| `logFilePath`      | string   | Yes      | Absolute path |
+| `type`             | string[] | No       | Only these log event types, e.g. USER_DEBUG, VALIDATION_RULE |
+| `debugCategory`    | string[] | No       | Only these debug log categories |
+| `maxLevel`         | string   | No       | Only events a log captured at this level carries |
+| `namespace`        | string[] | No       | Only these namespaces |
+| `contains`         | string   | No       | Only events whose text holds this, ignoring case |
+| `eventIndex`       | number   | No       | Only this event, with more of its text |
+| `parentEventIndex` | number   | No       | Only events below this one |
+| `limit`            | number   | No       | Page size (default: 50); fewer if the page would be too large |
+| `offset`           | number   | No       | Matched rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit. |
+
+<!-- params-apexlog_search_events:end -->
 
 ### apexlog_execute_anonymous
 
@@ -310,27 +343,28 @@ Deletes trace flags by id, to stop logging now: Salesforce refuses an edit that 
 
 ## Token Cost
 
-Every request carries all ten tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
+Every request carries all eleven tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
 
 <!-- token-cost-definitions:start -->
 
-| Tool                           | Tokens                                                      |
-| ------------------------------ | ----------------------------------------------------------- |
-| `apexlog_list_slow_operations` | ~530                                                        |
-| `apexlog_execute_anonymous`    | ~447                                                        |
-| `apexlog_create_trace_flag`    | ~351                                                        |
-| `apexlog_list_org_logs`        | ~322                                                        |
-| `apexlog_delete_org_logs`      | ~210                                                        |
-| `apexlog_get_org_logs`         | ~203                                                        |
-| `apexlog_get_summary`          | ~155                                                        |
-| `apexlog_list_trace_flags`     | ~152                                                        |
-| `apexlog_list_limit_risks`     | ~150                                                        |
-| `apexlog_delete_trace_flags`   | ~143                                                        |
-| **Total**                      | **~2,663** (1.3% of a 200K context), **+74% vs 1.x ~1,529** |
+| Tool                           | Tokens                                                       |
+| ------------------------------ | ------------------------------------------------------------ |
+| `apexlog_list_slow_operations` | ~530                                                         |
+| `apexlog_search_events`        | ~453                                                         |
+| `apexlog_execute_anonymous`    | ~447                                                         |
+| `apexlog_create_trace_flag`    | ~351                                                         |
+| `apexlog_list_org_logs`        | ~322                                                         |
+| `apexlog_delete_org_logs`      | ~210                                                         |
+| `apexlog_get_org_logs`         | ~203                                                         |
+| `apexlog_get_summary`          | ~155                                                         |
+| `apexlog_list_trace_flags`     | ~152                                                         |
+| `apexlog_list_limit_risks`     | ~150                                                         |
+| `apexlog_delete_trace_flags`   | ~143                                                         |
+| **Total**                      | **~3,116** (1.6% of a 200K context), **+104% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
-Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the six org tools, which reach logs and trace flags 1.x could not; the four tools 1.x also had cost ~1,282.
+Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the six org tools, which reach logs and trace flags 1.x could not, and `apexlog_search_events`, which reaches the events 1.x parsed and dropped; the four tools 1.x also had cost ~1,282.
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 
@@ -343,12 +377,13 @@ Cost does not grow with the log size. The figures below are measured against a 4
 | `apexlog_get_summary`          | ~342     | ~293 | +17%   |
 | `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
+| `apexlog_search_events`        | ~972     | -    | -      |
 
 <!-- token-cost-answers:end -->
 
 ## Configuration
 
-The [Quick Start](#quick-start) config gives you all ten tools.
+The [Quick Start](#quick-start) config gives you all eleven tools.
 
 ### Production safety
 

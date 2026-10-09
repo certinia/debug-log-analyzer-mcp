@@ -23,6 +23,7 @@ import {
   listLimitRisksToolConfig,
 } from "./tools/listLimitRisks.js";
 import { limitUnitsClause } from "./tools/responseShaping.js";
+import { searchEvents, searchEventsToolConfig } from "./tools/searchEvents.js";
 import {
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
@@ -148,6 +149,12 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     "apexlog_list_limit_risks",
     listLimitRisksToolConfig,
     async (args) => listLimitRisks(args),
+  );
+
+  server.registerTool(
+    "apexlog_search_events",
+    searchEventsToolConfig,
+    async (args) => searchEvents(args),
   );
 
   // Every org tool is held to the same deny list and production gate.

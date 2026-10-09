@@ -1,0 +1,5 @@
+matchedCount: 1
+capturedAt[1]{debugCategory,level}:
+  apexCode,FINE
+events[1]{eventIndex,parentEventIndex,type,debugCategory,namespace,lineNumber,text}:
+  4,3,USER_DEBUG,apexCode,default,1,"DEBUG | "

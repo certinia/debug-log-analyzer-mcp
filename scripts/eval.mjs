@@ -208,6 +208,31 @@ const ANSWERABILITY = {
       columns: ["debugCategory", "level"],
     },
   ],
+  apexlog_search_events: [
+    {
+      fixture: "minimal",
+      question: "What did the code print?",
+      keys: ["events"],
+      columns: ["type", "text"],
+    },
+    {
+      // Pinned where events match: an empty page carries no columns.
+      fixture: "governor-heavy",
+      question: "Where in the log is each event, and what is it under?",
+      keys: ["events"],
+      columns: ["eventIndex", "parentEventIndex", "lineNumber"],
+    },
+    {
+      question: "Did the page hide events the search matched?",
+      fields: ["matchedCount"],
+    },
+    {
+      // On an empty result too: only the level says whether none means none.
+      question: "Was the log captured at a level that would carry what I searched for?",
+      keys: ["capturedAt"],
+      columns: ["debugCategory", "level"],
+    },
+  ],
 };
 
 /**
@@ -279,6 +304,12 @@ const TOKEN_BUDGET = {
   // The thrown-exception table #208 added: four throws from two lines fold into
   // two rows, as 4,501 throws from one line in a real log fold into one.
   "apexlog_get_summary/exceptions": 289,
+  // The default page of 50 events (#144), what the code printed, a text
+  // search, and the empty search that states every declared level.
+  "apexlog_search_events/governor-heavy": 1021,
+  "apexlog_search_events/minimal": 53,
+  "apexlog_search_events/exceptions": 223,
+  "apexlog_search_events/heap-heavy": 64,
 };
 
 /**
@@ -328,6 +359,9 @@ const DEFINITION_BUDGET = {
   apexlog_list_trace_flags: 160,
   apexlog_create_trace_flag: 369,
   apexlog_delete_trace_flags: 150,
+  // Measured + 5% (#144). Eight filters and a page, each a question the
+  // ranking cannot ask: what the code printed, what ran under one method.
+  apexlog_search_events: 473,
 };
 
 /**
@@ -353,10 +387,12 @@ const V1_DEFINITION_TOTAL = 1529;
  * Deleting them, so a full org can set a trace flag again, added ~210 inside a
  * budget of 221 (#210). Tracing a user, so the org stores the logs those tools
  * read, or setting a class's levels, added ~646 inside budgets of 679 (#211).
- * The budgets sum to this cap, so raising any budget means raising the cap, on
- * purpose, with the reason here.
+ * Searching a log's events, for what the code printed or what ran under one
+ * method, added ~450 inside a budget of 473 (#144). The budgets sum to this
+ * cap, so raising any budget means raising the cap, on purpose, with the
+ * reason here.
  */
-const DEFINITION_TOTAL_CAP = 2791;
+const DEFINITION_TOTAL_CAP = 3264;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -375,6 +411,7 @@ const SELECTION_KEYWORDS = {
   ],
   apexlog_get_summary: ["summary", "overview"],
   apexlog_list_limit_risks: ["governor limits", "CPU time"],
+  apexlog_search_events: ["USER_DEBUG", "debug log"],
   apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
   apexlog_list_org_logs: ["debug logs", "Salesforce org"],
   apexlog_get_org_logs: ["debug logs", "Salesforce org"],
@@ -417,6 +454,14 @@ const FIXTURES_BY_TOOL = {
     { fixture: "heap-heavy", args: { sortBy: "heapSelfNetBytes" } },
   ],
   apexlog_list_limit_risks: ["governor-heavy", "minimal"],
+  apexlog_search_events: [
+    // The default page: the first 50 events in log order.
+    "governor-heavy",
+    { fixture: "minimal", args: { type: ["USER_DEBUG"] } },
+    { fixture: "exceptions", args: { contains: "exception" } },
+    // Nothing printed, so the page is empty and every declared level comes back.
+    { fixture: "heap-heavy", args: { type: ["USER_DEBUG"] } },
+  ],
 };
 
 /**

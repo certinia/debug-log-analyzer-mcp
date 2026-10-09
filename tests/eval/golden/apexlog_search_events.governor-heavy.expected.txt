@@ -1,0 +1,64 @@
+matchedCount: 158
+capturedAt[11]{debugCategory,level}:
+  apexCode,FINE
+  apexProfiling,FINE
+  callout,FINEST
+  dataAccess,INFO
+  database,FINEST
+  nba,FINE
+  system,FINE
+  validation,INFO
+  visualforce,FINE
+  wave,FINE
+  workflow,FINE
+events[50]{eventIndex,parentEventIndex,type,debugCategory,namespace,lineNumber,text}:
+  1,0,USER_INFO,apexCode,"",EXTERNAL,005Ea00000R6orz first-last@example.com
+  2,0,EXECUTION_STARTED,apexCode,default,null,""
+  3,2,CODE_UNIT_STARTED,apexCode,default,null,execute_anonymous_apex
+  4,3,SYSTEM_MODE_ENTER,system,default,null,"false"
+  5,3,METHOD_ENTRY,apexCode,default,5,AccountService.AccountService()
+  6,5,SYSTEM_METHOD_ENTRY,system,default,7,"com.salesforce.api.interop.apex.bcl.DateMethods.newInstance(Integer, Integer, Integer)"
+  9,3,METHOD_ENTRY,apexCode,default,1,AccountService.createAccountsAndContacts()
+  10,9,METHOD_ENTRY,apexCode,default,11,AccountService.getRevenue()
+  11,10,SYSTEM_METHOD_ENTRY,system,default,120,com.salesforce.api.interop.apex.bcl.DateMethods.today()
+  13,10,METHOD_ENTRY,apexCode,default,120,AccountService.getDayValue(Date)
+  14,13,SYSTEM_METHOD_ENTRY,system,default,142,com.salesforce.api.interop.apex.bcl.DateMethods.daysBetween(Date)
+  16,13,SYSTEM_METHOD_ENTRY,system,default,1,Math.Math()
+  18,13,METHOD_ENTRY,apexCode,default,143,"System.Math.mod(Integer, Integer)"
+  21,10,SYSTEM_METHOD_ENTRY,system,default,120,Decimal.multiply(Decimal)
+  24,9,SYSTEM_CONSTRUCTOR_ENTRY,system,default,13,<init>()
+  26,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  28,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  30,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  32,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  34,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  36,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  38,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  40,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  42,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  44,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  46,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  48,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  50,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  52,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  54,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  56,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  58,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  60,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  62,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  64,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  66,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  68,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  70,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  72,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  74,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  76,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  78,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  80,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  82,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  84,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  86,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  88,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)
+  90,9,SYSTEM_METHOD_ENTRY,system,default,19,List<Account>.add(Object)
+  92,9,SYSTEM_METHOD_ENTRY,system,default,16,String.valueOf(Object)
+  94,9,SYSTEM_METHOD_ENTRY,system,default,17,String.valueOf(Object)

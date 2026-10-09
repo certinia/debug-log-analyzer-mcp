@@ -197,3 +197,61 @@ export function elide(text: string, maxChars: number): string {
       : text.length - tail;
   return `${text.slice(0, from)}…${text.slice(to)}`;
 }
+
+/**
+ * The most one page of rows may cost, as characters.
+ *
+ * About 15,000 tokens at the four-characters-a-token estimate `scripts/eval.mjs`
+ * measures with, which leaves headroom under the 25,000-token response ceiling
+ * a client is likely to impose. Eliding names is not enough on its own: a
+ * thousand rows cost some 15,000 tokens in their numeric columns alone, so 5
+ * logs in that corpus still breached the ceiling with every name capped.
+ */
+export const PAGE_CHAR_BUDGET = 60_000;
+
+/**
+ * What a row costs on the wire, near enough to bound a page by.
+ *
+ * An estimate, not the encoded length: it counts each cell and a separator,
+ * where TOON also indents the row and quotes any cell holding a comma. It
+ * therefore under-counts, by 3% on the worst page of a 124-log corpus - which
+ * the budget's own headroom absorbs, since 60,000 characters is well under the
+ * 100,000 a 25,000-token ceiling allows.
+ */
+export function rowCost(row: object): number {
+  return Object.values(row).reduce(
+    (total, cell) => total + String(cell).length + 1,
+    0,
+  );
+}
+
+/**
+ * The rows of `items` that fit the page budget, built and costed in one pass:
+ * a row the budget turns away is never built, and the rows are a prefix of
+ * `items` by construction. At least one row always comes back, so one
+ * enormous row is reported rather than the table quietly going empty. Rows
+ * returned read against a matched count say the page was cut. `spent` counts
+ * the row turned away too, so nothing else fits after a cut.
+ */
+export function fitPage<T, R extends object>(
+  items: T[],
+  toRow: (item: T) => R,
+): { rows: R[]; spent: number } {
+  const rows: R[] = [];
+  let spent = 0;
+  for (const item of items) {
+    const row = toRow(item);
+    const cost = rowCost(row);
+    spent += cost;
+    if (spent > PAGE_CHAR_BUDGET && rows.length > 0) {
+      break;
+    }
+    rows.push(row);
+  }
+  return { rows, spent };
+}
+
+/** An empty or absent filter selects everything on that axis. */
+export function matches(wanted: string[] | undefined, value: string): boolean {
+  return !wanted?.length || wanted.includes(value);
+}
