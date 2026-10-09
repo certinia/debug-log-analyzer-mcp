@@ -147,6 +147,7 @@ export const deleteOrgLogsToolConfig = {
   description:
     "Delete debug logs from a Salesforce org, by id or by apexlog_list_org_logs's filters, to free its log storage, which blocks trace flags when full. A deleted log cannot be restored.",
   inputSchema: toolInputSchema(deleteOrgLogsInputSchema),
+  // Not idempotent: a call by filter deletes the next logs that match.
   annotations: {
     destructiveHint: true,
   },
