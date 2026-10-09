@@ -17,6 +17,7 @@ Tested in a scratch org on 2026-09-30. Table and method: https://github.com/cert
 - A flag with a 1-minute expiry is accepted and works. A `StartDate` in the past is accepted.
 - Salesforce refuses a second flag whose window overlaps one the entity already has: `FIELD_INTEGRITY_EXCEPTION`, "already being traced". A flag with no `StartDate` overlaps even an expired flag, so always set one.
 - The overlap rule is per log type: a `DEVELOPER_LOG` flag does not block a `USER_DEBUG` create, and a flag that starts later does not block one for now.
-- With no header, the returned log is empty, and the stored log carries the flag's levels.
+- With no header, the returned log is empty, and the stored log carries the flag's levels. An empty `<DebuggingHeader/>` does the same. A `debugLevel` preset such as `DEBUGONLY`, which `sf apex run` and the VS Code extension send, beats the flag like a categories header. Tested 2026-10-09: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
+- So no header form defers to the flag and returns the log: to run at a flag's levels, read its `DebugLevel` and send them.
 - A flag also logs the user's other traffic (e.g. `/aura` requests) while it lives.
 - Not tested: `CLASS_TRACING`.

@@ -183,7 +183,7 @@ The response also gives the org username, its alias if set, the org type, and a 
 | `apexFilePath` | string           | No       | Absolute path to a file of anonymous Apex |
 | `targetOrg`    | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
 | `outputDir`    | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root. |
-| `debugLevel`   | string \| object | No       | This run's log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
+| `debugLevel`   | string \| object | No       | This run's log levels. Omit for your active trace flag's, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
 
@@ -194,6 +194,8 @@ An object `debugLevel` looks like this:
 ```
 
 Levels are `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`.
+
+Set a `USER_DEBUG` trace flag on your user - in Setup, for example - and every run you start without `debugLevel` logs at its levels; your flag is never changed. `levelsSource` in the response says where a run's levels came from: `traceFlag`, `default` or `request`. A Developer Console trace flag still outranks them, and `levelsOverridden` says when it did.
 
 **Example prompts:**
 
@@ -211,10 +213,10 @@ Every request carries all four tool definitions, whether you call them or not. E
 | Tool                           | Tokens                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
 | `apexlog_list_slow_operations` | ~530                                                        |
-| `apexlog_execute_anonymous`    | ~429                                                        |
+| `apexlog_execute_anonymous`    | ~447                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~1,264** (0.6% of a 200K context), **-17% vs 1.x ~1,529** |
+| **Total**                      | **~1,282** (0.6% of a 200K context), **-16% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 

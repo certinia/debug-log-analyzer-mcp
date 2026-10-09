@@ -46,7 +46,7 @@ export type Workspace =
   | { kind: "unknown"; reason: string };
 
 /** What a tool asks of `openOrg`. */
-export type OrgRequest<T> = {
+export type OrgRequest<T, V = T> = {
   /** The tool's name, which a production confirmation is bound to. */
   tool: string;
   /** What the call does, as a verb phrase: every refusal is built from it. */
@@ -62,17 +62,18 @@ export type OrgRequest<T> = {
    */
   prepare?: (rootPaths: string[]) => Promise<T>;
   /**
-   * `false` for a read. A write gives what a production org must confirm,
-   * built once the org is connected so it can be read first. Required, so no
-   * write skips the gate by leaving it out.
+   * `false` for a read. A write reads what it needs from the connected org and
+   * returns it with what a production org must confirm, so it does exactly
+   * what was confirmed. Required, so no write skips the gate by leaving it out.
    */
-  confirm:
+  write:
     | false
     | ((org: {
         value: T;
         connection: Connection;
+        local: LocalOrg;
         orgLabel: string;
-      }) => Confirmable | Promise<Confirmable>);
+      }) => Promise<{ value: V; confirm: Confirmable }>);
 };
 
 export type OrgAccess<T> =
@@ -95,13 +96,13 @@ export type OrgAccess<T> =
  * production gate, before the tool changes anything. A refusal is returned; a
  * fault still throws.
  */
-export async function openOrg<T = undefined>(
+export async function openOrg<T = undefined, V = T>(
   server: McpServer,
   ctx: ServerContext,
-  request: OrgRequest<T>,
+  request: OrgRequest<T, V>,
   policy: OrgAccessPolicy,
-): Promise<OrgAccess<T>> {
-  const refuse = (text: string): OrgAccess<T> => ({
+): Promise<OrgAccess<V>> {
+  const refuse = (text: string): OrgAccess<V> => ({
     granted: false,
     result: toolError(text),
   });
@@ -158,7 +159,11 @@ export async function openOrg<T = undefined>(
   }
 
   const connection = org.getConnection();
-  if (request.confirm) {
+  // A read's value is what `prepare` gave; only a write's hook can change it.
+  let result = value as unknown as V;
+  if (request.write) {
+    const planned = await request.write({ value, connection, local, orgLabel });
+    result = planned.value;
     const decision = await authorizeOperation({
       ctx,
       mintConfirmationState: policy.mintConfirmationState,
@@ -170,7 +175,7 @@ export async function openOrg<T = undefined>(
       unverifiedReason,
       tool: request.tool,
       action: request.action,
-      confirm: await request.confirm({ value, connection, orgLabel }),
+      confirm: planned.confirm,
     });
     if (decision.outcome === "confirmationRequired") {
       return { granted: false, result: decision.result };
@@ -182,7 +187,7 @@ export async function openOrg<T = undefined>(
 
   return {
     granted: true,
-    value,
+    value: result,
     connection,
     local,
     orgLabel,

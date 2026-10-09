@@ -6,7 +6,7 @@ import { Connection } from "@salesforce/core";
 import {
   createTraceFlag,
   deleteTraceFlag,
-  hasActiveTraceFlag,
+  findActiveTraceFlags,
 } from "../../src/salesforce/traceFlags";
 
 describe("Trace Flags", () => {
@@ -19,7 +19,7 @@ describe("Trace Flags", () => {
   let mockSobject: jest.Mock;
   let mockCreate: jest.Mock;
   let mockDestroy: jest.Mock;
-  let mockFindOne: jest.Mock;
+  let mockQuery: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -28,15 +28,14 @@ describe("Trace Flags", () => {
 
     mockCreate = jest.fn();
     mockDestroy = jest.fn();
-    mockFindOne = jest.fn();
+    mockQuery = jest.fn();
     mockSobject = jest.fn().mockReturnValue({
       create: mockCreate,
       destroy: mockDestroy,
-      findOne: mockFindOne,
     });
 
     mockConnection = {
-      tooling: { sobject: mockSobject },
+      tooling: { sobject: mockSobject, query: mockQuery },
     } as unknown as jest.Mocked<Connection>;
   });
 
@@ -44,45 +43,96 @@ describe("Trace Flags", () => {
     jest.useRealTimers();
   });
 
-  describe("hasActiveTraceFlag", () => {
-    it("is true when the entity has a live flag", async () => {
-      mockFindOne.mockResolvedValue({ Id: traceFlagId });
+  describe("findActiveTraceFlags", () => {
+    const flagLevels = {
+      ApexCode: "ERROR",
+      ApexProfiling: "NONE",
+      Callout: "NONE",
+      Database: "INFO",
+      Nba: "NONE",
+      System: "WARN",
+      Validation: "NONE",
+      Visualforce: "NONE",
+      Wave: "NONE",
+      Workflow: "NONE",
+    };
 
-      await expect(
-        hasActiveTraceFlag(mockConnection, tracedEntityId),
-      ).resolves.toBe(true);
-    });
+    it("gives the levels of a live USER_DEBUG flag", async () => {
+      mockQuery.mockResolvedValue({
+        records: [
+          { LogType: "DEVELOPER_LOG", DebugLevel: { ...flagLevels, ApexCode: "FINEST" } },
+          { LogType: "USER_DEBUG", DebugLevel: flagLevels },
+        ],
+      });
 
-    it("is false when the entity has none", async () => {
-      mockFindOne.mockResolvedValue(null);
+      const flags = await findActiveTraceFlags(mockConnection, tracedEntityId);
 
-      await expect(
-        hasActiveTraceFlag(mockConnection, tracedEntityId),
-      ).resolves.toBe(false);
-    });
-
-    // Live now, and of a type that stores the log: a Developer Console flag counts.
-    it("asks for USER_DEBUG and DEVELOPER_LOG flags on the entity that are live now", async () => {
-      mockFindOne.mockResolvedValue(null);
-
-      await hasActiveTraceFlag(mockConnection, tracedEntityId);
-
-      const [conditions, fields] = mockFindOne.mock.calls[0] ?? [];
-      expect(mockSobject).toHaveBeenCalledWith("TraceFlag");
-      expect(fields).toEqual(["Id"]);
-      expect(conditions.TracedEntityId).toBe(tracedEntityId);
-      expect(String(conditions.StartDate.$lte)).toBe(now);
-      expect(String(conditions.ExpirationDate.$gt)).toBe(now);
-      expect(conditions.LogType).toEqual({
-        $in: ["USER_DEBUG", "DEVELOPER_LOG"],
+      expect(flags.storesLogs).toBe(true);
+      expect(flags.userDebugLevels).toMatchObject({
+        apexCode: "ERROR",
+        database: "INFO",
+        system: "WARN",
+        workflow: "NONE",
       });
     });
 
-    it("passes a query error on", async () => {
-      mockFindOne.mockRejectedValue(new Error("Query failed"));
+    // A concurrent run's flag, or one a failed delete left, is the tool's, not the user's.
+    it("stores logs but gives no levels for the tool's own run flag", async () => {
+      mockQuery.mockResolvedValue({
+        records: [
+          {
+            LogType: "USER_DEBUG",
+            DebugLevel: { ...flagLevels, DeveloperName: "Apex_Log_MCP_Debug_Level" },
+          },
+        ],
+      });
 
       await expect(
-        hasActiveTraceFlag(mockConnection, tracedEntityId),
+        findActiveTraceFlags(mockConnection, tracedEntityId),
+      ).resolves.toEqual({ storesLogs: true, userDebugLevels: undefined });
+    });
+
+    // A Developer Console flag stores the log, but its levels beat the header, so they are not offered.
+    it("stores logs but gives no levels for a Developer Console flag alone", async () => {
+      mockQuery.mockResolvedValue({
+        records: [{ LogType: "DEVELOPER_LOG", DebugLevel: flagLevels }],
+      });
+
+      await expect(
+        findActiveTraceFlags(mockConnection, tracedEntityId),
+      ).resolves.toEqual({ storesLogs: true, userDebugLevels: undefined });
+    });
+
+    it("stores nothing when the entity has no live flag", async () => {
+      mockQuery.mockResolvedValue({ records: [] });
+
+      await expect(
+        findActiveTraceFlags(mockConnection, tracedEntityId),
+      ).resolves.toEqual({ storesLogs: false, userDebugLevels: undefined });
+    });
+
+    // Live now, and of a type that stores the log, with the levels in the same query.
+    it("asks for the entity's live USER_DEBUG and DEVELOPER_LOG flags and their levels", async () => {
+      mockQuery.mockResolvedValue({ records: [] });
+
+      await findActiveTraceFlags(mockConnection, tracedEntityId);
+
+      const query = mockQuery.mock.calls[0]?.[0] as string;
+      expect(query).toContain("FROM TraceFlag");
+      expect(query).toContain(`TracedEntityId = '${tracedEntityId}'`);
+      expect(query).toContain(`StartDate <= ${now}`);
+      expect(query).toContain(`ExpirationDate > ${now}`);
+      expect(query).toContain("LogType IN ('USER_DEBUG', 'DEVELOPER_LOG')");
+      Object.keys(flagLevels).forEach((field) =>
+        expect(query).toContain(`DebugLevel.${field}`),
+      );
+    });
+
+    it("passes a query error on", async () => {
+      mockQuery.mockRejectedValue(new Error("Query failed"));
+
+      await expect(
+        findActiveTraceFlags(mockConnection, tracedEntityId),
       ).rejects.toThrow("Query failed");
     });
   });
