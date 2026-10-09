@@ -360,8 +360,9 @@ describe("apexLogs", () => {
       { length: 201 },
       (_, index) => `07L${String(index).padStart(15, "0")}`,
     );
+    // More batches than run at once, so some wait for a free slot.
+    const many = Array.from({ length: 1000 }, (_, index) => `07L${index}`);
 
-    // A failure carries no id, so position is the only link back to the log.
     it("should delete in batches of 200 and match each result to its id by position", async () => {
       destroy.mockImplementation(async (batch: string[]) =>
         batch.map((_, index) =>
@@ -371,26 +372,123 @@ describe("apexLogs", () => {
         ),
       );
 
-      const results = await deleteApexLogs(connection, ids);
+      const sizes: number[] = [];
+
+      const results = await deleteApexLogs(connection, ids, {
+        onBatchDone: (count) => sizes.push(count),
+      });
 
       expect(destroy.mock.calls.map(([batch]) => batch.length)).toEqual([200, 1]);
+      expect(sizes.sort()).toEqual([1, 200]);
       expect(destroy).toHaveBeenCalledWith(expect.any(Array), { allOrNone: false });
       expect(results).toHaveLength(201);
       expect(results[1]).toEqual({ id: ids[1], error: "insufficient access rights" });
       expect(results[200]).toEqual({ id: ids[200] });
     });
 
+    // The SDK sends no response to a cancelled call, so stopping the work is all that is left.
     it("should send no batch once the call is cancelled", async () => {
       const controller = new AbortController();
       controller.abort();
 
-      const results = await deleteApexLogs(connection, ids, controller.signal);
-
+      await expect(
+        deleteApexLogs(connection, ids, { signal: controller.signal }),
+      ).rejects.toThrow();
       expect(destroy).not.toHaveBeenCalled();
-      expect(results[0]).toEqual({
-        id: ids[0],
-        error: "not deleted: the call was cancelled",
+    });
+
+    // A permission or limit failure would fail every batch, so the rest are not sent.
+    it("should send no batch after a request fails, and count every batch as done", async () => {
+      destroy.mockRejectedValue(new Error("REQUEST_LIMIT_EXCEEDED"));
+      let done = 0;
+
+      const results = await deleteApexLogs(connection, many, {
+        onBatchDone: (count) => (done += count),
       });
+
+      expect(done).toBe(1000);
+      // The first four were already in flight.
+      expect(destroy).toHaveBeenCalledTimes(4);
+      expect(results[999]).toEqual({
+        id: many[999],
+        error: "not sent, after an earlier request failed: REQUEST_LIMIT_EXCEEDED",
+      });
+    });
+
+    it("should send no batch after the call is cancelled mid-run", async () => {
+      const controller = new AbortController();
+      destroy.mockImplementation(async (batch: string[]) => {
+        controller.abort();
+        return batch.map(() => ({ success: true, errors: [] }));
+      });
+
+      await expect(
+        deleteApexLogs(connection, many, { signal: controller.signal }),
+      ).rejects.toThrow();
+      // The first request cancels before the next worker starts.
+      expect(destroy).toHaveBeenCalledTimes(1);
+    });
+
+    // A request left running could delete logs under a retry sent right after the cancel.
+    it("should wait for the requests in flight before rejecting a cancelled call", async () => {
+      const controller = new AbortController();
+      let settled = 0;
+      destroy.mockImplementation(async (batch: string[]) => {
+        // Once all four slots hold a request.
+        if (destroy.mock.calls.length === 4) {
+          controller.abort();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        settled += 1;
+        return batch.map(() => ({ success: true, errors: [] }));
+      });
+
+      await expect(
+        deleteApexLogs(connection, many, { signal: controller.signal }),
+      ).rejects.toThrow();
+      expect(destroy).toHaveBeenCalledTimes(4);
+      expect(settled).toBe(4);
+    });
+
+    it("should reject when the call is cancelled while its last batches run", async () => {
+      const controller = new AbortController();
+      destroy.mockImplementation(async (batch: string[]) => {
+        controller.abort();
+        return batch.map(() => ({ success: true, errors: [] }));
+      });
+
+      await expect(
+        deleteApexLogs(connection, [ids[0]!], { signal: controller.signal }),
+      ).rejects.toThrow();
+    });
+
+    // Another call, or the org's own expiry, can delete a log after it was found.
+    it.each([
+      [
+        "mark a log already gone",
+        [{ statusCode: "INVALID_CROSS_REFERENCE_KEY", message: "invalid cross reference id" }],
+        { alreadyGone: true },
+      ],
+      [
+        "mark a log already gone, as the per-record path names its code",
+        [{ errorCode: "ENTITY_IS_DELETED", message: "entity is deleted" }],
+        { alreadyGone: true },
+      ],
+      [
+        "keep a failure with a log gone and another error",
+        [
+          { statusCode: "INVALID_CROSS_REFERENCE_KEY", message: "invalid cross reference id" },
+          { statusCode: "INSUFFICIENT_ACCESS", message: "insufficient access" },
+        ],
+        { error: "invalid cross reference id; insufficient access" },
+      ],
+      ["keep a failure with no error at all", [], { error: "the org gave no reason" }],
+    ])("should %s", async (_name, errors, outcome) => {
+      destroy.mockResolvedValue([{ success: false, errors }]);
+
+      await expect(deleteApexLogs(connection, [ids[0]!])).resolves.toEqual([
+        { id: ids[0], ...outcome },
+      ]);
     });
 
     // Logs already deleted by other batches are gone for good, so their report must survive.

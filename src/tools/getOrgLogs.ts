@@ -90,9 +90,7 @@ export async function getOrgLogs(
           } finally {
             done++;
             // Not awaited, so a slow client does not hold the slot; it catches its own failure.
-            if (!signal.aborted) {
-              void report(`${done} of ${ids.length} logs`);
-            }
+            void report(`${done} of ${ids.length} logs`);
           }
         },
       );
