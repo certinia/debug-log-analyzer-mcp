@@ -195,7 +195,7 @@ An object `debugLevel` looks like this:
 
 Levels are `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`.
 
-Set a `USER_DEBUG` trace flag on your user - in Setup, for example - and every run you start without `debugLevel` logs at its levels; your flag is never changed. `levelsSource` in the response says where a run's levels came from: `traceFlag`, `default` or `request`. A Developer Console trace flag still outranks them, and `levelsOverridden` says when it did.
+Set a `USER_DEBUG` trace flag on your user - in Setup, for example - and every run you start without `debugLevel` logs at its levels; your flag is never changed. `levelsSource` in the response says where a run's levels came from: `traceFlag`, `default` or `request`. A live Developer Console trace flag outranks all three, so the run takes its levels and `levelsSource` is `developerConsole`. `levelsOverridden` says when the log carries levels other than the ones `levelsSource` names.
 
 **Example prompts:**
 

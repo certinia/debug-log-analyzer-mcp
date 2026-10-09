@@ -57,7 +57,7 @@ describe("Trace Flags", () => {
       Workflow: "NONE",
     };
 
-    it("gives the levels of a live USER_DEBUG flag", async () => {
+    it("gives the levels of each live flag, by log type", async () => {
       mockQuery.mockResolvedValue({
         records: [
           { LogType: "DEVELOPER_LOG", DebugLevel: { ...flagLevels, ApexCode: "FINEST" } },
@@ -74,6 +74,7 @@ describe("Trace Flags", () => {
         system: "WARN",
         workflow: "NONE",
       });
+      expect(flags.developerConsoleLevels).toMatchObject({ apexCode: "FINEST" });
     });
 
     // A concurrent run's flag, or one a failed delete left, is the tool's, not the user's.
@@ -92,15 +93,17 @@ describe("Trace Flags", () => {
       ).resolves.toEqual({ storesLogs: true, userDebugLevels: undefined });
     });
 
-    // A Developer Console flag stores the log, but its levels beat the header, so they are not offered.
-    it("stores logs but gives no levels for a Developer Console flag alone", async () => {
+    // Its levels beat the header, so they are the run's, but they are not the user's flag.
+    it("stores logs and gives its own levels for a Developer Console flag alone", async () => {
       mockQuery.mockResolvedValue({
         records: [{ LogType: "DEVELOPER_LOG", DebugLevel: flagLevels }],
       });
 
-      await expect(
-        findActiveTraceFlags(mockConnection, tracedEntityId),
-      ).resolves.toEqual({ storesLogs: true, userDebugLevels: undefined });
+      const flags = await findActiveTraceFlags(mockConnection, tracedEntityId);
+
+      expect(flags.storesLogs).toBe(true);
+      expect(flags.userDebugLevels).toBeUndefined();
+      expect(flags.developerConsoleLevels).toMatchObject({ apexCode: "ERROR" });
     });
 
     it("stores nothing when the entity has no live flag", async () => {
@@ -120,7 +123,8 @@ describe("Trace Flags", () => {
       const query = mockQuery.mock.calls[0]?.[0] as string;
       expect(query).toContain("FROM TraceFlag");
       expect(query).toContain(`TracedEntityId = '${tracedEntityId}'`);
-      expect(query).toContain(`StartDate <= ${now}`);
+      // A flag saved with no StartDate is live from the start.
+      expect(query).toContain(`(StartDate = null OR StartDate <= ${now})`);
       expect(query).toContain(`ExpirationDate > ${now}`);
       expect(query).toContain("LogType IN ('USER_DEBUG', 'DEVELOPER_LOG')");
       Object.keys(flagLevels).forEach((field) =>
