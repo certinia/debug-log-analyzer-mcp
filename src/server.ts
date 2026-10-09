@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 import {
   createRequestStateCodec,
   McpServer,
+  type ServerContext,
 } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import {
@@ -26,6 +27,12 @@ import {
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymousDefinition.js";
+import {
+  getOrgLogsToolConfig,
+  listOrgLogsToolConfig,
+  type GetOrgLogsArgs,
+  type ListOrgLogsArgs,
+} from "./tools/orgLogsDefinition.js";
 import {
   apexExecutionRefusal,
   CONFIRMATION_TTL_SECONDS,
@@ -133,6 +140,36 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     async (args) => listLimitRisks(args),
   );
 
+  // Every org tool is held to the same deny list and production gate.
+  const orgAccessPolicy = {
+    allowProductionOrgs,
+    denyList,
+    classificationCache,
+    mintConfirmationState: (payload: ConfirmationState, ctx: ServerContext) =>
+      confirmationCodec.mint(payload, ctx),
+    consumeConfirmation,
+  };
+
+  // The org tools load lazily, as apexlog_execute_anonymous does: they reach
+  // `@salesforce/core`, which a session that only reads logs must not pay for.
+  server.registerTool(
+    "apexlog_list_org_logs",
+    listOrgLogsToolConfig,
+    async (args, ctx) => {
+      const { listOrgLogs } = await import("./tools/listOrgLogs.js");
+      return listOrgLogs(server, args as ListOrgLogsArgs, ctx, orgAccessPolicy);
+    },
+  );
+
+  server.registerTool(
+    "apexlog_get_org_logs",
+    getOrgLogsToolConfig,
+    async (args, ctx) => {
+      const { getOrgLogs } = await import("./tools/getOrgLogs.js");
+      return getOrgLogs(server, args as GetOrgLogsArgs, ctx, orgAccessPolicy);
+    },
+  );
+
   // Always registered, so agents can discover it regardless of configuration.
   // Whether a given call is permitted is decided per call, inside the handler.
   server.registerTool(
@@ -148,13 +185,8 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       // the 250 ms it costs to load.
       const { executeAnonymous } = await import("./tools/executeAnonymous.js");
       return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
-        allowProductionOrgs,
-        denyList,
+        ...orgAccessPolicy,
         apexExecutionDisabled,
-        classificationCache,
-        mintConfirmationState: (payload, ctx) =>
-          confirmationCodec.mint(payload, ctx),
-        consumeConfirmation,
       });
     },
   );

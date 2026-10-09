@@ -2,7 +2,6 @@
 // it - `src/index.ts` covers the `bin` alone.
 import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
-import path from "node:path";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
@@ -26,9 +25,10 @@ import {
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
-import { fileReadError } from "./localFile.js";
+import { fileReadError, outsideRoots } from "./localFile.js";
+import { openLogStore, writeDebugLog } from "./logStore.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
-import { CLOCK_SKEW_MS, toDateTimeLiteral } from "../salesforce/soql.js";
+import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import {
   apexExecutionRefusal,
@@ -55,56 +55,6 @@ const NO_LOG_CAPTURED_WARNING =
 export type ExecuteAnonymousPolicy = OrgAccessPolicy & {
   apexExecutionDisabled: boolean;
 };
-
-function logWarning(warning: string): string {
-  console.error(`[apex-log-mcp] ${warning}`);
-  return warning;
-}
-
-/** The resolved path, or the path itself when it does not resolve. */
-async function realPathOrSelf(target: string): Promise<string> {
-  return fs.realpath(target).catch(() => target);
-}
-
-/**
- * The MCP spec expects a server to work inside the roots the client declares,
- * and `outputDir` is agent-supplied, so it is the path an injected instruction
- * takes. Refusing would break a caller who means to write elsewhere, so say so
- * instead: the response names where the log went, and the same line goes to
- * stderr for the person watching the server.
- *
- * Symlinks are followed on both sides, so a link inside a root that points out
- * of one is still outside. A client that declares no roots gives nothing to
- * compare against, so it stays silent.
- */
-async function warnIfOutsideRoots(
-  outputDir: string,
-  rootPaths: string[],
-): Promise<string | undefined> {
-  const target = await outsideRoots(outputDir, rootPaths);
-  return target === undefined
-    ? undefined
-    : logWarning(
-        `Debug log written to ${target}, which is outside every root this client declared.`,
-      );
-}
-
-/** `target` with symlinks followed when it is outside every root, else undefined. No roots, no check. */
-async function outsideRoots(
-  target: string,
-  rootPaths: string[],
-): Promise<string | undefined> {
-  if (rootPaths.length === 0) {
-    return undefined;
-  }
-
-  const resolved = await realPathOrSelf(target);
-  const roots = await Promise.all(rootPaths.map(realPathOrSelf));
-  const inside = roots.some(
-    (root) => resolved === root || resolved.startsWith(root + path.sep),
-  );
-  return inside ? undefined : resolved;
-}
 
 // Refused where `outputDir` only warns: the file's text goes to the org, and a compile error can echo it.
 async function readApexFile(
@@ -292,7 +242,6 @@ export async function executeAnonymous(
     workspace,
     rootPaths,
   } = access;
-  const projectPath = rootPaths[0];
 
   await report("Setting the trace flag");
   const debugLevelId = storesLogs
@@ -306,7 +255,7 @@ export async function executeAnonymous(
     connection,
     userId,
     debugLevelId,
-    async () => {
+    async (flagLive) => {
       await report("Executing the Apex");
       const startedAt = new Date();
       const apexResult = await executeAnonymousWithLog(
@@ -321,30 +270,24 @@ export async function executeAnonymous(
         );
       }
 
-      const logId = await findStoredLogId(
-        connection,
-        userId,
-        apexResult.debugLog,
-        startedAt,
-      );
+      // An empty log has nothing stored to match. Without our flag, another may have stored it, so even one match is checked.
+      const logId = apexResult.debugLog
+        ? await findStoredLogId(
+            connection,
+            userId,
+            apexResult.debugLog,
+            startedAt,
+            !flagLive,
+          )
+        : undefined;
       return { apexResult, logId };
     },
   );
 
   await report("Writing the debug log");
 
-  // Absolute, because `filePath` below goes straight back to the analysis
-  // tools, which refuse a relative path. A relative `outputDir` anchors to the
-  // project root, the same base the default uses, rather than to wherever the
-  // client happened to spawn this server.
-  const outputDir = path.resolve(
-    projectPath ?? process.cwd(),
-    args.outputDir ?? ".apex-log-mcp",
-  );
-  // Resolves to the first directory created, or undefined when it already existed.
-  const createdDir = await fs.mkdir(outputDir, { recursive: true });
-
-  const filePath = await writeDebugLog(outputDir, logId, apexResult.debugLog);
+  const store = await openLogStore(args.outputDir, workspace, rootPaths);
+  const filePath = await writeDebugLog(store.dir, logId, apexResult.debugLog);
   const stats = await fs.stat(filePath);
   // The log itself is the one source of its duration, so this figure and
   // `apexlog_get_summary.durationTotalMs` are the same number. Parsing it here
@@ -359,14 +302,7 @@ export async function executeAnonymous(
     // as a run that did nothing rather than a log that was never captured.
     apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
     ...traceFlagWarnings,
-    // Unusable roots leave even the default, in the cwd, unchecked; usable, the default is inside the first root.
-    workspace.kind === "unknown"
-      ? logWarning(
-          `Debug log written to ${outputDir}, which was not checked against the client's roots: ${workspace.reason}.`,
-        )
-      : args.outputDir
-        ? await warnIfOutsideRoots(outputDir, rootPaths)
-        : undefined,
+    store.warning,
   ].filter((text): text is string => text !== undefined);
 
   return {
@@ -398,7 +334,7 @@ export async function executeAnonymous(
           // A fact about this run, not advice about it: the directory is new, so
           // nothing yet ignores it. Reported either way, because an absent field
           // cannot be told apart from one this server never worked out.
-          outputDirCreated: Boolean(createdDir),
+          outputDirCreated: store.created,
         }),
       },
     ],
@@ -410,7 +346,7 @@ async function withTraceFlagForRun<T>(
   connection: Connection,
   userId: string,
   flagLevelId: string | undefined,
-  run: () => Promise<T>,
+  run: (flagLive: boolean) => Promise<T>,
 ): Promise<{ value: T; warnings: string[] }> {
   const created =
     flagLevelId === undefined
@@ -420,7 +356,7 @@ async function withTraceFlagForRun<T>(
   let value: T;
   let deleteWarning: string | undefined;
   try {
-    value = await run();
+    value = await run(flagLevelId === undefined || created.id !== undefined);
   } finally {
     deleteWarning = await removeRunTraceFlag(connection, created.id);
   }
@@ -471,83 +407,6 @@ async function removeRunTraceFlag(
       `[apex-log-mcp] ${warning} ${error instanceof Error ? error.message : String(error)}`,
     );
     return warning;
-  }
-}
-
-/**
- * Write the log out, under the id Salesforce filed it as when there is one,
- * and never over a file already there: the id is matched rather than given, so
- * a wrong match must cost a filename and not an earlier run's log.
- */
-async function writeDebugLog(
-  outputDir: string,
-  logId: string | undefined,
-  debugLog: string,
-): Promise<string> {
-  const fallbackPath = path.join(outputDir, `apex-${Date.now()}.log`);
-  if (logId) {
-    const filePath = path.join(outputDir, `${logId}.log`);
-    try {
-      await fs.writeFile(filePath, debugLog, { encoding: "utf-8", flag: "wx" });
-      return filePath;
-    } catch (error) {
-      if (!isAlreadyExists(error)) {
-        throw error;
-      }
-      console.error(
-        `[apex-log-mcp] ${filePath} already holds a log, so this run was written to ${fallbackPath} instead.`,
-      );
-    }
-  }
-  await fs.writeFile(fallbackPath, debugLog, "utf-8");
-  return fallbackPath;
-}
-
-function isAlreadyExists(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error as NodeJS.ErrnoException).code === "EEXIST"
-  );
-}
-
-/**
- * The id Salesforce filed this log under, matched on its byte length and on
- * having been filed no earlier than this run.
- *
- * Salesforce hands out no log id for anonymous Apex, so this only names the
- * file the way `sf` names it. A miss costs a filename and nothing else, which
- * is why the length is matched rather than the newest row taken, and why a
- * failed query is reported and stepped over: the log is already in hand and
- * cannot be fetched again. Without the time bound, a log of the same length
- * from any earlier run answers the query.
- */
-async function findStoredLogId(
-  connection: Connection,
-  userId: string,
-  debugLog: string,
-  startedAt: Date,
-): Promise<string | undefined> {
-  // `StartTime` is org time and `startedAt` is this machine's, so the bound is
-  // slackened by the clock skew the two can carry between them.
-  const since = new Date(startedAt.getTime() - CLOCK_SKEW_MS);
-  try {
-    const record = (await connection
-      .sobject("ApexLog")
-      .findOne(
-        {
-          LogUserId: userId,
-          LogLength: Buffer.byteLength(debugLog, "utf-8"),
-          StartTime: { $gte: toDateTimeLiteral(since) },
-        },
-        ["Id"],
-        { sort: { StartTime: -1 } },
-      )) as { Id: string } | null;
-    return record?.Id;
-  } catch (error) {
-    console.error(
-      `[apex-log-mcp] Could not match the debug log to a stored ApexLog: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return undefined;
   }
 }
 

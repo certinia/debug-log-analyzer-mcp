@@ -20,7 +20,7 @@ import {
   TRACE_CATEGORIES,
 } from "../salesforce/debugLevels.js";
 import { APEX_EXECUTION_DISABLED_MESSAGE } from "../policy/orgExecutionPolicy.js";
-import { toolInputSchema } from "./inputSchema.js";
+import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
 import { absolutePathSchema } from "./localFile.js";
 
 const logLevelSchema = z.enum(LOG_LEVELS);
@@ -33,12 +33,7 @@ export const executeAnonymousInputSchema = {
   apexFilePath: absolutePathSchema
     .optional()
     .describe("Absolute path to a file of anonymous Apex"),
-  targetOrg: z
-    .string()
-    .optional()
-    .describe(
-      "Alias or username of the target Salesforce org. Uses the project default if not specified.",
-    ),
+  targetOrg: targetOrgSchema,
   outputDir: z
     .string()
     .optional()
