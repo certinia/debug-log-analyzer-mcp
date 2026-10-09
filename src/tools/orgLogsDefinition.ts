@@ -47,6 +47,7 @@ const logFilters = {
 
 export const listOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
+  ...logFilters,
   // Described here only: delete's description points at these, and each costs tokens on every request.
   user: logFilters.user.describe("Username whose activity was logged"),
   operation: logFilters.operation.describe(
@@ -57,8 +58,6 @@ export const listOrgLogsInputSchema = {
   startTimeFrom: logFilters.startTimeFrom.describe(
     "ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z",
   ),
-  startTimeTo: logFilters.startTimeTo,
-  minFileSizeBytes: logFilters.minFileSizeBytes,
   sortBy: z
     .enum(LOG_SORTS)
     .optional()
