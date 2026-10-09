@@ -80,25 +80,61 @@ export async function writeDebugLog(
   const fallbackPath = path.join(outputDir, `apex-${Date.now()}.log`);
   if (logId) {
     const filePath = path.join(outputDir, `${logId}.log`);
-    // Whole, as `saveStoredLog` writes, and a link, not a rename, so a file already there stays.
-    const partPath = partPathFor(filePath);
-    await fs.writeFile(partPath, debugLog, "utf-8");
-    try {
-      await fs.link(partPath, filePath);
+    if (await createExclusive(filePath, debugLog)) {
       return filePath;
-    } catch (error) {
-      if (!isAlreadyExists(error)) {
-        throw error;
-      }
-      console.error(
-        `[apex-log-mcp] ${filePath} already holds a log, so this run was written to ${fallbackPath} instead.`,
-      );
-    } finally {
-      await fs.rm(partPath, { force: true });
     }
+    console.error(
+      `[apex-log-mcp] ${filePath} already holds a log, so this run was written to ${fallbackPath} instead.`,
+    );
   }
   await fs.writeFile(fallbackPath, debugLog, "utf-8");
   return fallbackPath;
+}
+
+// False when a file is there; a link appears whole, and without hard links (exFAT, some shares) a failed write leaves nothing.
+async function createExclusive(
+  filePath: string,
+  text: string,
+): Promise<boolean> {
+  // Written whole first, then linked, not renamed, so a file already there stays.
+  const partPath = partPathFor(filePath);
+  try {
+    // A failed write here would fail again below, so only a failed link falls through.
+    await fs.writeFile(partPath, text, "utf-8");
+    try {
+      await fs.link(partPath, filePath);
+      return true;
+    } catch (error) {
+      if (isAlreadyExists(error)) {
+        return false;
+      }
+    }
+  } finally {
+    // Before the write below, so a full disk does not hold the log twice; a part left behind costs no log.
+    await fs.rm(partPath, { force: true }).catch(() => undefined);
+  }
+
+  const handle = await fs.open(filePath, "wx").catch((error: unknown) => {
+    if (isAlreadyExists(error)) {
+      return undefined;
+    }
+    throw error;
+  });
+  if (!handle) {
+    return false;
+  }
+  // Unlike the link, a process killed mid-write leaves a short file here; Node has no create-without-replace rename.
+  try {
+    await handle.writeFile(text, "utf-8");
+    // In the try: a failed close can mean the text never reached the disk.
+    await handle.close();
+  } catch (error) {
+    // This call opened it, and any file under the id is taken as the whole log; the first error is the one to report.
+    await handle.close().catch(() => undefined);
+    await fs.rm(filePath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+  return true;
 }
 
 /** Where `saveStoredLog` put a log, and whether this call downloaded it. */
@@ -125,8 +161,13 @@ export async function saveStoredLog(
   const text = await download();
   // Whole or not at all, since any file under the id is taken as the log.
   const partPath = partPathFor(filePath);
-  await fs.writeFile(partPath, text, "utf-8");
-  await fs.rename(partPath, filePath);
+  try {
+    await fs.writeFile(partPath, text, "utf-8");
+    await fs.rename(partPath, filePath);
+  } catch (error) {
+    await fs.rm(partPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
   return {
     filePath,
     fileSizeBytes: Buffer.byteLength(text, "utf-8"),
@@ -139,9 +180,7 @@ function partPathFor(filePath: string): string {
   return `${filePath}.${randomUUID()}.part`;
 }
 
+// By code, not `instanceof Error`: an fs error can come from another realm, as under jest.
 function isAlreadyExists(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error as NodeJS.ErrnoException).code === "EEXIST"
-  );
+  return (error as NodeJS.ErrnoException | null)?.code === "EEXIST";
 }

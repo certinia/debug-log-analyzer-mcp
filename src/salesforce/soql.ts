@@ -15,3 +15,26 @@ export const CLOCK_SKEW_MS = 5 * 60 * 1000;
 export function toDateTimeLiteral(date: Date): { toString(): string } {
   return { toString: () => date.toISOString() };
 }
+
+// Every character SOQL reads as special inside a string literal, as its escape.
+const SOQL_ESCAPES: Record<string, string> = {
+  "\n": "\\n",
+  "\r": "\\r",
+  "\t": "\\t",
+  "\b": "\\b",
+  "\f": "\\f",
+  '"': '\\"',
+  "'": "\\'",
+  "\\": "\\\\",
+};
+
+/** `value` with every character SOQL reads as special in a string literal escaped. */
+export function escapeSoql(value: string): string {
+  // Defined: the class holds only SOQL_ESCAPES's keys.
+  return value.replace(/[\n\r\t\b\f"'\\]/g, (char) => SOQL_ESCAPES[char]!);
+}
+
+/** A SOQL string literal: no character in the value can end it. */
+export function quote(value: string): string {
+  return `'${escapeSoql(value)}'`;
+}

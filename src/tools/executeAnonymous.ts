@@ -25,6 +25,7 @@ import {
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
+import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, writeDebugLog } from "./logStore.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
@@ -203,7 +204,7 @@ export async function executeAnonymous(
     return toolError(ONE_APEX_SOURCE);
   }
 
-  const report = progressReporter(ctx);
+  const report = progressReporter(ctx, PROGRESS_STEPS);
   const access = await openOrg(
     server,
     ctx,
@@ -408,33 +409,4 @@ async function removeRunTraceFlag(
     );
     return warning;
   }
-}
-
-/**
- * Report each step, but only to a caller that asked for progress. The spec
- * gives a token only when it wants the notifications.
- *
- * A failed notification is reported and stepped over. The Apex has already run
- * by the last step, so a rejected notify must not throw away the log it just
- * produced.
- */
-function progressReporter(ctx: ServerContext): (step: string) => Promise<void> {
-  const progressToken = ctx.mcpReq._meta?.progressToken;
-  let progress = 0;
-  return async (message: string) => {
-    if (progressToken === undefined) {
-      return;
-    }
-    progress += 1;
-    try {
-      await ctx.mcpReq.notify({
-        method: "notifications/progress",
-        params: { progressToken, progress, total: PROGRESS_STEPS, message },
-      });
-    } catch (error) {
-      console.error(
-        `[apex-log-mcp] Could not report progress: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  };
 }
