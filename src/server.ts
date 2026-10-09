@@ -28,6 +28,14 @@ import {
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymousDefinition.js";
 import {
+  createTraceFlagToolConfig,
+  deleteTraceFlagsToolConfig,
+  listTraceFlagsToolConfig,
+  type CreateTraceFlagArgs,
+  type DeleteTraceFlagsArgs,
+  type ListTraceFlagsArgs,
+} from "./tools/traceFlagsDefinition.js";
+import {
   deleteOrgLogsToolConfig,
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
@@ -178,6 +186,33 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     async (args, ctx) => {
       const { deleteOrgLogs } = await import("./tools/deleteOrgLogs.js");
       return deleteOrgLogs(server, args as DeleteOrgLogsArgs, ctx, orgAccessPolicy);
+    },
+  );
+
+  server.registerTool(
+    "apexlog_list_trace_flags",
+    listTraceFlagsToolConfig,
+    async (args, ctx) => {
+      const { listTraceFlags } = await import("./tools/listTraceFlags.js");
+      return listTraceFlags(server, args as ListTraceFlagsArgs, ctx, orgAccessPolicy);
+    },
+  );
+
+  server.registerTool(
+    "apexlog_create_trace_flag",
+    createTraceFlagToolConfig,
+    async (args, ctx) => {
+      const { createTraceFlag } = await import("./tools/createTraceFlag.js");
+      return createTraceFlag(server, args as CreateTraceFlagArgs, ctx, orgAccessPolicy);
+    },
+  );
+
+  server.registerTool(
+    "apexlog_delete_trace_flags",
+    deleteTraceFlagsToolConfig,
+    async (args, ctx) => {
+      const { deleteTraceFlags } = await import("./tools/deleteTraceFlags.js");
+      return deleteTraceFlags(server, args as DeleteTraceFlagsArgs, ctx, orgAccessPolicy);
     },
   );
 

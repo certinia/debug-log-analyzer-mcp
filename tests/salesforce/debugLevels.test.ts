@@ -8,6 +8,7 @@ import path from "node:path";
 import { Connection } from "@salesforce/core";
 import {
   ensureDebugLevel,
+  ensureLevelsDebugLevel,
   levelsClause,
   requestedLevels,
   toTraceConfig,
@@ -117,6 +118,90 @@ describe("Debug Levels", () => {
       mockQuery.mockRejectedValue(new Error("Query failed"));
 
       await expect(ensureDebugLevel(mockConnection)).rejects.toThrow("Query failed");
+    });
+  });
+
+  describe("ensureLevelsDebugLevel", () => {
+    // One record per set of levels, so a flag never shares one another call set differently.
+    const fieldsOf = (levels: Record<string, string>) =>
+      Object.fromEntries(
+        Object.entries(levels).map(([category, level]) => [
+          category.charAt(0).toUpperCase() + category.slice(1),
+          level,
+        ]),
+      );
+
+    it("should reuse the record named for the same levels", async () => {
+      mockQuery.mockResolvedValue({
+        records: [{ Id: "7dl000000000001AAA", ...fieldsOf(requestedLevels("FINEST")) }],
+      });
+
+      const first = await ensureLevelsDebugLevel(mockConnection, requestedLevels("FINEST"));
+      const second = await ensureLevelsDebugLevel(mockConnection, requestedLevels("FINEST"));
+
+      expect(second).toEqual(first);
+      expect(first.name).toMatch(/^Apex_Log_MCP_[0-9a-f]{10}$/);
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it("should name other levels another record", async () => {
+      mockQuery.mockResolvedValue({ records: [] });
+      mockCreate.mockResolvedValue({ success: true, id: "7dl000000000002AAA" });
+
+      const finest = await ensureLevelsDebugLevel(mockConnection, requestedLevels("FINEST"));
+      const debug = await ensureLevelsDebugLevel(mockConnection, requestedLevels("DEBUG"));
+
+      expect(debug.name).not.toBe(finest.name);
+    });
+
+    // The name promises the levels, so a record edited since must not be used.
+    it("should refuse a record edited to other levels", async () => {
+      mockQuery.mockResolvedValue({
+        records: [
+          { Id: "7dl000000000001AAA", ...fieldsOf(requestedLevels("FINEST")), Database: "NONE" },
+        ],
+      });
+
+      // Only the category that differs, so the fix in Setup is direct.
+      await expect(
+        ensureLevelsDebugLevel(mockConnection, requestedLevels("FINEST")),
+      ).rejects.toThrow(/edited to other levels.*In Setup, set database back to FINEST, then try again\.$/);
+    });
+
+    // Two calls at once: the second create fails on the unique name, and finds the first's record.
+    it("should use the record another call created in between", async () => {
+      mockQuery
+        .mockResolvedValueOnce({ records: [] })
+        .mockResolvedValueOnce({
+          records: [{ Id: "7dl000000000003AAA", ...fieldsOf(requestedLevels("FINEST")) }],
+        });
+      mockCreate.mockRejectedValue(new Error("DUPLICATE_DEVELOPER_NAME"));
+
+      await expect(
+        ensureLevelsDebugLevel(mockConnection, requestedLevels("FINEST")),
+      ).resolves.toMatchObject({ id: "7dl000000000003AAA" });
+    });
+
+    it("should report why the create failed, not a failed lookup after it", async () => {
+      mockQuery
+        .mockResolvedValueOnce({ records: [] })
+        .mockRejectedValueOnce(new Error("socket hang up"));
+      mockCreate.mockRejectedValue(new Error("INSUFFICIENT_ACCESS"));
+
+      await expect(
+        ensureLevelsDebugLevel(mockConnection, requestedLevels("FINEST")),
+      ).rejects.toThrow("INSUFFICIENT_ACCESS");
+    });
+
+    it("should create the record at exactly the levels asked for", async () => {
+      mockQuery.mockResolvedValue({ records: [] });
+      mockCreate.mockResolvedValue({ success: true, id: "7dl000000000002AAA" });
+
+      await ensureLevelsDebugLevel(mockConnection, requestedLevels({ apexCode: "FINEST" }));
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ ApexCode: "FINEST", Database: "FINEST", Callout: "DEBUG" }),
+      );
     });
   });
 

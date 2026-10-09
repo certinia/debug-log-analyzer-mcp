@@ -11,10 +11,10 @@ import {
   latestApexLogIds,
   listApexLogs,
   readCursor,
-  toLongId,
   type LogFilters,
   type LogSort,
 } from "../../src/salesforce/apexLogs";
+import { toLongId } from "../../src/salesforce/soql";
 
 function record(id: string, overrides: Record<string, unknown> = {}) {
   return {

@@ -265,9 +265,52 @@ Returns `deletedCount` and `deletedBytes`. One call deletes up to 200 ids, or up
 
 <!-- params-apexlog_delete_org_logs:end -->
 
+### apexlog_list_trace_flags
+
+Lists the trace flags that have not yet expired - on every entity, or on the one `tracedEntity` names - so an agent can answer "why are there no logs for this user?". An org stores a debug log only for a user a flag traces; a class or trigger flag sets that code's levels in those logs. Each row gives the entity, its type, the log type, the debug level's name, its `levels`, and when the flag starts and expires. At most 200 rows come back, latest to expire first, and `matchedCount` gives how many flags match in all: when it is larger, narrow the list with `tracedEntity`.
+
+<!-- params-apexlog_list_trace_flags:start -->
+
+| Parameter      | Type   | Required | Description |
+| -------------- | ------ | -------- | --- |
+| `targetOrg`    | string | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `tracedEntity` | string | No       | A username or user id, or a class or trigger name (ns.Name if namespaced) |
+
+<!-- params-apexlog_list_trace_flags:end -->
+
+### apexlog_create_trace_flag
+
+Starts logging a user, so an integration user's requests reach the org's logs, for `apexlog_list_org_logs` to find. A flag on a class or trigger stores no log itself: it sets the levels of that code's work in the logs a user's flag stores. Name a user by username or id, and a namespaced class as `ns.Name`. A user is traced as `USER_DEBUG`; a class or trigger as `CLASS_TRACING`. `debugLevel` takes one level for every category, or an object of categories over the defaults, as `apexlog_execute_anonymous` does, and the flag lives for `durationMinutes`, 30 unless you say, up to 1,439: Salesforce refuses a flag of a full day.
+
+Every transaction a traced user runs while the flag lives is stored, which can fill the org's 1,000 MB of log storage: when it is full, no one can set a flag until `apexlog_delete_org_logs` frees it. When the entity already has a flag of its type that has not ended, the call is refused and names it, with its levels and expiry - a flag is never changed here, so delete it first. Against a production org, the call asks first, naming the entity, the levels and the minutes.
+
+<!-- params-apexlog_create_trace_flag:start -->
+
+| Parameter         | Type             | Required | Description |
+| ----------------- | ---------------- | -------- | --- |
+| `targetOrg`       | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `tracedEntity`    | string           | Yes      | A username or user id, or a class or trigger name (ns.Name if namespaced) |
+| `debugLevel`      | string \| object | No       | A level for every category, or an object setting the named ones over apexlog_execute_anonymous's defaults (default: those defaults) |
+| `durationMinutes` | number           | No       | How long it logs (default: 30) |
+
+<!-- params-apexlog_create_trace_flag:end -->
+
+### apexlog_delete_trace_flags
+
+Deletes trace flags by id, to stop logging now: Salesforce refuses an edit that ends a flag early. An id that names no flag is a row in `failed`. Against a production org, the call asks first, naming each flag.
+
+<!-- params-apexlog_delete_trace_flags:start -->
+
+| Parameter   | Type     | Required | Description |
+| ----------- | -------- | -------- | --- |
+| `targetOrg` | string   | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `ids`       | string[] | Yes      | Trace flag ids, from apexlog_list_trace_flags |
+
+<!-- params-apexlog_delete_trace_flags:end -->
+
 ## Token Cost
 
-Every request carries all seven tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
+Every request carries all ten tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
 
 <!-- token-cost-definitions:start -->
 
@@ -275,16 +318,19 @@ Every request carries all seven tool definitions, whether you call them or not. 
 | ------------------------------ | ----------------------------------------------------------- |
 | `apexlog_list_slow_operations` | ~530                                                        |
 | `apexlog_execute_anonymous`    | ~447                                                        |
+| `apexlog_create_trace_flag`    | ~351                                                        |
 | `apexlog_list_org_logs`        | ~322                                                        |
 | `apexlog_delete_org_logs`      | ~210                                                        |
 | `apexlog_get_org_logs`         | ~203                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
+| `apexlog_list_trace_flags`     | ~152                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~2,017** (1.0% of a 200K context), **+32% vs 1.x ~1,529** |
+| `apexlog_delete_trace_flags`   | ~143                                                        |
+| **Total**                      | **~2,663** (1.3% of a 200K context), **+74% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
-Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the three org log tools, which reach logs 1.x could not; the four tools 1.x also had cost ~1,282.
+Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the six org tools, which reach logs and trace flags 1.x could not; the four tools 1.x also had cost ~1,282.
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 
@@ -302,7 +348,7 @@ Cost does not grow with the log size. The figures below are measured against a 4
 
 ## Configuration
 
-The [Quick Start](#quick-start) config gives you all seven tools.
+The [Quick Start](#quick-start) config gives you all ten tools.
 
 ### Production safety
 

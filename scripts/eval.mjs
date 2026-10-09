@@ -324,6 +324,10 @@ const DEFINITION_BUDGET = {
   apexlog_get_org_logs: 219,
   // Measured + 5% (#210). Its filters go undescribed: the list tool describes them.
   apexlog_delete_org_logs: 221,
+  // Measured + 5% each (#211). Create carries the levels union, the costly part.
+  apexlog_list_trace_flags: 160,
+  apexlog_create_trace_flag: 369,
+  apexlog_delete_trace_flags: 150,
 };
 
 /**
@@ -347,10 +351,12 @@ const V1_DEFINITION_TOTAL = 1529;
  * org was a deliberate purchase of a capability 1.x never had (#209): the two
  * definitions measure ~525 tokens a request, inside their budgets of 563.
  * Deleting them, so a full org can set a trace flag again, added ~210 inside a
- * budget of 221 (#210). The budgets sum to this cap, so raising any budget
- * means raising the cap, on purpose, with the reason here.
+ * budget of 221 (#210). Tracing a user, so the org stores the logs those tools
+ * read, or setting a class's levels, added ~646 inside budgets of 679 (#211).
+ * The budgets sum to this cap, so raising any budget means raising the cap, on
+ * purpose, with the reason here.
  */
-const DEFINITION_TOTAL_CAP = 2112;
+const DEFINITION_TOTAL_CAP = 2791;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -373,6 +379,9 @@ const SELECTION_KEYWORDS = {
   apexlog_list_org_logs: ["debug logs", "Salesforce org"],
   apexlog_get_org_logs: ["debug logs", "Salesforce org"],
   apexlog_delete_org_logs: ["debug logs", "storage"],
+  apexlog_list_trace_flags: ["trace flags", "Salesforce org"],
+  apexlog_create_trace_flag: ["trace flag", "Salesforce org"],
+  apexlog_delete_trace_flags: ["trace flags", "Salesforce org"],
 };
 
 /**

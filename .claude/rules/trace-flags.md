@@ -20,4 +20,5 @@ Tested in a scratch org on 2026-09-30. Table and method: https://github.com/cert
 - With no header, the returned log is empty, and the stored log carries the flag's levels. An empty `<DebuggingHeader/>` does the same. A `debugLevel` preset such as `DEBUGONLY`, which `sf apex run` and the VS Code extension send, beats the flag like a categories header. Tested 2026-10-09: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
 - So no header form defers to the flag and returns the log: to run at a flag's levels, read its `DebugLevel` and send them.
 - A flag also logs the user's other traffic (e.g. `/aura` requests) while it lives.
-- Not tested: `CLASS_TRACING`.
+- `CLASS_TRACING`: a flag on a class is accepted, and a second whose window overlaps is refused the same way. Tested 2026-10-09 (#211).
+- A class or trigger flag stores no log itself: it only overrides the levels of that code's work, in logs a user flag stores. Documented, not tested: https://help.salesforce.com/s/articleView?id=platform.code_debug_log_classes_setup.htm

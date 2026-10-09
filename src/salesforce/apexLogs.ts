@@ -6,7 +6,10 @@ import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
 import {
   CLOCK_SKEW_MS,
+  chunk,
   containing,
+  isoSeconds,
+  isSalesforceId,
   quote,
   toDateTimeLiteral,
 } from "./soql.js";
@@ -74,35 +77,9 @@ type ApexLogRecord = {
   LogLength: number;
 };
 
-/** True for a debug log id: 15 characters, or 18 whose suffix is the one the first 15 give. */
+/** True for a debug log id. */
 export function isApexLogId(id: string): boolean {
-  return (
-    /^07L[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/.test(id) &&
-    // The suffix ignores case, so a mistyped one is refused, not silently corrected.
-    (id.length === 15 || toLongId(id) === id.slice(0, 15) + id.slice(15).toUpperCase())
-  );
-}
-
-const ID_SUFFIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
-
-/**
- * The 18-character form of an id, as the API returns it. A 15-character id, or
- * an 18-character one whose suffix differs in case, names the same log, so
- * without this it would save to a second file or read as a different log.
- */
-export function toLongId(id: string): string {
-  // The suffix is derived from the first 15, so it is rebuilt rather than trusted.
-  const base = id.slice(0, 15);
-  const suffix = [0, 5, 10]
-    .map((start) =>
-      [...base.slice(start, start + 5)].reduce(
-        (bits, char, bit) => (/[A-Z]/.test(char) ? bits | (1 << bit) : bits),
-        0,
-      ),
-    )
-    .map((bits) => ID_SUFFIX_CHARS[bits])
-    .join("");
-  return base + suffix;
+  return isSalesforceId(id, "07L");
 }
 
 function whereText(clauses: string[]): string {
@@ -228,8 +205,7 @@ function toRow(record: ApexLogRecord): OrgLogRow {
     request: record.Request,
     succeeded: record.Status === "Success",
     exceptionMessage: record.Status === "Success" ? "" : record.Status,
-    // ISO 8601 in UTC, as the startTime filters take it; the org sends `+0000` and milliseconds it never sets.
-    startTime: new Date(record.StartTime).toISOString().replace(".000Z", "Z"),
+    startTime: isoSeconds(record.StartTime),
     durationTotalMs: record.DurationMilliseconds,
     fileSizeBytes: record.LogLength,
   };
@@ -352,15 +328,10 @@ export async function deleteApexLogs(
     onBatchDone,
   }: { signal?: AbortSignal; onBatchDone?: (count: number) => void } = {},
 ): Promise<DeleteResult[]> {
-  const batches = Array.from(
-    { length: Math.ceil(ids.length / DELETE_BATCH_SIZE) },
-    (_, index) =>
-      ids.slice(index * DELETE_BATCH_SIZE, (index + 1) * DELETE_BATCH_SIZE),
-  );
   // A failed request, such as a missing permission or a spent API limit, would fail every batch after it.
   let requestError: string | undefined;
   const results = await mapWithLimit(
-    batches,
+    chunk(ids, DELETE_BATCH_SIZE),
     PARALLEL_REQUESTS,
     async (batch): Promise<DeleteResult[]> => {
       // Returns, not throws, so the pool waits for the requests in flight before the call rejects.

@@ -11,9 +11,9 @@ import {
   latestApexLogIds,
   mapWithLimit,
   PARALLEL_REQUESTS,
-  toLongId,
 } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
+import { toLongId } from "../salesforce/soql.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
 import { openLogStore, saveStoredLog, type StoredLog } from "./logStore.js";
 import { progressReporter } from "./progress.js";

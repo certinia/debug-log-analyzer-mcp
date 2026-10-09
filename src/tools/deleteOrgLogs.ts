@@ -12,12 +12,11 @@ import {
   type DeleteResult,
   filterCondition,
   findApexLogs,
-  toLongId,
   type FoundApexLogs,
   type LogSelection,
 } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
-import { CLOCK_SKEW_MS } from "../salesforce/soql.js";
+import { CLOCK_SKEW_MS, toLongId } from "../salesforce/soql.js";
 import { toolError, type Confirmable } from "../policy/orgExecutionPolicy.js";
 import { progressReporter } from "./progress.js";
 import { omitEmpty } from "./responseShaping.js";

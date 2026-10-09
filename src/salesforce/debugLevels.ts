@@ -1,10 +1,14 @@
+import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
 import { LOG_LEVEL } from "@apexdevtools/apex-log-parser";
 import type { DebugLevels } from "@apexdevtools/apex-log-parser";
 import type { Assert } from "../compileGuards.js";
+import { quote } from "./soql.js";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
 export const DEBUG_LEVEL_NAME = "Apex_Log_MCP_Debug_Level";
+
+type DebugLevelRecord = Record<string, unknown> & { Id: string };
 
 /** The parser also admits `""`, for an event that states no level; a request cannot ask for it. */
 export type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
@@ -206,37 +210,79 @@ export function toTraceConfig(
  */
 export async function ensureDebugLevel(connection: Connection): Promise<string> {
   return (
-    (await findDebugLevelId(connection)) ?? (await createDebugLevel(connection))
-  );
+    await ensureNamedDebugLevel(connection, DEBUG_LEVEL_NAME, DEFAULT_TRACE_CONFIG)
+  ).Id;
 }
 
-async function findDebugLevelId(
+/**
+ * Find or create a DebugLevel holding exactly these levels, for a flag a
+ * person asked for. Named by a digest of the levels, so the same levels reuse
+ * one record; one edited since to other levels is refused, not used.
+ */
+export async function ensureLevelsDebugLevel(
   connection: Connection,
-): Promise<string | undefined> {
-  const result = await connection.tooling.query(
-    `SELECT Id
-     FROM ${DEBUG_LEVEL_SOBJECT}
-     WHERE DeveloperName = '${DEBUG_LEVEL_NAME}'
-     LIMIT 1`,
+  levels: Required<TraceConfig>,
+): Promise<{ id: string; name: string }> {
+  const digest = createHash("sha256")
+    .update(TRACE_CATEGORIES.map((category) => levels[category]).join(","))
+    .digest("hex")
+    .slice(0, 10);
+  const name = `Apex_Log_MCP_${digest}`;
+  const found = await ensureNamedDebugLevel(connection, name, levels);
+  const held = toTraceConfig(found);
+  const edited = TRACE_CATEGORIES.filter(
+    (category) => held[category] !== levels[category],
   );
-  return (result.records[0] as { Id?: string } | undefined)?.Id ?? undefined;
+  if (edited.length) {
+    throw new Error(
+      `DebugLevel ${name} has been edited to other levels, so a flag on it would not log at the levels asked for. In Setup, set ${edited.map((category) => `${category} back to ${levels[category]}`).join(", ")}, then try again.`,
+    );
+  }
+  return { id: found.Id, name };
 }
 
-async function createDebugLevel(connection: Connection): Promise<string> {
-  const result = await connection.tooling.sobject(DEBUG_LEVEL_SOBJECT).create({
-    DeveloperName: DEBUG_LEVEL_NAME,
-    MasterLabel: DEBUG_LEVEL_NAME,
-    ...Object.fromEntries(
-      TRACE_CATEGORIES.map((category) => [
-        toFieldName(category),
-        DEFAULT_TRACE_CONFIG[category],
-      ]),
-    ),
-  });
+async function ensureNamedDebugLevel(
+  connection: Connection,
+  name: string,
+  levels: Required<TraceConfig>,
+): Promise<DebugLevelRecord> {
+  const find = async () =>
+    (
+      await connection.tooling.query<DebugLevelRecord>(
+        `SELECT Id, ${DEBUG_LEVEL_FIELDS.join(", ")}
+         FROM ${DEBUG_LEVEL_SOBJECT}
+         WHERE DeveloperName = ${quote(name)}
+         LIMIT 1`,
+      )
+    ).records[0];
+  return (await find()) ?? (await createDebugLevel(connection, name, levels, find));
+}
 
-  if (!result.success || !result.id) {
-    throw new Error("Failed to create DebugLevel");
+async function createDebugLevel(
+  connection: Connection,
+  name: string,
+  levels: Required<TraceConfig>,
+  find: () => Promise<DebugLevelRecord | undefined>,
+): Promise<DebugLevelRecord> {
+  const fields = Object.fromEntries(
+    TRACE_CATEGORIES.map((category) => [toFieldName(category), levels[category]]),
+  );
+  try {
+    const result = await connection.tooling.sobject(DEBUG_LEVEL_SOBJECT).create({
+      DeveloperName: name,
+      MasterLabel: name,
+      ...fields,
+    });
+    if (result.success && result.id) {
+      return { Id: result.id, ...fields };
+    }
+    throw new Error(`Failed to create DebugLevel: ${JSON.stringify(result.errors)}`);
+  } catch (error) {
+    // Another call may have created it (jsforce throws on the duplicate name); a failed lookup must not hide why.
+    const created = await find().catch(() => undefined);
+    if (!created) {
+      throw error;
+    }
+    return created;
   }
-
-  return result.id;
 }

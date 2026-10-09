@@ -28,6 +28,7 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 }));
 
 jest.mock("../src/salesforce/traceFlags", () => ({
+  ...jest.requireActual("../src/salesforce/traceFlags"),
   findActiveTraceFlags: jest.fn(),
   createTraceFlag: jest.fn(),
   deleteTraceFlag: jest.fn(),
@@ -352,8 +353,11 @@ describe("Execute Anonymous", () => {
         mockConnection,
         testUserId,
         testDebugLevelId,
-        15 * 60 * 1000,
+        expect.anything(),
       );
+      // 15 minutes, from 5 minutes back for the clock skew.
+      const { start, end } = mockCreateTraceFlag.mock.calls[0]![3];
+      expect(end.getTime() - start.getTime()).toBe(20 * 60 * 1000);
       expect(deleteTraceFlag).toHaveBeenCalledWith(
         mockConnection,
         testTraceFlagId,

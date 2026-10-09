@@ -22,6 +22,7 @@ import {
   createTraceFlag,
   deleteTraceFlag,
   findActiveTraceFlags,
+  traceFlagWindow,
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
@@ -381,7 +382,7 @@ async function createRunTraceFlag(
         connection,
         userId,
         debugLevelId,
-        RUN_TRACE_FLAG_MS,
+        traceFlagWindow(RUN_TRACE_FLAG_MS),
       ),
     };
   } catch (error) {
