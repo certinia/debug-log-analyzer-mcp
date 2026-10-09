@@ -307,6 +307,20 @@ describe("openOrg", () => {
     expect(typeof result.requestState).toBe("string");
   });
 
+  it("should not ask about a write that found nothing to change", async () => {
+    classifyAs("production");
+
+    const access = await openOrg(
+      server(),
+      makeCtx(),
+      request({ write: async () => ({ value: "nothing", confirm: null }) }),
+      policy(),
+    );
+
+    expect(access).toMatchObject({ granted: true, value: "nothing" });
+    expect(mintConfirmationState).not.toHaveBeenCalled();
+  });
+
   it("should refuse a confirmation given for another tool", async () => {
     classifyAs("production");
     const asked = inputRequired(

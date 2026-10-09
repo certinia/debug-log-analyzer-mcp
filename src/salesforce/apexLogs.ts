@@ -74,32 +74,39 @@ type ApexLogRecord = {
   LogLength: number;
 };
 
-/** True for a debug log id, 15 or 18 characters. */
+/** True for a debug log id: 15 characters, or 18 whose suffix is the one the first 15 give. */
 export function isApexLogId(id: string): boolean {
-  return /^07L[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/.test(id);
+  return (
+    /^07L[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/.test(id) &&
+    // The suffix ignores case, so a mistyped one is refused, not silently corrected.
+    (id.length === 15 || toLongId(id) === id.slice(0, 15) + id.slice(15).toUpperCase())
+  );
 }
 
 const ID_SUFFIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
 
 /**
- * The 18-character form of an id, which the API returns: a 15-character id
- * names the same log, so without this it would save to a second file.
+ * The 18-character form of an id, as the API returns it. A 15-character id, or
+ * an 18-character one whose suffix differs in case, names the same log, so
+ * without this it would save to a second file or read as a different log.
  */
 export function toLongId(id: string): string {
-  if (id.length !== 15) {
-    return id;
-  }
-  // Each suffix character encodes which of 5 characters are upper case.
+  // The suffix is derived from the first 15, so it is rebuilt rather than trusted.
+  const base = id.slice(0, 15);
   const suffix = [0, 5, 10]
     .map((start) =>
-      [...id.slice(start, start + 5)].reduce(
+      [...base.slice(start, start + 5)].reduce(
         (bits, char, bit) => (/[A-Z]/.test(char) ? bits | (1 << bit) : bits),
         0,
       ),
     )
     .map((bits) => ID_SUFFIX_CHARS[bits])
     .join("");
-  return id + suffix;
+  return base + suffix;
+}
+
+function whereText(clauses: string[]): string {
+  return clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
 }
 
 // The org returns `+0000`, which SOQL does not read back as a date-time literal.
@@ -109,21 +116,21 @@ function sortLiteral(sort: LogSort, value: string | number): string {
     : String(Number(value));
 }
 
+// An empty string or a zero narrows nothing, so it is no filter: the delete's guard reads the same rule.
 function whereClauses(filters: LogFilters): string[] {
   return [
-    filters.user !== undefined && `LogUser.Username = ${quote(filters.user)}`,
-    filters.operation !== undefined &&
-      `Operation LIKE ${containing(filters.operation)}`,
-    filters.request !== undefined && `Request = ${quote(filters.request)}`,
+    filters.user && `LogUser.Username = ${quote(filters.user)}`,
+    filters.operation && `Operation LIKE ${containing(filters.operation)}`,
+    filters.request && `Request = ${quote(filters.request)}`,
     filters.succeeded !== undefined &&
       `Status ${filters.succeeded ? "=" : "!="} 'Success'`,
-    filters.startTimeFrom !== undefined &&
+    filters.startTimeFrom &&
       `StartTime >= ${new Date(filters.startTimeFrom).toISOString()}`,
-    filters.startTimeTo !== undefined &&
+    filters.startTimeTo &&
       `StartTime <= ${new Date(filters.startTimeTo).toISOString()}`,
-    filters.minFileSizeBytes !== undefined &&
+    filters.minFileSizeBytes &&
       `LogLength >= ${filters.minFileSizeBytes}`,
-  ].filter((clause): clause is string => typeof clause === "string");
+  ].filter((clause): clause is string => Boolean(clause));
 }
 
 // A digest, not the list itself, because the cursor is paid for on every page.
@@ -136,6 +143,11 @@ function listKey(sort: LogSort, filters: LogFilters): string {
 
 /** Where a cursor resumes, and the count its first page took. */
 export type ResumePoint = { value: string | number; id: string; matchedCount: number };
+
+/** The filters as the SOQL condition they become, empty when they narrow nothing. */
+export function filterCondition(filters: LogFilters): string {
+  return whereClauses(filters).join(" AND ");
+}
 
 /**
  * Read a cursor back, refusing one this list did not give.
@@ -217,8 +229,6 @@ export async function listApexLogs(
         `(${field} < ${afterValue} OR (${field} = ${afterValue} AND Id < ${quote(after.id)}))`,
       ]
     : where;
-  const whereText = (clauses: string[]) =>
-    clauses.length ? ` WHERE ${clauses.join(" AND ")}` : "";
 
   // Counted once, on the first page: a `LIKE '%…%'` filter has the org read every log to count them.
   const counting: Promise<number> = after
@@ -251,6 +261,110 @@ export async function listApexLogs(
         ).toString("base64url"),
       }),
   };
+}
+
+/** Most logs one delete reads, so a call ends inside a client's timeout; `remainingCount` says when more match. */
+const MAX_LOGS_PER_DELETE = 10_000;
+
+/** One request's worth: the API deletes at most 200 records a call. */
+export const DELETE_BATCH_SIZE = 200;
+
+/** Few enough that a large job does not trip the org's concurrent request limit. */
+export const PARALLEL_REQUESTS = 4;
+
+/** What a delete is asked to remove: ids, or every log the filters match. */
+export type LogSelection = { ids: string[] } | { filters: LogFilters };
+
+/** The stored logs a selection names, with their sizes, and how many match in all. */
+export type FoundApexLogs = {
+  logs: { id: string; fileSizeBytes: number }[];
+  matchedCount: number;
+};
+
+/**
+ * The stored logs a selection names, oldest first, at most
+ * `MAX_LOGS_PER_DELETE` of them; `matchedCount` counts every match.
+ */
+export async function findApexLogs(
+  connection: Connection,
+  selection: LogSelection,
+): Promise<FoundApexLogs> {
+  const where =
+    "ids" in selection
+      ? [`Id IN (${selection.ids.map(quote).join(", ")})`]
+      : whereClauses(selection.filters);
+  const result = await connection.query<{ Id: string; LogLength: number }>(
+    `SELECT Id, LogLength FROM ${APEX_LOG_SOBJECT}${whereText(where)} ORDER BY StartTime, Id`,
+    { autoFetch: true, maxFetch: MAX_LOGS_PER_DELETE },
+  );
+  return {
+    logs: result.records.map((record) => ({
+      id: record.Id,
+      fileSizeBytes: record.LogLength,
+    })),
+    matchedCount: result.totalSize,
+  };
+}
+
+/**
+ * Delete stored logs, each failure kept beside its id rather than failing the
+ * rest. A batch not yet sent when `signal` aborts is left alone and reported.
+ */
+export async function deleteApexLogs(
+  connection: Connection,
+  ids: string[],
+  signal?: AbortSignal,
+): Promise<{ id: string; error?: string }[]> {
+  const batches = Array.from(
+    { length: Math.ceil(ids.length / DELETE_BATCH_SIZE) },
+    (_, index) =>
+      ids.slice(index * DELETE_BATCH_SIZE, (index + 1) * DELETE_BATCH_SIZE),
+  );
+  const results = await mapWithLimit(batches, PARALLEL_REQUESTS, async (batch) => {
+    if (signal?.aborted) {
+      return batch.map((id) => ({ id, error: "not deleted: the call was cancelled" }));
+    }
+    try {
+      const saved = await connection
+        .sobject(APEX_LOG_SOBJECT)
+        .destroy(batch, { allOrNone: false });
+      // A failure carries no id, so each result is matched to its id by position.
+      return saved.map((result, index) => ({
+        // In range: the API returns one result per id sent.
+        id: batch[index]!,
+        ...(!result.success && {
+          error: result.errors.map((error) => error.message).join("; "),
+        }),
+      }));
+    } catch (error) {
+      // A failed request costs its own batch, not the report of what the others deleted.
+      const message = error instanceof Error ? error.message : String(error);
+      return batch.map((id) => ({ id, error: message }));
+    }
+  });
+  return results.flat();
+}
+
+/**
+ * `fn` over `items`, at most `limit` at a time, results in input order. A
+ * pool, not batches, so one slow request holds up one slot, not a batch.
+ */
+export async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      // In range: the loop checked `next` before taking it.
+      results[index] = await fn(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 /** The ids of the newest stored logs, newest first. */

@@ -28,8 +28,10 @@ import {
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymousDefinition.js";
 import {
+  deleteOrgLogsToolConfig,
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
+  type DeleteOrgLogsArgs,
   type GetOrgLogsArgs,
   type ListOrgLogsArgs,
 } from "./tools/orgLogsDefinition.js";
@@ -167,6 +169,15 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     async (args, ctx) => {
       const { getOrgLogs } = await import("./tools/getOrgLogs.js");
       return getOrgLogs(server, args as GetOrgLogsArgs, ctx, orgAccessPolicy);
+    },
+  );
+
+  server.registerTool(
+    "apexlog_delete_org_logs",
+    deleteOrgLogsToolConfig,
+    async (args, ctx) => {
+      const { deleteOrgLogs } = await import("./tools/deleteOrgLogs.js");
+      return deleteOrgLogs(server, args as DeleteOrgLogsArgs, ctx, orgAccessPolicy);
     },
   );
 
