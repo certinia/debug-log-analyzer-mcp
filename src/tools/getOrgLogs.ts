@@ -9,6 +9,8 @@ import { encode } from "@toon-format/toon";
 import {
   downloadApexLog,
   latestApexLogIds,
+  mapWithLimit,
+  PARALLEL_REQUESTS,
   toLongId,
 } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
@@ -17,9 +19,6 @@ import { openLogStore, saveStoredLog, type StoredLog } from "./logStore.js";
 import { progressReporter } from "./progress.js";
 import { omitEmpty } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
-
-// Few enough that a large page does not trip the org's concurrent request limit.
-const PARALLEL_DOWNLOADS = 4;
 
 type Saved = { id: string } & StoredLog;
 type Failed = { id: string; error: string };
@@ -72,7 +71,7 @@ export async function getOrgLogs(
     ? []
     : await mapWithLimit(
         ids,
-        PARALLEL_DOWNLOADS,
+        PARALLEL_REQUESTS,
         async (id): Promise<Saved | Failed> => {
           try {
             // The SDK sends no result once cancelled, so this only stops the work.
@@ -114,23 +113,4 @@ export async function getOrgLogs(
       },
     ],
   };
-}
-
-// A pool, not batches, so one large log holds up one slot rather than the rest of its batch.
-async function mapWithLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next++;
-      // In range: the loop checked `next` before taking it.
-      results[index] = await fn(items[index]!);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }

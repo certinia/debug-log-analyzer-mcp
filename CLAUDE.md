@@ -27,7 +27,7 @@ pnpm start
 ### Core Components
 
 - **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else. A bad flag exits 1 with one `[apex-log-mcp]` line, checked by `pnpm run eval`.
-- **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the six tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
+- **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the seven tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
 - **src/tools/responseShaping.ts**: the shared response helpers - `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`, `elide`, `NAME_LIMIT`.
 - **src/tools/localFile.ts**: `absolutePathSchema` and `fileReadError`, shared by every tool that reads a local file - a log or a file of Apex.
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
@@ -74,8 +74,9 @@ dist/               # Compiled JavaScript output
 4. **`apexlog_execute_anonymous`**: runs Apex, saves the log, returns its path
 5. **`apexlog_list_org_logs`**: the debug logs stored in an org, filtered, sorted and paged in SOQL
 6. **`apexlog_get_org_logs`**: downloads stored logs by id or the newest N, returns their paths
+7. **`apexlog_delete_org_logs`**: deletes stored logs by id or by the list tool's filters, to free the org's log storage
 
-Tools 1-3 take an absolute path to a `.log` file. Tools 4-6 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all three; only a write meets the production gate.
+Tools 1-3 take an absolute path to a `.log` file. Tools 4-7 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all four; only a write (4 and 7) meets the production gate.
 
 ## Naming
 

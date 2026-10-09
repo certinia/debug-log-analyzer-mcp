@@ -243,9 +243,31 @@ Downloads logs by `ids`, or the newest `latest` of them - the newest one when yo
 
 <!-- params-apexlog_get_org_logs:end -->
 
+### apexlog_delete_org_logs
+
+Deletes stored logs by `ids`, or every log the filters of `apexlog_list_org_logs` match, to free the org's 1,000 MB of log storage: when it is full, no one in the org can set a trace flag, so `apexlog_execute_anonymous` stops working. A call with no ids and no filter is refused; to delete every log, pass `startTimeTo` set to now. List with the same filters first to see what goes - a deleted log cannot be restored.
+
+Returns `deletedCount` and `deletedBytes`. One call deletes up to 10,000 logs; `remainingCount` says how many more match, so call again for the rest. A log that cannot be deleted, or an id that names no stored log, is a row in `failed`, with the cause. Against a production org, the call asks first, naming the org, the count, the bytes and the condition. There, a delete by filter needs `startTimeTo`, no later than now, so no log filed while you confirm can join what you were shown; logs that expire meanwhile only shrink it. A call that matches nothing deletes nothing and asks nothing.
+
+<!-- params-apexlog_delete_org_logs:start -->
+
+| Parameter          | Type     | Required | Description |
+| ------------------ | -------- | -------- | --- |
+| `targetOrg`        | string   | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `ids`              | string[] | No       | Log ids, in place of filters |
+| `user`             | string   | No       |  |
+| `operation`        | string   | No       |  |
+| `request`          | string   | No       |  |
+| `succeeded`        | boolean  | No       |  |
+| `startTimeFrom`    | string   | No       |  |
+| `startTimeTo`      | string   | No       |  |
+| `minFileSizeBytes` | number   | No       |  |
+
+<!-- params-apexlog_delete_org_logs:end -->
+
 ## Token Cost
 
-Every request carries all six tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
+Every request carries all seven tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
 
 <!-- token-cost-definitions:start -->
 
@@ -254,14 +276,15 @@ Every request carries all six tool definitions, whether you call them or not. Ea
 | `apexlog_list_slow_operations` | ~530                                                        |
 | `apexlog_execute_anonymous`    | ~447                                                        |
 | `apexlog_list_org_logs`        | ~322                                                        |
+| `apexlog_delete_org_logs`      | ~210                                                        |
 | `apexlog_get_org_logs`         | ~203                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~1,807** (0.9% of a 200K context), **+18% vs 1.x ~1,529** |
+| **Total**                      | **~2,017** (1.0% of a 200K context), **+32% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
-Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the two org log tools, which reach logs 1.x could not; the four tools 1.x also had cost ~1,282.
+Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the three org log tools, which reach logs 1.x could not; the four tools 1.x also had cost ~1,282.
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 
@@ -279,7 +302,7 @@ Cost does not grow with the log size. The figures below are measured against a 4
 
 ## Configuration
 
-The [Quick Start](#quick-start) config gives you all six tools.
+The [Quick Start](#quick-start) config gives you all seven tools.
 
 ### Production safety
 

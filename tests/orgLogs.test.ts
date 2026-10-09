@@ -18,6 +18,8 @@ jest.mock("../src/salesforce/apexLogs", () => ({
   readCursor: jest.fn(),
   latestApexLogIds: jest.fn(),
   downloadApexLog: jest.fn(),
+  findApexLogs: jest.fn(),
+  deleteApexLogs: jest.fn(),
 }));
 
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -28,6 +30,7 @@ import type { AuthInfo, Org } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import { listOrgLogs } from "../src/tools/listOrgLogs";
 import { getOrgLogs } from "../src/tools/getOrgLogs";
+import { deleteOrgLogs } from "../src/tools/deleteOrgLogs";
 import {
   connectOrg,
   readLocalOrg,
@@ -35,7 +38,9 @@ import {
 } from "../src/salesforce/connection";
 import { classifyOrg } from "../src/salesforce/orgClassification";
 import {
+  deleteApexLogs,
   downloadApexLog,
+  findApexLogs,
   latestApexLogIds,
   listApexLogs,
   readCursor,
@@ -51,6 +56,8 @@ const mockListApexLogs = listApexLogs as jest.MockedFunction<typeof listApexLogs
 const mockLatest = latestApexLogIds as jest.MockedFunction<typeof latestApexLogIds>;
 const mockDownload = downloadApexLog as jest.MockedFunction<typeof downloadApexLog>;
 const mockReadCursor = readCursor as jest.MockedFunction<typeof readCursor>;
+const mockFind = findApexLogs as jest.MockedFunction<typeof findApexLogs>;
+const mockDelete = deleteApexLogs as jest.MockedFunction<typeof deleteApexLogs>;
 
 const LOCAL_ORG: LocalOrg = {
   orgId: "00D000000000001",
@@ -122,7 +129,7 @@ describe("listOrgLogs", () => {
   });
 
   it("should pass the filters, sort and cursor on, and give the next cursor back", async () => {
-    const after = { value: 50, id: "07L000000000001AAA", matchedCount: 3000 };
+    const after = { value: 50, id: "07L000000000001EAA", matchedCount: 3000 };
     mockReadCursor.mockReturnValue(after);
     mockListApexLogs.mockResolvedValue({
       rows: [],
@@ -182,17 +189,17 @@ describe("listOrgLogs", () => {
 
 describe("getOrgLogs", () => {
   it("should download the newest log when given neither ids nor latest", async () => {
-    mockLatest.mockResolvedValue(["07L000000000001AAA"]);
+    mockLatest.mockResolvedValue(["07L000000000001EAA"]);
     mockDownload.mockResolvedValue("67.0 APEX_CODE,FINE");
 
     const result = await getOrgLogs(server(), {}, ctx, policy());
 
     expect(mockLatest).toHaveBeenCalledWith(connection, 1);
-    const filePath = path.join(root, ".apex-log-mcp", "07L000000000001AAA.log");
+    const filePath = path.join(root, ".apex-log-mcp", "07L000000000001EAA.log");
     expect(decode(text(result as never))).toEqual({
       org: "me@example.com (psa)",
       logs: [
-        { id: "07L000000000001AAA", filePath, fileSizeBytes: 19, downloaded: true },
+        { id: "07L000000000001EAA", filePath, fileSizeBytes: 19, downloaded: true },
       ],
       outputDirCreated: true,
     });
@@ -202,28 +209,28 @@ describe("getOrgLogs", () => {
   // A stored log never changes, so the same id is the same text.
   it("should not download a log already saved", async () => {
     const outputDir = path.join(root, "logs");
-    await getOrgLogs(server(), { ids: ["07L000000000001AAA"], outputDir }, ctx, policy());
-    writeFileSync(path.join(outputDir, "07L000000000002AAA.log"), "saved");
+    await getOrgLogs(server(), { ids: ["07L000000000001EAA"], outputDir }, ctx, policy());
+    writeFileSync(path.join(outputDir, "07L000000000002EAA.log"), "saved");
     mockDownload.mockClear();
     mockDownload.mockResolvedValue("downloaded");
 
     const result = await getOrgLogs(
       server(),
-      { ids: ["07L000000000002AAA"], outputDir },
+      { ids: ["07L000000000002EAA"], outputDir },
       ctx,
       policy(),
     );
 
     expect(mockDownload).not.toHaveBeenCalled();
     expect(decode(text(result as never))).toMatchObject({
-      logs: [{ id: "07L000000000002AAA", fileSizeBytes: 5, downloaded: false }],
+      logs: [{ id: "07L000000000002EAA", fileSizeBytes: 5, downloaded: false }],
       outputDirCreated: false,
     });
   });
 
   it("should report a log that fails as a row, and still save the rest", async () => {
     mockDownload.mockImplementation(async (_c, id) => {
-      if (id === "07L000000000009AAA") {
+      if (id === "07L000000000009EAA") {
         throw new Error("invalid parameter value");
       }
       return "log";
@@ -231,14 +238,14 @@ describe("getOrgLogs", () => {
 
     const result = await getOrgLogs(
       server(),
-      { ids: ["07L000000000001AAA", "07L000000000009AAA"] },
+      { ids: ["07L000000000001EAA", "07L000000000009EAA"] },
       ctx,
       policy(),
     );
 
     expect(decode(text(result as never))).toMatchObject({
-      logs: [{ id: "07L000000000001AAA", downloaded: true }],
-      failed: [{ id: "07L000000000009AAA", error: "invalid parameter value" }],
+      logs: [{ id: "07L000000000001EAA", downloaded: true }],
+      failed: [{ id: "07L000000000009EAA", error: "invalid parameter value" }],
     });
   });
 
@@ -262,7 +269,7 @@ describe("getOrgLogs", () => {
   it("should save one id from two calls at once, failing neither", async () => {
     mockDownload.mockResolvedValue("log");
     const call = () =>
-      getOrgLogs(server(), { ids: ["07L000000000001AAA"] }, ctx, policy());
+      getOrgLogs(server(), { ids: ["07L000000000001EAA"] }, ctx, policy());
 
     const results = await Promise.all([call(), call()]);
 
@@ -276,14 +283,14 @@ describe("getOrgLogs", () => {
 
     const result = await getOrgLogs(
       server(),
-      { ids: ["07L000000000001AAA", "07L000000000001AAA"] },
+      { ids: ["07L000000000001EAA", "07L000000000001EAA"] },
       ctx,
       policy(),
     );
 
     expect(mockDownload).toHaveBeenCalledTimes(1);
     expect(decode(text(result as never))).toMatchObject({
-      logs: [{ id: "07L000000000001AAA" }],
+      logs: [{ id: "07L000000000001EAA" }],
     });
   });
 
@@ -340,7 +347,7 @@ describe("getOrgLogs", () => {
   it("should refuse ids and latest together, before touching the org", async () => {
     const result = await getOrgLogs(
       server(),
-      { ids: ["07L000000000001AAA"], latest: 2 },
+      { ids: ["07L000000000001EAA"], latest: 2 },
       ctx,
       policy(),
     );
@@ -357,7 +364,7 @@ describe("getOrgLogs", () => {
 
     const result = await getOrgLogs(
       server(),
-      { ids: ["07L000000000001AAA"], outputDir: elsewhere },
+      { ids: ["07L000000000001EAA"], outputDir: elsewhere },
       ctx,
       policy(),
     );
@@ -379,5 +386,313 @@ describe("getOrgLogs", () => {
       "Cannot download debug logs against org 'me@example.com (psa)'",
     );
     expect(mockDownload).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleteOrgLogs", () => {
+  beforeEach(() => {
+    mockClassifyOrg.mockResolvedValue({ classification: "scratch" });
+  });
+
+  // Leaving every filter out, or giving one that narrows nothing, must not read as "delete every log".
+  it.each([
+    ["no ids and no filter", {}],
+    ["an empty operation", { operation: "" }],
+    ["a zero minFileSizeBytes", { minFileSizeBytes: 0 }],
+  ])("should refuse %s, before touching the org", async (_name, args) => {
+    const result = await deleteOrgLogs(server(), args, ctx, policy());
+
+    expect(text(result as never)).toContain("Give ids or at least one filter");
+    expect(mockReadLocalOrg).not.toHaveBeenCalled();
+  });
+
+  it("should refuse ids and filters together", async () => {
+    const result = await deleteOrgLogs(
+      server(),
+      { ids: ["07L000000000001EAA"], succeeded: false },
+      ctx,
+      policy(),
+    );
+
+    expect(text(result as never)).toBe("Give ids or filters, not both.");
+  });
+
+  it("should delete what the filters match, and count it", async () => {
+    mockFind.mockResolvedValue({
+      logs: [
+        { id: "07L000000000001EAA", fileSizeBytes: 100 },
+        { id: "07L000000000002EAA", fileSizeBytes: 50 },
+      ],
+      matchedCount: 2,
+    });
+    mockDelete.mockResolvedValue([
+      { id: "07L000000000001EAA" },
+      { id: "07L000000000002EAA" },
+    ]);
+
+    const result = await deleteOrgLogs(
+      server(),
+      { startTimeTo: "2026-10-09T09:00:00Z", user: undefined },
+      ctx,
+      policy(),
+    );
+
+    expect(mockFind).toHaveBeenCalledWith(connection, {
+      filters: { startTimeTo: "2026-10-09T09:00:00Z" },
+    });
+    expect(decode(text(result as never))).toEqual({
+      org: "me@example.com (psa)",
+      deletedCount: 2,
+      deletedBytes: 150,
+      remainingCount: 0,
+    });
+  });
+
+  it("should report a failed delete and an id that names no log as rows, and count the rest", async () => {
+    mockFind.mockResolvedValue({
+      logs: [
+        { id: "07L000000000001EAA", fileSizeBytes: 100 },
+        { id: "07L000000000002EAA", fileSizeBytes: 50 },
+      ],
+      matchedCount: 2,
+    });
+    mockDelete.mockResolvedValue([
+      { id: "07L000000000001EAA" },
+      { id: "07L000000000002EAA", error: "insufficient access rights" },
+    ]);
+
+    const result = await deleteOrgLogs(
+      server(),
+      { ids: ["07L000000000001EAA", "07L000000000002EAA", "07L000000000009EAA"] },
+      ctx,
+      policy(),
+    );
+
+    expect(decode(text(result as never))).toMatchObject({
+      deletedCount: 1,
+      deletedBytes: 100,
+      failed: [
+        { id: "07L000000000002EAA", error: "insufficient access rights" },
+        { id: "07L000000000009EAA", error: "no stored log has this id" },
+      ],
+    });
+  });
+
+  it("should report an unknown id in the form it was sent", async () => {
+    mockFind.mockResolvedValue({ logs: [], matchedCount: 0 });
+    mockDelete.mockResolvedValue([]);
+
+    const result = await deleteOrgLogs(
+      server(),
+      { ids: ["07L000000000009"] },
+      ctx,
+      policy(),
+    );
+
+    expect(mockFind).toHaveBeenCalledWith(connection, {
+      ids: ["07L000000000009EAA"],
+    });
+    expect(decode(text(result as never))).toMatchObject({
+      failed: [{ id: "07L000000000009", error: "no stored log has this id" }],
+    });
+  });
+
+  // A no-op is not a destructive act, so a person is not asked to confirm one.
+  it("should not ask production to confirm when nothing matches", async () => {
+    mockClassifyOrg.mockResolvedValue({ classification: "production" });
+    mockFind.mockResolvedValue({ logs: [], matchedCount: 0 });
+    mockDelete.mockResolvedValue([]);
+    const mint = jest.fn();
+
+    const result = await deleteOrgLogs(
+      server(),
+      { user: "nobody@example.com" },
+      ctx,
+      policy({ mintConfirmationState: mint }),
+    );
+
+    expect(mint).not.toHaveBeenCalled();
+    expect(decode(text(result as never))).toEqual({
+      org: "me@example.com (psa)",
+      deletedCount: 0,
+      deletedBytes: 0,
+      remainingCount: 0,
+    });
+  });
+
+  it("should say how many more match than one call deletes", async () => {
+    mockFind.mockResolvedValue({
+      logs: [{ id: "07L000000000001EAA", fileSizeBytes: 100 }],
+      matchedCount: 10_001,
+    });
+    mockDelete.mockResolvedValue([{ id: "07L000000000001EAA" }]);
+
+    const result = await deleteOrgLogs(
+      server(),
+      { succeeded: true },
+      ctx,
+      policy(),
+    );
+
+    expect(decode(text(result as never))).toMatchObject({ remainingCount: 10_000 });
+  });
+
+  const PAST = "2026-10-09T09:00:00Z";
+
+  it("should ask before deleting from production, naming the count and the condition, and delete nothing yet", async () => {
+    mockClassifyOrg.mockResolvedValue({ classification: "production" });
+    mockFind.mockResolvedValue({
+      logs: [
+        { id: "07L000000000001EAA", fileSizeBytes: 100 },
+        { id: "07L000000000002EAA", fileSizeBytes: 50 },
+        { id: "07L000000000003EAA", fileSizeBytes: 25 },
+      ],
+      matchedCount: 3,
+    });
+
+    const result = await deleteOrgLogs(
+      server(),
+      // The empty value narrows nothing, so the condition shown must leave it out.
+      { user: "me@example.com", request: "", startTimeTo: PAST },
+      ctx,
+      policy(),
+    );
+
+    const shown = JSON.stringify(result);
+    expect(shown).toContain(
+      "3 debug logs, 175 bytes. Every log where LogUser.Username = 'me@example.com' AND StartTime <= 2026-10-09T09:00:00.000Z.",
+    );
+    expect(shown).toContain("cannot be restored");
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  // Without the bound, a log filed while the person reads could join what they were shown.
+  it.each([
+    ["no startTimeTo", {}],
+    ["a startTimeTo in the future", { startTimeTo: "2099-01-01T00:00:00Z" }],
+  ])("should refuse a production delete by filter with %s", async (_name, extra) => {
+    mockClassifyOrg.mockResolvedValue({ classification: "production" });
+    mockFind.mockResolvedValue({
+      logs: [{ id: "07L000000000001EAA", fileSizeBytes: 1 }],
+      matchedCount: 1,
+    });
+
+    const result = await deleteOrgLogs(
+      server(),
+      { succeeded: true, ...extra },
+      ctx,
+      policy(),
+    );
+
+    expect(text(result as never)).toContain("needs startTimeTo, no later than now");
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  // Bound to what was asked, so logs that expire while the person reads do not void it.
+  it("should bind a production confirmation to the filters, not to the logs found", async () => {
+    mockClassifyOrg.mockResolvedValue({ classification: "production" });
+    const mint = jest.fn();
+    const digest = async (ids: string[], args: object) => {
+      mockFind.mockResolvedValue({
+        logs: ids.map((id) => ({ id, fileSizeBytes: 1 })),
+        matchedCount: ids.length,
+      });
+      await deleteOrgLogs(server(), { startTimeTo: PAST, ...args }, ctx, policy({ mintConfirmationState: mint }));
+      return mint.mock.calls.at(-1)[0].effectDigest;
+    };
+
+    const shown = await digest(["07L000000000001EAA", "07L000000000002EAA"], { succeeded: true });
+
+    expect(await digest(["07L000000000001EAA"], { succeeded: true })).toBe(shown);
+    expect(await digest(["07L000000000001EAA"], { succeeded: false })).not.toBe(shown);
+  });
+
+  it("should show the ids found, not every id given", async () => {
+    mockClassifyOrg.mockResolvedValue({ classification: "production" });
+    mockFind.mockResolvedValue({
+      logs: [{ id: "07L000000000001EAA", fileSizeBytes: 1 }],
+      matchedCount: 1,
+    });
+
+    const result = await deleteOrgLogs(
+      server(),
+      { ids: ["07L000000000001EAA", "07L000000000002EAA"] },
+      ctx,
+      policy(),
+    );
+
+    expect(JSON.stringify(result)).toContain("By id: 07L000000000001EAA.");
+  });
+
+  it("should show how many match in all when one call deletes only some", async () => {
+    mockClassifyOrg.mockResolvedValue({ classification: "production" });
+    mockFind.mockResolvedValue({
+      logs: [{ id: "07L000000000001EAA", fileSizeBytes: 10 }],
+      matchedCount: 40_000,
+    });
+
+    const result = await deleteOrgLogs(
+      server(),
+      { succeeded: true, startTimeTo: PAST },
+      ctx,
+      policy(),
+    );
+
+    expect(JSON.stringify(result)).toContain(
+      "1 of the 40000 debug logs that match, the oldest first; call again for the rest",
+    );
+  });
+
+  // Failed logs still hold storage, so an agent looping until zero must see them.
+  it("should count failed deletes as still remaining", async () => {
+    mockFind.mockResolvedValue({
+      logs: [
+        { id: "07L000000000001EAA", fileSizeBytes: 1 },
+        { id: "07L000000000002EAA", fileSizeBytes: 1 },
+      ],
+      matchedCount: 2,
+    });
+    mockDelete.mockResolvedValue([
+      { id: "07L000000000001EAA" },
+      { id: "07L000000000002EAA", error: "insufficient access rights" },
+    ]);
+
+    const result = await deleteOrgLogs(server(), { succeeded: true }, ctx, policy());
+
+    expect(decode(text(result as never))).toMatchObject({
+      deletedCount: 1,
+      remainingCount: 1,
+    });
+  });
+
+  it("should pass the call's cancel signal to the delete", async () => {
+    mockFind.mockResolvedValue({
+      logs: [{ id: "07L000000000001EAA", fileSizeBytes: 1 }],
+      matchedCount: 1,
+    });
+    mockDelete.mockResolvedValue([{ id: "07L000000000001EAA" }]);
+
+    await deleteOrgLogs(server(), { succeeded: true }, ctx, policy());
+
+    expect(mockDelete).toHaveBeenCalledWith(
+      connection,
+      ["07L000000000001EAA"],
+      ctx.mcpReq.signal,
+    );
+  });
+
+  it("should refuse a denied org before connecting", async () => {
+    const result = await deleteOrgLogs(
+      server(),
+      { succeeded: true },
+      ctx,
+      policy({ denyList: compileDenyList(["psa"]) }),
+    );
+
+    expect(text(result as never)).toContain(
+      "Cannot delete debug logs against org 'me@example.com (psa)'",
+    );
+    expect(mockConnectOrg).not.toHaveBeenCalled();
+    expect(mockFind).not.toHaveBeenCalled();
   });
 });

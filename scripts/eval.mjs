@@ -322,6 +322,8 @@ const DEFINITION_BUDGET = {
   // list costs what `limit` asks for, not what the org holds (#209).
   apexlog_list_org_logs: 344,
   apexlog_get_org_logs: 219,
+  // Measured + 5% (#210). Its filters go undescribed: the list tool describes them.
+  apexlog_delete_org_logs: 221,
 };
 
 /**
@@ -343,11 +345,12 @@ const V1_DEFINITION_TOTAL = 1529;
  * The ceiling on the sum of the definition budgets. It sat at
  * `V1_DEFINITION_TOTAL` until the org log tools: reaching a log stored in the
  * org was a deliberate purchase of a capability 1.x never had (#209): the two
- * definitions measure ~525 tokens a request, inside their budgets of 563. The
- * budgets now sum to this cap, so raising any budget means raising the cap,
- * on purpose, with the reason here.
+ * definitions measure ~525 tokens a request, inside their budgets of 563.
+ * Deleting them, so a full org can set a trace flag again, added ~210 inside a
+ * budget of 221 (#210). The budgets sum to this cap, so raising any budget
+ * means raising the cap, on purpose, with the reason here.
  */
-const DEFINITION_TOTAL_CAP = 1891;
+const DEFINITION_TOTAL_CAP = 2112;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -369,6 +372,7 @@ const SELECTION_KEYWORDS = {
   apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
   apexlog_list_org_logs: ["debug logs", "Salesforce org"],
   apexlog_get_org_logs: ["debug logs", "Salesforce org"],
+  apexlog_delete_org_logs: ["debug logs", "storage"],
 };
 
 /**
