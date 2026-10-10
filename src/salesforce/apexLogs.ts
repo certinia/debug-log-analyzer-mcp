@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
 import {
   CLOCK_SKEW_MS,
-  escapeSoql,
+  containing,
   quote,
   toDateTimeLiteral,
 } from "./soql.js";
@@ -100,11 +100,6 @@ export function toLongId(id: string): string {
     .map((bits) => ID_SUFFIX_CHARS[bits])
     .join("");
   return id + suffix;
-}
-
-/** A SOQL `LIKE` pattern matching `value` anywhere: its own `%` and `_` match only themselves. */
-function containing(value: string): string {
-  return `'%${escapeSoql(value).replace(/[%_]/g, "\\$&")}%'`;
 }
 
 // The org returns `+0000`, which SOQL does not read back as a date-time literal.
