@@ -17,36 +17,35 @@ export function toDateTimeLiteral(date: Date): { toString(): string } {
 }
 
 // Every character SOQL reads as special inside a string literal, as its escape.
-const SOQL_ESCAPES: Record<string, string> = {
-  "\n": "\\n",
-  "\r": "\\r",
-  "\t": "\\t",
-  "\b": "\\b",
-  "\f": "\\f",
-  '"': '\\"',
-  "'": "\\'",
-  "\\": "\\\\",
-};
-
-// One pass over the value, its pattern built from the table's keys, so the two cannot drift.
-function escaper(table: Record<string, string>): (value: string) => string {
-  const keys = Object.keys(table).join("").replace(/[\\\]^-]/g, "\\$&");
-  const pattern = new RegExp(`[${keys}]`, "g");
-  // Defined: the pattern matches only the table's keys.
-  return (value) => value.replace(pattern, (char) => table[char]!);
-}
-
-const escapeSoql = escaper(SOQL_ESCAPES);
+const SOQL_ESCAPES = new Map([
+  ["\n", "\\n"],
+  ["\r", "\\r"],
+  ["\t", "\\t"],
+  ["\b", "\\b"],
+  ["\f", "\\f"],
+  ['"', '\\"'],
+  ["'", "\\'"],
+  ["\\", "\\\\"],
+]);
 
 // A `LIKE` pattern also reads `%` and `_` as wildcards.
-const escapeLike = escaper({ ...SOQL_ESCAPES, "%": "\\%", _: "\\_" });
+const LIKE_ESCAPES = new Map(SOQL_ESCAPES).set("%", "\\%").set("_", "\\_");
+
+// Each character through the table once, so nothing is escaped twice; a Map, so no inherited key can match.
+function escapeWith(table: Map<string, string>, value: string): string {
+  let escaped = "";
+  for (const char of value) {
+    escaped += table.get(char) ?? char;
+  }
+  return escaped;
+}
 
 /** A SOQL string literal: no character in the value can end it. */
 export function quote(value: string): string {
-  return `'${escapeSoql(value)}'`;
+  return `'${escapeWith(SOQL_ESCAPES, value)}'`;
 }
 
 /** A SOQL `LIKE` pattern matching `value` anywhere: its own `%` and `_` match only themselves. */
 export function containing(value: string): string {
-  return `'%${escapeLike(value)}%'`;
+  return `'%${escapeWith(LIKE_ESCAPES, value)}%'`;
 }
