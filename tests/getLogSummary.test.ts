@@ -905,7 +905,7 @@ describe("getLogSummary", () => {
 
       await expect(
         getLogSummary({ logFilePath: "/path/to/restricted.log" }),
-      ).rejects.toThrow("Cannot read log file /path/to/restricted.log: EACCES");
+      ).rejects.toThrow("Cannot read log file /path/to/restricted.log: permission denied (EACCES)");
     });
 
     it("should propagate file read errors", async () => {

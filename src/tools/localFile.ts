@@ -20,6 +20,16 @@ export const absolutePathSchema = z
   .string()
   .refine(isAbsolute, "must be an absolute path");
 
+// The codes a read most often fails with, in words; the code stays beside them for a search.
+const CODE_WORDS: Partial<Record<string, string>> = {
+  EACCES: "permission denied",
+  EPERM: "permission denied",
+  EISDIR: "it is a directory",
+  ELOOP: "too many symbolic links",
+  EMFILE: "too many open files",
+  ENFILE: "too many open files",
+};
+
 /**
  * Why a file could not be read, by its errno. A missing file is one of several
  * ways this fails; reporting all of them as "not found" sends the caller to look
@@ -34,10 +44,11 @@ export function fileReadError(
   error: unknown,
 ): Error {
   const code = (error as NodeJS.ErrnoException).code ?? String(error);
+  const cause = CODE_WORDS[code];
   const message =
     code === "ENOENT"
       ? `${noun.charAt(0).toUpperCase()}${noun.slice(1)} not found: ${filePath}`
-      : `Cannot read ${noun} ${filePath}: ${code}`;
+      : `Cannot read ${noun} ${filePath}: ${cause ? `${cause} (${code})` : code}`;
   return new Error(message, { cause: error });
 }
 

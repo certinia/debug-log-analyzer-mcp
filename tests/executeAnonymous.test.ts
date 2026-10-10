@@ -1134,7 +1134,7 @@ describe("Execute Anonymous", () => {
 
     it.each([
       ["ENOENT", `Apex file not found: ${apexFilePath}`],
-      ["EACCES", `Cannot read Apex file ${apexFilePath}: EACCES`],
+      ["EACCES", `Cannot read Apex file ${apexFilePath}: permission denied (EACCES)`],
     ])("should name why the file could not be read (%s), before connecting", async (code, message) => {
       mockOpen.mockRejectedValueOnce(errno(code));
 
