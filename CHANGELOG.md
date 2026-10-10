@@ -8,18 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, or at the defaults - never at the levels a previous run left. Pass `"traceFlag"` to require the flag ([#230])
+- apexlog_execute_anonymous: set the categories an object `debugLevel` names over the defaults, not over the levels a previous run left ([#230])
+- apexlog_execute_anonymous: show a live Developer Console trace flag's levels in a production confirmation, and report them as `levelsSource` `developerConsole` rather than as `levelsOverridden` ([#230])
 - apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `unattributed` row holds the time no event spans ([#226])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
 
 ### Added
 
-- --deny-orgs: refuse anonymous Apex against named orgs, or against an org type with `type:production`. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186])
+- apexlog_list_org_logs, apexlog_get_org_logs: list the debug logs stored in an org, filtered, sorted and paged in the org, and download them by id or the newest N for the analysis tools ([#209])
+- apexlog_delete_org_logs: delete stored logs by id or by the list's filters, so an org whose log storage is full can set a trace flag again ([#210])
+- --deny-orgs: refuse named orgs, or an org type with `type:production`, to every org tool - running Apex and reading logs alike. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186], [#209])
 - apexlog_execute_anonymous: run from a file with `apexFilePath`, reuse saved scripts and save tokens ([#212])
 - apexlog_get_summary: report the exceptions a transaction threw, with where and how often, and how many flow elements failed ([#208])
 
 ### Fixed
 
 - apexlog_execute_anonymous: show all of the Apex in a production confirmation, and refuse Apex too long to show ([#221])
+- apexlog_execute_anonymous: show the log levels in a production confirmation, and refuse a run at levels other than the ones confirmed ([#228])
 - apexlog_execute_anonymous: stop changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
 - apexlog_execute_anonymous: run the Apex with a warning when the org refuses a trace flag, instead of failing the call ([#207])
 - apexlog_execute_anonymous: stop a 60-second stall waiting on roots ([#222])
@@ -123,3 +129,7 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#222]: https://github.com/certinia/debug-log-analyzer-mcp/issues/222
 [#226]: https://github.com/certinia/debug-log-analyzer-mcp/pull/226
 [#225]: https://github.com/certinia/debug-log-analyzer-mcp/pull/225
+[#228]: https://github.com/certinia/debug-log-analyzer-mcp/issues/228
+[#230]: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
+[#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
+[#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209

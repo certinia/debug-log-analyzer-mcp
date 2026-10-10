@@ -46,7 +46,7 @@ export type Workspace =
   | { kind: "unknown"; reason: string };
 
 /** What a tool asks of `openOrg`. */
-export type OrgRequest<T> = {
+export type OrgRequest<T, V = T> = {
   /** The tool's name, which a production confirmation is bound to. */
   tool: string;
   /** What the call does, as a verb phrase: every refusal is built from it. */
@@ -62,17 +62,19 @@ export type OrgRequest<T> = {
    */
   prepare?: (rootPaths: string[]) => Promise<T>;
   /**
-   * `false` for a read. A write gives what a production org must confirm,
-   * built once the org is connected so it can be read first. Required, so no
-   * write skips the gate by leaving it out.
+   * `false` for a read. A write reads what it needs from the connected org and
+   * returns it with what a production org must confirm, so it does exactly
+   * what was confirmed. Required, so no write skips the gate by leaving it out;
+   * `confirm: null` says, explicitly, that the write found nothing to change.
    */
-  confirm:
+  write:
     | false
     | ((org: {
         value: T;
         connection: Connection;
+        local: LocalOrg;
         orgLabel: string;
-      }) => Confirmable | Promise<Confirmable>);
+      }) => Promise<{ value: V; confirm: Confirmable | null }>);
 };
 
 export type OrgAccess<T> =
@@ -95,13 +97,13 @@ export type OrgAccess<T> =
  * production gate, before the tool changes anything. A refusal is returned; a
  * fault still throws.
  */
-export async function openOrg<T = undefined>(
+export async function openOrg<T = undefined, V = T>(
   server: McpServer,
   ctx: ServerContext,
-  request: OrgRequest<T>,
+  request: OrgRequest<T, V>,
   policy: OrgAccessPolicy,
-): Promise<OrgAccess<T>> {
-  const refuse = (text: string): OrgAccess<T> => ({
+): Promise<OrgAccess<V>> {
+  const refuse = (text: string): OrgAccess<V> => ({
     granted: false,
     result: toolError(text),
   });
@@ -158,31 +160,38 @@ export async function openOrg<T = undefined>(
   }
 
   const connection = org.getConnection();
-  if (request.confirm) {
-    const decision = await authorizeOperation({
-      ctx,
-      mintConfirmationState: policy.mintConfirmationState,
-      consumeConfirmation: policy.consumeConfirmation,
-      classification,
-      orgId: local.orgId,
-      orgLabel,
-      allowProductionOrgs: policy.allowProductionOrgs,
-      unverifiedReason,
-      tool: request.tool,
-      action: request.action,
-      confirm: await request.confirm({ value, connection, orgLabel }),
-    });
-    if (decision.outcome === "confirmationRequired") {
-      return { granted: false, result: decision.result };
-    }
-    if (decision.outcome === "refused") {
-      return refuse(decision.reason);
+  // A read's value is what `prepare` gave; only a write's hook can change it.
+  let result = value as unknown as V;
+  if (request.write) {
+    const planned = await request.write({ value, connection, local, orgLabel });
+    result = planned.value;
+    // Nothing to change is nothing to confirm: asking would put a no-op to a person as a destructive prompt.
+    if (planned.confirm) {
+      const decision = await authorizeOperation({
+        ctx,
+        mintConfirmationState: policy.mintConfirmationState,
+        consumeConfirmation: policy.consumeConfirmation,
+        classification,
+        orgId: local.orgId,
+        orgLabel,
+        allowProductionOrgs: policy.allowProductionOrgs,
+        unverifiedReason,
+        tool: request.tool,
+        action: request.action,
+        confirm: planned.confirm,
+      });
+      if (decision.outcome === "confirmationRequired") {
+        return { granted: false, result: decision.result };
+      }
+      if (decision.outcome === "refused") {
+        return refuse(decision.reason);
+      }
     }
   }
 
   return {
     granted: true,
-    value,
+    value: result,
     connection,
     local,
     orgLabel,

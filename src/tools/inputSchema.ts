@@ -4,6 +4,14 @@
 
 import { z } from "zod";
 
+/** The org an org tool runs against, worded once so every tool charges the same tokens for it. */
+export const targetOrgSchema = z
+  .string()
+  .optional()
+  .describe(
+    "Alias or username of the target Salesforce org. Uses the project default if not specified.",
+  );
+
 /** What zod states and no client reads, where the value is zod's and not ours. */
 const UNREAD = new Set(["$schema", "minimum", "maximum"]);
 

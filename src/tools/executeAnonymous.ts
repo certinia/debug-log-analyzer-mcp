@@ -2,12 +2,18 @@
 // it - `src/index.ts` covers the `bin` alone.
 import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
-import path from "node:path";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
 import { getUserIdByUsername } from "../salesforce/users.js";
-import { ensureDebugLevel } from "../salesforce/debugLevels.js";
+import {
+  DEFAULT_TRACE_CONFIG,
+  ensureDebugLevel,
+  levelsClause,
+  requestedLevels,
+  type DebugLevelInput,
+  type TraceConfig,
+} from "../salesforce/debugLevels.js";
 import {
   executeAnonymousWithLog,
   levelsWereOverridden,
@@ -15,12 +21,15 @@ import {
 import {
   createTraceFlag,
   deleteTraceFlag,
-  hasActiveTraceFlag,
+  findActiveTraceFlags,
+  type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
-import { fileReadError } from "./localFile.js";
+import { progressReporter } from "./progress.js";
+import { fileReadError, outsideRoots } from "./localFile.js";
+import { openLogStore, writeDebugLog } from "./logStore.js";
 import { NS_TO_MS, roundMs } from "./responseShaping.js";
-import { CLOCK_SKEW_MS, toDateTimeLiteral } from "../salesforce/soql.js";
+import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import {
   apexExecutionRefusal,
@@ -47,56 +56,6 @@ const NO_LOG_CAPTURED_WARNING =
 export type ExecuteAnonymousPolicy = OrgAccessPolicy & {
   apexExecutionDisabled: boolean;
 };
-
-function logWarning(warning: string): string {
-  console.error(`[apex-log-mcp] ${warning}`);
-  return warning;
-}
-
-/** The resolved path, or the path itself when it does not resolve. */
-async function realPathOrSelf(target: string): Promise<string> {
-  return fs.realpath(target).catch(() => target);
-}
-
-/**
- * The MCP spec expects a server to work inside the roots the client declares,
- * and `outputDir` is agent-supplied, so it is the path an injected instruction
- * takes. Refusing would break a caller who means to write elsewhere, so say so
- * instead: the response names where the log went, and the same line goes to
- * stderr for the person watching the server.
- *
- * Symlinks are followed on both sides, so a link inside a root that points out
- * of one is still outside. A client that declares no roots gives nothing to
- * compare against, so it stays silent.
- */
-async function warnIfOutsideRoots(
-  outputDir: string,
-  rootPaths: string[],
-): Promise<string | undefined> {
-  const target = await outsideRoots(outputDir, rootPaths);
-  return target === undefined
-    ? undefined
-    : logWarning(
-        `Debug log written to ${target}, which is outside every root this client declared.`,
-      );
-}
-
-/** `target` with symlinks followed when it is outside every root, else undefined. No roots, no check. */
-async function outsideRoots(
-  target: string,
-  rootPaths: string[],
-): Promise<string | undefined> {
-  if (rootPaths.length === 0) {
-    return undefined;
-  }
-
-  const resolved = await realPathOrSelf(target);
-  const roots = await Promise.all(rootPaths.map(realPathOrSelf));
-  const inside = roots.some(
-    (root) => resolved === root || resolved.startsWith(root + path.sep),
-  );
-  return inside ? undefined : resolved;
-}
 
 // Refused where `outputDir` only warns: the file's text goes to the org, and a compile error can echo it.
 async function readApexFile(
@@ -150,13 +109,69 @@ function apexSource({
   return undefined;
 }
 
+/** Where a run's levels came from: the user's trace flag, the defaults, the call, or a Developer Console flag. */
+type LevelsSource = "traceFlag" | "default" | "request" | "developerConsole";
+
+type RunLevels = { levels: Required<TraceConfig>; source: LevelsSource };
+
+const SOURCE_TEXT: Record<LevelsSource, string> = {
+  traceFlag: "your trace flag's",
+  default: "the defaults",
+  request: "as requested",
+  developerConsole: "your Developer Console trace flag's",
+};
+
+// A Developer Console flag outranks the header (.claude/rules/trace-flags.md), so its levels are the ones confirmed and run.
+function resolveRunLevels(
+  debugLevel: DebugLevelInput | undefined,
+  flags: ActiveTraceFlags,
+  username: string,
+): RunLevels {
+  // First, so a bad debugLevel or a missing USER_DEBUG flag is refused even when the console wins.
+  const asked = askedLevels(debugLevel, flags.userDebugLevels, username);
+  return flags.developerConsoleLevels
+    ? { levels: flags.developerConsoleLevels, source: "developerConsole" }
+    : asked;
+}
+
+// Read from the flag and sent, not left to it: with no header the returned log is empty.
+function askedLevels(
+  debugLevel: DebugLevelInput | undefined,
+  userDebugLevels: Required<TraceConfig> | undefined,
+  username: string,
+): RunLevels {
+  if (debugLevel === "default") {
+    return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
+  }
+  if (debugLevel !== undefined && debugLevel !== "traceFlag") {
+    return { levels: requestedLevels(debugLevel), source: "request" };
+  }
+  if (userDebugLevels !== undefined) {
+    return { levels: userDebugLevels, source: "traceFlag" };
+  }
+  // Asked for by name, so a flag that has expired is said, not papered over with the defaults.
+  if (debugLevel === "traceFlag") {
+    throw new Error(
+      `${username} has no active USER_DEBUG trace flag, so there are no levels to use. Create one, or leave out debugLevel to run at the defaults.`,
+    );
+  }
+  return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
+}
+
 // All of it, never cut, between markers and with its size, so Apex cannot pass for the end of the prompt.
-function apexConfirmable(apex: string, orgLabel: string): Confirmable {
+function apexConfirmable(
+  apex: string,
+  run: RunLevels,
+  orgLabel: string,
+): Confirmable {
   const lines = apex.split("\n").length;
   const linesText = `${lines} line${lines === 1 ? "" : "s"}`;
+  const clause = levelsClause(run.levels);
   return {
-    effect: apex,
-    detail: `Apex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----`,
+    // The levels, not where they came from, so a flag that expires to the same levels keeps the confirmation.
+    effect: `${clause}\0${apex}`,
+    // Before the Apex, so the Apex cannot pass for it.
+    detail: `Log levels, ${SOURCE_TEXT[run.source]}: ${clause}.\n\nApex, ${linesText} and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----`,
     // The size again, in the schema, where the Apex cannot reach.
     title: `Run ${linesText} of Apex`,
     unshowable:
@@ -189,7 +204,7 @@ export async function executeAnonymous(
     return toolError(ONE_APEX_SOURCE);
   }
 
-  const report = progressReporter(ctx);
+  const report = progressReporter(ctx, PROGRESS_STEPS);
   const access = await openOrg(
     server,
     ctx,
@@ -203,7 +218,16 @@ export async function executeAnonymous(
           ? `Cannot check Apex file ${args.apexFilePath}: ${reason}. Pass the Apex inline in apex.`
           : undefined,
       prepare: readApex,
-      confirm: ({ value, orgLabel }) => apexConfirmable(value, orgLabel),
+      write: async ({ value: apex, connection, local, orgLabel }) => {
+        const userId = await getUserIdByUsername(connection, local.username);
+        // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
+        const flags = await findActiveTraceFlags(connection, userId);
+        const run = resolveRunLevels(debugLevel, flags, local.username);
+        return {
+          value: { apex, userId, storesLogs: flags.storesLogs, run },
+          confirm: apexConfirmable(apex, run, orgLabel),
+        };
+      },
     },
     policy,
   );
@@ -212,23 +236,18 @@ export async function executeAnonymous(
     return access.result;
   }
   const {
-    value: apex,
+    value: { apex, userId, storesLogs, run },
     connection,
-    local: { username },
     orgLabel,
     classification,
     workspace,
     rootPaths,
   } = access;
-  const projectPath = rootPaths[0];
 
   await report("Setting the trace flag");
-  const userId = await getUserIdByUsername(connection, username);
-  // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
-  const [{ id: debugLevelId, levels }, alreadyTraced] = await Promise.all([
-    ensureDebugLevel(connection, debugLevel),
-    hasActiveTraceFlag(connection, userId),
-  ]);
+  const debugLevelId = storesLogs
+    ? undefined
+    : await ensureDebugLevel(connection);
 
   const {
     value: { apexResult, logId },
@@ -236,14 +255,14 @@ export async function executeAnonymous(
   } = await withTraceFlagForRun(
     connection,
     userId,
-    alreadyTraced ? undefined : debugLevelId,
-    async () => {
+    debugLevelId,
+    async (flagLive) => {
       await report("Executing the Apex");
       const startedAt = new Date();
       const apexResult = await executeAnonymousWithLog(
         connection,
         apex,
-        levels,
+        run.levels,
       );
 
       if (!apexResult.compiled) {
@@ -252,30 +271,24 @@ export async function executeAnonymous(
         );
       }
 
-      const logId = await findStoredLogId(
-        connection,
-        userId,
-        apexResult.debugLog,
-        startedAt,
-      );
+      // An empty log has nothing stored to match. Without our flag, another may have stored it, so even one match is checked.
+      const logId = apexResult.debugLog
+        ? await findStoredLogId(
+            connection,
+            userId,
+            apexResult.debugLog,
+            startedAt,
+            !flagLive,
+          )
+        : undefined;
       return { apexResult, logId };
     },
   );
 
   await report("Writing the debug log");
 
-  // Absolute, because `filePath` below goes straight back to the analysis
-  // tools, which refuse a relative path. A relative `outputDir` anchors to the
-  // project root, the same base the default uses, rather than to wherever the
-  // client happened to spawn this server.
-  const outputDir = path.resolve(
-    projectPath ?? process.cwd(),
-    args.outputDir ?? ".apex-log-mcp",
-  );
-  // Resolves to the first directory created, or undefined when it already existed.
-  const createdDir = await fs.mkdir(outputDir, { recursive: true });
-
-  const filePath = await writeDebugLog(outputDir, logId, apexResult.debugLog);
+  const store = await openLogStore(args.outputDir, workspace, rootPaths);
+  const filePath = await writeDebugLog(store.dir, logId, apexResult.debugLog);
   const stats = await fs.stat(filePath);
   // The log itself is the one source of its duration, so this figure and
   // `apexlog_get_summary.durationTotalMs` are the same number. Parsing it here
@@ -290,14 +303,7 @@ export async function executeAnonymous(
     // as a run that did nothing rather than a log that was never captured.
     apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
     ...traceFlagWarnings,
-    // Unusable roots leave even the default, in the cwd, unchecked; usable, the default is inside the first root.
-    workspace.kind === "unknown"
-      ? logWarning(
-          `Debug log written to ${outputDir}, which was not checked against the client's roots: ${workspace.reason}.`,
-        )
-      : args.outputDir
-        ? await warnIfOutsideRoots(outputDir, rootPaths)
-        : undefined,
+    store.warning,
   ].filter((text): text is string => text !== undefined);
 
   return {
@@ -317,14 +323,19 @@ export async function executeAnonymous(
           durationMs: parsedLog
             ? roundMs(parsedLog.duration.total / NS_TO_MS)
             : 0,
-          // True when a Developer Console trace flag outranked the levels asked
-          // for, which is the one thing that can silently change what was
-          // captured. Reported either way, for the same reason as below.
-          levelsOverridden: levelsWereOverridden(levels, parsedLog?.debugLevels),
+          // True when the log carries levels other than the ones levelsSource
+          // names - a Developer Console flag set during the run, say. Reported
+          // either way, for the same reason as below.
+          levelsOverridden: levelsWereOverridden(
+            run.levels,
+            parsedLog?.debugLevels,
+          ),
+          // Where the levels came from, so a log far thinner or fuller than expected explains itself.
+          levelsSource: run.source,
           // A fact about this run, not advice about it: the directory is new, so
           // nothing yet ignores it. Reported either way, because an absent field
           // cannot be told apart from one this server never worked out.
-          outputDirCreated: Boolean(createdDir),
+          outputDirCreated: store.created,
         }),
       },
     ],
@@ -336,7 +347,7 @@ async function withTraceFlagForRun<T>(
   connection: Connection,
   userId: string,
   flagLevelId: string | undefined,
-  run: () => Promise<T>,
+  run: (flagLive: boolean) => Promise<T>,
 ): Promise<{ value: T; warnings: string[] }> {
   const created =
     flagLevelId === undefined
@@ -346,7 +357,7 @@ async function withTraceFlagForRun<T>(
   let value: T;
   let deleteWarning: string | undefined;
   try {
-    value = await run();
+    value = await run(flagLevelId === undefined || created.id !== undefined);
   } finally {
     deleteWarning = await removeRunTraceFlag(connection, created.id);
   }
@@ -398,110 +409,4 @@ async function removeRunTraceFlag(
     );
     return warning;
   }
-}
-
-/**
- * Write the log out, under the id Salesforce filed it as when there is one,
- * and never over a file already there: the id is matched rather than given, so
- * a wrong match must cost a filename and not an earlier run's log.
- */
-async function writeDebugLog(
-  outputDir: string,
-  logId: string | undefined,
-  debugLog: string,
-): Promise<string> {
-  const fallbackPath = path.join(outputDir, `apex-${Date.now()}.log`);
-  if (logId) {
-    const filePath = path.join(outputDir, `${logId}.log`);
-    try {
-      await fs.writeFile(filePath, debugLog, { encoding: "utf-8", flag: "wx" });
-      return filePath;
-    } catch (error) {
-      if (!isAlreadyExists(error)) {
-        throw error;
-      }
-      console.error(
-        `[apex-log-mcp] ${filePath} already holds a log, so this run was written to ${fallbackPath} instead.`,
-      );
-    }
-  }
-  await fs.writeFile(fallbackPath, debugLog, "utf-8");
-  return fallbackPath;
-}
-
-function isAlreadyExists(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error as NodeJS.ErrnoException).code === "EEXIST"
-  );
-}
-
-/**
- * The id Salesforce filed this log under, matched on its byte length and on
- * having been filed no earlier than this run.
- *
- * Salesforce hands out no log id for anonymous Apex, so this only names the
- * file the way `sf` names it. A miss costs a filename and nothing else, which
- * is why the length is matched rather than the newest row taken, and why a
- * failed query is reported and stepped over: the log is already in hand and
- * cannot be fetched again. Without the time bound, a log of the same length
- * from any earlier run answers the query.
- */
-async function findStoredLogId(
-  connection: Connection,
-  userId: string,
-  debugLog: string,
-  startedAt: Date,
-): Promise<string | undefined> {
-  // `StartTime` is org time and `startedAt` is this machine's, so the bound is
-  // slackened by the clock skew the two can carry between them.
-  const since = new Date(startedAt.getTime() - CLOCK_SKEW_MS);
-  try {
-    const record = (await connection
-      .sobject("ApexLog")
-      .findOne(
-        {
-          LogUserId: userId,
-          LogLength: Buffer.byteLength(debugLog, "utf-8"),
-          StartTime: { $gte: toDateTimeLiteral(since) },
-        },
-        ["Id"],
-        { sort: { StartTime: -1 } },
-      )) as { Id: string } | null;
-    return record?.Id;
-  } catch (error) {
-    console.error(
-      `[apex-log-mcp] Could not match the debug log to a stored ApexLog: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return undefined;
-  }
-}
-
-/**
- * Report each step, but only to a caller that asked for progress. The spec
- * gives a token only when it wants the notifications.
- *
- * A failed notification is reported and stepped over. The Apex has already run
- * by the last step, so a rejected notify must not throw away the log it just
- * produced.
- */
-function progressReporter(ctx: ServerContext): (step: string) => Promise<void> {
-  const progressToken = ctx.mcpReq._meta?.progressToken;
-  let progress = 0;
-  return async (message: string) => {
-    if (progressToken === undefined) {
-      return;
-    }
-    progress += 1;
-    try {
-      await ctx.mcpReq.notify({
-        method: "notifications/progress",
-        params: { progressToken, progress, total: PROGRESS_STEPS, message },
-      });
-    } catch (error) {
-      console.error(
-        `[apex-log-mcp] Could not report progress: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  };
 }

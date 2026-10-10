@@ -318,6 +318,12 @@ const DEFINITION_BUDGET = {
   // Raised for `apexFilePath` (#212): without it, a script in a file is read
   // into context and then written out again as `apex`, paid for twice.
   apexlog_execute_anonymous: 450,
+  // Seven optional filters and a cursor, each run in SOQL, so a busy org's log
+  // list costs what `limit` asks for, not what the org holds (#209).
+  apexlog_list_org_logs: 344,
+  apexlog_get_org_logs: 219,
+  // Measured + 5% (#210). Its filters go undescribed: the list tool describes them.
+  apexlog_delete_org_logs: 221,
 };
 
 /**
@@ -334,6 +340,17 @@ const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
  * measured as `V1_RESPONSE_TOKENS` was. The README publishes it.
  */
 const V1_DEFINITION_TOTAL = 1529;
+
+/**
+ * The ceiling on the sum of the definition budgets. It sat at
+ * `V1_DEFINITION_TOTAL` until the org log tools: reaching a log stored in the
+ * org was a deliberate purchase of a capability 1.x never had (#209): the two
+ * definitions measure ~525 tokens a request, inside their budgets of 563.
+ * Deleting them, so a full org can set a trace flag again, added ~210 inside a
+ * budget of 221 (#210). The budgets sum to this cap, so raising any budget
+ * means raising the cap, on purpose, with the reason here.
+ */
+const DEFINITION_TOTAL_CAP = 2112;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -353,6 +370,9 @@ const SELECTION_KEYWORDS = {
   apexlog_get_summary: ["summary", "overview"],
   apexlog_list_limit_risks: ["governor limits", "CPU time"],
   apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
+  apexlog_list_org_logs: ["debug logs", "Salesforce org"],
+  apexlog_get_org_logs: ["debug logs", "Salesforce org"],
+  apexlog_delete_org_logs: ["debug logs", "storage"],
 };
 
 /**
@@ -872,17 +892,16 @@ function checkDefinitionBudget(costs, failures) {
     }
   }
   // The budgets themselves, not the measurements: every tool has one - the loop
-  // above fails a tool that does not - so a run under all four is under their
-  // sum, and a fifth tool cannot slip past. What no per-tool budget can say is
-  // that the sum is still under what 1.x charged, which is the figure the README
-  // publishes as the saving.
+  // above fails a tool that does not - so a run under all of them is under
+  // their sum, and a new tool cannot slip past. What no per-tool budget can say
+  // is that the sum is still under the cap.
   const budgeted = Object.values(DEFINITION_BUDGET).reduce(
     (sum, budget) => sum + budget,
     0,
   );
-  if (budgeted > V1_DEFINITION_TOTAL) {
+  if (budgeted > DEFINITION_TOTAL_CAP) {
     failures.push(
-      `the definition budgets sum to ${budgeted}, over the ${V1_DEFINITION_TOTAL} that 1.x charged for tools/list`,
+      `the definition budgets sum to ${budgeted}, over the ${DEFINITION_TOTAL_CAP} cap on tools/list`,
     );
   }
 }

@@ -2,7 +2,8 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { isAbsolute } from "path";
+import { promises as fs } from "node:fs";
+import path, { isAbsolute } from "node:path";
 import { z } from "zod";
 
 /**
@@ -38,4 +39,30 @@ export function fileReadError(
       ? `${noun.charAt(0).toUpperCase()}${noun.slice(1)} not found: ${filePath}`
       : `Cannot read ${noun} ${filePath}: ${code}`;
   return new Error(message, { cause: error });
+}
+
+/** The resolved path, or the path itself when it does not resolve. */
+async function realPathOrSelf(target: string): Promise<string> {
+  return fs.realpath(target).catch(() => target);
+}
+
+/**
+ * `target` with symlinks followed when it is outside every root, else
+ * undefined. No roots, no check. Symlinks are followed on both sides, so a link
+ * inside a root that points out of one is still outside.
+ */
+export async function outsideRoots(
+  target: string,
+  rootPaths: string[],
+): Promise<string | undefined> {
+  if (rootPaths.length === 0) {
+    return undefined;
+  }
+
+  const resolved = await realPathOrSelf(target);
+  const roots = await Promise.all(rootPaths.map(realPathOrSelf));
+  const inside = roots.some(
+    (root) => resolved === root || resolved.startsWith(root + path.sep),
+  );
+  return inside ? undefined : resolved;
 }
