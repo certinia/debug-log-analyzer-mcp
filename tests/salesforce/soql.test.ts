@@ -15,15 +15,17 @@ describe("toDateTimeLiteral", () => {
 
 // No character in a value may end the literal it goes into.
 describe("quote", () => {
-  it("should escape every character SOQL reads as special, and leave LIKE wildcards", () => {
-    expect(quote("a'b\\c\"d\ne\rf\tg\bh\fi%_")).toBe(
-      "'a\\'b\\\\c\\\"d\\ne\\rf\\tg\\bh\\fi%_'",
+  it("should escape every character SOQL reads as special, and leave the rest and LIKE wildcards", () => {
+    expect(quote("a'b\\c\"d\ne\rf\tg\bh\fi%_\v")).toBe(
+      "'a\\'b\\\\c\\\"d\\ne\\rf\\tg\\bh\\fi%_\v'",
     );
   });
 });
 
 describe("containing", () => {
-  it("should match anywhere, its own % and _ only as themselves", () => {
-    expect(containing("50%_off'\\\n")).toBe("'%50\\%\\_off\\'\\\\\\n%'");
+  it("should match anywhere, escaping what quote does and its own % and _", () => {
+    expect(containing("a'b\\c\"d\ne\rf\tg\bh\fi%_")).toBe(
+      "'%a\\'b\\\\c\\\"d\\ne\\rf\\tg\\bh\\fi\\%\\_%'",
+    );
   });
 });
