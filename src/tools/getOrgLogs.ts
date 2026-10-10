@@ -9,9 +9,8 @@ import { encode } from "@toon-format/toon";
 import {
   downloadApexLog,
   latestApexLogIds,
-  mapWithLimit,
-  PARALLEL_REQUESTS,
 } from "../salesforce/apexLogs.js";
+import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
@@ -69,9 +68,8 @@ export async function getOrgLogs(
   // One failed log is a row with its cause; the rest still save.
   const results = !store
     ? []
-    : await mapWithLimit(
+    : await mapRequests(
         ids,
-        PARALLEL_REQUESTS,
         async (id): Promise<Saved | Failed> => {
           try {
             // The SDK sends no result once cancelled, so this only stops the work.

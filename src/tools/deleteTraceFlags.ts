@@ -6,10 +6,7 @@
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { encode } from "@toon-format/toon";
-import {
-  mapWithLimit,
-  PARALLEL_REQUESTS,
-} from "../salesforce/apexLogs.js";
+import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
 import { deleteTraceFlag, findTraceFlags } from "../salesforce/traceFlags.js";
@@ -55,9 +52,8 @@ export async function deleteTraceFlags(
   }
 
   const found = new Set(access.value.map((flag) => flag.id));
-  const results = await mapWithLimit(
+  const results = await mapRequests(
     [...found],
-    PARALLEL_REQUESTS,
     async (id) => {
       // Once cancelled, no further request is sent; the flag is reported as left.
       if (ctx.mcpReq.signal.aborted) {

@@ -13,6 +13,7 @@ import {
   quote,
   toDateTimeLiteral,
 } from "./soql.js";
+import { mapRequests } from "./parallelRequests.js";
 
 const APEX_LOG_SOBJECT = "ApexLog";
 
@@ -275,9 +276,6 @@ const MAX_LOGS_PER_DELETE = 10_000;
 /** One request's worth: the API deletes at most 200 records a call. */
 export const DELETE_BATCH_SIZE = 200;
 
-/** Few enough that a large job does not trip the org's concurrent request limit. */
-export const PARALLEL_REQUESTS = 4;
-
 /** What a delete is asked to remove: ids, or every log the filters match. */
 export type LogSelection = { ids: string[] } | { filters: LogFilters };
 
@@ -330,9 +328,8 @@ export async function deleteApexLogs(
 ): Promise<DeleteResult[]> {
   // A failed request, such as a missing permission or a spent API limit, would fail every batch after it.
   let requestError: string | undefined;
-  const results = await mapWithLimit(
+  const results = await mapRequests(
     chunk(ids, DELETE_BATCH_SIZE),
-    PARALLEL_REQUESTS,
     async (batch): Promise<DeleteResult[]> => {
       // Returns, not throws, so the pool waits for the requests in flight before the call rejects.
       if (signal?.aborted) {
@@ -396,28 +393,6 @@ function isAlreadyGone(errors: object[]): boolean {
       return GONE_CODES.has(statusCode ?? errorCode ?? "");
     })
   );
-}
-
-/**
- * `fn` over `items`, at most `limit` at a time, results in input order. A
- * pool, not batches, so one slow request holds up one slot, not a batch.
- */
-export async function mapWithLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next++;
-      // In range: the loop checked `next` before taking it.
-      results[index] = await fn(items[index]!);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }
 
 /** The ids of the newest stored logs, newest first. */
