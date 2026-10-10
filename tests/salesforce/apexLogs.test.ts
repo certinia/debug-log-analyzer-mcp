@@ -260,7 +260,9 @@ describe("apexLogs", () => {
 
       await expect(
         list({ limit: 1, cursor: first.nextCursor!, ...change }),
-      ).rejects.toThrow("cursor belongs to a list with other filters");
+      ).rejects.toThrow(
+        "cursor belongs to a list with other filters or another sortBy. Pass the same ones, or leave cursor out to start from the first page.",
+      );
     });
 
     // The value is written into SOQL, so it must be the sort's own type.
@@ -278,12 +280,15 @@ describe("apexLogs", () => {
       );
 
       expect(() => readCursor(forged, sortBy, {})).toThrow(
-        "cursor belongs to a list with other filters",
+        "cursor is not one this tool returned",
       );
     });
 
-    it("should refuse a cursor this tool did not return", async () => {
-      await expect(list({ cursor: "not-a-cursor" })).rejects.toThrow(
+    it.each([
+      ["text that is not JSON", "not-a-cursor"],
+      ["JSON that is not a list", Buffer.from("{}").toString("base64url")],
+    ])("should refuse a cursor this tool did not return: %s", async (_name, cursor) => {
+      await expect(list({ cursor })).rejects.toThrow(
         "cursor is not one this tool returned",
       );
     });

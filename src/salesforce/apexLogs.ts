@@ -18,6 +18,9 @@ import { mapRequests } from "./parallelRequests.js";
 
 const APEX_LOG_SOBJECT = "ApexLog";
 
+const FOREIGN_CURSOR =
+  "cursor is not one this tool returned. Leave it out to start from the first page.";
+
 /** What a list sorts on, newest, slowest or largest first. */
 export const LOG_SORTS = [
   "startTime",
@@ -175,26 +178,24 @@ export function readCursor(
   try {
     cursor = JSON.parse(Buffer.from(text, "base64url").toString("utf8"));
   } catch {
-    throw new Error(
-      "cursor is not one this tool returned. Leave it out to start from the first page.",
-    );
+    throw new Error(FOREIGN_CURSOR);
   }
-  const [list, value, id, matchedCount] = Array.isArray(cursor) ? cursor : [];
+  if (!Array.isArray(cursor) || typeof cursor[0] !== "string") {
+    throw new Error(FOREIGN_CURSOR);
+  }
+  const [list, value, id, matchedCount] = cursor;
   // The value reaches SOQL, so it must be the sort's own type.
   const valueFits =
     sort === "startTime"
       ? typeof value === "string" && !Number.isNaN(Date.parse(value))
       : Number.isFinite(value);
-  if (
-    list !== listKey(sort, filters) ||
-    !valueFits ||
-    typeof id !== "string" ||
-    !isApexLogId(id) ||
-    !Number.isInteger(matchedCount)
-  ) {
+  if (list !== listKey(sort, filters)) {
     throw new Error(
-      "cursor belongs to a list with other filters or another sortBy. Pass the same ones, or leave cursor out to start again.",
+      "cursor belongs to a list with other filters or another sortBy. Pass the same ones, or leave cursor out to start from the first page.",
     );
+  }
+  if (!valueFits || typeof id !== "string" || !isApexLogId(id) || !Number.isInteger(matchedCount)) {
+    throw new Error(FOREIGN_CURSOR);
   }
   return { value, id, matchedCount };
 }
