@@ -22,6 +22,7 @@ import {
   listLimitRisks,
   listLimitRisksToolConfig,
 } from "./tools/listLimitRisks.js";
+import { withReloginHint } from "./salesforce/authFailure.js";
 import { limitUnitsClause } from "./tools/responseShaping.js";
 import { searchEvents, searchEventsToolConfig } from "./tools/searchEvents.js";
 import {
@@ -169,10 +170,20 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     ctx: ServerContext,
     policy: typeof orgAccessPolicy,
   ) => Promise<Result>;
-  const orgTool =
-    <Args, Result>(load: () => Promise<OrgToolHandler<Args, Result>>) =>
-    async (args: Args, ctx: ServerContext): Promise<Result> =>
-      (await load())(server, args, ctx, orgAccessPolicy);
+  // A dead login can fail any org call, not only the connect, so every org handler is wrapped.
+  const withRelogin =
+    <Args, Result>(handler: (args: Args, ctx: ServerContext) => Promise<Result>) =>
+    async (args: Args, ctx: ServerContext): Promise<Result> => {
+      try {
+        return await handler(args, ctx);
+      } catch (error) {
+        throw withReloginHint(error);
+      }
+    };
+  const orgTool = <Args, Result>(load: () => Promise<OrgToolHandler<Args, Result>>) =>
+    withRelogin(async (args: Args, ctx: ServerContext) =>
+      (await load())(server, args, ctx, orgAccessPolicy),
+    );
 
   server.registerTool(
     "apexlog_list_org_logs",
@@ -215,7 +226,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   server.registerTool(
     "apexlog_execute_anonymous",
     executeAnonymousToolConfig(apexExecutionDisabled),
-    async (args, ctx) => {
+    withRelogin(async (args: unknown, ctx: ServerContext) => {
       const refused = apexExecutionRefusal(apexExecutionDisabled);
       if (refused) {
         return refused;
@@ -228,7 +239,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
         ...orgAccessPolicy,
         apexExecutionDisabled,
       });
-    },
+    }),
   );
 
   return server;

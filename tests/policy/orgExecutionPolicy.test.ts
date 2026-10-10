@@ -419,7 +419,7 @@ describe("authorizeOperation", () => {
         expect(decision.reason).toContain(
           "Reason: Unable to refresh session due to: inactive organization",
         );
-        expect(decision.reason).toContain("re-authenticate");
+        expect(decision.reason).toContain("log in to the org again");
         expect(decision.reason).toContain("sf org login web");
         expect(decision.reason).toContain("--allow-production-orgs");
       }

@@ -102,6 +102,7 @@ import { deleteOrgLogs } from "../src/tools/deleteOrgLogs";
 import { listTraceFlags } from "../src/tools/listTraceFlags";
 import { createTraceFlag } from "../src/tools/createTraceFlag";
 import { deleteTraceFlags } from "../src/tools/deleteTraceFlags";
+import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -487,6 +488,21 @@ describe("createApexLogServer", () => {
         consumeConfirmation: expect.any(Function),
       });
       expect(result).toBe(mockAnalysisResult);
+    });
+
+    it.each([
+      ["apexlog_list_org_logs", listOrgLogs],
+      ["apexlog_execute_anonymous", executeAnonymous],
+    ])("should tell the agent to ask for a new login when %s finds the session dead", async (name, handler) => {
+      const dead = Object.assign(new Error("Session expired or invalid"), {
+        errorCode: "INVALID_SESSION_ID",
+      });
+      (handler as jest.Mock).mockRejectedValueOnce(dead);
+      createApexLogServer();
+
+      await expect(
+        registeredTools.get(name)!.callback({ apex: "System.debug(1);" }, {} as any),
+      ).rejects.toThrow(`Session expired or invalid ${RELOGIN_HINT}`);
     });
 
     it("should pass --allow-production-orgs through to apexlog_execute_anonymous", async () => {

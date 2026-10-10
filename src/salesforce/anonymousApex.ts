@@ -1,7 +1,7 @@
 import type { Connection } from "@salesforce/core";
 import type { DebugLevels } from "@apexdevtools/apex-log-parser";
 
-import { RELOGIN_HINT } from "./connection.js";
+import { RELOGIN_HINT } from "./authFailure.js";
 import {
   CATEGORY_LOG_NAMES,
   TRACE_CATEGORIES,

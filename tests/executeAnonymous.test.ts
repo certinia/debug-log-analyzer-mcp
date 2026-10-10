@@ -2063,7 +2063,7 @@ describe("Execute Anonymous", () => {
       expect(result.content[0].text).toContain(
         "Reason: Unable to refresh session due to: inactive organization",
       );
-      expect(result.content[0].text).toContain("re-authenticate");
+      expect(result.content[0].text).toContain("log in to the org again");
       expect(mockRequest).not.toHaveBeenCalled();
     });
 

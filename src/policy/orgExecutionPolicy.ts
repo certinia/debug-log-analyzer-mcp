@@ -12,6 +12,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
+import { RELOGIN_HINT } from "../salesforce/authFailure.js";
 
 export type PolicyDecision =
   | { outcome: "allowed" }
@@ -146,8 +147,7 @@ function refusal(
       `Cannot ${action} against org '${orgLabel}': its type could not be verified, ` +
       "so it is treated as production to prevent accidental data loss.\n" +
       `Reason: ${truncate(unverifiedReason, MAX_REASON)}\n` +
-      "If the org's authentication has expired, re-authenticate it (for example " +
-      "'sf org login web --alias <alias>') and try again.\n" +
+      `If the org's login has expired: ${RELOGIN_HINT}\n` +
       ENABLE_HINT
     );
   }

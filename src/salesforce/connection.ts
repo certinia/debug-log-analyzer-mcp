@@ -8,12 +8,9 @@ import {
   Org,
   StateAggregator,
 } from "@salesforce/core";
+import { RELOGIN_HINT } from "./authFailure.js";
 
 /** The target org as the local sf files know it. */
-/** The step for an org whose saved login no longer works: the user's, since it opens a browser. */
-export const RELOGIN_HINT =
-  "Ask the user to log in to the org again: sf org login web --alias <alias>.";
-
 export type LocalOrg = {
   orgId: string;
   username: string;
