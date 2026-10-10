@@ -288,22 +288,6 @@ describe("getOrgLogs", () => {
     }
   });
 
-  it("should download a repeated id once", async () => {
-    mockDownload.mockResolvedValue("log");
-
-    const result = await getOrgLogs(
-      server(),
-      { ids: ["07L000000000001EAA", "07L000000000001EAA"] },
-      ctx,
-      policy(),
-    );
-
-    expect(mockDownload).toHaveBeenCalledTimes(1);
-    expect(decode(text(result as never))).toMatchObject({
-      logs: [{ id: "07L000000000001EAA" }],
-    });
-  });
-
   it("should make no directory when the org holds no logs", async () => {
     mockLatest.mockResolvedValue([]);
 

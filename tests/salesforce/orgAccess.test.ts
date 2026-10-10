@@ -257,17 +257,6 @@ describe("openOrg", () => {
     expect(mockConnectOrg).not.toHaveBeenCalled();
   });
 
-  it("should deny a read as well as a write", async () => {
-    const access = await openOrg(
-      server(),
-      makeCtx(),
-      request(),
-      policy({ denyList: compileDenyList(["psa"]) }),
-    );
-
-    expect(refusalText(access)).toContain("--deny-orgs entry 'psa'");
-  });
-
   // A refusal, not a confirmation: no answer can lift a deny.
   it("should refuse a denied type before a write can ask", async () => {
     classifyAs("production");

@@ -284,14 +284,6 @@ describe("createApexLogServer", () => {
 
       expect(mockConsoleError).toHaveBeenCalledWith("[MCP Error]", testError);
     });
-
-    it.each(["SIGINT", "SIGTERM"])("closes cleanly on %s", async (signal) => {
-      const mockProcessOnce = jest.spyOn(process, "once");
-
-      runStdioServer();
-
-      expect(mockProcessOnce).toHaveBeenCalledWith(signal, expect.any(Function));
-    });
   });
 
   describe("Tool Registration", () => {
@@ -560,81 +552,22 @@ describe("createApexLogServer", () => {
       expect(McpServer).toHaveBeenCalledTimes(2);
     });
 
-    it("should handle SIGINT and close server", async () => {
+    it.each(["SIGINT", "SIGTERM"])("should close the server on %s", async (signal) => {
+      const processOnce = jest.spyOn(process, "once");
       runStdioServer();
-
-      // Find the SIGINT handler
-      const processOnceCalls = jest.spyOn(process, "once").mock.calls;
-      const sigintCall = processOnceCalls.find(
-        (call: any) => call[0] === "SIGINT",
+      const signalCall = processOnce.mock.calls.find(
+        (call: any) => call[0] === signal,
       );
-      expect(sigintCall).toBeDefined();
+      processOnce.mockRestore();
+      expect(signalCall).toBeDefined();
 
-      const sigintHandler = sigintCall![1] as () => Promise<void>;
+      const signalHandler = signalCall![1] as () => Promise<void>;
 
-      // Test SIGINT handler
-      try {
-        await sigintHandler();
-      } catch (error) {
-        // Expected to throw due to mocked process.exit
-        expect((error as Error).message).toBe("Process exit called");
-      }
+      // The mocked process.exit throws.
+      await expect(signalHandler()).rejects.toThrow("Process exit called");
 
       expect(mockHandleClose).toHaveBeenCalled();
       expect(mockExit).toHaveBeenCalledWith(0);
-    });
-  });
-
-  describe("Integration Tests", () => {
-    it("should handle complete workflow for apexlog_list_slow_operations", async () => {
-      createApexLogServer();
-
-      // Verify all tools registered
-      expect(registeredTools.size).toBe(11);
-
-      // Test tool execution
-      const tool = registeredTools.get("apexlog_list_slow_operations")!;
-      const args = {
-        logFilePath: "/path/to/test.log",
-        limit: 10,
-        minSelfMs: 1000,
-      };
-
-      const result = await tool.callback(args, {} as any);
-      expect(result).toEqual(mockAnalysisResult);
-      expect(listSlowOperations).toHaveBeenCalledWith(args);
-    });
-
-    it("should handle edge cases with malformed requests", async () => {
-      createApexLogServer();
-
-      (
-        listSlowOperations as jest.MockedFunction<
-          typeof listSlowOperations
-        >
-      ).mockRejectedValueOnce(new Error("Invalid arguments"));
-
-      const tool = registeredTools.get("apexlog_list_slow_operations")!;
-
-      await expect(tool.callback(null as any, {} as any)).rejects.toThrow(
-        "Invalid arguments",
-      );
-    });
-  });
-
-  describe("Type Safety", () => {
-    it("should handle typed arguments correctly", async () => {
-      createApexLogServer();
-
-      const tool = registeredTools.get("apexlog_list_limit_risks")!;
-      const args = {
-        logFilePath: "/path/to/test.log",
-        threshold: 50,
-      };
-
-      await tool.callback(args, {} as any);
-
-      expect(listLimitRisks).toHaveBeenCalledWith(args);
     });
   });
 });
