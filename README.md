@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
 
-**MCP Server to Analyze Salesforce Apex debug logs from your AI assistant. Finds slow methods, governor limit risks, and where a transaction spent its time.**
+**MCP Server to Analyze Salesforce Apex debug logs from your AI assistant. Finds slow methods, governor limit risks, and where a transaction spent its time. In your org, runs anonymous Apex, fetches and deletes logs, and sets trace flags.**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/certinia/debug-log-analyzer-mcp/main/docs/images/apex-log-mcp.png" alt="Claude analyzing an Apex debug log for performance bottlenecks and governor limit concerns" width="800" />
@@ -28,7 +28,7 @@ Requires [Node.js](https://nodejs.org/) 22 or later. Add this to your MCP client
 }
 ```
 
-Then ask your assistant to analyze a log. `apexlog_execute_anonymous` also needs an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).
+Then ask your assistant to analyze a log. The org tools also need an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).
 
 ## Example Prompts
 
@@ -37,8 +37,14 @@ Then ask your assistant to analyze a log. `apexlog_execute_anonymous` also needs
 - "Are we approaching any governor limits in this transaction?"
 - "What did my System.debug calls print?"
 - "Run this Apex against my scratch org and analyze the performance"
+- "Find the latest debug log for integration@acme.com and summarize it"
+- "Why are there no logs for this user?"
 
-Keeping the server connected costs ~1,232 tokens, 0.6% of a 200K context. See [Token Cost](#token-cost).
+<!-- token-cost-summary:start -->
+
+Keeping the server connected costs ~3,116 tokens, 1.6% of a 200K context. See [Token Cost](#token-cost).
+
+<!-- token-cost-summary:end -->
 
 ## Tools Reference
 
@@ -48,7 +54,7 @@ Every tool returns one flat table, encoded as [TOON](https://github.com/toon-for
 
 A `0` means none, not "not measured". Only what did not happen is left out: fatal errors, lost log content, query plans. Durations are in milliseconds to 3 decimal places, percentages to 1.
 
-The server runs as a local process started by your client over stdio, no network calls and no API keys. Each log is parsed once, so follow up questions are faster.
+The server runs as a local process started by your client over stdio, with no API keys. The analysis tools make no network calls. Each log is parsed once, so follow up questions are faster.
 
 ### apexlog_list_slow_operations
 
@@ -170,7 +176,7 @@ The governor limits nearest their ceiling, worst first.
 
 ### apexlog_search_events
 
-Searches a log's events in log order, for what the other tools rank or total: what the code printed (`USER_DEBUG`), the validation rules, the statements, or every event under one method. Filters combine, and `offset` walks a long log a page at a time.
+Searches a log's events in log order, for what the other tools rank or total: what the code printed (`USER_DEBUG`), the validation rules, the statements, or every event under one method. Filters combine.
 
 <!-- shape-apexlog_search_events:start -->
 
@@ -181,7 +187,7 @@ Searches a log's events in log order, for what the other tools rank or total: wh
 
 A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventIndex` names an event and `parentEventIndex` the one it sits under, so a row found here can be opened up with `parentEventIndex`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
 
-Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision. `maxLevel` reads a `USER_DEBUG` line at the level the code logged it at. A page stops early when it would be too large, and `matchedCount` says how many events matched in all. `capturedAt` gives the level of each category `debugCategory` names, or that the matches came from when every `type` named matched or you asked for one event. Otherwise, or when those name no category the header declared, it gives every level the header declared, because a search that found no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
+Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision. `maxLevel` reads a `USER_DEBUG` line at the level the code logged it at. `matchedCount` says how many events matched in all. `capturedAt` gives the levels of the categories you filtered on. When every `type` named matched, or you asked for one event, it gives the levels of the categories the matches came from. Otherwise, or when those name no category the header declared, it gives every level the header declared. A search that finds no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
 
 <!-- params-apexlog_search_events:start -->
 
@@ -202,9 +208,9 @@ Text past 400 characters is elided; ask for one event by `eventIndex` to read up
 
 ### apexlog_execute_anonymous
 
-Runs anonymous Apex against an authenticated org, saves the debug log locally, and returns the path. Pass that path to any analysis tool.
+Runs anonymous Apex against an authenticated org, saves the debug log locally, and returns the path. Pass that path to any analysis tool. The Apex runs as the `targetOrg` user, with that user's permissions. Its DML commits when the run succeeds; a compile failure or an uncaught exception rolls it back.
 
-Give the Apex inline in `apex`, or the absolute path to a file of it in `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. Give exactly one. A file outside the roots your client declares is refused, as is anything but a regular file. If your client declares roots this server cannot use - on protocol 2026-07-28, with no answer in 5 seconds, or with none on this machine - a file is refused, and so is a call without `targetOrg`, since the project's default org cannot be found. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
+Give exactly one of `apex` or `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. A file outside the roots your client declares is refused, as is anything but a regular file. When the server cannot use your client's roots, a file is refused, and so is a call without `targetOrg`, since the project's default org cannot be found. That happens on MCP 2026-07-28, when the client does not answer in 5 seconds, or when no root is on this machine. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
 
 The response also gives the org username, its alias if set, the org type, and a summary of the run. Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
 
@@ -239,9 +245,9 @@ Set a `USER_DEBUG` trace flag on your user - in Setup, for example - and every r
 
 ### apexlog_list_org_logs
 
-Lists the debug logs stored in an org - a slow UI action, an integration user's request, a Queueable - so an agent can find one it did not run itself. Filters, sorting and paging all run in the org, so a page costs what `limit` asks for, however many logs the org holds. `matchedCount` is how many logs the filters match.
+Lists the debug logs stored in an org - a slow UI action, an integration user's request, a Queueable - so an agent can find one it did not run itself. Filters, sorting and paging all run in the org, so a page costs what `limit` asks for, however many logs the org holds.
 
-`operation` matches part of the operation in any case, so `aura` finds `/aura`. `succeeded: false` finds the failed logs, and `exceptionMessage` says why each failed. Pass `nextCursor` back as `cursor`, with the same filters and `sortBy`, for the next page; it is absent on the last one. A cursor pages past the 2,000 rows SOQL's `OFFSET` stops at.
+`matchedCount` is how many logs the filters match. `exceptionMessage` says why a log failed. A cursor pages past the 2,000 rows SOQL's `OFFSET` stops at; `nextCursor` is absent on the last page.
 
 <!-- params-apexlog_list_org_logs:start -->
 
@@ -263,7 +269,9 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 
 ### apexlog_get_org_logs
 
-Downloads logs by `ids`, or the newest `latest` of them - the newest one when you pass neither, as `sf apex get log` does - and returns each saved path, which the analysis tools accept. Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved.
+Downloads logs by `ids` or the newest `latest`, as `sf apex get log` does. Returns each saved path, for the analysis tools.
+
+Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved.
 
 <!-- params-apexlog_get_org_logs:start -->
 
@@ -278,9 +286,13 @@ Downloads logs by `ids`, or the newest `latest` of them - the newest one when yo
 
 ### apexlog_delete_org_logs
 
-Deletes stored logs by `ids`, or every log the filters of `apexlog_list_org_logs` match, to free the org's 1,000 MB of log storage: when it is full, no one in the org can set a trace flag, so `apexlog_execute_anonymous` stops working. A call with no ids and no filter is refused; to delete every log, pass `startTimeTo` set to now - on a production org, at least 5 minutes ago. List with the same filters first to see what goes - a deleted log cannot be restored.
+Deletes stored logs by `ids`, or every log the filters of `apexlog_list_org_logs` match, to free the org's 1,000 MB of log storage: when it is full, no one in the org can set a trace flag, so `apexlog_execute_anonymous` stops working. A call with no ids and no filter is refused; to delete every log, pass `startTimeTo` set to now, or on a production org 5 minutes ago. List with the same filters first to see what goes - a deleted log cannot be restored.
 
-Returns `deletedCount` and `deletedBytes`. One call deletes up to 200 ids, or up to 10,000 logs by filter; `remainingCount` says how many more match, so call again for the rest. `notFoundCount` counts the logs already gone - deleted by an earlier call or by someone else meanwhile - and the ids never in this org; `notFoundIds` names them. Logs that cannot be deleted are in `failed`, one row per cause, with how many and their ids. Both list every id for a delete by id, and the first 5 for a delete by filter. After a request fails, the call sends no more. Against a production org, the call asks first, naming the org, the count, the bytes, and the filters or the first 5 ids. There, a delete by filter needs `startTimeTo` at least 5 minutes ago, so no log filed while you confirm can join what you were shown, even if the org's clock runs behind yours; logs that expire meanwhile only shrink it. A call that matches nothing deletes nothing and asks nothing. It reports progress as each batch of 200 deletes. Cancelled, it starts no more batches; those already sent finish, and the call returns no result.
+Returns `deletedCount` and `deletedBytes`. One call deletes up to 200 ids, or up to 10,000 logs by filter; `remainingCount` says how many more match, so call again for the rest. `notFoundCount` counts the logs already gone - deleted by an earlier call or by someone else meanwhile - and the ids never in this org; `notFoundIds` names them. Logs that cannot be deleted are in `failed`, one row per cause, with how many and their ids. `notFoundIds` and `failed` list every id for a delete by id, and the first 5 for a delete by filter. After a request fails, the call sends no more.
+
+Against a production org, the call asks first, naming the org, the count, the bytes, and the filters or the first 5 ids. There, a delete by filter needs `startTimeTo` at least 5 minutes ago, so no log filed while you confirm can join what you were shown, even if the org's clock runs behind yours; logs that expire meanwhile only shrink it. A call that matches nothing deletes nothing and asks nothing.
+
+It reports progress as each batch of 200 deletes. Cancelled, it starts no more batches; those already sent finish, and the call returns no result.
 
 <!-- params-apexlog_delete_org_logs:start -->
 
@@ -300,7 +312,9 @@ Returns `deletedCount` and `deletedBytes`. One call deletes up to 200 ids, or up
 
 ### apexlog_list_trace_flags
 
-Lists the trace flags that have not yet expired - on every entity, or on the one `tracedEntity` names - so an agent can answer "why are there no logs for this user?". An org stores a debug log only for a user a flag traces; a class or trigger flag sets that code's levels in those logs. Each row gives the entity, its type, the log type, the debug level's name, its `levels`, and when the flag starts and expires. At most 200 rows come back, latest to expire first, and `matchedCount` gives how many flags match in all: when it is larger, narrow the list with `tracedEntity`.
+Lists the trace flags that have not yet expired - on every entity, or on the one `tracedEntity` names - so an agent can answer "why are there no logs for this user?".
+
+An org stores a debug log only for a user a flag traces; a class or trigger flag sets that code's levels in those logs. Each row gives the entity, its type, the log type, the debug level's name, its `levels`, and when the flag starts and expires. At most 200 rows come back, latest to expire first. `matchedCount` gives how many flags match in all; when it is larger, narrow the list with `tracedEntity`.
 
 <!-- params-apexlog_list_trace_flags:start -->
 
@@ -313,7 +327,9 @@ Lists the trace flags that have not yet expired - on every entity, or on the one
 
 ### apexlog_create_trace_flag
 
-Starts logging a user, so an integration user's requests reach the org's logs, for `apexlog_list_org_logs` to find. A flag on a class or trigger stores no log itself: it sets the levels of that code's work in the logs a user's flag stores. Name a user by username or id, and a namespaced class as `ns.Name`. A user is traced as `USER_DEBUG`; a class or trigger as `CLASS_TRACING`. `debugLevel` takes one level for every category, or an object of categories over the defaults, as `apexlog_execute_anonymous` does, and the flag lives for `durationMinutes`, 30 unless you say, up to 1,439: Salesforce refuses a flag of a full day.
+Starts logging a user, so an integration user's requests reach the org's logs, for `apexlog_list_org_logs` to find. A flag on a class or trigger stores no log itself: it sets the levels of that code's work in the logs a user's flag stores. A user is traced as `USER_DEBUG`; a class or trigger as `CLASS_TRACING`.
+
+A flag lives up to 1,439 minutes: Salesforce refuses a flag of a full day. The debug level it uses stays in the org after the flag ends, for the next flag at the same levels.
 
 Every transaction a traced user runs while the flag lives is stored, which can fill the org's 1,000 MB of log storage: when it is full, no one can set a flag until `apexlog_delete_org_logs` frees it. When the entity already has a flag of its type that has not ended, the call is refused and names it, with its levels and expiry - a flag is never changed here, so delete it first. Against a production org, the call asks first, naming the entity, the levels and the minutes.
 
@@ -330,7 +346,9 @@ Every transaction a traced user runs while the flag lives is stored, which can f
 
 ### apexlog_delete_trace_flags
 
-Deletes trace flags by id, to stop logging now: Salesforce refuses an edit that ends a flag early. `notFoundCount` counts the ids that name no flag - already deleted, or never in this org - and `notFoundIds` names them. Flags Salesforce refuses to delete are in `failed`, one row per cause, with how many and their ids. Against a production org, the call asks first, naming each flag. Cancelled, it starts no more deletes; those already sent finish, and the call returns no result.
+Deletes trace flags by id, to stop logging now: Salesforce refuses an edit that ends a flag early.
+
+Returns `deletedCount`. `notFoundCount` counts the ids that name no flag - already deleted, or never in this org - and `notFoundIds` names them. Flags Salesforce refuses to delete are in `failed`, one row per cause, with how many and their ids. Against a production org, the call asks first, naming each flag. Cancelled, it starts no more deletes; those already sent finish, and the call returns no result.
 
 <!-- params-apexlog_delete_trace_flags:start -->
 
@@ -343,7 +361,7 @@ Deletes trace flags by id, to stop logging now: Salesforce refuses an edit that 
 
 ## Token Cost
 
-Every request carries all eleven tool definitions, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
+Every request carries every tool definition, whether you call them or not. Each figure below is a whole definition: name, title, description, input schema and annotations.
 
 <!-- token-cost-definitions:start -->
 
@@ -368,7 +386,7 @@ Only the total compares with 1.x: per tool it would compare different tools, sin
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 
-Cost does not grow with the log size. The figures below are measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log). On the full 19.7 MB original, `apexlog_get_summary` returns ~387 tokens instead of ~335, and `apexlog_list_limit_risks` the same ~35.
+Cost does not grow with the log size. The figures below are measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log). On the full 19.7 MB original, `apexlog_get_summary` returns ~394 tokens, and `apexlog_list_limit_risks` the same as on the slice.
 
 <!-- token-cost-answers:start -->
 
@@ -383,11 +401,11 @@ Cost does not grow with the log size. The figures below are measured against a 4
 
 ## Configuration
 
-The [Quick Start](#quick-start) config gives you all eleven tools.
+The [Quick Start](#quick-start) config gives you every tool.
 
 ### Production safety
 
-`apexlog_execute_anonymous` runs arbitrary Apex, so the server identifies the org before running anything:
+Every tool that changes an org - `apexlog_execute_anonymous`, `apexlog_delete_org_logs`, `apexlog_create_trace_flag` and `apexlog_delete_trace_flags` - identifies the org first:
 
 | Org type     | Identified by                     | Behaviour             |
 | ------------ | --------------------------------- | --------------------- |
@@ -398,7 +416,7 @@ The [Quick Start](#quick-start) config gives you all eleven tools.
 | `production` | Anything else                     | Confirmation required |
 | `unknown`    | The org could not be queried      | Confirmation required |
 
-For a production org, `--allow-production-orgs` runs it anyway. Otherwise the server asks you to confirm, naming the org and showing all of the Apex with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one run.
+For a production org, `--allow-production-orgs` skips the confirmation. Otherwise the server asks you to confirm, naming the org and what the call would do - for Apex, all of it with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one call.
 
 An org that cannot be identified is treated as production, so a network or permissions problem can never quietly downgrade one.
 
@@ -423,7 +441,7 @@ A `type:` entry denies a type from the table above, e.g. `type:sandbox`. `type:p
 
 Nothing lifts a deny - not `--allow-production-orgs`, not a confirmation. The refusal names what matched.
 
-A deny covers every org tool, listing and downloading logs as well as running Apex, since a log holds the org's data. `--deny-orgs '*'` refuses them all, and the analysis tools keep working.
+A deny covers every org tool, since a log holds the org's data. `--deny-orgs '*'` refuses them all, and the analysis tools keep working.
 
 Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as convenience, not a security boundary.
 
@@ -432,10 +450,10 @@ Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as
 | Flag                      | Description                                                                                                              |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `--allow-production-orgs` | Treat production orgs like any other - no confirmation, no refusal. Only set this if production targets are intentional. |
-| `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. The three analysis tools are unaffected.   |
+| `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. Every other tool is unaffected.            |
 | `--deny-orgs`             | Refuse these orgs: org id, username, alias or instance URL, with `*` as a glob, or `type:` and an org type. |
 
-For an analysis-only deployment:
+To stop Apex running:
 
 ```json
 {

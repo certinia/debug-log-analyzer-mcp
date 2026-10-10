@@ -1064,8 +1064,8 @@ function comparison(before, after) {
 }
 
 /**
- * The README tables, generated so the published figures cannot go stale. Only
- * the tables: the prose around them stays in the README, where it is edited.
+ * The README tables, and the one line quoting their total, generated so the
+ * published figures cannot go stale. The prose around them stays in the README.
  */
 function renderTokenCost(costs, responses) {
   const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
@@ -1073,6 +1073,10 @@ function renderTokenCost(costs, responses) {
   const [v1TotalCell, totalChange] = comparison(V1_DEFINITION_TOTAL, total);
 
   return [
+    {
+      id: "token-cost-summary",
+      table: `Keeping the server connected costs ~${thousands(total)} tokens, ${share}% of a 200K context. See [Token Cost](#token-cost).`,
+    },
     {
       id: "token-cost-definitions",
       table: renderTable(
