@@ -6,6 +6,7 @@ import { Connection } from "@salesforce/core";
 import {
   createTraceFlag,
   deleteTraceFlag,
+  destroyTraceFlags,
   findActiveTraceFlags,
   findOverlappingTraceFlag,
   MAX_DURATION_MINUTES,
@@ -525,6 +526,65 @@ describe("Trace Flags", () => {
       await expect(
         deleteTraceFlag(mockConnection, traceFlagId),
       ).rejects.toThrow(/Failed to delete TraceFlag.*Locked/);
+    });
+  });
+
+  describe("destroyTraceFlags", () => {
+    // Deleted by another call, or expired, since it was found: what the org sends, checked on a real org.
+    it("marks a flag already gone, and keeps another failure beside its id", async () => {
+      mockDestroy.mockImplementation(async (id: string) => {
+        if (id === "7tf000000000001AAA") {
+          throw Object.assign(new Error("invalid cross reference id"), {
+            errorCode: "INVALID_CROSS_REFERENCE_KEY",
+          });
+        }
+        if (id === "7tf000000000002AAA") {
+          throw new Error("insufficient access rights");
+        }
+        if (id === "7tf000000000004AAA") {
+          return {
+            success: false,
+            errors: [{ statusCode: "ENTITY_IS_DELETED", message: "entity is deleted" }],
+          };
+        }
+        return { success: true, id };
+      });
+
+      await expect(
+        destroyTraceFlags(mockConnection, [
+          "7tf000000000001AAA",
+          "7tf000000000002AAA",
+          "7tf000000000003AAA",
+          "7tf000000000004AAA",
+        ]),
+      ).resolves.toEqual([
+        { id: "7tf000000000001AAA", alreadyGone: true },
+        { id: "7tf000000000002AAA", error: "insufficient access rights" },
+        { id: "7tf000000000003AAA" },
+        { id: "7tf000000000004AAA", alreadyGone: true },
+      ]);
+    });
+
+    // A request left running could delete a flag under a retry sent right after the cancel.
+    it("waits for the deletes in flight, sends no more, then rejects once cancelled", async () => {
+      jest.useRealTimers();
+      const controller = new AbortController();
+      let settled = 0;
+      // The fourth delete cancels and returns at once, while the first three still run.
+      mockDestroy.mockImplementation(async (id: string) => {
+        if (mockDestroy.mock.calls.length === 4) {
+          controller.abort();
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        settled += 1;
+        return { success: true, id };
+      });
+      const ids = Array.from({ length: 8 }, (_, index) => `7tf00000000000${index}AAA`);
+
+      await expect(destroyTraceFlags(mockConnection, ids, controller.signal)).rejects.toThrow();
+      expect(mockDestroy).toHaveBeenCalledTimes(4);
+      expect(settled).toBe(4);
     });
   });
 });

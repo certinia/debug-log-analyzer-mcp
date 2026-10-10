@@ -6,22 +6,20 @@
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { encode } from "@toon-format/toon";
-import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
-import { toLongId } from "../salesforce/soql.js";
-import { deleteTraceFlag, findTraceFlags } from "../salesforce/traceFlags.js";
+import { destroyTraceFlags, findTraceFlags } from "../salesforce/traceFlags.js";
+import { deleteReport, givenIds } from "./deleteReport.js";
 import { omitEmpty } from "./responseShaping.js";
 import type { DeleteTraceFlagsArgs } from "./traceFlagsDefinition.js";
 
-/** Delete trace flags by id, each failure kept beside its id. */
+/** Delete trace flags by id, failures grouped by cause. */
 export async function deleteTraceFlags(
   server: McpServer,
   args: DeleteTraceFlagsArgs,
   ctx: ServerContext,
   policy: OrgAccessPolicy,
 ) {
-  // Each id as the API writes it, mapped back to the form the caller sent.
-  const given = new Map(args.ids.map((id) => [toLongId(id), id]));
+  const given = givenIds(args.ids);
   const ids = [...given.keys()];
 
   const access = await openOrg(
@@ -51,31 +49,10 @@ export async function deleteTraceFlags(
     return access.result;
   }
 
-  const found = new Set(access.value.map((flag) => flag.id));
-  const results = await mapRequests(
-    [...found],
-    async (id) => {
-      // Once cancelled, no further request is sent; the flag is reported as left.
-      if (ctx.mcpReq.signal.aborted) {
-        return { id, error: "not deleted: the call was cancelled" };
-      }
-      try {
-        await deleteTraceFlag(access.connection, id);
-        return { id };
-      } catch (error) {
-        return { id, error: error instanceof Error ? error.message : String(error) };
-      }
-    },
-  );
-  const failures = results.flatMap((result) =>
-    "error" in result ? [{ id: given.get(result.id) ?? result.id, error: result.error }] : [],
-  );
-  const failed = failures.concat(
-    // An id that names no flag: already deleted, or never in this org.
-    [...given]
-      .filter(([id]) => !found.has(id))
-      .map(([, id]) => ({ id, error: "no trace flag has this id" })),
-  );
+  const foundIds = access.value.map((flag) => flag.id);
+  const results = await destroyTraceFlags(access.connection, foundIds, ctx.mcpReq.signal);
+  // At most 200 ids, so every one is listed.
+  const outcome = deleteReport(given, foundIds, results, Infinity);
 
   return {
     content: [
@@ -83,8 +60,9 @@ export async function deleteTraceFlags(
         type: "text" as const,
         text: encode({
           org: access.orgLabel,
-          deletedCount: results.length - failures.length,
-          ...omitEmpty({ failed }),
+          deletedCount: outcome.deleted.size,
+          notFoundCount: outcome.notFoundCount,
+          ...omitEmpty({ notFoundIds: outcome.notFoundIds, failed: outcome.failed }),
         }),
       },
     ],

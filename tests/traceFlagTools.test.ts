@@ -15,7 +15,7 @@ jest.mock("../src/salesforce/orgClassification", () => ({
 jest.mock("../src/salesforce/traceFlags", () => ({
   ...jest.requireActual("../src/salesforce/traceFlags"),
   createTraceFlag: jest.fn(),
-  deleteTraceFlag: jest.fn(),
+  destroyTraceFlags: jest.fn(),
   findOverlappingTraceFlag: jest.fn(),
   findTraceFlags: jest.fn(),
   listTraceFlags: jest.fn(),
@@ -53,7 +53,7 @@ const mockFind = flags.findTraceFlags as jest.MockedFunction<typeof flags.findTr
 const mockOverlap = flags.findOverlappingTraceFlag as jest.MockedFunction<typeof flags.findOverlappingTraceFlag>;
 const mockResolve = flags.resolveTracedEntity as jest.MockedFunction<typeof flags.resolveTracedEntity>;
 const mockCreate = flags.createTraceFlag as jest.MockedFunction<typeof flags.createTraceFlag>;
-const mockDelete = flags.deleteTraceFlag as jest.MockedFunction<typeof flags.deleteTraceFlag>;
+const mockDestroy = flags.destroyTraceFlags as jest.MockedFunction<typeof flags.destroyTraceFlags>;
 const mockEnsureLevel = ensureLevelsDebugLevel as jest.MockedFunction<typeof ensureLevelsDebugLevel>;
 
 const LOCAL_ORG: LocalOrg = {
@@ -267,9 +267,10 @@ describe("createTraceFlag", () => {
 describe("deleteTraceFlags", () => {
   const FOUND = [{ ...FLAG, tracedEntity: "Jo" }];
 
-  it("should delete the flags found and report an unknown id as sent", async () => {
+  // Not a failure: a retry after a lost response finds the flags it deleted gone.
+  it("should delete the flags found and list an unknown id apart, as sent", async () => {
     mockFind.mockResolvedValue(FOUND);
-    mockDelete.mockResolvedValue();
+    mockDestroy.mockResolvedValue([{ id: FLAG.id }]);
 
     const result = await deleteTraceFlags(
       server(),
@@ -278,23 +279,24 @@ describe("deleteTraceFlags", () => {
       policy(),
     );
 
-    expect(mockDelete).toHaveBeenCalledTimes(1);
+    expect(mockDestroy).toHaveBeenCalledWith(expect.anything(), [FLAG.id], ctx.mcpReq.signal);
     expect(decode(text(result))).toEqual({
       org: "me@example.com (psa)",
       deletedCount: 1,
-      failed: [{ id: "7tf000000000009", error: "no trace flag has this id" }],
+      notFoundCount: 1,
+      notFoundIds: ["7tf000000000009"],
     });
   });
 
-  it("should report a flag Salesforce refuses to delete as a row", async () => {
+  it("should report a flag Salesforce refuses to delete as a row by cause", async () => {
     mockFind.mockResolvedValue(FOUND);
-    mockDelete.mockRejectedValue(new Error("insufficient access rights"));
+    mockDestroy.mockResolvedValue([{ id: FLAG.id, error: "insufficient access rights" }]);
 
     const result = await deleteTraceFlags(server(), { ids: [FLAG.id] }, ctx, policy());
 
     expect(decode(text(result))).toMatchObject({
       deletedCount: 0,
-      failed: [{ id: FLAG.id, error: "insufficient access rights" }],
+      failed: [{ error: "insufficient access rights", idCount: 1, ids: [FLAG.id] }],
     });
   });
 
@@ -305,22 +307,7 @@ describe("deleteTraceFlags", () => {
     const result = await deleteTraceFlags(server(), { ids: [FLAG.id] }, ctx, policy());
 
     expect(JSON.stringify(result)).toContain(`Stop logging: Jo (USER_DEBUG, ${FLAG.id})`);
-    expect(mockDelete).not.toHaveBeenCalled();
-  });
-
-  it("should send no delete once the call is cancelled", async () => {
-    mockFind.mockResolvedValue(FOUND);
-    const controller = new AbortController();
-    controller.abort();
-    const cancelled = { mcpReq: { signal: controller.signal, requestState: () => undefined } } as unknown as ServerContext;
-
-    const result = await deleteTraceFlags(server(), { ids: [FLAG.id] }, cancelled, policy());
-
-    expect(mockDelete).not.toHaveBeenCalled();
-    expect(decode(text(result))).toMatchObject({
-      deletedCount: 0,
-      failed: [{ id: FLAG.id, error: "not deleted: the call was cancelled" }],
-    });
+    expect(mockDestroy).not.toHaveBeenCalled();
   });
 
   it("should not ask production about ids that name no flag", async () => {

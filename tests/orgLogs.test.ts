@@ -491,7 +491,7 @@ describe("deleteOrgLogs", () => {
       failed: [
         {
           error: "insufficient access rights",
-          logCount: 2,
+          idCount: 2,
           ids: ["07L000000000002", "07L000000000003EAA"],
         },
       ],
@@ -519,7 +519,7 @@ describe("deleteOrgLogs", () => {
 
     expect(decode(text(result as never))).toMatchObject({
       failed: [
-        { error: "insufficient access rights", logCount: 7, ids: ids.slice(0, shownCount) },
+        { error: "insufficient access rights", idCount: 7, ids: ids.slice(0, shownCount) },
       ],
     });
   });

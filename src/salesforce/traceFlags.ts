@@ -6,6 +6,8 @@ import {
   toTraceConfig,
   type TraceConfig,
 } from "./debugLevels.js";
+import { savedOutcome, thrownOutcome, type DeleteResult } from "./deleteResults.js";
+import { mapRequests } from "./parallelRequests.js";
 import {
   CLOCK_SKEW_MS,
   isIdShaped,
@@ -133,6 +135,31 @@ export async function createTraceFlag(
   }
 
   return result.id;
+}
+
+/**
+ * Delete trace flags, one request each, a failure kept beside its id. Once
+ * `signal` aborts, no further flag is sent, and the call rejects.
+ */
+export async function destroyTraceFlags(
+  connection: Connection,
+  ids: string[],
+  signal?: AbortSignal,
+): Promise<DeleteResult[]> {
+  const results = await mapRequests(ids, async (id): Promise<DeleteResult[]> => {
+    // Returns, not throws, so the pool waits for the requests in flight before the call rejects.
+    if (signal?.aborted) {
+      return [];
+    }
+    try {
+      const result = await connection.tooling.sobject(TRACE_FLAG_SOBJECT).destroy(id);
+      return [{ id, ...savedOutcome(result) }];
+    } catch (error) {
+      return [{ id, ...thrownOutcome(error) }];
+    }
+  });
+  signal?.throwIfAborted();
+  return results.flat();
 }
 
 /** Delete a trace flag by id. */

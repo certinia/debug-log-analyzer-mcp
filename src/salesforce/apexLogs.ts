@@ -13,6 +13,7 @@ import {
   quote,
   toDateTimeLiteral,
 } from "./soql.js";
+import { savedOutcome, type DeleteResult } from "./deleteResults.js";
 import { mapRequests } from "./parallelRequests.js";
 
 const APEX_LOG_SOBJECT = "ApexLog";
@@ -310,9 +311,6 @@ export async function findApexLogs(
   };
 }
 
-/** One log's outcome: deleted, gone before this call reached it, or failed with the cause. */
-export type DeleteResult = { id: string; alreadyGone?: true; error?: string };
-
 /**
  * Delete stored logs, each failure kept beside its id rather than failing the
  * rest. After a request fails, no further batch is sent. Once `signal` aborts,
@@ -348,7 +346,7 @@ export async function deleteApexLogs(
         return saved.map((result, index) => ({
           // In range: the API returns one result per id sent, in order.
           id: batch[index]!,
-          ...outcomeOf(result),
+          ...savedOutcome(result),
         }));
       } catch (error) {
         // A failed request costs its own batch, not the report of what the others deleted.
@@ -362,37 +360,6 @@ export async function deleteApexLogs(
   );
   signal?.throwIfAborted();
   return results.flat();
-}
-
-function outcomeOf(result: {
-  success: boolean;
-  errors: { message: string }[];
-}): Omit<DeleteResult, "id"> {
-  if (result.success) {
-    return {};
-  }
-  if (isAlreadyGone(result.errors)) {
-    return { alreadyGone: true };
-  }
-  return {
-    error:
-      result.errors.map((error) => error.message).join("; ") ||
-      "the org gave no reason",
-  };
-}
-
-// What the org answers for a log deleted since it was found; a log has no recycle bin.
-const GONE_CODES = new Set(["INVALID_CROSS_REFERENCE_KEY", "ENTITY_IS_DELETED"]);
-
-// jsforce types `errorCode`, but the collection API sends `statusCode`.
-function isAlreadyGone(errors: object[]): boolean {
-  return (
-    errors.length > 0 &&
-    errors.every((error) => {
-      const { statusCode, errorCode } = error as { statusCode?: string; errorCode?: string };
-      return GONE_CODES.has(statusCode ?? errorCode ?? "");
-    })
-  );
 }
 
 /** The ids of the newest stored logs, newest first. */
