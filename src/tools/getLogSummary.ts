@@ -39,7 +39,7 @@ import {
   type NamespaceLimitRow,
 } from "./responseShaping.js";
 
-export const getLogSummaryInputSchema = {
+const getLogSummaryInputSchema = {
   logFilePath: logFilePathSchema,
 };
 

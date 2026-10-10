@@ -23,7 +23,7 @@ import {
   toonResult,
 } from "./responseShaping.js";
 
-export const searchEventsInputSchema = {
+const searchEventsInputSchema = {
   logFilePath: logFilePathSchema,
   // Free strings, as on apexlog_list_slow_operations: an enum of the parser's
   // 290 event types would cost more than every other tool's definition.

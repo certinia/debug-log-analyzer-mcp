@@ -45,7 +45,7 @@ const logFilters = {
   minFileSizeBytes: z.number().int().nonnegative().optional(),
 };
 
-export const listOrgLogsInputSchema = {
+const listOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
   ...logFilters,
   // Described here only: delete's description points at these, and each costs tokens on every request.
@@ -89,7 +89,7 @@ export const listOrgLogsToolConfig = {
   },
 };
 
-export const getOrgLogsInputSchema = {
+const getOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
   ids: z
     .array(logId)
@@ -125,7 +125,7 @@ export const getOrgLogsToolConfig = {
   },
 };
 
-export const deleteOrgLogsInputSchema = {
+const deleteOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
   ids: z
     .array(logId)

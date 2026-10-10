@@ -19,7 +19,7 @@ import {
 /** Where a limit becomes worth reporting, when the caller names no other. */
 export const WARNING_THRESHOLD = 80;
 
-export const listLimitRisksInputSchema = {
+const listLimitRisksInputSchema = {
   logFilePath: logFilePathSchema,
   threshold: z
     .number()

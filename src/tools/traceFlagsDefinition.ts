@@ -22,7 +22,7 @@ const tracedEntity = z
   .string()
   .describe("A username or user id, or a class or trigger name (ns.Name if namespaced)");
 
-export const listTraceFlagsInputSchema = {
+const listTraceFlagsInputSchema = {
   targetOrg: targetOrgSchema,
   tracedEntity: tracedEntity.optional(),
 };
@@ -41,7 +41,7 @@ export const listTraceFlagsToolConfig = {
   },
 };
 
-export const createTraceFlagInputSchema = {
+const createTraceFlagInputSchema = {
   targetOrg: targetOrgSchema,
   tracedEntity,
   debugLevel: z
@@ -76,7 +76,7 @@ export const createTraceFlagToolConfig = {
   },
 };
 
-export const deleteTraceFlagsInputSchema = {
+const deleteTraceFlagsInputSchema = {
   targetOrg: targetOrgSchema,
   ids: z
     .array(
