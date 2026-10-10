@@ -32,17 +32,11 @@ import {
   createTraceFlagToolConfig,
   deleteTraceFlagsToolConfig,
   listTraceFlagsToolConfig,
-  type CreateTraceFlagArgs,
-  type DeleteTraceFlagsArgs,
-  type ListTraceFlagsArgs,
 } from "./tools/traceFlagsDefinition.js";
 import {
   deleteOrgLogsToolConfig,
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
-  type DeleteOrgLogsArgs,
-  type GetOrgLogsArgs,
-  type ListOrgLogsArgs,
 } from "./tools/orgLogsDefinition.js";
 import {
   apexExecutionRefusal,
@@ -169,58 +163,51 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
 
   // The org tools load lazily, as apexlog_execute_anonymous does: they reach
   // `@salesforce/core`, which a session that only reads logs must not pay for.
+  type OrgToolHandler<Args, Result> = (
+    server: McpServer,
+    args: Args,
+    ctx: ServerContext,
+    policy: typeof orgAccessPolicy,
+  ) => Promise<Result>;
+  const orgTool =
+    <Args, Result>(load: () => Promise<OrgToolHandler<Args, Result>>) =>
+    async (args: Args, ctx: ServerContext): Promise<Result> =>
+      (await load())(server, args, ctx, orgAccessPolicy);
+
   server.registerTool(
     "apexlog_list_org_logs",
     listOrgLogsToolConfig,
-    async (args, ctx) => {
-      const { listOrgLogs } = await import("./tools/listOrgLogs.js");
-      return listOrgLogs(server, args as ListOrgLogsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/listOrgLogs.js")).listOrgLogs),
   );
 
   server.registerTool(
     "apexlog_get_org_logs",
     getOrgLogsToolConfig,
-    async (args, ctx) => {
-      const { getOrgLogs } = await import("./tools/getOrgLogs.js");
-      return getOrgLogs(server, args as GetOrgLogsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/getOrgLogs.js")).getOrgLogs),
   );
 
   server.registerTool(
     "apexlog_delete_org_logs",
     deleteOrgLogsToolConfig,
-    async (args, ctx) => {
-      const { deleteOrgLogs } = await import("./tools/deleteOrgLogs.js");
-      return deleteOrgLogs(server, args as DeleteOrgLogsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/deleteOrgLogs.js")).deleteOrgLogs),
   );
 
   server.registerTool(
     "apexlog_list_trace_flags",
     listTraceFlagsToolConfig,
-    async (args, ctx) => {
-      const { listTraceFlags } = await import("./tools/listTraceFlags.js");
-      return listTraceFlags(server, args as ListTraceFlagsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/listTraceFlags.js")).listTraceFlags),
   );
 
   server.registerTool(
     "apexlog_create_trace_flag",
     createTraceFlagToolConfig,
-    async (args, ctx) => {
-      const { createTraceFlag } = await import("./tools/createTraceFlag.js");
-      return createTraceFlag(server, args as CreateTraceFlagArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/createTraceFlag.js")).createTraceFlag),
   );
 
   server.registerTool(
     "apexlog_delete_trace_flags",
     deleteTraceFlagsToolConfig,
-    async (args, ctx) => {
-      const { deleteTraceFlags } = await import("./tools/deleteTraceFlags.js");
-      return deleteTraceFlags(server, args as DeleteTraceFlagsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/deleteTraceFlags.js")).deleteTraceFlags),
   );
 
   // Always registered, so agents can discover it regardless of configuration.

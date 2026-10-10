@@ -9,6 +9,7 @@ import {
   roundPercent,
   toLimitRows,
   toNamespaceLimitRows,
+  toonResult,
 } from "../src/tools/responseShaping";
 import {
   ALL_LIMIT_METRICS,
@@ -173,6 +174,14 @@ describe("responseShaping", () => {
       expect(limitUnitsClause()).toBe(
         "every governor limit is a count except cpuTime in milliseconds and heapSize in bytes",
       );
+    });
+  });
+});
+
+describe("toonResult", () => {
+  it("returns the value as one encoded text block", () => {
+    expect(toonResult({ org: "psa", deletedCount: 0 })).toEqual({
+      content: [{ type: "text", text: JSON.stringify({ org: "psa", deletedCount: 0 }) }],
     });
   });
 });

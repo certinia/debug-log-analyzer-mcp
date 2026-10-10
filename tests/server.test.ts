@@ -83,11 +83,25 @@ jest.mock("../src/tools/executeAnonymousDefinition", () => ({
   })),
 }));
 
+// The org tools, loaded lazily by the server's own wiring.
+jest.mock("../src/tools/listOrgLogs", () => ({ listOrgLogs: jest.fn() }));
+jest.mock("../src/tools/getOrgLogs", () => ({ getOrgLogs: jest.fn() }));
+jest.mock("../src/tools/deleteOrgLogs", () => ({ deleteOrgLogs: jest.fn() }));
+jest.mock("../src/tools/listTraceFlags", () => ({ listTraceFlags: jest.fn() }));
+jest.mock("../src/tools/createTraceFlag", () => ({ createTraceFlag: jest.fn() }));
+jest.mock("../src/tools/deleteTraceFlags", () => ({ deleteTraceFlags: jest.fn() }));
+
 // Import the tools after mocking
 import { listSlowOperations } from "../src/tools/listSlowOperations";
 import { getLogSummary } from "../src/tools/getLogSummary";
 import { listLimitRisks } from "../src/tools/listLimitRisks";
 import { executeAnonymous } from "../src/tools/executeAnonymous";
+import { listOrgLogs } from "../src/tools/listOrgLogs";
+import { getOrgLogs } from "../src/tools/getOrgLogs";
+import { deleteOrgLogs } from "../src/tools/deleteOrgLogs";
+import { listTraceFlags } from "../src/tools/listTraceFlags";
+import { createTraceFlag } from "../src/tools/createTraceFlag";
+import { deleteTraceFlags } from "../src/tools/deleteTraceFlags";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -443,6 +457,32 @@ describe("createApexLogServer", () => {
         },
       );
       expect(result).toEqual(mockExecuteAnonymousResult);
+    });
+
+    // Every org tool reaches the deny list and the production gate through this policy.
+    it.each([
+      ["apexlog_list_org_logs", listOrgLogs],
+      ["apexlog_get_org_logs", getOrgLogs],
+      ["apexlog_delete_org_logs", deleteOrgLogs],
+      ["apexlog_list_trace_flags", listTraceFlags],
+      ["apexlog_create_trace_flag", createTraceFlag],
+      ["apexlog_delete_trace_flags", deleteTraceFlags],
+    ])("should pass the args, ctx and org policy to %s", async (name, handler) => {
+      (handler as jest.Mock).mockResolvedValue(mockAnalysisResult);
+      createApexLogServer({ allowProductionOrgs: true });
+
+      const args = { targetOrg: "psa" };
+      const ctx = { mcpReq: {} };
+      const result = await registeredTools.get(name)!.callback(args, ctx);
+
+      expect(handler).toHaveBeenCalledWith(expect.anything(), args, ctx, {
+        allowProductionOrgs: true,
+        denyList: { patterns: [], types: [] },
+        classificationCache: expect.any(Map),
+        mintConfirmationState: expect.any(Function),
+        consumeConfirmation: expect.any(Function),
+      });
+      expect(result).toBe(mockAnalysisResult);
     });
 
     it("should pass --allow-production-orgs through to apexlog_execute_anonymous", async () => {

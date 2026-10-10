@@ -3,7 +3,6 @@
  */
 
 import { z } from "zod";
-import { encode } from "@toon-format/toon";
 import type {
   ApexLog,
   DebugCategory,
@@ -35,6 +34,7 @@ import {
   roundPercent,
   toLimitRows,
   toNamespaceLimitRows,
+  toonResult,
   type LimitRow,
   type NamespaceLimitRow,
 } from "./responseShaping.js";
@@ -310,14 +310,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
     categories: categories(apexLog),
   };
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode(summary),
-      },
-    ],
-  };
+  return toonResult(summary);
 }
 
 function categories(apexLog: ApexLog): CategoryRow[] {

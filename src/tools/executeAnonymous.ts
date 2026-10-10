@@ -4,7 +4,6 @@ import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
-import { encode } from "@toon-format/toon";
 import {
   DEFAULT_TRACE_CONFIG,
   ensureDebugLevel,
@@ -29,7 +28,7 @@ import { loadApexLog } from "./apexLogSource.js";
 import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, writeDebugLog } from "./logStore.js";
-import { NS_TO_MS, roundMs } from "./responseShaping.js";
+import { NS_TO_MS, roundMs, toonResult } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import {
@@ -311,40 +310,28 @@ export async function executeAnonymous(
     store.warning,
   ].filter((text): text is string => text !== undefined);
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({
-          filePath,
-          ...(warnings.length && { warning: warnings.join(" ") }),
-          fileSizeBytes: stats.size,
-          org: orgLabel,
-          orgType: classification,
-          succeeded: apexResult.succeeded,
-          ...(apexResult.exceptionMessage && {
-            exceptionMessage: apexResult.exceptionMessage,
-          }),
-          durationMs: parsedLog
-            ? roundMs(parsedLog.duration.total / NS_TO_MS)
-            : 0,
-          // True when the log carries levels other than the ones levelsSource
-          // names - a Developer Console flag set during the run, say. Reported
-          // either way, for the same reason as below.
-          levelsOverridden: levelsWereOverridden(
-            run.levels,
-            parsedLog?.debugLevels,
-          ),
-          // Where the levels came from, so a log far thinner or fuller than expected explains itself.
-          levelsSource: run.source,
-          // A fact about this run, not advice about it: the directory is new, so
-          // nothing yet ignores it. Reported either way, because an absent field
-          // cannot be told apart from one this server never worked out.
-          outputDirCreated: store.created,
-        }),
-      },
-    ],
-  };
+  return toonResult({
+    filePath,
+    ...(warnings.length && { warning: warnings.join(" ") }),
+    fileSizeBytes: stats.size,
+    org: orgLabel,
+    orgType: classification,
+    succeeded: apexResult.succeeded,
+    ...(apexResult.exceptionMessage && {
+      exceptionMessage: apexResult.exceptionMessage,
+    }),
+    durationMs: parsedLog ? roundMs(parsedLog.duration.total / NS_TO_MS) : 0,
+    // True when the log carries levels other than the ones levelsSource
+    // names - a Developer Console flag set during the run, say. Reported
+    // either way, for the same reason as below.
+    levelsOverridden: levelsWereOverridden(run.levels, parsedLog?.debugLevels),
+    // Where the levels came from, so a log far thinner or fuller than expected explains itself.
+    levelsSource: run.source,
+    // A fact about this run, not advice about it: the directory is new, so
+    // nothing yet ignores it. Reported either way, because an absent field
+    // cannot be told apart from one this server never worked out.
+    outputDirCreated: store.created,
+  });
 }
 
 // Only a live flag stores the log the file's id comes from; `flagLevelId` is undefined when the user has one (.claude/rules/trace-flags.md).

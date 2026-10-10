@@ -3,7 +3,6 @@
  */
 
 import { z } from "zod";
-import { encode } from "@toon-format/toon";
 import type { DebugCategory, Limits } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
@@ -14,6 +13,7 @@ import {
   percentageOf,
   roundPercent,
   toLimitRows,
+  toonResult,
 } from "./responseShaping.js";
 
 /** Where a limit becomes worth reporting, when the caller names no other. */
@@ -95,14 +95,7 @@ export async function listLimitRisks(args: LimitRisksArgs) {
     atRisk,
   };
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode(result),
-      },
-    ],
-  };
+  return toonResult(result);
 }
 
 /**

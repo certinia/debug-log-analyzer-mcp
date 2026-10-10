@@ -5,11 +5,10 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
-import { encode } from "@toon-format/toon";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { destroyTraceFlags, findTraceFlags } from "../salesforce/traceFlags.js";
 import { deleteReport, givenIds } from "./deleteReport.js";
-import { omitEmpty } from "./responseShaping.js";
+import { omitEmpty, toonResult } from "./responseShaping.js";
 import type { DeleteTraceFlagsArgs } from "./traceFlagsDefinition.js";
 
 /** Delete trace flags by id, failures grouped by cause. */
@@ -54,17 +53,10 @@ export async function deleteTraceFlags(
   // At most 200 ids, so every one is listed.
   const outcome = deleteReport(given, foundIds, results, Infinity);
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({
-          org: access.orgLabel,
-          deletedCount: outcome.deleted.size,
-          notFoundCount: outcome.notFoundCount,
-          ...omitEmpty({ notFoundIds: outcome.notFoundIds, failed: outcome.failed }),
-        }),
-      },
-    ],
-  };
+  return toonResult({
+    org: access.orgLabel,
+    deletedCount: outcome.deleted.size,
+    notFoundCount: outcome.notFoundCount,
+    ...omitEmpty({ notFoundIds: outcome.notFoundIds, failed: outcome.failed }),
+  });
 }

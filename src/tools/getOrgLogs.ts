@@ -5,7 +5,6 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
-import { encode } from "@toon-format/toon";
 import {
   downloadApexLog,
   latestApexLogIds,
@@ -16,7 +15,7 @@ import { toLongId } from "../salesforce/soql.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
 import { openLogStore, saveStoredLog, type StoredLog } from "./logStore.js";
 import { progressReporter } from "./progress.js";
-import { omitEmpty } from "./responseShaping.js";
+import { omitEmpty, toonResult } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 
 type Saved = { id: string } & StoredLog;
@@ -95,18 +94,11 @@ export async function getOrgLogs(
   const logs = results.filter((r): r is Saved => !("error" in r));
   const failed = results.filter((r): r is Failed => "error" in r);
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({
-          org: access.orgLabel,
-          ...(store?.warning !== undefined && { warning: store.warning }),
-          logs,
-          ...omitEmpty({ failed }),
-          outputDirCreated: store?.created ?? false,
-        }),
-      },
-    ],
-  };
+  return toonResult({
+    org: access.orgLabel,
+    ...(store?.warning !== undefined && { warning: store.warning }),
+    logs,
+    ...omitEmpty({ failed }),
+    outputDirCreated: store?.created ?? false,
+  });
 }

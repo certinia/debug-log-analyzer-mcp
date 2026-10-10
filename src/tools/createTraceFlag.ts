@@ -5,7 +5,6 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
-import { encode } from "@toon-format/toon";
 import {
   DEFAULT_TRACE_CONFIG,
   ensureLevelsDebugLevel,
@@ -23,6 +22,7 @@ import {
   type TraceFlagRow,
 } from "../salesforce/traceFlags.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
+import { toonResult } from "./responseShaping.js";
 import type { CreateTraceFlagArgs } from "./traceFlagsDefinition.js";
 
 const DEFAULT_DURATION_MINUTES = 30;
@@ -123,12 +123,5 @@ export async function createTraceFlag(
     return toolError(message + next);
   }
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({ org: access.orgLabel, ...flag }),
-      },
-    ],
-  };
+  return toonResult({ org: access.orgLabel, ...flag });
 }

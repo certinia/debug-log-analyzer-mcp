@@ -5,10 +5,10 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
-import { encode } from "@toon-format/toon";
 import { listApexLogs, readCursor } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import type { ListOrgLogsArgs } from "./orgLogsDefinition.js";
+import { toonResult } from "./responseShaping.js";
 
 const DEFAULT_LIMIT = 20;
 
@@ -46,19 +46,12 @@ export async function listOrgLogs(
     after: access.value,
   });
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({
-          org: access.orgLabel,
-          // Beside the rows, so an empty table reads as nothing matched, not as an answer missing.
-          sortBy,
-          matchedCount: page.matchedCount,
-          logs: page.rows,
-          ...(page.nextCursor && { nextCursor: page.nextCursor }),
-        }),
-      },
-    ],
-  };
+  return toonResult({
+    org: access.orgLabel,
+    // Beside the rows, so an empty table reads as nothing matched, not as an answer missing.
+    sortBy,
+    matchedCount: page.matchedCount,
+    logs: page.rows,
+    ...(page.nextCursor && { nextCursor: page.nextCursor }),
+  });
 }

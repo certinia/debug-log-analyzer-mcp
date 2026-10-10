@@ -9,7 +9,6 @@ import type {
   LineNumber,
   LogEvent,
 } from "@apexdevtools/apex-log-parser";
-import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema, walkLog } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { capturedAt, declaredLevels, type DeclaredLevel } from "./operations.js";
@@ -21,6 +20,7 @@ import {
   NAME_LIMIT,
   omitEmpty,
   PAGE_CHAR_BUDGET,
+  toonResult,
 } from "./responseShaping.js";
 
 export const searchEventsInputSchema = {
@@ -250,12 +250,5 @@ export async function searchEvents(args: SearchEventsArgs) {
     events,
   };
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode(result),
-      },
-    ],
-  };
+  return toonResult(result);
 }

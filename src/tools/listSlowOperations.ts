@@ -4,7 +4,6 @@
 
 import { z } from "zod";
 import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
-import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import {
@@ -39,6 +38,7 @@ import {
   roundMs,
   roundPercent,
   rowCost,
+  toonResult,
 } from "./responseShaping.js";
 
 /**
@@ -498,12 +498,5 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     ...omitEmpty({ queryPlans }),
   };
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode(result),
-      },
-    ],
-  };
+  return toonResult(result);
 }

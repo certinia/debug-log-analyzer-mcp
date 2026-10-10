@@ -5,7 +5,6 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
-import { encode } from "@toon-format/toon";
 import {
   deleteApexLogs,
   describeFilters,
@@ -19,7 +18,7 @@ import { CLOCK_SKEW_MS } from "../salesforce/soql.js";
 import { toolError, type Confirmable } from "../policy/orgExecutionPolicy.js";
 import { deleteReport, givenIds, shownId } from "./deleteReport.js";
 import { progressReporter } from "./progress.js";
-import { omitEmpty } from "./responseShaping.js";
+import { omitEmpty, toonResult } from "./responseShaping.js";
 import type { DeleteOrgLogsArgs } from "./orgLogsDefinition.js";
 
 // Enough ids to recognise the set by, few enough to read.
@@ -93,22 +92,15 @@ export async function deleteOrgLogs(
   const outcome = deleteReport(given, logIds, results, ids ? Infinity : SHOWN_IDS);
   const deleted = logs.filter((log) => outcome.deleted.has(log.id));
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({
-          org: access.orgLabel,
-          deletedCount: deleted.length,
-          deletedBytes: totalBytes(deleted),
-          // The matches past this call's cap, and the failures, since they still hold storage.
-          remainingCount: matchedCount - logs.length + outcome.failedCount,
-          notFoundCount: outcome.notFoundCount,
-          ...omitEmpty({ notFoundIds: outcome.notFoundIds, failed: outcome.failed }),
-        }),
-      },
-    ],
-  };
+  return toonResult({
+    org: access.orgLabel,
+    deletedCount: deleted.length,
+    deletedBytes: totalBytes(deleted),
+    // The matches past this call's cap, and the failures, since they still hold storage.
+    remainingCount: matchedCount - logs.length + outcome.failedCount,
+    notFoundCount: outcome.notFoundCount,
+    ...omitEmpty({ notFoundIds: outcome.notFoundIds, failed: outcome.failed }),
+  });
 }
 
 /**

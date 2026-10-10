@@ -19,6 +19,13 @@ import {
   type Limits,
   type NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
+import type { CallToolResult } from "@modelcontextprotocol/server";
+import { encode } from "@toon-format/toon";
+
+/** A tool's answer: `value` as one TOON text block. */
+export function toonResult(value: object): CallToolResult {
+  return { content: [{ type: "text", text: encode(value) }] };
+}
 
 /** The parser works in nanoseconds; every reported duration is milliseconds. */
 export const NS_TO_MS = 1_000_000;
