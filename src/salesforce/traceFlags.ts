@@ -163,22 +163,6 @@ export async function destroyTraceFlags(
   return results.flat();
 }
 
-/** Delete a trace flag by id. */
-export async function deleteTraceFlag(
-  connection: Connection,
-  traceFlagId: string,
-): Promise<void> {
-  const result = await connection.tooling
-    .sobject(TRACE_FLAG_SOBJECT)
-    .destroy(traceFlagId);
-
-  if (!result.success) {
-    throw new Error(
-      `Salesforce refused to delete the trace flag: ${saveErrorText(result.errors)}`,
-    );
-  }
-}
-
 /** A user is traced as `USER_DEBUG`; a class or a trigger as `CLASS_TRACING`. */
 export type TraceLogType = "USER_DEBUG" | "CLASS_TRACING";
 

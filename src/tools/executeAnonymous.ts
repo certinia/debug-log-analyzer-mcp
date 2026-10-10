@@ -18,7 +18,7 @@ import {
 } from "../salesforce/anonymousApex.js";
 import {
   createTraceFlag,
-  deleteTraceFlag,
+  destroyTraceFlags,
   findActiveTraceFlags,
   findUsersByUsername,
   traceFlagWindow,
@@ -383,7 +383,7 @@ async function createRunTraceFlag(
   }
 }
 
-// Reported, not thrown: the log is in hand and the flag expires on its own.
+// Reported, not thrown: the log is in hand and the flag expires on its own. A flag already gone is removed.
 async function removeRunTraceFlag(
   connection: Connection,
   traceFlagId: string | undefined,
@@ -391,14 +391,11 @@ async function removeRunTraceFlag(
   if (traceFlagId === undefined) {
     return undefined;
   }
-  try {
-    await deleteTraceFlag(connection, traceFlagId);
+  const [result] = await destroyTraceFlags(connection, [traceFlagId]);
+  if (result?.error === undefined) {
     return undefined;
-  } catch (error) {
-    const warning = `Could not delete trace flag ${traceFlagId}, created for this run. It expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes; to end it sooner, delete it with apexlog_delete_trace_flags.`;
-    console.error(
-      `[apex-log-mcp] ${warning} ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return warning;
   }
+  const warning = `Could not delete trace flag ${traceFlagId}, created for this run. It expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes; to end it sooner, delete it with apexlog_delete_trace_flags.`;
+  console.error(`[apex-log-mcp] ${warning} ${result.error}`);
+  return warning;
 }

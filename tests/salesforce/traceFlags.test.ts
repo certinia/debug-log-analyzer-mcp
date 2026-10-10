@@ -5,7 +5,6 @@
 import { Connection } from "@salesforce/core";
 import {
   createTraceFlag,
-  deleteTraceFlag,
   destroyTraceFlags,
   findActiveTraceFlags,
   findOverlappingTraceFlag,
@@ -507,25 +506,6 @@ describe("Trace Flags", () => {
       await expect(
         findOverlappingTraceFlag(mockConnection, jo, "USER_DEBUG", 900_000),
       ).resolves.toEqual({ notBefore: new Date("2025-01-15T08:58:01.000Z") });
-    });
-  });
-
-  describe("deleteTraceFlag", () => {
-    it("deletes the flag by id", async () => {
-      mockDestroy.mockResolvedValue({ success: true, id: traceFlagId });
-
-      await deleteTraceFlag(mockConnection, traceFlagId);
-
-      expect(mockSobject).toHaveBeenCalledWith("TraceFlag");
-      expect(mockDestroy).toHaveBeenCalledWith(traceFlagId);
-    });
-
-    it("names the errors when Salesforce refuses the delete", async () => {
-      mockDestroy.mockResolvedValue({ success: false, errors: ["Locked"] });
-
-      await expect(
-        deleteTraceFlag(mockConnection, traceFlagId),
-      ).rejects.toThrow(/Salesforce refused to delete the trace flag: Locked/);
     });
   });
 
