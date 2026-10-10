@@ -33,6 +33,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: stop a 60-second stall waiting on roots ([#222])
 - apexlog_execute_anonymous: require `targetOrg` when the client's roots can't be used ([#225])
 - apexlog_get_summary, apexlog_list_slow_operations: time a method that the log never closes up to the end of the log, instead of reporting it too short ([#226])
+- apexlog_execute_anonymous: say when the org's login has expired and how to log in again ([#239])
+- apexlog_execute_anonymous: say when `targetOrg` names no authenticated org, instead of the Salesforce SDK's raw error ([#236])
+- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks: say a `logFilePath` that is a directory is one, instead of Node's raw error ([#234])
 
 ## [2.0.1] - 2026-09-11
 
@@ -133,6 +136,9 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#225]: https://github.com/certinia/debug-log-analyzer-mcp/pull/225
 [#228]: https://github.com/certinia/debug-log-analyzer-mcp/issues/228
 [#230]: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
+[#234]: https://github.com/certinia/debug-log-analyzer-mcp/issues/234
+[#236]: https://github.com/certinia/debug-log-analyzer-mcp/issues/236
+[#239]: https://github.com/certinia/debug-log-analyzer-mcp/issues/239
 [#211]: https://github.com/certinia/debug-log-analyzer-mcp/issues/211
 [#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
