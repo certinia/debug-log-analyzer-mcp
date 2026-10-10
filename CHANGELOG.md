@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **Breaking:** apexlog_execute_anonymous: rename `durationMs` to `durationTotalMs`, the name apexlog_get_summary gives the same figure ([#240])
 - apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, or at the defaults - never at the levels a previous run left. Pass `"traceFlag"` to require the flag ([#230])
 - apexlog_execute_anonymous: set the categories an object `debugLevel` names over the defaults, not over the levels a previous run left ([#230])
 - apexlog_execute_anonymous: show a live Developer Console trace flag's levels in a production confirmation, and report them as `levelsSource` `developerConsole` rather than as `levelsOverridden` ([#230])
@@ -139,6 +140,7 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#234]: https://github.com/certinia/debug-log-analyzer-mcp/issues/234
 [#236]: https://github.com/certinia/debug-log-analyzer-mcp/issues/236
 [#239]: https://github.com/certinia/debug-log-analyzer-mcp/issues/239
+[#240]: https://github.com/certinia/debug-log-analyzer-mcp/issues/240
 [#211]: https://github.com/certinia/debug-log-analyzer-mcp/issues/211
 [#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209

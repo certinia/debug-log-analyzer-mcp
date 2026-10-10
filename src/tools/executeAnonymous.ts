@@ -51,7 +51,7 @@ const ONE_APEX_SOURCE =
   "Give exactly one of apex and apexFilePath: the Apex inline, or the absolute path to a file of it.";
 
 const NO_LOG_CAPTURED_WARNING =
-  "Salesforce returned no debug log for this run, so the saved file is empty and durationMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
+  "Salesforce returned no debug log for this run, so the saved file is empty and durationTotalMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
 
 export type ExecuteAnonymousPolicy = OrgAccessPolicy & {
   apexExecutionDisabled: boolean;
@@ -320,7 +320,7 @@ export async function executeAnonymous(
     ...(apexResult.exceptionMessage && {
       exceptionMessage: apexResult.exceptionMessage,
     }),
-    durationMs: parsedLog ? roundMs(parsedLog.duration.total / NS_TO_MS) : 0,
+    durationTotalMs: parsedLog ? roundMs(parsedLog.duration.total / NS_TO_MS) : 0,
     // True when the log carries levels other than the ones levelsSource
     // names - a Developer Console flag set during the run, say. Reported
     // either way, for the same reason as below.

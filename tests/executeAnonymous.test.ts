@@ -388,7 +388,7 @@ describe("Execute Anonymous", () => {
       expect(mockLoadApexLog).toHaveBeenCalledWith(
         expect.stringContaining(`${testLogId}.log`),
       );
-      expect(toonDecode(result).durationMs).toBe(2.5);
+      expect(toonDecode(result).durationTotalMs).toBe(2.5);
     });
 
     it("posts the SOAP envelope to the org id path segment", async () => {
@@ -798,7 +798,7 @@ describe("Execute Anonymous", () => {
 
       const payload = toonDecode(result);
       expect(payload.warning).toContain("no debug log");
-      expect(payload.durationMs).toBe(0);
+      expect(payload.durationTotalMs).toBe(0);
       expect(mockLoadApexLog).not.toHaveBeenCalled();
       // An empty log has no stored twin, so an earlier run's empty log must not name it.
       expect(mockFind).not.toHaveBeenCalled();
