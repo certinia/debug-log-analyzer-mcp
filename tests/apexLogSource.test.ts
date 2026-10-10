@@ -49,6 +49,7 @@ const statsOf = (
     size: BigInt(size),
     mtimeNs: BigInt(mtimeNs),
     ctimeNs: BigInt(ctimeNs),
+    isFile: () => true,
   }) as BigIntStats;
 
 /**
@@ -193,6 +194,23 @@ describe("apexLogSource", () => {
       expect(second).toBe(first);
       expect(mockFs.readFile).toHaveBeenCalledTimes(1);
       expect(mockParse).toHaveBeenCalledTimes(1);
+    });
+
+    // A directory opens on macOS and Linux; the read alone would fail, naming no path.
+    it.each([
+      [true, "it is a directory (EISDIR)"],
+      [false, "not a regular file"],
+    ])("refuses a path that is not a regular file, before reading it (directory: %s)", async (isDirectory, cause) => {
+      mockFs.stat.mockResolvedValueOnce({
+        ...statsOf(1, 0),
+        isFile: () => false,
+        isDirectory: () => isDirectory,
+      } as never);
+
+      await expect(loadApexLog(logPath)).rejects.toThrow(
+        `Cannot read log file ${logPath}: ${cause}`,
+      );
+      expect(mockFs.readFile).not.toHaveBeenCalled();
     });
 
     it("does not serve a failed read to the next caller", async () => {

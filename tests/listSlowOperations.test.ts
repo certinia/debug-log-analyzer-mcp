@@ -46,6 +46,7 @@ const mockStats = {
   size: 1n,
   mtimeNs: 1n,
   ctimeNs: 1n,
+  isFile: () => true,
 } as BigIntStats;
 
 const ARGS: SlowOperationsArgs = { logFilePath: "/test/file.log" };

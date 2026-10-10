@@ -78,14 +78,20 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
   // file and the bytes to the new one. A handle holds one inode, so the
   // fingerprint below describes exactly the bytes this call goes on to read.
   let handle;
-  let fingerprint;
+  let stats;
   try {
     handle = await fs.open(logFilePath, "r");
-    fingerprint = fingerprintOf(await handle.stat({ bigint: true }));
+    stats = await handle.stat({ bigint: true });
   } catch (error) {
     await handle?.close();
     throw fileReadError("log file", logFilePath, error);
   }
+  // A directory opens on macOS and Linux; only the read would fail, and with no path in the error.
+  if (!stats.isFile()) {
+    await handle.close();
+    throw fileReadError("log file", logFilePath, stats.isDirectory() ? { code: "EISDIR" } : "not a regular file");
+  }
+  const fingerprint = fingerprintOf(stats);
 
   try {
     if (
