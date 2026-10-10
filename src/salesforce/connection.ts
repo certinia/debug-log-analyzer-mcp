@@ -32,7 +32,9 @@ export async function readLocalOrg(
   const aliasOrUsername = targetOrg ?? (await resolveDefaultOrg(projectPath));
   const { aliases } = await StateAggregator.getInstance();
   const username = aliases.resolveUsername(aliasOrUsername);
-  const authInfo = await AuthInfo.create({ username });
+  const authInfo = await AuthInfo.create({ username }).catch((error: unknown) => {
+    throw unknownOrgError(error, aliasOrUsername);
+  });
   const { orgId, instanceUrl } = authInfo.getFields();
 
   if (!orgId) {
@@ -46,6 +48,21 @@ export async function readLocalOrg(
     instanceUrl,
     authInfo,
   };
+}
+
+// The SDK's own text names no parameter; its "Did you mean" suggestion is kept.
+function unknownOrgError(error: unknown, aliasOrUsername: string): unknown {
+  if (!(error instanceof Error) || error.name !== "NamedOrgNotFoundError") {
+    return error;
+  }
+  const { actions } = error as { actions?: string[] };
+  return new Error(
+    [
+      `No authenticated org is named '${aliasOrUsername}'. Check targetOrg, or list orgs with 'sf org list'.`,
+      ...(actions ?? []),
+    ].join(" "),
+    { cause: error },
+  );
 }
 
 /** Connect through the auth `readLocalOrg` read, so it is the org it checked. */
