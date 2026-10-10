@@ -39,7 +39,7 @@ export const executeAnonymousInputSchema = {
     .string()
     .optional()
     .describe(
-      `Directory to save the debug log file (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root)`,
+      `Log directory (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root, else cwd)`,
     ),
   // The enums already list the levels and the categories, so the description
   // says only what they cannot: what each form does, and the per-category

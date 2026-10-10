@@ -112,7 +112,7 @@ const getOrgLogsInputSchema = {
     .string()
     .optional()
     .describe(
-      `Directory to save the debug log files (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root)`,
+      `Log directory (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root, else cwd)`,
     ),
 };
 

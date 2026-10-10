@@ -42,7 +42,7 @@ Then ask your assistant to analyze a log. The org tools also need an org authent
 
 <!-- token-cost-summary:start -->
 
-Keeping the server connected costs ~3,130 tokens, 1.6% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~3,123 tokens, 1.6% of a 200K context. See [Token Cost](#token-cost).
 
 <!-- token-cost-summary:end -->
 
@@ -221,7 +221,7 @@ The response also gives the org username, its alias if set, the org type, and a 
 | `apex`         | string           | No       | The anonymous Apex to execute, or use apexFilePath |
 | `apexFilePath` | string           | No       | Absolute path to a file of anonymous Apex |
 | `targetOrg`    | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `outputDir`    | string           | No       | Directory to save the debug log file (default: .apex-log-mcp/ in the first client root) |
+| `outputDir`    | string           | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
 | `debugLevel`   | string \| object | No       | This run's log levels. Omit for the user's trace flag levels, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
@@ -280,7 +280,7 @@ Up to 25 a call. A log already saved under `outputDir` is not downloaded again, 
 | `targetOrg` | string   | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
 | `ids`       | string[] | No       | Log ids, from apexlog_list_org_logs |
 | `latest`    | number   | No       | The newest N logs, in place of ids (default: 1) |
-| `outputDir` | string   | No       | Directory to save the debug log files (default: .apex-log-mcp/ in the first client root) |
+| `outputDir` | string   | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
 
 <!-- params-apexlog_get_org_logs:end -->
 
@@ -369,16 +369,16 @@ Every request carries every tool definition, whether you call them or not. Each 
 | ------------------------------ | ------------------------------------------------------------ |
 | `apexlog_list_slow_operations` | ~533                                                         |
 | `apexlog_search_events`        | ~453                                                         |
-| `apexlog_execute_anonymous`    | ~450                                                         |
+| `apexlog_execute_anonymous`    | ~447                                                         |
 | `apexlog_create_trace_flag`    | ~359                                                         |
 | `apexlog_list_org_logs`        | ~321                                                         |
 | `apexlog_delete_org_logs`      | ~210                                                         |
-| `apexlog_get_org_logs`         | ~204                                                         |
+| `apexlog_get_org_logs`         | ~200                                                         |
 | `apexlog_get_summary`          | ~155                                                         |
 | `apexlog_list_trace_flags`     | ~152                                                         |
 | `apexlog_list_limit_risks`     | ~150                                                         |
 | `apexlog_delete_trace_flags`   | ~143                                                         |
-| **Total**                      | **~3,130** (1.6% of a 200K context), **+105% vs 1.x ~1,529** |
+| **Total**                      | **~3,123** (1.6% of a 200K context), **+104% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
