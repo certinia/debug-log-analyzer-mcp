@@ -408,7 +408,7 @@ describe("deleteOrgLogs", () => {
       policy(),
     );
 
-    expect(text(result as never)).toBe("Give ids or filters, not both.");
+    expect(text(result as never)).toBe("Give ids or the filter parameters, not both.");
   });
 
   it("should delete what the filters match, and count it", async () => {

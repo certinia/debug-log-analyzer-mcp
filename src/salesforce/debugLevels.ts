@@ -3,6 +3,7 @@ import type { Connection } from "@salesforce/core";
 import { LOG_LEVEL } from "@apexdevtools/apex-log-parser";
 import type { DebugLevels } from "@apexdevtools/apex-log-parser";
 import type { Assert } from "../compileGuards.js";
+import { saveErrorText } from "./deleteResults.js";
 import { quote } from "./soql.js";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
@@ -235,7 +236,7 @@ export async function ensureLevelsDebugLevel(
   );
   if (edited.length) {
     throw new Error(
-      `DebugLevel ${name} has been edited to other levels, so a flag on it would not log at the levels asked for. In Setup, set ${edited.map((category) => `${category} back to ${levels[category]}`).join(", ")}, then try again.`,
+      `DebugLevel ${name} has been edited to other levels, so a flag on it would not log at the levels asked for. In Setup, set ${edited.map((category) => `${category} back to ${levels[category]}`).join(", ")}, or pass a different debugLevel.`,
     );
   }
   return { id: found.Id, name };
@@ -276,7 +277,11 @@ async function createDebugLevel(
     if (result.success && result.id) {
       return { Id: result.id, ...fields };
     }
-    throw new Error(`Failed to create DebugLevel: ${JSON.stringify(result.errors)}`);
+    throw new Error(
+      result.success
+        ? "Salesforce saved the debug level but returned no id."
+        : `Salesforce refused the debug level: ${saveErrorText(result.errors)}`,
+    );
   } catch (error) {
     // Another call may have created it (jsforce throws on the duplicate name); a failed lookup must not hide why.
     const created = await find().catch(() => undefined);

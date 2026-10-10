@@ -65,7 +65,7 @@ async function readApexFile(
   const outside = await outsideRoots(apexFilePath, rootPaths);
   if (outside !== undefined) {
     throw new Error(
-      `Apex file ${outside} is outside every root this client declared.`,
+      `Apex file ${outside} is outside every root this client declared. Move it under a root, or pass the Apex inline in apex.`,
     );
   }
 
@@ -152,7 +152,7 @@ function askedLevels(
   // Asked for by name, so a flag that has expired is said, not papered over with the defaults.
   if (debugLevel === "traceFlag") {
     throw new Error(
-      `${username} has no active USER_DEBUG trace flag, so there are no levels to use. Create one, or leave out debugLevel to run at the defaults.`,
+      `${username} has no active USER_DEBUG trace flag, so there are no levels to use. Create one with apexlog_create_trace_flag, or leave out debugLevel to run at the defaults.`,
     );
   }
   return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
@@ -177,7 +177,7 @@ function apexConfirmable(
     unshowable:
       apex.length > MAX_APEX_TO_CONFIRM
         ? `The Apex is ${apex.length} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
-          `so nothing was executed against '${orgLabel}'. To run it, restart the server with --allow-production-orgs.`
+          `so nothing was executed against '${orgLabel}'. To run it, shorten it to ${MAX_APEX_TO_CONFIRM} characters or fewer, or ask the user to restart the server with --allow-production-orgs.`
         : undefined,
   };
 }
@@ -395,7 +395,7 @@ async function removeRunTraceFlag(
     await deleteTraceFlag(connection, traceFlagId);
     return undefined;
   } catch (error) {
-    const warning = `Could not delete trace flag ${traceFlagId}, created for this run; it expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes.`;
+    const warning = `Could not delete trace flag ${traceFlagId}, created for this run. It expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes; to end it sooner, delete it with apexlog_delete_trace_flags.`;
     console.error(
       `[apex-log-mcp] ${warning} ${error instanceof Error ? error.message : String(error)}`,
     );

@@ -101,7 +101,7 @@ describe("Debug Levels", () => {
       mockCreate.mockResolvedValue({ success: false, errors: ["Creation failed"] });
 
       await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
-        "Failed to create DebugLevel",
+        "Salesforce refused the debug level",
       );
     });
 
@@ -110,7 +110,7 @@ describe("Debug Levels", () => {
       mockCreate.mockResolvedValue({ success: true, id: null });
 
       await expect(ensureDebugLevel(mockConnection)).rejects.toThrow(
-        "Failed to create DebugLevel",
+        "Salesforce saved the debug level but returned no id.",
       );
     });
 
@@ -165,7 +165,7 @@ describe("Debug Levels", () => {
       // Only the category that differs, so the fix in Setup is direct.
       await expect(
         ensureLevelsDebugLevel(mockConnection, requestedLevels("FINEST")),
-      ).rejects.toThrow(/edited to other levels.*In Setup, set database back to FINEST, then try again\.$/);
+      ).rejects.toThrow(/edited to other levels.*In Setup, set database back to FINEST, or pass a different debugLevel\.$/);
     });
 
     // Two calls at once: the second create fails on the unique name, and finds the first's record.

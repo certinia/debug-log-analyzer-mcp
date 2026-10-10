@@ -10,6 +10,10 @@ import {
 } from "@salesforce/core";
 
 /** The target org as the local sf files know it. */
+/** The step for an org whose saved login no longer works: the user's, since it opens a browser. */
+export const RELOGIN_HINT =
+  "Ask the user to log in to the org again: sf org login web --alias <alias>.";
+
 export type LocalOrg = {
   orgId: string;
   username: string;
@@ -35,7 +39,7 @@ export async function readLocalOrg(
   const { orgId, instanceUrl } = authInfo.getFields();
 
   if (!orgId) {
-    throw new Error(`The auth file for '${username}' holds no org id.`);
+    throw new Error(`The auth file for '${username}' holds no org id. ${RELOGIN_HINT}`);
   }
 
   return {
@@ -62,7 +66,7 @@ async function resolveDefaultOrg(projectPath?: string): Promise<string> {
 
   if (!defaultOrg) {
     throw new Error(
-      "No default org configured. Please set a default org using 'sf config set target-org <username>' (use --global if not in a Salesforce DX project).",
+      "No default org is set. Pass targetOrg, or set one with 'sf config set target-org <alias>' (add --global outside a Salesforce DX project).",
     );
   }
 

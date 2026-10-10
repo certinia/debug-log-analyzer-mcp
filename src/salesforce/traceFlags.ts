@@ -6,7 +6,7 @@ import {
   toTraceConfig,
   type TraceConfig,
 } from "./debugLevels.js";
-import { savedOutcome, thrownOutcome, type DeleteResult } from "./deleteResults.js";
+import { saveErrorText, savedOutcome, thrownOutcome, type DeleteResult } from "./deleteResults.js";
 import { mapRequests } from "./parallelRequests.js";
 import {
   CLOCK_SKEW_MS,
@@ -128,10 +128,11 @@ export async function createTraceFlag(
     LogType: logType,
   });
 
-  if (!result.success || !result.id) {
-    throw new Error(
-      `Failed to create TraceFlag: ${JSON.stringify(result.errors)}`,
-    );
+  if (!result.success) {
+    throw new Error(`Salesforce refused the trace flag: ${saveErrorText(result.errors)}`);
+  }
+  if (!result.id) {
+    throw new Error("Salesforce saved the trace flag but returned no id.");
   }
 
   return result.id;
@@ -173,7 +174,7 @@ export async function deleteTraceFlag(
 
   if (!result.success) {
     throw new Error(
-      `Failed to delete TraceFlag: ${JSON.stringify(result.errors)}`,
+      `Salesforce refused to delete the trace flag: ${saveErrorText(result.errors)}`,
     );
   }
 }
@@ -277,13 +278,13 @@ export async function resolveTracedEntity(
   if (found.length === 0) {
     throw new Error(
       byId || byUsername
-        ? `No user, class or trigger in this org has the ${byUsername ? "username" : "id"} ${name}.`
-        : `No user, class or trigger in this org is named ${name}. Name a user by username or id, and a namespaced class as ns.Name.`,
+        ? `No user, class or trigger in this org has the ${byUsername ? "username" : "id"} ${name}. Check tracedEntity.`
+        : `No user, class or trigger in this org is named ${name}. In tracedEntity, name a user by username or id, and a namespaced class as ns.Name.`,
     );
   }
   if (found.length > 1) {
     throw new Error(
-      `More than one class or trigger is named ${name}: ${found.map((entity) => `${entity.name} (${entity.type}, ${entity.id})`).join(", ")}. Pass the one you mean by its id.`,
+      `More than one class or trigger is named ${name}: ${found.map((entity) => `${entity.name} (${entity.type}, ${entity.id})`).join(", ")}. Pass its id as tracedEntity.`,
     );
   }
   // In range: found has exactly one entry here.

@@ -232,7 +232,7 @@ async function getWorkspace(
     if (!(error instanceof SdkError)) {
       return {
         kind: "unknown",
-        reason: `the client's roots could not be read: ${String(error)}`,
+        reason: `the client's roots could not be read: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
     switch (error.code) {
@@ -250,7 +250,7 @@ async function getWorkspace(
           ? {
               kind: "unknown",
               reason:
-                "this server cannot yet ask a 2026-07-28 client for its roots",
+                "this server cannot yet ask a client on MCP 2026-07-28 for its roots",
             }
           : { kind: "none" };
       }

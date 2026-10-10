@@ -1,6 +1,7 @@
 import type { Connection } from "@salesforce/core";
 import type { DebugLevels } from "@apexdevtools/apex-log-parser";
 
+import { RELOGIN_HINT } from "./connection.js";
 import {
   CATEGORY_LOG_NAMES,
   TRACE_CATEGORIES,
@@ -79,7 +80,7 @@ async function postExecuteAnonymous(
 ): Promise<Record<string, unknown>> {
   const sessionId = connection.accessToken;
   if (!sessionId) {
-    throw new Error("The org connection carries no access token.");
+    throw new Error(`The org session has no access token. ${RELOGIN_HINT}`);
   }
 
   const response = await connection.request({

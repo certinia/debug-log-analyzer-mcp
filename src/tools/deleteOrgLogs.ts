@@ -39,12 +39,12 @@ export async function deleteOrgLogs(
   const condition = filterCondition(filters);
   const filtered = condition !== "";
   if (ids !== undefined && filtered) {
-    return toolError("Give ids or filters, not both.");
+    return toolError("Give ids or the filter parameters, not both.");
   }
   // Every log goes only when asked for by a filter, never by leaving them all out.
   if (ids === undefined && !filtered) {
     return toolError(
-      `Give ids or at least one filter. To delete every log, pass startTimeTo set to now; on a production org, at least ${SKEW_MINUTES} minutes ago.`,
+      `Give ids or at least one filter parameter. To delete every log, pass startTimeTo set to now; where the call asks you to confirm (a production org, or one whose type cannot be read), at least ${SKEW_MINUTES} minutes ago.`,
     );
   }
   const given = givenIds(ids ?? []);
@@ -134,7 +134,7 @@ function deleteConfirmable(
     ...confirmed(condition, `Every log with ${describeFilters(selection.filters)}`),
     // Only read where the call would ask, so a sandbox needs no startTimeTo.
     ...(!(startTimeTo && Date.parse(startTimeTo) <= Date.now() - CLOCK_SKEW_MS) && {
-      unshowable: `On a production org, a delete by filter needs startTimeTo at least ${SKEW_MINUTES} minutes ago, so no log filed while you confirm can join what you were shown. Pass startTimeTo, or delete by ids.`,
+      unshowable: `On a production org, or one whose type cannot be read, a delete by filter needs startTimeTo at least ${SKEW_MINUTES} minutes ago, so no log filed while you confirm can join what you were shown. Set startTimeTo that far back, or delete by ids.`,
     }),
   };
 }

@@ -141,10 +141,10 @@ function shownText(event: LogEvent): string {
 }
 
 // An index that names nothing in the tree - past the log, or a line the parser folded - must not read as no match.
-function resolve(apexLog: ApexLog, eventIndex: number): LogEvent {
+function resolve(apexLog: ApexLog, eventIndex: number, parameter: string): LogEvent {
   const event = apexLog.eventsById[eventIndex];
   if (!event?.parent?.children.includes(event)) {
-    throw new Error(`No event in this log has eventIndex ${eventIndex}.`);
+    throw new Error(`No event in this log has eventIndex ${eventIndex}. Pass as ${parameter} an eventIndex from a row this tool returned.`);
   }
   return event;
 }
@@ -177,8 +177,8 @@ export async function searchEvents(args: SearchEventsArgs) {
   const root: LogEvent =
     parentEventIndex === undefined || parentEventIndex === apexLog.eventIndex
       ? apexLog
-      : resolve(apexLog, parentEventIndex);
-  const one = eventIndex === undefined ? undefined : resolve(apexLog, eventIndex);
+      : resolve(apexLog, parentEventIndex, "parentEventIndex");
+  const one = eventIndex === undefined ? undefined : resolve(apexLog, eventIndex, "eventIndex");
 
   const maxRank = maxLevel === undefined ? undefined : LEVEL_RANK.get(maxLevel);
   // One pattern per call, so no event's text is copied to compare it.

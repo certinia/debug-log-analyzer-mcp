@@ -514,7 +514,7 @@ describe("Execute Anonymous", () => {
             policy(),
           ),
         ).rejects.toThrow(
-          "test@example.com has no active USER_DEBUG trace flag, so there are no levels to use. Create one, or leave out debugLevel to run at the defaults.",
+          "test@example.com has no active USER_DEBUG trace flag, so there are no levels to use. Create one with apexlog_create_trace_flag, or leave out debugLevel to run at the defaults.",
         );
         expect(ensureDebugLevel).not.toHaveBeenCalled();
         expect(createTraceFlag).not.toHaveBeenCalled();
@@ -1023,7 +1023,7 @@ describe("Execute Anonymous", () => {
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("The org connection carries no access token.");
+      ).rejects.toThrow("The org session has no access token.");
 
       expect(mockRequest).not.toHaveBeenCalled();
     });
@@ -1062,13 +1062,13 @@ describe("Execute Anonymous", () => {
 
       mockConnectOrg.mockRejectedValue(
         new Error(
-          "No default org configured. Please set a default org using 'sf config set target-org <username>'.",
+          "No default org is set. Pass targetOrg, or set one with 'sf config set target-org <alias>'.",
         ),
       );
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("No default org configured");
+      ).rejects.toThrow("No default org is set");
 
       expect(findUsersByUsername).not.toHaveBeenCalled();
       expect(ensureDebugLevel).not.toHaveBeenCalled();
@@ -1187,7 +1187,7 @@ describe("Execute Anonymous", () => {
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toBe(
-          `Cannot check Apex file ${apexFilePath}: this server cannot yet ask a 2026-07-28 client for its roots. Pass the Apex inline in apex.`,
+          `Cannot check Apex file ${apexFilePath}: this server cannot yet ask a client on MCP 2026-07-28 for its roots. Pass the Apex inline in apex.`,
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
         expect(mockOpen).not.toHaveBeenCalled();
@@ -1219,7 +1219,7 @@ describe("Execute Anonymous", () => {
         );
 
         expect(result.content[0]?.text).toContain(
-          "Debug log written to /elsewhere/logs, which was not checked against the client's roots: this server cannot yet ask a 2026-07-28 client for its roots.",
+          "Debug log written to /elsewhere/logs, which was not checked against the client's roots: this server cannot yet ask a client on MCP 2026-07-28 for its roots.",
         );
       });
 
@@ -1246,7 +1246,7 @@ describe("Execute Anonymous", () => {
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toBe(
-          "Cannot tell which project's default org to use: this server cannot yet ask a 2026-07-28 client for its roots. Pass targetOrg.",
+          "Cannot tell which project's default org to use: this server cannot yet ask a client on MCP 2026-07-28 for its roots. Pass targetOrg.",
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
       });
@@ -1713,7 +1713,7 @@ describe("Execute Anonymous", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toBe(
         `The Apex is ${MAX_APEX_TO_CONFIRM + 1} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
-          "so nothing was executed against 'test@example.com'. To run it, restart the server with --allow-production-orgs.",
+          "so nothing was executed against 'test@example.com'. To run it, shorten it to 10000 characters or fewer, or ask the user to restart the server with --allow-production-orgs.",
       );
       expect(mockRequest).not.toHaveBeenCalled();
     });

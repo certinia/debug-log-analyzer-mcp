@@ -86,7 +86,7 @@ export async function createTraceFlag(
   const { entity, logType, existing, notBefore } = access.value;
   if (existing) {
     return toolError(
-      `${entity.name} already has a ${logType} trace flag, ${existing.id}, at ${existing.levels}, from ${existing.startTime} until ${existing.expirationTime}. A flag is never changed here: delete it with apexlog_delete_trace_flags, then create.`,
+      `${entity.name} already has a ${logType} trace flag, ${existing.id}, at ${existing.levels}, from ${existing.startTime} until ${existing.expirationTime}. Delete it with apexlog_delete_trace_flags, then call this tool again.`,
     );
   }
 
@@ -118,7 +118,7 @@ export async function createTraceFlag(
         " Free the org's debug log storage with apexlog_delete_org_logs, then try again."
       : /already being traced/i.test(message)
         ? // A flag set while the call waited, such as for a confirmation, was not there to name.
-          " Find the flag in the way with apexlog_list_trace_flags, delete it with apexlog_delete_trace_flags, then create."
+          " Find the flag in the way with apexlog_list_trace_flags, delete it with apexlog_delete_trace_flags, then call this tool again."
         : "";
     return toolError(message + next);
   }

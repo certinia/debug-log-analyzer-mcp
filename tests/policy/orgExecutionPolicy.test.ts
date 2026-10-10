@@ -268,7 +268,7 @@ describe("authorizeOperation", () => {
       const decision = await authorize({ ctx });
       expect(decision).toEqual({
         outcome: "refused",
-        reason: expect.stringContaining("already been used"),
+        reason: expect.stringContaining("already used"),
       });
     });
 
@@ -312,7 +312,7 @@ describe("authorizeOperation", () => {
       expect(decision.outcome).toBe("refused");
       if (decision.outcome === "refused") {
         expect(decision.reason).toBe(
-          `User declined to ${action} against production org '${orgLabel}'.`,
+          `User declined to ${action} against production org '${orgLabel}'. Do not retry unless the user asks.`,
         );
       }
     });
@@ -326,7 +326,7 @@ describe("authorizeOperation", () => {
       expect(decision.outcome).toBe("refused");
       if (decision.outcome === "refused") {
         expect(decision.reason).toBe(
-          `User declined to ${action} against org '${orgLabel}'.`,
+          `User declined to ${action} against org '${orgLabel}'. Do not retry unless the user asks.`,
         );
       }
     });
@@ -347,7 +347,7 @@ describe("authorizeOperation", () => {
       if (decision.outcome === "refused") {
         expect(decision.reason).toContain("does not match this call");
         expect(decision.reason).toContain("nothing was done");
-        expect(decision.reason).toContain(`Ask again to ${action}.`);
+        expect(decision.reason).toContain("Call the tool again for a new confirmation.");
       }
     });
 
@@ -396,7 +396,7 @@ describe("authorizeOperation", () => {
           `Cannot ${action} against production org '${orgLabel}'`,
         );
         expect(decision.reason).toContain("--allow-production-orgs");
-        expect(decision.reason).toContain("MCP elicitation");
+        expect(decision.reason).toContain("the user must restart");
       }
     });
 

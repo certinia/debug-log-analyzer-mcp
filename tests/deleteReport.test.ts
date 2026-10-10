@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { thrownOutcome } from "../src/salesforce/deleteResults";
+import { saveErrorText, thrownOutcome } from "../src/salesforce/deleteResults";
 import { deleteReport, givenIds } from "../src/tools/deleteReport";
 
 const LONG_1 = "7tf000000000001AAA";
@@ -41,5 +41,17 @@ describe("thrownOutcome", () => {
     const error = Object.assign(new Error("entity is deleted"), { statusCode: 404, errorCode: "ENTITY_IS_DELETED" });
 
     expect(thrownOutcome(error)).toEqual({ alreadyGone: true });
+  });
+});
+
+describe("saveErrorText", () => {
+  it.each([
+    [[{ message: "bad value", fields: ["StartDate"] }, { message: "locked" }], "bad value (StartDate); locked"],
+    [{ message: "locked" }, "locked"],
+    ["locked", "locked"],
+    [[{ statusCode: "X" }], '{"statusCode":"X"}'],
+    [undefined, "the org gave no reason"],
+  ])("reads %o as %s", (errors, text) => {
+    expect(saveErrorText(errors)).toBe(text);
   });
 });

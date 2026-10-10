@@ -60,7 +60,7 @@ const mockAuthInfo = { getFields } as any;
 describe("Salesforce Connection", () => {
   const testUsername = "test@example.com";
   const noDefaultOrgError =
-    "No default org configured. Please set a default org using 'sf config set target-org <username>'";
+    "No default org is set. Pass targetOrg";
 
   beforeEach(() => {
     jest.clearAllMocks();

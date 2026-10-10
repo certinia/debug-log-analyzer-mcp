@@ -182,7 +182,7 @@ describe("Trace Flags", () => {
         traceFlagWindow(900_000),
       );
 
-      await expect(created).rejects.toThrow("Failed to create TraceFlag");
+      await expect(created).rejects.toThrow("Salesforce refused the trace flag");
       await expect(created).rejects.toThrow(/Error 1.*Error 2/);
     });
 
@@ -317,7 +317,7 @@ describe("Trace Flags", () => {
       }));
 
       await expect(resolveTracedEntity(mockConnection, "Account")).rejects.toThrow(
-        "More than one class or trigger is named Account: Account (ApexClass, 01p000000000001AAA), Account (ApexTrigger, 01q000000000001AAA). Pass the one you mean by its id.",
+        "More than one class or trigger is named Account: Account (ApexClass, 01p000000000001AAA), Account (ApexTrigger, 01q000000000001AAA). Pass its id as tracedEntity.",
       );
     });
 
@@ -525,7 +525,7 @@ describe("Trace Flags", () => {
 
       await expect(
         deleteTraceFlag(mockConnection, traceFlagId),
-      ).rejects.toThrow(/Failed to delete TraceFlag.*Locked/);
+      ).rejects.toThrow(/Salesforce refused to delete the trace flag: Locked/);
     });
   });
 
