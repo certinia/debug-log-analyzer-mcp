@@ -353,6 +353,15 @@ the annotations, which no budget with headroom would notice coming back.
 One trade a budget cannot see: a description is a selection prompt, so a trim that saves tokens can
 cost discovery. `SELECTION_KEYWORDS` makes that fail loudly instead of passing quietly.
 
+Two rules are deliberate, though a directory that scores a description on its own (Glama, for
+one) marks them down:
+
+- A parameter's range lives in its schema constraints, and its format and default in its
+  `.describe()`. The description repeats none of them, because the client receives the schema
+  beside it.
+- A failure several tools share, such as a bad path or a denied org, is not described in each
+  tool. The error text says it when it happens.
+
 ## 🧪 Testing Your Changes
 
 Make sure your changes don’t break anything. If you’re working on a feature or bug fix that requires tests, be sure to add or update the relevant tests.
