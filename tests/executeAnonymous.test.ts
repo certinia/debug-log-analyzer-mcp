@@ -16,10 +16,6 @@ jest.mock("node:fs", () => ({
   constants: { O_RDONLY: 0, O_NONBLOCK: 4 },
 }));
 
-jest.mock("../src/salesforce/users", () => ({
-  getUserIdByUsername: jest.fn(),
-}));
-
 // Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
 // the tests below assert the levels this tool asks the org for.
 jest.mock("../src/salesforce/debugLevels", () => ({
@@ -30,6 +26,7 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 jest.mock("../src/salesforce/traceFlags", () => ({
   ...jest.requireActual("../src/salesforce/traceFlags"),
   findActiveTraceFlags: jest.fn(),
+  findUsersByUsername: jest.fn(),
   createTraceFlag: jest.fn(),
   deleteTraceFlag: jest.fn(),
 }));
@@ -77,7 +74,6 @@ import {
   executeAnonymousInputSchema,
   type ExecuteAnonymousArgs,
 } from "../src/tools/executeAnonymousDefinition";
-import { getUserIdByUsername } from "../src/salesforce/users";
 import {
   ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
@@ -88,6 +84,8 @@ import {
   createTraceFlag,
   deleteTraceFlag,
   findActiveTraceFlags,
+  findUsersByUsername,
+  type TracedEntity,
 } from "../src/salesforce/traceFlags";
 import {
   connectOrg,
@@ -116,6 +114,10 @@ const mockLoadApexLog = loadApexLog as jest.MockedFunction<typeof loadApexLog>;
 const mockFindActiveTraceFlags = findActiveTraceFlags as jest.MockedFunction<
   typeof findActiveTraceFlags
 >;
+const mockFindUsersByUsername = findUsersByUsername as jest.MockedFunction<
+  typeof findUsersByUsername
+>;
+const user = (id: string): TracedEntity => ({ id, name: "test@example.com", type: "User" });
 
 /** A user's own trace flag levels, unlike the defaults in every category. */
 const FLAG_LEVELS = {
@@ -325,9 +327,7 @@ describe("Execute Anonymous", () => {
       getPropertyValue: jest.fn(() => undefined),
     });
 
-    (
-      getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
-    ).mockResolvedValue(testUserId);
+    mockFindUsersByUsername.mockResolvedValue([user(testUserId)]);
     mockEnsureDebugLevel.mockResolvedValue(testDebugLevelId);
     mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: false });
     mockCreateTraceFlag.mockResolvedValue(testTraceFlagId);
@@ -344,7 +344,7 @@ describe("Execute Anonymous", () => {
 
       const result = await executeAnonymous(mockServer, args, ctx, policy());
 
-      expect(getUserIdByUsername).toHaveBeenCalledWith(
+      expect(findUsersByUsername).toHaveBeenCalledWith(
         mockConnection,
         "test@example.com",
       );
@@ -674,9 +674,7 @@ describe("Execute Anonymous", () => {
 
     it("matches the stored log on its byte length", async () => {
       const customUserId = "005CUSTOMUSERID";
-      (
-        getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
-      ).mockResolvedValue(customUserId);
+      mockFindUsersByUsername.mockResolvedValue([user(customUserId)]);
 
       await executeAnonymous(
         mockServer,
@@ -827,12 +825,20 @@ describe("Execute Anonymous", () => {
       expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
-    it("should propagate errors from getUserIdByUsername", async () => {
+    // The sf auth can outlive the user it names.
+    it("should refuse when no user has the authed username, before writing anything", async () => {
+      mockFindUsersByUsername.mockResolvedValue([]);
+
+      await expect(
+        executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
+      ).rejects.toThrow("No user in this org has the username test@example.com.");
+      expect(createTraceFlag).not.toHaveBeenCalled();
+    });
+
+    it("should propagate errors from the user lookup", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const mockGetUserIdByUsername =
-        getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>;
-      mockGetUserIdByUsername.mockRejectedValue(new Error("User not found"));
+      mockFindUsersByUsername.mockRejectedValue(new Error("User not found"));
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
@@ -1064,7 +1070,7 @@ describe("Execute Anonymous", () => {
         executeAnonymous(mockServer, args, ctx, policy()),
       ).rejects.toThrow("No default org configured");
 
-      expect(getUserIdByUsername).not.toHaveBeenCalled();
+      expect(findUsersByUsername).not.toHaveBeenCalled();
       expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();

@@ -215,6 +215,14 @@ async function queryEntities(
   return records.map((record) => ({ id: record.Id, name: entityName(record), type }));
 }
 
+/** The users with this username: none, or one, since a username is unique across Salesforce. */
+export async function findUsersByUsername(
+  connection: Connection,
+  username: string,
+): Promise<TracedEntity[]> {
+  return queryEntities(connection, "005", `Username = ${quote(username)}`);
+}
+
 /**
  * The user, class or trigger `name` names: an id, a username, or a class or
  * trigger name, `ns.Name` when namespaced. A bare name prefers the one local
@@ -237,7 +245,7 @@ export async function resolveTracedEntity(
   const found = byId
     ? await queryEntities(connection, byId, `Id = ${quote(toLongId(name))}`)
     : byUsername
-      ? await queryEntities(connection, "005", `Username = ${quote(name)}`)
+      ? await findUsersByUsername(connection, name)
       : await byName(connection, name);
   if (found.length === 0) {
     throw new Error(

@@ -340,12 +340,14 @@ describe("Trace Flags", () => {
       );
     });
 
-    // A quote in a name would end the SOQL literal.
-    it("escapes a quote in a name", async () => {
+    // A quote in a name would end the SOQL literal, and a backslash before it would undo its escape.
+    it("escapes a quote and a backslash in a username", async () => {
       mockDataQuery.mockResolvedValue({ records: [] });
 
-      await expect(resolveTracedEntity(mockConnection, "o'brien@example.com")).rejects.toThrow();
-      expect(mockDataQuery.mock.calls[0][0]).toContain("'o\\'brien@example.com'");
+      await expect(resolveTracedEntity(mockConnection, "o\\'brien@example.com")).rejects.toThrow(
+        "No user, class or trigger in this org has the username o\\'brien@example.com.",
+      );
+      expect(mockDataQuery.mock.calls[0][0]).toContain("'o\\\\\\'brien@example.com'");
     });
   });
 

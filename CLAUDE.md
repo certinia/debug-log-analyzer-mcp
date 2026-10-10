@@ -61,7 +61,7 @@ src/
   index.ts          # CLI entry point (bin)
   server.ts         # MCP server implementation
   tools/            # One module per MCP tool
-  salesforce/       # Org connection, org classification, debug levels, trace flags, users
+  salesforce/       # Org connection, org classification, debug levels, trace flags
   policy/           # Per-call authorization for anonymous Apex execution
 dist/               # Compiled JavaScript output
 ```

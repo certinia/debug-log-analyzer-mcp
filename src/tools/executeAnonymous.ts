@@ -5,7 +5,6 @@ import { promises as fs, constants as fsConstants } from "node:fs";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { encode } from "@toon-format/toon";
-import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   DEFAULT_TRACE_CONFIG,
   ensureDebugLevel,
@@ -22,6 +21,7 @@ import {
   createTraceFlag,
   deleteTraceFlag,
   findActiveTraceFlags,
+  findUsersByUsername,
   traceFlagWindow,
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
@@ -220,7 +220,11 @@ export async function executeAnonymous(
           : undefined,
       prepare: readApex,
       write: async ({ value: apex, connection, local, orgLabel }) => {
-        const userId = await getUserIdByUsername(connection, local.username);
+        const [user] = await findUsersByUsername(connection, local.username);
+        if (!user) {
+          throw new Error(`No user in this org has the username ${local.username}.`);
+        }
+        const userId = user.id;
         // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
         const flags = await findActiveTraceFlags(connection, userId);
         const run = resolveRunLevels(debugLevel, flags, local.username);
