@@ -69,7 +69,7 @@ export type CreateTraceFlagArgs = z.infer<
 export const createTraceFlagToolConfig = {
   title: "Create Trace Flag",
   description:
-    "Start logging a user in a Salesforce org with a trace flag: every transaction they run is stored as a debug log until the flag expires, which can fill the org's log storage. A class or trigger flag stores no log, only sets that code's levels. Refused when the entity has a flag of its log type.",
+    "Start logging a user in a Salesforce org with a trace flag: every transaction they run is stored as a debug log until the flag expires, which can fill the org's log storage. A class or trigger flag stores no log, only sets that code's levels. Refused when the entity has a flag of its log type. Leaves a debug level in the org.",
   inputSchema: toolInputSchema(createTraceFlagInputSchema),
   annotations: {
     destructiveHint: false,
@@ -96,7 +96,7 @@ export type DeleteTraceFlagsArgs = z.infer<
 export const deleteTraceFlagsToolConfig = {
   title: "Delete Trace Flags",
   description:
-    "Delete trace flags from a Salesforce org, to stop logging now: a flag cannot be ended early by editing it.",
+    "Delete trace flags from a Salesforce org to stop logging now; an edit can only move the end to a future time.",
   inputSchema: toolInputSchema(deleteTraceFlagsInputSchema),
   annotations: {
     destructiveHint: true,

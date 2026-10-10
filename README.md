@@ -42,7 +42,7 @@ Then ask your assistant to analyze a log. The org tools also need an org authent
 
 <!-- token-cost-summary:start -->
 
-Keeping the server connected costs ~3,116 tokens, 1.6% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~3,130 tokens, 1.6% of a 200K context. See [Token Cost](#token-cost).
 
 <!-- token-cost-summary:end -->
 
@@ -167,10 +167,10 @@ The governor limits nearest their ceiling, worst first.
 
 <!-- params-apexlog_list_limit_risks:start -->
 
-| Parameter     | Type   | Required | Description |
-| ------------- | ------ | -------- | --- |
-| `logFilePath` | string | Yes      | Absolute path |
-| `threshold`   | number | No       | Report a limit once it is this percentage consumed (default: 80) |
+| Parameter     | Type   | Required | Description                                    |
+| ------------- | ------ | -------- | ---------------------------------------------- |
+| `logFilePath` | string | Yes      | Absolute path                                  |
+| `threshold`   | number | No       | Minimum usedPercentage to report (default: 80) |
 
 <!-- params-apexlog_list_limit_risks:end -->
 
@@ -221,8 +221,8 @@ The response also gives the org username, its alias if set, the org type, and a 
 | `apex`         | string           | No       | The anonymous Apex to execute, or use apexFilePath |
 | `apexFilePath` | string           | No       | Absolute path to a file of anonymous Apex |
 | `targetOrg`    | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `outputDir`    | string           | No       | Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root. |
-| `debugLevel`   | string \| object | No       | This run's log levels. Omit for your active trace flag's, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
+| `outputDir`    | string           | No       | Directory to save the debug log file (default: .apex-log-mcp/ in the first client root) |
+| `debugLevel`   | string \| object | No       | This run's log levels. Omit for the user's trace flag levels, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
 
@@ -262,7 +262,7 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 | `startTimeTo`      | string  | No       |  |
 | `minFileSizeBytes` | number  | No       |  |
 | `sortBy`           | string  | No       | Newest, slowest or largest first (default: startTime) |
-| `limit`            | number  | No       | Rows per page (default: 20) |
+| `limit`            | number  | No       | Page size (default: 20) |
 | `cursor`           | string  | No       | nextCursor from the previous page, with the same filters and sortBy |
 
 <!-- params-apexlog_list_org_logs:end -->
@@ -280,7 +280,7 @@ Up to 25 a call. A log already saved under `outputDir` is not downloaded again, 
 | `targetOrg` | string   | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
 | `ids`       | string[] | No       | Log ids, from apexlog_list_org_logs |
 | `latest`    | number   | No       | The newest N logs, in place of ids (default: 1) |
-| `outputDir` | string   | No       | Directory to save the debug log files. Defaults to .apex-log-mcp/ in the project root. |
+| `outputDir` | string   | No       | Directory to save the debug log files (default: .apex-log-mcp/ in the first client root) |
 
 <!-- params-apexlog_get_org_logs:end -->
 
@@ -346,7 +346,7 @@ Every transaction a traced user runs while the flag lives is stored, which can f
 
 ### apexlog_delete_trace_flags
 
-Deletes trace flags by id, to stop logging now: Salesforce refuses an edit that ends a flag early.
+Deletes trace flags by id, to stop logging now: an edit can end a flag early only to a future time.
 
 Returns `deletedCount`. `notFoundCount` counts the ids that name no flag - already deleted, or never in this org - and `notFoundIds` names them. Flags Salesforce refuses to delete are in `failed`, one row per cause, with how many and their ids. Against a production org, the call asks first, naming each flag. Cancelled, it starts no more deletes; those already sent finish, and the call returns no result.
 
@@ -367,18 +367,18 @@ Every request carries every tool definition, whether you call them or not. Each 
 
 | Tool                           | Tokens                                                       |
 | ------------------------------ | ------------------------------------------------------------ |
-| `apexlog_list_slow_operations` | ~530                                                         |
+| `apexlog_list_slow_operations` | ~533                                                         |
 | `apexlog_search_events`        | ~453                                                         |
-| `apexlog_execute_anonymous`    | ~447                                                         |
-| `apexlog_create_trace_flag`    | ~351                                                         |
-| `apexlog_list_org_logs`        | ~322                                                         |
+| `apexlog_execute_anonymous`    | ~450                                                         |
+| `apexlog_create_trace_flag`    | ~359                                                         |
+| `apexlog_list_org_logs`        | ~321                                                         |
 | `apexlog_delete_org_logs`      | ~210                                                         |
-| `apexlog_get_org_logs`         | ~203                                                         |
+| `apexlog_get_org_logs`         | ~204                                                         |
 | `apexlog_get_summary`          | ~155                                                         |
 | `apexlog_list_trace_flags`     | ~152                                                         |
 | `apexlog_list_limit_risks`     | ~150                                                         |
 | `apexlog_delete_trace_flags`   | ~143                                                         |
-| **Total**                      | **~3,116** (1.6% of a 200K context), **+104% vs 1.x ~1,529** |
+| **Total**                      | **~3,130** (1.6% of a 200K context), **+105% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 

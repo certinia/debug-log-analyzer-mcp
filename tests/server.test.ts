@@ -252,13 +252,25 @@ describe("createApexLogServer", () => {
             tools: {},
           },
           enforceStrictCapabilities: true,
-          instructions: expect.any(String),
+          // Said once for every tool that changes an org, not in each description.
+          instructions: expect.stringContaining("ask the user to confirm first"),
           // Verifies a confirmation before any handler sees it.
           requestState: { verify: expect.any(Function) },
           cacheHints: {
             "tools/list": { ttlMs: 3_600_000, cacheScope: "public" },
           },
         },
+      );
+    });
+
+    it("should not tell the agent to confirm when production orgs are allowed", async () => {
+      createApexLogServer({ allowProductionOrgs: true });
+
+      expect(McpServer).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          instructions: expect.not.stringContaining("confirm"),
+        }),
       );
     });
 

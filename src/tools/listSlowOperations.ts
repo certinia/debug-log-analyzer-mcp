@@ -130,7 +130,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
+    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, callouts, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
   inputSchema: toolInputSchema(listSlowOperationsInputSchema),
   annotations: {
     readOnlyHint: true,

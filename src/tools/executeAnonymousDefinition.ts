@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import { DEFAULT_OUTPUT_DIR } from "./logStore.js";
 import {
   DEFAULT_TRACE_CONFIG,
   levelsClause,
@@ -38,7 +39,7 @@ export const executeAnonymousInputSchema = {
     .string()
     .optional()
     .describe(
-      "Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root.",
+      `Directory to save the debug log file (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root)`,
     ),
   // The enums already list the levels and the categories, so the description
   // says only what they cannot: what each form does, and the per-category
@@ -50,7 +51,7 @@ export const executeAnonymousInputSchema = {
     ])
     .optional()
     .describe(
-      `This run's log levels. Omit for your active trace flag's, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}.`,
+      `This run's log levels. Omit for the user's trace flag levels, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}.`,
     ),
 };
 
@@ -59,7 +60,7 @@ export type ExecuteAnonymousArgs = z.infer<
 >;
 
 const EXECUTE_ANONYMOUS_DESCRIPTION =
-  "Execute a snippet of anonymous Apex against an authenticated Salesforce org (via SF CLI). Saves the resulting debug log to a local file and returns a summary with the file path, which the analysis tools accept. Production orgs require per-call user confirmation or the --allow-production-orgs server flag.";
+  "Execute anonymous Apex in an authenticated Salesforce org as the targetOrg user; its DML commits unless the run fails. Saves the debug log locally and returns its path for the analysis tools. If the user has no active trace flag, adds a debug level, left in the org, and a trace flag for the run, deleted after.";
 
 /**
  * The tool is always registered so that agents can discover it. When Apex

@@ -25,7 +25,7 @@ const listLimitRisksInputSchema = {
     .number()
     .optional()
     .describe(
-      `Report a limit once it is this percentage consumed (default: ${WARNING_THRESHOLD})`,
+      `Minimum usedPercentage to report (default: ${WARNING_THRESHOLD})`,
     ),
 };
 
@@ -69,7 +69,7 @@ export interface LimitRiskResult {
 export const listLimitRisksToolConfig = {
   title: "List Apex Log Limit Risks",
   description:
-    "List the governor limits an Apex log transaction has nearly consumed - CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote - worst first, with how much of each was used",
+    "List the governor limits an Apex log transaction has nearly used up - CPU time, heap, SOQL queries and rows, SOSL queries, DML statements and rows, callouts and every other limit - worst first, with how much of each was used",
   inputSchema: toolInputSchema(listLimitRisksInputSchema),
   annotations: {
     readOnlyHint: true,

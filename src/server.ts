@@ -96,7 +96,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       name: "apex-log-mcp",
       version: packageJson.version,
       description:
-        "Analyzes Salesforce Apex debug logs for performance bottlenecks, governor limit usage, and optimization opportunities.",
+        "Analyzes Salesforce Apex debug logs for bottlenecks and governor limit usage; runs Apex, fetches logs and manages trace flags in an org.",
     },
     {
       capabilities: {
@@ -104,7 +104,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       },
       // Never send a request the client did not declare: it may never be answered.
       enforceStrictCapabilities: true,
-      instructions: `Analysis tools take an absolute path to a .log file. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.`,
+      instructions: `Analysis tools take an absolute .log file path and never contact an org. Every duration in a response is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper with the other tools. A zero count or limit is measured, not missing.${allowProductionOrgs ? "" : " Tools that change a production org, or one of unknown type, ask the user to confirm first, or refuse when the client cannot ask."}`,
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },

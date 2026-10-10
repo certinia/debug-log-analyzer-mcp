@@ -7,10 +7,8 @@ import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { listApexLogs, readCursor } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
-import type { ListOrgLogsArgs } from "./orgLogsDefinition.js";
+import { DEFAULT_LIMIT, type ListOrgLogsArgs } from "./orgLogsDefinition.js";
 import { toonResult } from "./responseShaping.js";
-
-const DEFAULT_LIMIT = 20;
 
 export async function listOrgLogs(
   server: McpServer,
