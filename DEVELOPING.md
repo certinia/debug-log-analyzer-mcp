@@ -249,10 +249,11 @@ does `capturedAt` - the level each debug log category was captured at - which
 table rather than a set of scalars because it is keyed the way the rows are, on `debugCategory`, so
 the two join; and each tool names only the categories its own figures came from, since a level for a
 category nothing here was logged under qualifies nothing. `apexlog_search_events` names only the
-categories its query fixes - the `debugCategory` filter, or the matches' when every `type` named
-matched or one event was asked for - and otherwise, or when those hold no declared category, every
-declared level, because a category with no match may have none only because its level did not
-capture it.
+categories its query fixes - the matches' when every `type` named matched or one event was asked
+for - and otherwise, or when those hold no declared category, every declared level, because a
+category with no match may have none only because its level did not capture it. Its rows carry no
+`debugCategory`: a row's `type` decides it, and there the levels explain what is missing, not the
+rows shown. It sends them on the first page only.
 
 They matter because a capture level silently changes what every figure beside it means. On a log
 taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self

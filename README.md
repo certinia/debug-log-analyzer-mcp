@@ -42,7 +42,7 @@ Then ask your assistant to analyze a log. The org tools also need an org authent
 
 <!-- token-cost-summary:start -->
 
-Keeping the server connected costs ~2,618 tokens, 1.3% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~2,495 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
 
 <!-- token-cost-summary:end -->
 
@@ -181,28 +181,26 @@ Searches a log's events in log order, for what the other tools rank or total: wh
 <!-- shape-apexlog_search_events:start -->
 
 - `capturedAt` - `{debugCategory, level}`
-- `events` - `{eventIndex, parentEventIndex, type, debugCategory, namespace, lineNumber, text}`
+- `events` - `{eventIndex, parentEventIndex, type, namespace, lineNumber, text}`
 
 <!-- shape-apexlog_search_events:end -->
 
 A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventIndex` names an event and `parentEventIndex` the one it sits under, so a row found here can be opened up with `parentEventIndex`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
 
-Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision. `maxLevel` reads a `USER_DEBUG` line at the level the code logged it at. `matchedCount` says how many events matched in all. `capturedAt` gives the levels of the categories you filtered on. When every `type` named matched, or you asked for one event, it gives the levels of the categories the matches came from. Otherwise, or when those name no category the header declared, it gives every level the header declared. A search that finds no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
+Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision, and a long row is cut around the match. For plain text, grep the saved `.log` instead: it is cheaper, and this tool earns its tokens on event types, nesting, and clients with no shell. `matchedCount` says how many events matched in all; `nextOffset`, while more remain, is the `offset` of the next page. `capturedAt` comes on the first page only. When every `type` named matched, or you asked for one event, it gives the levels of the categories the matches came from. Otherwise, or when those name no category the header declared, it gives every level the header declared. A search that finds no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
 
 <!-- params-apexlog_search_events:start -->
 
-| Parameter          | Type     | Required | Description |
-| ------------------ | -------- | -------- | --- |
-| `logFilePath`      | string   | Yes      | Absolute path |
+| Parameter          | Type     | Required | Description                                                  |
+| ------------------ | -------- | -------- | ------------------------------------------------------------ |
+| `logFilePath`      | string   | Yes      | Absolute path                                                |
 | `type`             | string[] | No       | Only these log event types, e.g. USER_DEBUG, VALIDATION_RULE |
-| `debugCategory`    | string[] | No       | Only these debug log categories |
-| `maxLevel`         | string   | No       | Only events a log captured at this level carries |
-| `namespace`        | string[] | No       | Only these namespaces |
-| `contains`         | string   | No       | Only events whose text holds this, ignoring case |
-| `eventIndex`       | number   | No       | Only this event, with more of its text |
-| `parentEventIndex` | number   | No       | Only events below this one |
-| `limit`            | number   | No       | Page size (default: 50); fewer if the page would be too large |
-| `offset`           | number   | No       | Matched rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit. |
+| `namespace`        | string[] | No       | Only these namespaces                                        |
+| `contains`         | string   | No       | Only events whose text holds this, ignoring case             |
+| `eventIndex`       | number   | No       | Only this event, with more of its text                       |
+| `parentEventIndex` | number   | No       | Only events below this one                                   |
+| `limit`            | number   | No       | Page size (default: 50)                                      |
+| `offset`           | number   | No       | Rows to skip (default: 0): the last page's nextOffset        |
 
 <!-- params-apexlog_search_events:end -->
 
@@ -312,14 +310,14 @@ Every request carries every tool definition, whether you call them or not. Each 
 | Tool                           | Tokens                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
 | `apexlog_list_slow_operations` | ~533                                                        |
-| `apexlog_search_events`        | ~453                                                        |
 | `apexlog_execute_anonymous`    | ~447                                                        |
 | `apexlog_create_trace_flag`    | ~359                                                        |
+| `apexlog_search_events`        | ~330                                                        |
 | `apexlog_list_org_logs`        | ~321                                                        |
 | `apexlog_get_org_logs`         | ~200                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~2,618** (1.3% of a 200K context), **+71% vs 1.x ~1,529** |
+| **Total**                      | **~2,495** (1.2% of a 200K context), **+63% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
@@ -336,7 +334,7 @@ Cost does not grow with the log size. The figures below are measured against a 4
 | `apexlog_get_summary`          | ~342     | ~293 | +17%   |
 | `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
-| `apexlog_search_events`        | ~972     | -    | -      |
+| `apexlog_search_events`        | ~881     | -    | -      |
 
 <!-- token-cost-answers:end -->
 

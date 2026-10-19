@@ -483,24 +483,6 @@ describe("parser contract", () => {
         expect(indexes).toEqual([...indexes].sort((a, b) => a - b));
       },
     );
-
-    // `maxLevel` reads a USER_DEBUG line's level off its text, because the
-    // parser stamps every one DEBUG, whatever level the code logged it at.
-    it("states a USER_DEBUG line's own level at the start of its text", () => {
-      const log = parse(
-        [
-          HEADER,
-          "09:00:00.1 (1000)|EXECUTION_STARTED",
-          "09:00:00.1 (2000)|USER_DEBUG|[1]|ERROR|hello",
-          "09:00:00.1 (3000)|EXECUTION_FINISHED",
-          "",
-        ].join("\n"),
-      );
-      const debug = log.eventsById.find((event) => event.type === "USER_DEBUG");
-
-      expect(debug?.debugLevel).toBe("DEBUG");
-      expect(debug?.text).toBe("ERROR | hello");
-    });
   });
 
   describe("ApexLog.isTruncated", () => {

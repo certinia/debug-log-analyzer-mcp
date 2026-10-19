@@ -355,9 +355,10 @@ const DEFINITION_BUDGET = {
   apexlog_get_org_logs: 219,
   // Measured + 5% (#211). The levels union is the costly part.
   apexlog_create_trace_flag: 369,
-  // Measured + 5% (#144). Eight filters and a page, each a question the
+  // Measured + 5% (#144). Six filters and a page, each a question the
   // ranking cannot ask: what the code printed, what ran under one method.
-  apexlog_search_events: 473,
+  // The category and level filters went: `type` asks both more exactly.
+  apexlog_search_events: 347,
 };
 
 /**
@@ -385,11 +386,11 @@ const V1_DEFINITION_TOTAL = 1529;
  * deleting flags and deleting stored logs were dropped: each answered a rare
  * need that Setup or `sf` meets, at ~500 tokens on every request.
  * Searching a log's events, for what the code printed or what ran under one
- * method, added ~450 inside a budget of 473 (#144). The budgets sum to this
+ * method, added ~330 inside a budget of 347 (#144). The budgets sum to this
  * cap, so raising any budget means raising the cap, on purpose, with the
  * reason here.
  */
-const DEFINITION_TOTAL_CAP = 2733;
+const DEFINITION_TOTAL_CAP = 2607;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
