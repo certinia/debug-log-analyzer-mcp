@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: set the categories an object `debugLevel` names over the defaults, not over the levels a previous run left ([#230])
 - apexlog_execute_anonymous: show a live Developer Console trace flag's levels in a production confirmation, and report them as `levelsSource` `developerConsole` rather than as `levelsOverridden` ([#230])
 - apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `unattributed` row holds the time no event spans ([#226])
+- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: parse a log of 20 MB or more about 28% faster ([#246])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
 
 ### Added
@@ -147,3 +148,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
 [#144]: https://github.com/certinia/debug-log-analyzer-mcp/issues/144
 [#244]: https://github.com/certinia/debug-log-analyzer-mcp/pull/244
+[#246]: https://github.com/certinia/debug-log-analyzer-mcp/pull/246
