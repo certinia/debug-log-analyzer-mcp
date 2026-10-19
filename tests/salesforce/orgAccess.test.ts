@@ -98,17 +98,21 @@ function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
   };
 }
 
-function request<T>(overrides: Partial<OrgRequest<T>> = {}): OrgRequest<T> {
+function request<T, V = T>(
+  overrides: Partial<OrgRequest<T, V>> = {},
+): OrgRequest<T, V> {
   return {
     tool: "apexlog_test_tool",
     action: "delete 1 debug log",
     targetOrg: "psa",
-    confirm: false,
+    write: false,
     ...overrides,
   };
 }
 
-const write = { confirm: () => CONFIRM };
+const write = {
+  write: async ({ value }: { value: undefined }) => ({ value, confirm: CONFIRM }),
+};
 
 function refusalText(access: OrgAccess<unknown>): string {
   if (access.granted) {
@@ -177,10 +181,13 @@ describe("openOrg", () => {
   // So a write can read the org, e.g. count what it will delete, before it asks.
   it("should build the confirmation after connecting, from the prepared value", async () => {
     classifyAs("production");
-    const confirm = jest.fn(
-      ({ value, orgLabel }: { value: string; orgLabel: string }) => {
+    const write = jest.fn(
+      async ({ value, orgLabel }: { value: string; orgLabel: string }) => {
         expect(mockConnectOrg).toHaveBeenCalled();
-        return { ...CONFIRM, detail: `${value} on ${orgLabel}` };
+        return {
+          value,
+          confirm: { ...CONFIRM, detail: `${value} on ${orgLabel}` },
+        };
       },
     );
 
@@ -188,17 +195,38 @@ describe("openOrg", () => {
       await openOrg(
         server(),
         makeCtx(),
-        request({ prepare: async () => "3 logs", confirm }),
+        request({ prepare: async () => "3 logs", write }),
         policy(),
       ),
     );
 
-    expect(confirm).toHaveBeenCalledWith(
-      expect.objectContaining({ value: "3 logs", connection }),
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({ value: "3 logs", connection, local: LOCAL_ORG }),
     );
     expect(JSON.stringify(result.inputRequests)).toContain(
       "3 logs on test@example.com (psa)",
     );
+  });
+
+  // So the write does exactly what it read and confirmed, e.g. the log ids it counted.
+  it("should grant the value the write planned", async () => {
+    const access = await openOrg(
+      server(),
+      makeCtx(),
+      request({
+        prepare: async () => "filter",
+        write: async ({ value }) => ({
+          value: { filter: value, ids: ["07L1", "07L2"] },
+          confirm: CONFIRM,
+        }),
+      }),
+      policy(),
+    );
+
+    expect(access).toMatchObject({
+      granted: true,
+      value: { filter: "filter", ids: ["07L1", "07L2"] },
+    });
   });
 
   it("should report the connect step before it connects", async () => {

@@ -93,7 +93,7 @@ The tool definitions follow the same rule and are charged on every turn, called 
 
 ## Anonymous Apex
 
-`apexlog_execute_anonymous` writes the debug log under `.apex-log-mcp/`, or `outputDir`, and returns the path beside a summary, the org alias and the detected org type. `debugLevel` sets the run's log levels per category, or all of them at once. It never changes the user's trace flag.
+`apexlog_execute_anonymous` writes the debug log under `.apex-log-mcp/`, or `outputDir`, and returns the path beside a summary, the org alias and the detected org type. Left out, `debugLevel` runs at the user's active `USER_DEBUG` flag's levels, else the defaults; it sets them per category, or all at once. The levels always go in the header, because with no header the returned log is empty. It never changes the user's trace flag.
 
 It is always registered so agents can discover it; each call passes the deny list below, then is authorized in `src/policy/orgExecutionPolicy.ts`. A production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation, decided before any `DebugLevel` or `TraceFlag` is written. `--no-apex-execution` refuses every call; the 1.x `--allowed-orgs` is accepted, ignored and warned about.
 

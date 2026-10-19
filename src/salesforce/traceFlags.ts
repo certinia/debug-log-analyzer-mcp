@@ -1,4 +1,10 @@
 import type { Connection } from "@salesforce/core";
+import {
+  DEBUG_LEVEL_FIELDS,
+  DEBUG_LEVEL_NAME,
+  toTraceConfig,
+  type TraceConfig,
+} from "./debugLevels.js";
 import { CLOCK_SKEW_MS, toDateTimeLiteral } from "./soql.js";
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
@@ -6,22 +12,50 @@ const TRACE_FLAG_SOBJECT = "TraceFlag";
 // A Developer Console flag stores the user's logs too - see .claude/rules/trace-flags.md.
 const STORING_LOG_TYPES = ["USER_DEBUG", "DEVELOPER_LOG"];
 
-/** Whether the entity has a flag live now that stores its logs. */
-export async function hasActiveTraceFlag(
+/** The entity's flags live now: whether one stores its logs, and the levels of each kind. */
+export type ActiveTraceFlags = {
+  storesLogs: boolean;
+  /** Undefined when only a Developer Console flag, or none, is live. */
+  userDebugLevels?: Required<TraceConfig>;
+  /** The Developer Console flag's, which outrank every other; undefined when none is live. */
+  developerConsoleLevels?: Required<TraceConfig>;
+};
+
+/**
+ * The entity's live flags, with the levels of the debug level each points at,
+ * in one query. At most one `USER_DEBUG` flag is live at a time, because
+ * Salesforce refuses one whose window overlaps another.
+ */
+export async function findActiveTraceFlags(
   connection: Connection,
   tracedEntityId: string,
-): Promise<boolean> {
+): Promise<ActiveTraceFlags> {
   const now = toDateTimeLiteral(new Date());
-  const flag = await connection.tooling.sobject(TRACE_FLAG_SOBJECT).findOne(
-    {
-      TracedEntityId: tracedEntityId,
-      StartDate: { $lte: now },
-      ExpirationDate: { $gt: now },
-      LogType: { $in: STORING_LOG_TYPES },
-    },
-    ["Id"],
+  const { records } = await connection.tooling.query<{
+    LogType: string;
+    DebugLevel: Record<string, unknown> | null;
+  }>(
+    `SELECT LogType, DebugLevel.DeveloperName, ${DEBUG_LEVEL_FIELDS.map((field) => `DebugLevel.${field}`).join(", ")}
+     FROM ${TRACE_FLAG_SOBJECT}
+     WHERE TracedEntityId = '${tracedEntityId}'
+       AND (StartDate = null OR StartDate <= ${now}) AND ExpirationDate > ${now}
+       AND LogType IN (${STORING_LOG_TYPES.map((type) => `'${type}'`).join(", ")})`,
   );
-  return flag !== null;
+  // A run's own flag, still live or left by a failed delete, stores the log but is not the user's choice of levels.
+  const userDebug = records.find(
+    (flag) =>
+      flag.LogType === "USER_DEBUG" &&
+      flag.DebugLevel?.["DeveloperName"] !== DEBUG_LEVEL_NAME,
+  );
+  const developerConsole = records.find(
+    (flag) => flag.LogType === "DEVELOPER_LOG",
+  );
+  return {
+    storesLogs: records.length > 0,
+    userDebugLevels: userDebug && toTraceConfig(userDebug.DebugLevel),
+    developerConsoleLevels:
+      developerConsole && toTraceConfig(developerConsole.DebugLevel),
+  };
 }
 
 /**

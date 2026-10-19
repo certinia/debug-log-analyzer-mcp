@@ -15,6 +15,7 @@
 import { z } from "zod";
 import {
   DEFAULT_TRACE_CONFIG,
+  levelsClause,
   LOG_LEVELS,
   TRACE_CATEGORIES,
 } from "../salesforce/debugLevels.js";
@@ -23,23 +24,6 @@ import { toolInputSchema } from "./inputSchema.js";
 import { absolutePathSchema } from "./localFile.js";
 
 const logLevelSchema = z.enum(LOG_LEVELS);
-
-/**
- * The defaults, read from `DEFAULT_TRACE_CONFIG` so the description cannot go
- * stale. Categories are grouped by level to keep the wire text short:
- * "apexCode, workflow FINE; callout DEBUG".
- */
-function defaultLevelsClause(): string {
-  const byLevel = Object.entries(DEFAULT_TRACE_CONFIG).reduce(
-    (acc, [category, level]) =>
-      acc.set(level, [...(acc.get(level) ?? []), category]),
-    new Map<string, string[]>(),
-  );
-
-  return [...byLevel]
-    .map(([level, categories]) => `${categories.join(", ")} ${level}`)
-    .join("; ");
-}
 
 export const executeAnonymousInputSchema = {
   apex: z
@@ -62,16 +46,16 @@ export const executeAnonymousInputSchema = {
       "Directory to save the debug log file. Defaults to .apex-log-mcp/ in the project root.",
     ),
   // The enums already list the levels and the categories, so the description
-  // says only what they cannot: what each of the three forms does, and the
-  // per-category defaults.
+  // says only what they cannot: what each form does, and the per-category
+  // defaults, read from `DEFAULT_TRACE_CONFIG` so they cannot go stale.
   debugLevel: z
     .union([
-      z.enum(["default", ...LOG_LEVELS]),
+      z.enum(["traceFlag", "default", ...LOG_LEVELS]),
       z.partialRecord(z.enum(TRACE_CATEGORIES), logLevelSchema),
     ])
     .optional()
     .describe(
-      `This run's log levels. "default" restores the defaults; a bare level sets every category to it; an object sets only the categories named and leaves the rest unchanged. Defaults: ${defaultLevelsClause()}.`,
+      `This run's log levels. Omit for your active trace flag's, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}.`,
     ),
 };
 
