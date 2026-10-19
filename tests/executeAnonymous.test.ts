@@ -16,10 +16,6 @@ jest.mock("node:fs", () => ({
   constants: { O_RDONLY: 0, O_NONBLOCK: 4 },
 }));
 
-jest.mock("../src/salesforce/users", () => ({
-  getUserIdByUsername: jest.fn(),
-}));
-
 // Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
 // the tests below assert the levels this tool asks the org for.
 jest.mock("../src/salesforce/debugLevels", () => ({
@@ -28,9 +24,11 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 }));
 
 jest.mock("../src/salesforce/traceFlags", () => ({
+  ...jest.requireActual("../src/salesforce/traceFlags"),
   findActiveTraceFlags: jest.fn(),
+  findUsersByUsername: jest.fn(),
   createTraceFlag: jest.fn(),
-  deleteTraceFlag: jest.fn(),
+  destroyTraceFlags: jest.fn(),
 }));
 
 jest.mock("../src/salesforce/connection", () => ({
@@ -76,7 +74,6 @@ import {
   executeAnonymousInputSchema,
   type ExecuteAnonymousArgs,
 } from "../src/tools/executeAnonymousDefinition";
-import { getUserIdByUsername } from "../src/salesforce/users";
 import {
   ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
@@ -85,8 +82,10 @@ import {
 } from "../src/salesforce/debugLevels";
 import {
   createTraceFlag,
-  deleteTraceFlag,
+  destroyTraceFlags,
   findActiveTraceFlags,
+  findUsersByUsername,
+  type TracedEntity,
 } from "../src/salesforce/traceFlags";
 import {
   connectOrg,
@@ -115,6 +114,10 @@ const mockLoadApexLog = loadApexLog as jest.MockedFunction<typeof loadApexLog>;
 const mockFindActiveTraceFlags = findActiveTraceFlags as jest.MockedFunction<
   typeof findActiveTraceFlags
 >;
+const mockFindUsersByUsername = findUsersByUsername as jest.MockedFunction<
+  typeof findUsersByUsername
+>;
+const user = (id: string): TracedEntity => ({ id, name: "test@example.com", type: "User" });
 
 /** A user's own trace flag levels, unlike the defaults in every category. */
 const FLAG_LEVELS = {
@@ -126,8 +129,8 @@ const FLAG_LEVELS = {
 const mockCreateTraceFlag = createTraceFlag as jest.MockedFunction<
   typeof createTraceFlag
 >;
-const mockDeleteTraceFlag = deleteTraceFlag as jest.MockedFunction<
-  typeof deleteTraceFlag
+const mockDestroyTraceFlags = destroyTraceFlags as jest.MockedFunction<
+  typeof destroyTraceFlags
 >;
 const mockConfigAggregatorCreate = ConfigAggregator.create as jest.Mock;
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<
@@ -324,13 +327,11 @@ describe("Execute Anonymous", () => {
       getPropertyValue: jest.fn(() => undefined),
     });
 
-    (
-      getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
-    ).mockResolvedValue(testUserId);
+    mockFindUsersByUsername.mockResolvedValue([user(testUserId)]);
     mockEnsureDebugLevel.mockResolvedValue(testDebugLevelId);
     mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: false });
     mockCreateTraceFlag.mockResolvedValue(testTraceFlagId);
-    mockDeleteTraceFlag.mockResolvedValue();
+    mockDestroyTraceFlags.mockImplementation(async (_connection, ids) => ids.map((id) => ({ id })));
     mockLoadApexLog.mockResolvedValue({
       duration: { total: 150_000_000 },
       debugLevels: DEFAULT_TRACE_CONFIG,
@@ -343,7 +344,7 @@ describe("Execute Anonymous", () => {
 
       const result = await executeAnonymous(mockServer, args, ctx, policy());
 
-      expect(getUserIdByUsername).toHaveBeenCalledWith(
+      expect(findUsersByUsername).toHaveBeenCalledWith(
         mockConnection,
         "test@example.com",
       );
@@ -352,12 +353,12 @@ describe("Execute Anonymous", () => {
         mockConnection,
         testUserId,
         testDebugLevelId,
-        15 * 60 * 1000,
+        expect.anything(),
       );
-      expect(deleteTraceFlag).toHaveBeenCalledWith(
-        mockConnection,
-        testTraceFlagId,
-      );
+      // 15 minutes, from 5 minutes back for the clock skew.
+      const { start, end } = mockCreateTraceFlag.mock.calls[0]![3];
+      expect(end.getTime() - start.getTime()).toBe(20 * 60 * 1000);
+      expect(destroyTraceFlags).toHaveBeenCalledWith(mockConnection, [testTraceFlagId]);
       expectPostedApex(testApexCode);
       expect(mockSobject).toHaveBeenCalledWith("ApexLog");
 
@@ -387,7 +388,7 @@ describe("Execute Anonymous", () => {
       expect(mockLoadApexLog).toHaveBeenCalledWith(
         expect.stringContaining(`${testLogId}.log`),
       );
-      expect(toonDecode(result).durationMs).toBe(2.5);
+      expect(toonDecode(result).durationTotalMs).toBe(2.5);
     });
 
     it("posts the SOAP envelope to the org id path segment", async () => {
@@ -510,7 +511,7 @@ describe("Execute Anonymous", () => {
             policy(),
           ),
         ).rejects.toThrow(
-          "test@example.com has no active USER_DEBUG trace flag, so there are no levels to use. Create one, or leave out debugLevel to run at the defaults.",
+          "test@example.com has no active USER_DEBUG trace flag, so there are no levels to use. Create one with apexlog_create_trace_flag, or leave out debugLevel to run at the defaults.",
         );
         expect(ensureDebugLevel).not.toHaveBeenCalled();
         expect(createTraceFlag).not.toHaveBeenCalled();
@@ -670,9 +671,7 @@ describe("Execute Anonymous", () => {
 
     it("matches the stored log on its byte length", async () => {
       const customUserId = "005CUSTOMUSERID";
-      (
-        getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>
-      ).mockResolvedValue(customUserId);
+      mockFindUsersByUsername.mockResolvedValue([user(customUserId)]);
 
       await executeAnonymous(
         mockServer,
@@ -799,7 +798,7 @@ describe("Execute Anonymous", () => {
 
       const payload = toonDecode(result);
       expect(payload.warning).toContain("no debug log");
-      expect(payload.durationMs).toBe(0);
+      expect(payload.durationTotalMs).toBe(0);
       expect(mockLoadApexLog).not.toHaveBeenCalled();
       // An empty log has no stored twin, so an earlier run's empty log must not name it.
       expect(mockFind).not.toHaveBeenCalled();
@@ -823,12 +822,20 @@ describe("Execute Anonymous", () => {
       expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
-    it("should propagate errors from getUserIdByUsername", async () => {
+    // The sf auth can outlive the user it names.
+    it("should refuse when no user has the authed username, before writing anything", async () => {
+      mockFindUsersByUsername.mockResolvedValue([]);
+
+      await expect(
+        executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
+      ).rejects.toThrow("No user in this org has the username test@example.com.");
+      expect(createTraceFlag).not.toHaveBeenCalled();
+    });
+
+    it("should propagate errors from the user lookup", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
-      const mockGetUserIdByUsername =
-        getUserIdByUsername as jest.MockedFunction<typeof getUserIdByUsername>;
-      mockGetUserIdByUsername.mockRejectedValue(new Error("User not found"));
+      mockFindUsersByUsername.mockRejectedValue(new Error("User not found"));
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
@@ -871,7 +878,7 @@ describe("Execute Anonymous", () => {
       );
       expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(createTraceFlag).not.toHaveBeenCalled();
-      expect(deleteTraceFlag).not.toHaveBeenCalled();
+      expect(destroyTraceFlags).not.toHaveBeenCalled();
       expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
@@ -890,8 +897,9 @@ describe("Execute Anonymous", () => {
         order.push("match");
         return [{ Id: testLogId }];
       });
-      mockDeleteTraceFlag.mockImplementation(async () => {
+      mockDestroyTraceFlags.mockImplementation(async (_connection, ids) => {
         order.push("delete");
+        return ids.map((id) => ({ id }));
       });
 
       const result = await executeAnonymous(
@@ -920,15 +928,12 @@ describe("Execute Anonymous", () => {
         executeAnonymous(mockServer, { apex: testApexCode }, ctx, policy()),
       ).rejects.toThrow("Apex could not be compiled");
 
-      expect(deleteTraceFlag).toHaveBeenCalledWith(
-        mockConnection,
-        testTraceFlagId,
-      );
+      expect(destroyTraceFlags).toHaveBeenCalledWith(mockConnection, [testTraceFlagId]);
     });
 
     // The log is in hand and the flag expires on its own, so a failed delete only warns.
     it("returns the log and warns when the flag it created cannot be deleted", async () => {
-      mockDeleteTraceFlag.mockRejectedValue(new Error("Locked"));
+      mockDestroyTraceFlags.mockResolvedValue([{ id: testTraceFlagId, error: "Locked" }]);
 
       const result = await executeAnonymous(
         mockServer,
@@ -942,6 +947,20 @@ describe("Execute Anonymous", () => {
       expect(decoded.filePath).toContain(`${testLogId}.log`);
       expect(decoded.warning).toContain(testTraceFlagId);
       expect(decoded.warning).toContain("15 minutes");
+    });
+
+    // Expired or deleted by another call before the run ended: nothing is left to warn about.
+    it("does not warn when the flag it created is already gone", async () => {
+      mockDestroyTraceFlags.mockResolvedValue([{ id: testTraceFlagId, alreadyGone: true }]);
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(toonDecode(result).warning).toBeUndefined();
     });
 
     // The header returns the log without a flag; only the file's log id depends on one.
@@ -962,7 +981,7 @@ describe("Execute Anonymous", () => {
         ([request]: [unknown]) => typeof request !== "string",
       );
       expect(runs).toHaveLength(1);
-      expect(deleteTraceFlag).not.toHaveBeenCalled();
+      expect(destroyTraceFlags).not.toHaveBeenCalled();
       expect(decoded.succeeded).toBe(true);
       expect(decoded.warning).toContain("Could not set a trace flag");
       expect(decoded.warning).toContain("overlapping trace flag");
@@ -1013,7 +1032,7 @@ describe("Execute Anonymous", () => {
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("The org connection carries no access token.");
+      ).rejects.toThrow("The org session has no access token.");
 
       expect(mockRequest).not.toHaveBeenCalled();
     });
@@ -1052,15 +1071,15 @@ describe("Execute Anonymous", () => {
 
       mockConnectOrg.mockRejectedValue(
         new Error(
-          "No default org configured. Please set a default org using 'sf config set target-org <username>'.",
+          "No default org is set. Pass targetOrg, or set one with 'sf config set target-org <alias>'.",
         ),
       );
 
       await expect(
         executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("No default org configured");
+      ).rejects.toThrow("No default org is set");
 
-      expect(getUserIdByUsername).not.toHaveBeenCalled();
+      expect(findUsersByUsername).not.toHaveBeenCalled();
       expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
@@ -1124,7 +1143,7 @@ describe("Execute Anonymous", () => {
 
     it.each([
       ["ENOENT", `Apex file not found: ${apexFilePath}`],
-      ["EACCES", `Cannot read Apex file ${apexFilePath}: EACCES`],
+      ["EACCES", `Cannot read Apex file ${apexFilePath}: permission denied (EACCES)`],
     ])("should name why the file could not be read (%s), before connecting", async (code, message) => {
       mockOpen.mockRejectedValueOnce(errno(code));
 
@@ -1177,7 +1196,7 @@ describe("Execute Anonymous", () => {
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toBe(
-          `Cannot check Apex file ${apexFilePath}: this server cannot yet ask a 2026-07-28 client for its roots. Pass the Apex inline in apex.`,
+          `Cannot check Apex file ${apexFilePath}: this server cannot yet ask a client on MCP 2026-07-28 for its roots. Pass the Apex inline in apex.`,
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
         expect(mockOpen).not.toHaveBeenCalled();
@@ -1209,7 +1228,7 @@ describe("Execute Anonymous", () => {
         );
 
         expect(result.content[0]?.text).toContain(
-          "Debug log written to /elsewhere/logs, which was not checked against the client's roots: this server cannot yet ask a 2026-07-28 client for its roots.",
+          "Debug log written to /elsewhere/logs, which was not checked against the client's roots: this server cannot yet ask a client on MCP 2026-07-28 for its roots.",
         );
       });
 
@@ -1236,7 +1255,7 @@ describe("Execute Anonymous", () => {
 
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toBe(
-          "Cannot tell which project's default org to use: this server cannot yet ask a 2026-07-28 client for its roots. Pass targetOrg.",
+          "Cannot tell which project's default org to use: this server cannot yet ask a client on MCP 2026-07-28 for its roots. Pass targetOrg.",
         );
         expect(mockReadLocalOrg).not.toHaveBeenCalled();
       });
@@ -1703,7 +1722,7 @@ describe("Execute Anonymous", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toBe(
         `The Apex is ${MAX_APEX_TO_CONFIRM + 1} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
-          "so nothing was executed against 'test@example.com'. To run it, restart the server with --allow-production-orgs.",
+          "so nothing was executed against 'test@example.com'. To run it, shorten it to 10000 characters or fewer, or ask the user to restart the server with --allow-production-orgs.",
       );
       expect(mockRequest).not.toHaveBeenCalled();
     });
@@ -2053,7 +2072,6 @@ describe("Execute Anonymous", () => {
       expect(result.content[0].text).toContain(
         "Reason: Unable to refresh session due to: inactive organization",
       );
-      expect(result.content[0].text).toContain("re-authenticate");
       expect(mockRequest).not.toHaveBeenCalled();
     });
 

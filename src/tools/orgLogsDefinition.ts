@@ -10,6 +10,7 @@
  */
 
 import { z } from "zod";
+import { DEFAULT_OUTPUT_DIR } from "./logStore.js";
 import {
   DELETE_BATCH_SIZE,
   isApexLogId,
@@ -19,6 +20,9 @@ import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
 
 /** Per `apexlog_get_org_logs` call, so one call cannot download for minutes. */
 const MAX_LOGS_PER_GET = 25;
+
+/** Rows a list page holds when the caller gives no limit. */
+export const DEFAULT_LIMIT = 20;
 
 // Refinements, not `.regex` or `z.iso`, whose patterns cost 89 wire tokens per date-time field.
 const logId = z
@@ -45,7 +49,7 @@ const logFilters = {
   minFileSizeBytes: z.number().int().nonnegative().optional(),
 };
 
-export const listOrgLogsInputSchema = {
+const listOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
   ...logFilters,
   // Described here only: delete's description points at these, and each costs tokens on every request.
@@ -68,7 +72,7 @@ export const listOrgLogsInputSchema = {
     .min(1)
     .max(200)
     .optional()
-    .describe("Rows per page (default: 20)"),
+    .describe(`Page size (default: ${DEFAULT_LIMIT})`),
   cursor: z
     .string()
     .optional()
@@ -89,7 +93,7 @@ export const listOrgLogsToolConfig = {
   },
 };
 
-export const getOrgLogsInputSchema = {
+const getOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
   ids: z
     .array(logId)
@@ -108,7 +112,7 @@ export const getOrgLogsInputSchema = {
     .string()
     .optional()
     .describe(
-      "Directory to save the debug log files. Defaults to .apex-log-mcp/ in the project root.",
+      `Log directory (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root, else cwd)`,
     ),
 };
 
@@ -125,7 +129,7 @@ export const getOrgLogsToolConfig = {
   },
 };
 
-export const deleteOrgLogsInputSchema = {
+const deleteOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
   ids: z
     .array(logId)

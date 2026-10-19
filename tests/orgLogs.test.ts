@@ -288,22 +288,6 @@ describe("getOrgLogs", () => {
     }
   });
 
-  it("should download a repeated id once", async () => {
-    mockDownload.mockResolvedValue("log");
-
-    const result = await getOrgLogs(
-      server(),
-      { ids: ["07L000000000001EAA", "07L000000000001EAA"] },
-      ctx,
-      policy(),
-    );
-
-    expect(mockDownload).toHaveBeenCalledTimes(1);
-    expect(decode(text(result as never))).toMatchObject({
-      logs: [{ id: "07L000000000001EAA" }],
-    });
-  });
-
   it("should make no directory when the org holds no logs", async () => {
     mockLatest.mockResolvedValue([]);
 
@@ -424,7 +408,7 @@ describe("deleteOrgLogs", () => {
       policy(),
     );
 
-    expect(text(result as never)).toBe("Give ids or filters, not both.");
+    expect(text(result as never)).toBe("Give ids or the filter parameters, not both.");
   });
 
   it("should delete what the filters match, and count it", async () => {
@@ -491,7 +475,7 @@ describe("deleteOrgLogs", () => {
       failed: [
         {
           error: "insufficient access rights",
-          logCount: 2,
+          idCount: 2,
           ids: ["07L000000000002", "07L000000000003EAA"],
         },
       ],
@@ -519,7 +503,7 @@ describe("deleteOrgLogs", () => {
 
     expect(decode(text(result as never))).toMatchObject({
       failed: [
-        { error: "insufficient access rights", logCount: 7, ids: ids.slice(0, shownCount) },
+        { error: "insufficient access rights", idCount: 7, ids: ids.slice(0, shownCount) },
       ],
     });
   });

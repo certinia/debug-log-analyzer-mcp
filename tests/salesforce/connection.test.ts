@@ -60,7 +60,7 @@ const mockAuthInfo = { getFields } as any;
 describe("Salesforce Connection", () => {
   const testUsername = "test@example.com";
   const noDefaultOrgError =
-    "No default org configured. Please set a default org using 'sf config set target-org <username>'";
+    "No default org is set. Pass targetOrg";
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -100,6 +100,18 @@ describe("Salesforce Connection", () => {
       mockConfigAggregator.getPropertyValue.mockReturnValue(undefined);
 
       await expect(readLocalOrg()).rejects.toThrow(noDefaultOrgError);
+    });
+
+    it("should name targetOrg when no authenticated org has that name", async () => {
+      const notFound = Object.assign(new Error("No authorization information found for typo."), {
+        name: "NamedOrgNotFoundError",
+        actions: ["Did you mean psa?"],
+      });
+      (AuthInfo.create as jest.Mock).mockRejectedValueOnce(notFound);
+
+      await expect(readLocalOrg(undefined, "typo")).rejects.toThrow(
+        "No authenticated org is named 'typo'. Check targetOrg, or list orgs with 'sf org list'. Did you mean psa?",
+      );
     });
 
     it("should throw when the auth file holds no org id", async () => {

@@ -5,19 +5,17 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
-import { encode } from "@toon-format/toon";
 import {
   downloadApexLog,
   latestApexLogIds,
-  mapWithLimit,
-  PARALLEL_REQUESTS,
-  toLongId,
 } from "../salesforce/apexLogs.js";
+import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
+import { toLongId } from "../salesforce/soql.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
 import { openLogStore, saveStoredLog, type StoredLog } from "./logStore.js";
 import { progressReporter } from "./progress.js";
-import { omitEmpty } from "./responseShaping.js";
+import { omitEmpty, toonResult } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 
 type Saved = { id: string } & StoredLog;
@@ -69,9 +67,8 @@ export async function getOrgLogs(
   // One failed log is a row with its cause; the rest still save.
   const results = !store
     ? []
-    : await mapWithLimit(
+    : await mapRequests(
         ids,
-        PARALLEL_REQUESTS,
         async (id): Promise<Saved | Failed> => {
           try {
             // The SDK sends no result once cancelled, so this only stops the work.
@@ -97,18 +94,11 @@ export async function getOrgLogs(
   const logs = results.filter((r): r is Saved => !("error" in r));
   const failed = results.filter((r): r is Failed => "error" in r);
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({
-          org: access.orgLabel,
-          ...(store?.warning !== undefined && { warning: store.warning }),
-          logs,
-          ...omitEmpty({ failed }),
-          outputDirCreated: store?.created ?? false,
-        }),
-      },
-    ],
-  };
+  return toonResult({
+    org: access.orgLabel,
+    ...(store?.warning !== undefined && { warning: store.warning }),
+    logs,
+    ...omitEmpty({ failed }),
+    outputDirCreated: store?.created ?? false,
+  });
 }

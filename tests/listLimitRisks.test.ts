@@ -50,6 +50,7 @@ const mockStats = {
   size: 1n,
   mtimeNs: 1n,
   ctimeNs: 1n,
+  isFile: () => true,
 } as BigIntStats;
 
 const ARGS: LimitRisksArgs = { logFilePath: "/test/file.log" };

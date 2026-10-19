@@ -468,6 +468,39 @@ describe("parser contract", () => {
       expect(flowErrors(log.eventsById)).toHaveLength(1);
       expect(tree(log).every((event) => listed.has(event))).toBe(true);
     });
+
+    // `apexlog_search_events` resolves `eventIndex` by position and pages in
+    // this order, so an id must name its slot and the tree must read in order.
+    it.each(TIMED_FIXTURES)(
+      "places each event at its eventIndex, in log order, in %s",
+      (name) => {
+        const log = parse(fixture(name));
+        const indexes = tree(log).map((event) => event.eventIndex);
+
+        log.eventsById.forEach((event, index) =>
+          expect(event.eventIndex).toBe(index),
+        );
+        expect(indexes).toEqual([...indexes].sort((a, b) => a - b));
+      },
+    );
+
+    // `maxLevel` reads a USER_DEBUG line's level off its text, because the
+    // parser stamps every one DEBUG, whatever level the code logged it at.
+    it("states a USER_DEBUG line's own level at the start of its text", () => {
+      const log = parse(
+        [
+          HEADER,
+          "09:00:00.1 (1000)|EXECUTION_STARTED",
+          "09:00:00.1 (2000)|USER_DEBUG|[1]|ERROR|hello",
+          "09:00:00.1 (3000)|EXECUTION_FINISHED",
+          "",
+        ].join("\n"),
+      );
+      const debug = log.eventsById.find((event) => event.type === "USER_DEBUG");
+
+      expect(debug?.debugLevel).toBe("DEBUG");
+      expect(debug?.text).toBe("ERROR | hello");
+    });
   });
 
   describe("ApexLog.isTruncated", () => {

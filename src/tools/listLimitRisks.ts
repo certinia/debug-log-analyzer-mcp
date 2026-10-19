@@ -3,7 +3,6 @@
  */
 
 import { z } from "zod";
-import { encode } from "@toon-format/toon";
 import type { DebugCategory, Limits } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
@@ -14,18 +13,19 @@ import {
   percentageOf,
   roundPercent,
   toLimitRows,
+  toonResult,
 } from "./responseShaping.js";
 
 /** Where a limit becomes worth reporting, when the caller names no other. */
 export const WARNING_THRESHOLD = 80;
 
-export const listLimitRisksInputSchema = {
+const listLimitRisksInputSchema = {
   logFilePath: logFilePathSchema,
   threshold: z
     .number()
     .optional()
     .describe(
-      `Report a limit once it is this percentage consumed (default: ${WARNING_THRESHOLD})`,
+      `Minimum usedPercentage to report (default: ${WARNING_THRESHOLD})`,
     ),
 };
 
@@ -69,7 +69,7 @@ export interface LimitRiskResult {
 export const listLimitRisksToolConfig = {
   title: "List Apex Log Limit Risks",
   description:
-    "List the governor limits an Apex log transaction has nearly consumed - CPU time, heap, SOQL and SOSL queries, DML statements, and the rows each returned or wrote - worst first, with how much of each was used",
+    "List the governor limits an Apex log transaction has nearly used up - CPU time, heap, SOQL queries and rows, SOSL queries, DML statements and rows, callouts and every other limit - worst first, with how much of each was used",
   inputSchema: toolInputSchema(listLimitRisksInputSchema),
   annotations: {
     readOnlyHint: true,
@@ -95,14 +95,7 @@ export async function listLimitRisks(args: LimitRisksArgs) {
     atRisk,
   };
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode(result),
-      },
-    ],
-  };
+  return toonResult(result);
 }
 
 /**

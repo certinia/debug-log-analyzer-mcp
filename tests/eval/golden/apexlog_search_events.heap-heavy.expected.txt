@@ -1,0 +1,14 @@
+matchedCount: 0
+capturedAt[11]{debugCategory,level}:
+  apexCode,FINEST
+  apexProfiling,FINEST
+  callout,NONE
+  dataAccess,NONE
+  database,NONE
+  nba,NONE
+  system,NONE
+  validation,NONE
+  visualforce,NONE
+  wave,NONE
+  workflow,NONE
+events: []

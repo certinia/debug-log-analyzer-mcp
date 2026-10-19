@@ -22,18 +22,22 @@ import {
   listLimitRisks,
   listLimitRisksToolConfig,
 } from "./tools/listLimitRisks.js";
+import { withReloginHint } from "./salesforce/authFailure.js";
 import { limitUnitsClause } from "./tools/responseShaping.js";
+import { searchEvents, searchEventsToolConfig } from "./tools/searchEvents.js";
 import {
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymousDefinition.js";
 import {
+  createTraceFlagToolConfig,
+  deleteTraceFlagsToolConfig,
+  listTraceFlagsToolConfig,
+} from "./tools/traceFlagsDefinition.js";
+import {
   deleteOrgLogsToolConfig,
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
-  type DeleteOrgLogsArgs,
-  type GetOrgLogsArgs,
-  type ListOrgLogsArgs,
 } from "./tools/orgLogsDefinition.js";
 import {
   apexExecutionRefusal,
@@ -93,7 +97,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       name: "apex-log-mcp",
       version: packageJson.version,
       description:
-        "Analyzes Salesforce Apex debug logs for performance bottlenecks, governor limit usage, and optimization opportunities.",
+        "Analyzes Salesforce Apex debug logs for bottlenecks and governor limit usage; runs Apex, fetches logs and manages trace flags in an org.",
     },
     {
       capabilities: {
@@ -101,7 +105,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       },
       // Never send a request the client did not declare: it may never be answered.
       enforceStrictCapabilities: true,
-      instructions: `Analysis tools take an absolute path to a .log file. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper with the other tools. Counts and limits are always reported, so a zero is a measured zero and not a missing value.`,
+      instructions: `Analysis tools take an absolute .log file path and never contact an org. Every duration in a response is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper with the other tools. A zero count or limit is measured, not missing.${allowProductionOrgs ? "" : " Tools that change a production org, or one of unknown type, ask the user to confirm first, or refuse when the client cannot ask."}`,
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },
@@ -142,6 +146,12 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     async (args) => listLimitRisks(args),
   );
 
+  server.registerTool(
+    "apexlog_search_events",
+    searchEventsToolConfig,
+    async (args) => searchEvents(args),
+  );
+
   // Every org tool is held to the same deny list and production gate.
   const orgAccessPolicy = {
     allowProductionOrgs,
@@ -154,31 +164,61 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
 
   // The org tools load lazily, as apexlog_execute_anonymous does: they reach
   // `@salesforce/core`, which a session that only reads logs must not pay for.
+  type OrgToolHandler<Args, Result> = (
+    server: McpServer,
+    args: Args,
+    ctx: ServerContext,
+    policy: typeof orgAccessPolicy,
+  ) => Promise<Result>;
+  // A dead login can fail any org call, not only the connect, so every org handler is wrapped.
+  const withRelogin =
+    <Args, Result>(handler: (args: Args, ctx: ServerContext) => Promise<Result>) =>
+    async (args: Args, ctx: ServerContext): Promise<Result> => {
+      try {
+        return await handler(args, ctx);
+      } catch (error) {
+        throw withReloginHint(error);
+      }
+    };
+  const orgTool = <Args, Result>(load: () => Promise<OrgToolHandler<Args, Result>>) =>
+    withRelogin(async (args: Args, ctx: ServerContext) =>
+      (await load())(server, args, ctx, orgAccessPolicy),
+    );
+
   server.registerTool(
     "apexlog_list_org_logs",
     listOrgLogsToolConfig,
-    async (args, ctx) => {
-      const { listOrgLogs } = await import("./tools/listOrgLogs.js");
-      return listOrgLogs(server, args as ListOrgLogsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/listOrgLogs.js")).listOrgLogs),
   );
 
   server.registerTool(
     "apexlog_get_org_logs",
     getOrgLogsToolConfig,
-    async (args, ctx) => {
-      const { getOrgLogs } = await import("./tools/getOrgLogs.js");
-      return getOrgLogs(server, args as GetOrgLogsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/getOrgLogs.js")).getOrgLogs),
   );
 
   server.registerTool(
     "apexlog_delete_org_logs",
     deleteOrgLogsToolConfig,
-    async (args, ctx) => {
-      const { deleteOrgLogs } = await import("./tools/deleteOrgLogs.js");
-      return deleteOrgLogs(server, args as DeleteOrgLogsArgs, ctx, orgAccessPolicy);
-    },
+    orgTool(async () => (await import("./tools/deleteOrgLogs.js")).deleteOrgLogs),
+  );
+
+  server.registerTool(
+    "apexlog_list_trace_flags",
+    listTraceFlagsToolConfig,
+    orgTool(async () => (await import("./tools/listTraceFlags.js")).listTraceFlags),
+  );
+
+  server.registerTool(
+    "apexlog_create_trace_flag",
+    createTraceFlagToolConfig,
+    orgTool(async () => (await import("./tools/createTraceFlag.js")).createTraceFlag),
+  );
+
+  server.registerTool(
+    "apexlog_delete_trace_flags",
+    deleteTraceFlagsToolConfig,
+    orgTool(async () => (await import("./tools/deleteTraceFlags.js")).deleteTraceFlags),
   );
 
   // Always registered, so agents can discover it regardless of configuration.
@@ -186,7 +226,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   server.registerTool(
     "apexlog_execute_anonymous",
     executeAnonymousToolConfig(apexExecutionDisabled),
-    async (args, ctx) => {
+    withRelogin(async (args: unknown, ctx: ServerContext) => {
       const refused = apexExecutionRefusal(apexExecutionDisabled);
       if (refused) {
         return refused;
@@ -199,7 +239,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
         ...orgAccessPolicy,
         apexExecutionDisabled,
       });
-    },
+    }),
   );
 
   return server;

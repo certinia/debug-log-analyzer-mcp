@@ -55,6 +55,7 @@ const mockStats = {
   size: 1n,
   mtimeNs: 1n,
   ctimeNs: 1n,
+  isFile: () => true,
 } as BigIntStats;
 
 const counts = { total: 0, self: 0 };
@@ -905,7 +906,7 @@ describe("getLogSummary", () => {
 
       await expect(
         getLogSummary({ logFilePath: "/path/to/restricted.log" }),
-      ).rejects.toThrow("Cannot read log file /path/to/restricted.log: EACCES");
+      ).rejects.toThrow("Cannot read log file /path/to/restricted.log: permission denied (EACCES)");
     });
 
     it("should propagate file read errors", async () => {

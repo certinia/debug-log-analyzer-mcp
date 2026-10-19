@@ -12,6 +12,7 @@ import {
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
+import { RELOGIN_HINT } from "../salesforce/authFailure.js";
 
 export type PolicyDecision =
   | { outcome: "allowed" }
@@ -130,9 +131,11 @@ function digestOf(effect: string): string {
   return createHash("sha256").update(effect, "utf8").digest("hex");
 }
 
+const ASK_AGAIN = "Call the tool again for a new confirmation.";
+
 const ENABLE_HINT =
-  "To proceed anyway: restart the server with --allow-production-orgs, or use a client " +
-  "that supports MCP elicitation for per-call confirmation.";
+  "To proceed, the user must restart the server with --allow-production-orgs, or use a " +
+  "client that confirms each call.";
 
 function refusal(
   action: string,
@@ -144,8 +147,7 @@ function refusal(
       `Cannot ${action} against org '${orgLabel}': its type could not be verified, ` +
       "so it is treated as production to prevent accidental data loss.\n" +
       `Reason: ${truncate(unverifiedReason, MAX_REASON)}\n` +
-      "If the org's authentication has expired, re-authenticate it (for example " +
-      "'sf org login web --alias <alias>') and try again.\n" +
+      `If the org's login has expired: ${RELOGIN_HINT}\n` +
       ENABLE_HINT
     );
   }
@@ -281,7 +283,7 @@ export async function authorizeOperation(opts: {
       outcome: "refused",
       reason:
         `The confirmation does not match this call: the tool, what it would do or the target org ` +
-        `changed after it was given, so nothing was done against '${orgLabel}'. Ask again to ${action}.`,
+        `changed after it was given, so nothing was done against '${orgLabel}'. ${ASK_AGAIN}`,
     };
   }
 
@@ -305,8 +307,8 @@ export async function authorizeOperation(opts: {
       return {
         outcome: "refused",
         reason:
-          `The confirmation has already been used, and one confirmation authorizes one call, ` +
-          `so nothing was done against '${orgLabel}'. Ask again to ${action}.`,
+          `That confirmation was already used, and each covers one call, so nothing was done ` +
+          `against '${orgLabel}'. ${ASK_AGAIN}`,
       };
     }
     return { outcome: "allowed" };
@@ -314,8 +316,6 @@ export async function authorizeOperation(opts: {
 
   return {
     outcome: "refused",
-    reason: unverifiedReason
-      ? `User declined to ${action} against org '${orgLabel}'.`
-      : `User declined to ${action} against production org '${orgLabel}'.`,
+    reason: `User declined to ${action} against ${unverifiedReason ? "" : "production "}org '${orgLabel}'. Do not retry unless the user asks.`,
   };
 }

@@ -8,6 +8,7 @@ import {
   Org,
   StateAggregator,
 } from "@salesforce/core";
+import { RELOGIN_HINT } from "./authFailure.js";
 
 /** The target org as the local sf files know it. */
 export type LocalOrg = {
@@ -31,11 +32,13 @@ export async function readLocalOrg(
   const aliasOrUsername = targetOrg ?? (await resolveDefaultOrg(projectPath));
   const { aliases } = await StateAggregator.getInstance();
   const username = aliases.resolveUsername(aliasOrUsername);
-  const authInfo = await AuthInfo.create({ username });
+  const authInfo = await AuthInfo.create({ username }).catch((error: unknown) => {
+    throw unknownOrgError(error, aliasOrUsername);
+  });
   const { orgId, instanceUrl } = authInfo.getFields();
 
   if (!orgId) {
-    throw new Error(`The auth file for '${username}' holds no org id.`);
+    throw new Error(`The auth file for '${username}' holds no org id. ${RELOGIN_HINT}`);
   }
 
   return {
@@ -45,6 +48,21 @@ export async function readLocalOrg(
     instanceUrl,
     authInfo,
   };
+}
+
+// The SDK's own text names no parameter; its "Did you mean" suggestion is kept.
+function unknownOrgError(error: unknown, aliasOrUsername: string): unknown {
+  if (!(error instanceof Error) || error.name !== "NamedOrgNotFoundError") {
+    return error;
+  }
+  const { actions } = error as { actions?: string[] };
+  return new Error(
+    [
+      `No authenticated org is named '${aliasOrUsername}'. Check targetOrg, or list orgs with 'sf org list'.`,
+      ...(actions ?? []),
+    ].join(" "),
+    { cause: error },
+  );
 }
 
 /** Connect through the auth `readLocalOrg` read, so it is the org it checked. */
@@ -62,7 +80,7 @@ async function resolveDefaultOrg(projectPath?: string): Promise<string> {
 
   if (!defaultOrg) {
     throw new Error(
-      "No default org configured. Please set a default org using 'sf config set target-org <username>' (use --global if not in a Salesforce DX project).",
+      "No default org is set. Pass targetOrg, or set one with 'sf config set target-org <alias>' (add --global outside a Salesforce DX project).",
     );
   }
 

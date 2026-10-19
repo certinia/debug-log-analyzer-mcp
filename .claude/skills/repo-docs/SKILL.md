@@ -37,11 +37,13 @@ A new parameter regenerates its own row. Write prose for it only if it changes w
 
 ## Generated blocks - never hand-edit
 
-`README.md` holds nine blocks between markers, all written by the eval run:
+`README.md` holds these blocks between markers, all written by the eval run:
 
+- `token-cost-summary` - the line on what keeping the server connected costs
 - `token-cost-definitions` and `token-cost-answers` - the two token tables
-- `params-<tool>` - the parameter table, from the schema the client is served
-- `shape-<tool>` - the response fields, from the fixture the figures are measured against
+- `params-<tool>` - the parameter table, from the schema the client is served, for every tool
+- `shape-<tool>` - the response fields, from the fixture the figures are measured against, for the
+  analysis tools only
 
 `pnpm run build && pnpm run eval:update` regenerates them with the goldens. `pnpm run eval` fails
 when they drift, so a hand edit is a CI failure, not a saving.

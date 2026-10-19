@@ -4,8 +4,6 @@ import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
-import { encode } from "@toon-format/toon";
-import { getUserIdByUsername } from "../salesforce/users.js";
 import {
   DEFAULT_TRACE_CONFIG,
   ensureDebugLevel,
@@ -20,15 +18,17 @@ import {
 } from "../salesforce/anonymousApex.js";
 import {
   createTraceFlag,
-  deleteTraceFlag,
+  destroyTraceFlags,
   findActiveTraceFlags,
+  findUsersByUsername,
+  traceFlagWindow,
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
 import { loadApexLog } from "./apexLogSource.js";
 import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, writeDebugLog } from "./logStore.js";
-import { NS_TO_MS, roundMs } from "./responseShaping.js";
+import { NS_TO_MS, roundMs, toonResult } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import {
@@ -51,7 +51,7 @@ const ONE_APEX_SOURCE =
   "Give exactly one of apex and apexFilePath: the Apex inline, or the absolute path to a file of it.";
 
 const NO_LOG_CAPTURED_WARNING =
-  "Salesforce returned no debug log for this run, so the saved file is empty and durationMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
+  "Salesforce returned no debug log for this run, so the saved file is empty and durationTotalMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
 
 export type ExecuteAnonymousPolicy = OrgAccessPolicy & {
   apexExecutionDisabled: boolean;
@@ -65,7 +65,7 @@ async function readApexFile(
   const outside = await outsideRoots(apexFilePath, rootPaths);
   if (outside !== undefined) {
     throw new Error(
-      `Apex file ${outside} is outside every root this client declared.`,
+      `Apex file ${outside} is outside every root this client declared. Move it under a root, or pass the Apex inline in apex.`,
     );
   }
 
@@ -152,7 +152,7 @@ function askedLevels(
   // Asked for by name, so a flag that has expired is said, not papered over with the defaults.
   if (debugLevel === "traceFlag") {
     throw new Error(
-      `${username} has no active USER_DEBUG trace flag, so there are no levels to use. Create one, or leave out debugLevel to run at the defaults.`,
+      `${username} has no active USER_DEBUG trace flag, so there are no levels to use. Create one with apexlog_create_trace_flag, or leave out debugLevel to run at the defaults.`,
     );
   }
   return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
@@ -177,7 +177,7 @@ function apexConfirmable(
     unshowable:
       apex.length > MAX_APEX_TO_CONFIRM
         ? `The Apex is ${apex.length} characters, more than the ${MAX_APEX_TO_CONFIRM} a confirmation shows whole, ` +
-          `so nothing was executed against '${orgLabel}'. To run it, restart the server with --allow-production-orgs.`
+          `so nothing was executed against '${orgLabel}'. To run it, shorten it to ${MAX_APEX_TO_CONFIRM} characters or fewer, or ask the user to restart the server with --allow-production-orgs.`
         : undefined,
   };
 }
@@ -219,7 +219,11 @@ export async function executeAnonymous(
           : undefined,
       prepare: readApex,
       write: async ({ value: apex, connection, local, orgLabel }) => {
-        const userId = await getUserIdByUsername(connection, local.username);
+        const [user] = await findUsersByUsername(connection, local.username);
+        if (!user) {
+          throw new Error(`No user in this org has the username ${local.username}.`);
+        }
+        const userId = user.id;
         // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
         const flags = await findActiveTraceFlags(connection, userId);
         const run = resolveRunLevels(debugLevel, flags, local.username);
@@ -306,40 +310,28 @@ export async function executeAnonymous(
     store.warning,
   ].filter((text): text is string => text !== undefined);
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode({
-          filePath,
-          ...(warnings.length && { warning: warnings.join(" ") }),
-          fileSizeBytes: stats.size,
-          org: orgLabel,
-          orgType: classification,
-          succeeded: apexResult.succeeded,
-          ...(apexResult.exceptionMessage && {
-            exceptionMessage: apexResult.exceptionMessage,
-          }),
-          durationMs: parsedLog
-            ? roundMs(parsedLog.duration.total / NS_TO_MS)
-            : 0,
-          // True when the log carries levels other than the ones levelsSource
-          // names - a Developer Console flag set during the run, say. Reported
-          // either way, for the same reason as below.
-          levelsOverridden: levelsWereOverridden(
-            run.levels,
-            parsedLog?.debugLevels,
-          ),
-          // Where the levels came from, so a log far thinner or fuller than expected explains itself.
-          levelsSource: run.source,
-          // A fact about this run, not advice about it: the directory is new, so
-          // nothing yet ignores it. Reported either way, because an absent field
-          // cannot be told apart from one this server never worked out.
-          outputDirCreated: store.created,
-        }),
-      },
-    ],
-  };
+  return toonResult({
+    filePath,
+    ...(warnings.length && { warning: warnings.join(" ") }),
+    fileSizeBytes: stats.size,
+    org: orgLabel,
+    orgType: classification,
+    succeeded: apexResult.succeeded,
+    ...(apexResult.exceptionMessage && {
+      exceptionMessage: apexResult.exceptionMessage,
+    }),
+    durationTotalMs: parsedLog ? roundMs(parsedLog.duration.total / NS_TO_MS) : 0,
+    // True when the log carries levels other than the ones levelsSource
+    // names - a Developer Console flag set during the run, say. Reported
+    // either way, for the same reason as below.
+    levelsOverridden: levelsWereOverridden(run.levels, parsedLog?.debugLevels),
+    // Where the levels came from, so a log far thinner or fuller than expected explains itself.
+    levelsSource: run.source,
+    // A fact about this run, not advice about it: the directory is new, so
+    // nothing yet ignores it. Reported either way, because an absent field
+    // cannot be told apart from one this server never worked out.
+    outputDirCreated: store.created,
+  });
 }
 
 // Only a live flag stores the log the file's id comes from; `flagLevelId` is undefined when the user has one (.claude/rules/trace-flags.md).
@@ -381,7 +373,7 @@ async function createRunTraceFlag(
         connection,
         userId,
         debugLevelId,
-        RUN_TRACE_FLAG_MS,
+        traceFlagWindow(RUN_TRACE_FLAG_MS),
       ),
     };
   } catch (error) {
@@ -391,7 +383,7 @@ async function createRunTraceFlag(
   }
 }
 
-// Reported, not thrown: the log is in hand and the flag expires on its own.
+// Reported, not thrown: the log is in hand and the flag expires on its own. A flag already gone is removed.
 async function removeRunTraceFlag(
   connection: Connection,
   traceFlagId: string | undefined,
@@ -399,14 +391,11 @@ async function removeRunTraceFlag(
   if (traceFlagId === undefined) {
     return undefined;
   }
-  try {
-    await deleteTraceFlag(connection, traceFlagId);
+  const [result] = await destroyTraceFlags(connection, [traceFlagId]);
+  if (result?.error === undefined) {
     return undefined;
-  } catch (error) {
-    const warning = `Could not delete trace flag ${traceFlagId}, created for this run; it expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes.`;
-    console.error(
-      `[apex-log-mcp] ${warning} ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return warning;
   }
+  const warning = `Could not delete trace flag ${traceFlagId}, created for this run. It expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes; to end it sooner, delete it with apexlog_delete_trace_flags.`;
+  console.error(`[apex-log-mcp] ${warning} ${result.error}`);
+  return warning;
 }

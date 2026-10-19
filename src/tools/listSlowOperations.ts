@@ -4,7 +4,6 @@
 
 import { z } from "zod";
 import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
-import { encode } from "@toon-format/toon";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import {
@@ -29,12 +28,17 @@ import {
 } from "./queryPlans.js";
 import {
   elide,
+  fitPage,
+  matches,
   NAME_LIMIT,
   NS_TO_MS,
   omitEmpty,
+  PAGE_CHAR_BUDGET,
   percentageOf,
   roundMs,
   roundPercent,
+  rowCost,
+  toonResult,
 } from "./responseShaping.js";
 
 /**
@@ -119,17 +123,6 @@ export const listSlowOperationsInputSchema = {
     .describe("Default durationSelfMs. heapSelfNetBytes adds that column."),
 };
 
-/**
- * The most one page of rows may cost, as characters.
- *
- * About 15,000 tokens at the four-characters-a-token estimate `scripts/eval.mjs`
- * measures with, which leaves headroom under the 25,000-token response ceiling
- * a client is likely to impose. Eliding names is not enough on its own: a
- * thousand rows cost some 15,000 tokens in their numeric columns alone, so 5
- * logs in that corpus still breached the ceiling with every name capped.
- */
-const PAGE_CHAR_BUDGET = 60_000;
-
 export type SlowOperationsArgs = z.infer<
   z.ZodObject<typeof listSlowOperationsInputSchema>
 >;
@@ -137,7 +130,7 @@ export type SlowOperationsArgs = z.infer<
 export const listSlowOperationsToolConfig = {
   title: "List Slow Apex Log Operations",
   description:
-    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
+    "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, callouts, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
   inputSchema: toolInputSchema(listSlowOperationsInputSchema),
   annotations: {
     readOnlyHint: true,
@@ -284,22 +277,6 @@ function verdictOf(plan: QueryPlan): QueryPlanVerdict {
 }
 
 /**
- * What a row costs on the wire, near enough to bound a page by.
- *
- * An estimate, not the encoded length: it counts each cell and a separator,
- * where TOON also indents the row and quotes any cell holding a comma. It
- * therefore under-counts, by 3% on the worst page of a 124-log corpus - which
- * the budget's own headroom absorbs, since 60,000 characters is well under the
- * 100,000 a 25,000-token ceiling allows.
- */
-function rowCost(row: SlowOperation | PlanRow): number {
-  return Object.values(row).reduce(
-    (total, cell) => total + String(cell).length + 1,
-    0,
-  );
-}
-
-/**
  * Plans for the ranked rows named after their query, in rank order.
  *
  * One row per ranked query row that was explained, not one per query text: the
@@ -383,11 +360,6 @@ function plansForFoldedRows(
     .map((plan) => ({ ...plan, name: elide(plan.name, NAME_LIMIT) }));
 }
 
-/** An empty or absent filter selects everything on that axis. */
-function matches(wanted: string[] | undefined, value: string): boolean {
-  return !wanted?.length || wanted.includes(value);
-}
-
 export async function listSlowOperations(args: SlowOperationsArgs) {
   const {
     logFilePath,
@@ -468,26 +440,12 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     }),
   });
 
-  // Built and costed in one pass, so a row the budget turns away is never
-  // built, and `operations` is a prefix of `page` by construction rather than
-  // by an invariant the next reader has to take on trust - which is what lets
-  // a plan's `operationRow` name a row safely. At least one row always comes
-  // back, so a single enormous row is reported rather than the table quietly
-  // going empty. Rows returned read against `matchedCount` say the page was
-  // cut, which needs no field of its own.
-  const operations: SlowOperation[] = [];
-  let spent = 0;
-  for (const operation of page) {
-    const row = toRow(operation);
-    spent += rowCost(row);
-    if (spent > PAGE_CHAR_BUDGET && operations.length > 0) {
-      break;
-    }
-    operations.push(row);
-  }
+  // A prefix of `page` by construction, which is what lets a plan's
+  // `operationRow` name a row safely.
+  const fitted = fitPage(page, toRow);
+  const operations = fitted.rows;
+  let spent = fitted.spent;
 
-  // Kept in step by construction - the loop above appends in order and stops -
-  // so a plan's `operationRow` can only name a row the response carries.
   const ranked = page.slice(0, operations.length);
 
   // Only the returned rows are explained, so the table qualifies what the
@@ -540,12 +498,5 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     ...omitEmpty({ queryPlans }),
   };
 
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: encode(result),
-      },
-    ],
-  };
+  return toonResult(result);
 }

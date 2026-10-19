@@ -6,12 +6,20 @@ import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
 import {
   CLOCK_SKEW_MS,
+  chunk,
   containing,
+  isoSeconds,
+  isSalesforceId,
   quote,
   toDateTimeLiteral,
 } from "./soql.js";
+import { savedOutcome, type DeleteResult } from "./deleteResults.js";
+import { mapRequests } from "./parallelRequests.js";
 
 const APEX_LOG_SOBJECT = "ApexLog";
+
+const FOREIGN_CURSOR =
+  "cursor is not one this tool returned. Leave it out to start from the first page.";
 
 /** What a list sorts on, newest, slowest or largest first. */
 export const LOG_SORTS = [
@@ -74,35 +82,9 @@ type ApexLogRecord = {
   LogLength: number;
 };
 
-/** True for a debug log id: 15 characters, or 18 whose suffix is the one the first 15 give. */
+/** True for a debug log id. */
 export function isApexLogId(id: string): boolean {
-  return (
-    /^07L[a-zA-Z0-9]{12}(?:[a-zA-Z0-9]{3})?$/.test(id) &&
-    // The suffix ignores case, so a mistyped one is refused, not silently corrected.
-    (id.length === 15 || toLongId(id) === id.slice(0, 15) + id.slice(15).toUpperCase())
-  );
-}
-
-const ID_SUFFIX_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
-
-/**
- * The 18-character form of an id, as the API returns it. A 15-character id, or
- * an 18-character one whose suffix differs in case, names the same log, so
- * without this it would save to a second file or read as a different log.
- */
-export function toLongId(id: string): string {
-  // The suffix is derived from the first 15, so it is rebuilt rather than trusted.
-  const base = id.slice(0, 15);
-  const suffix = [0, 5, 10]
-    .map((start) =>
-      [...base.slice(start, start + 5)].reduce(
-        (bits, char, bit) => (/[A-Z]/.test(char) ? bits | (1 << bit) : bits),
-        0,
-      ),
-    )
-    .map((bits) => ID_SUFFIX_CHARS[bits])
-    .join("");
-  return base + suffix;
+  return isSalesforceId(id, "07L");
 }
 
 function whereText(clauses: string[]): string {
@@ -196,26 +178,24 @@ export function readCursor(
   try {
     cursor = JSON.parse(Buffer.from(text, "base64url").toString("utf8"));
   } catch {
-    throw new Error(
-      "cursor is not one this tool returned. Leave it out to start from the first page.",
-    );
+    throw new Error(FOREIGN_CURSOR);
   }
-  const [list, value, id, matchedCount] = Array.isArray(cursor) ? cursor : [];
+  if (!Array.isArray(cursor) || typeof cursor[0] !== "string") {
+    throw new Error(FOREIGN_CURSOR);
+  }
+  const [list, value, id, matchedCount] = cursor;
   // The value reaches SOQL, so it must be the sort's own type.
   const valueFits =
     sort === "startTime"
       ? typeof value === "string" && !Number.isNaN(Date.parse(value))
       : Number.isFinite(value);
-  if (
-    list !== listKey(sort, filters) ||
-    !valueFits ||
-    typeof id !== "string" ||
-    !isApexLogId(id) ||
-    !Number.isInteger(matchedCount)
-  ) {
+  if (list !== listKey(sort, filters)) {
     throw new Error(
-      "cursor belongs to a list with other filters or another sortBy. Pass the same ones, or leave cursor out to start again.",
+      "cursor belongs to a list with other filters or another sortBy. Pass the same ones, or leave cursor out to start from the first page.",
     );
+  }
+  if (!valueFits || typeof id !== "string" || !isApexLogId(id) || !Number.isInteger(matchedCount)) {
+    throw new Error(FOREIGN_CURSOR);
   }
   return { value, id, matchedCount };
 }
@@ -228,8 +208,7 @@ function toRow(record: ApexLogRecord): OrgLogRow {
     request: record.Request,
     succeeded: record.Status === "Success",
     exceptionMessage: record.Status === "Success" ? "" : record.Status,
-    // ISO 8601 in UTC, as the startTime filters take it; the org sends `+0000` and milliseconds it never sets.
-    startTime: new Date(record.StartTime).toISOString().replace(".000Z", "Z"),
+    startTime: isoSeconds(record.StartTime),
     durationTotalMs: record.DurationMilliseconds,
     fileSizeBytes: record.LogLength,
   };
@@ -299,9 +278,6 @@ const MAX_LOGS_PER_DELETE = 10_000;
 /** One request's worth: the API deletes at most 200 records a call. */
 export const DELETE_BATCH_SIZE = 200;
 
-/** Few enough that a large job does not trip the org's concurrent request limit. */
-export const PARALLEL_REQUESTS = 4;
-
 /** What a delete is asked to remove: ids, or every log the filters match. */
 export type LogSelection = { ids: string[] } | { filters: LogFilters };
 
@@ -336,9 +312,6 @@ export async function findApexLogs(
   };
 }
 
-/** One log's outcome: deleted, gone before this call reached it, or failed with the cause. */
-export type DeleteResult = { id: string; alreadyGone?: true; error?: string };
-
 /**
  * Delete stored logs, each failure kept beside its id rather than failing the
  * rest. After a request fails, no further batch is sent. Once `signal` aborts,
@@ -352,16 +325,10 @@ export async function deleteApexLogs(
     onBatchDone,
   }: { signal?: AbortSignal; onBatchDone?: (count: number) => void } = {},
 ): Promise<DeleteResult[]> {
-  const batches = Array.from(
-    { length: Math.ceil(ids.length / DELETE_BATCH_SIZE) },
-    (_, index) =>
-      ids.slice(index * DELETE_BATCH_SIZE, (index + 1) * DELETE_BATCH_SIZE),
-  );
   // A failed request, such as a missing permission or a spent API limit, would fail every batch after it.
   let requestError: string | undefined;
-  const results = await mapWithLimit(
-    batches,
-    PARALLEL_REQUESTS,
+  const results = await mapRequests(
+    chunk(ids, DELETE_BATCH_SIZE),
     async (batch): Promise<DeleteResult[]> => {
       // Returns, not throws, so the pool waits for the requests in flight before the call rejects.
       if (signal?.aborted) {
@@ -380,7 +347,7 @@ export async function deleteApexLogs(
         return saved.map((result, index) => ({
           // In range: the API returns one result per id sent, in order.
           id: batch[index]!,
-          ...outcomeOf(result),
+          ...savedOutcome(result),
         }));
       } catch (error) {
         // A failed request costs its own batch, not the report of what the others deleted.
@@ -394,59 +361,6 @@ export async function deleteApexLogs(
   );
   signal?.throwIfAborted();
   return results.flat();
-}
-
-function outcomeOf(result: {
-  success: boolean;
-  errors: { message: string }[];
-}): Omit<DeleteResult, "id"> {
-  if (result.success) {
-    return {};
-  }
-  if (isAlreadyGone(result.errors)) {
-    return { alreadyGone: true };
-  }
-  return {
-    error:
-      result.errors.map((error) => error.message).join("; ") ||
-      "the org gave no reason",
-  };
-}
-
-// What the org answers for a log deleted since it was found; a log has no recycle bin.
-const GONE_CODES = new Set(["INVALID_CROSS_REFERENCE_KEY", "ENTITY_IS_DELETED"]);
-
-// jsforce types `errorCode`, but the collection API sends `statusCode`.
-function isAlreadyGone(errors: object[]): boolean {
-  return (
-    errors.length > 0 &&
-    errors.every((error) => {
-      const { statusCode, errorCode } = error as { statusCode?: string; errorCode?: string };
-      return GONE_CODES.has(statusCode ?? errorCode ?? "");
-    })
-  );
-}
-
-/**
- * `fn` over `items`, at most `limit` at a time, results in input order. A
- * pool, not batches, so one slow request holds up one slot, not a batch.
- */
-export async function mapWithLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const index = next++;
-      // In range: the loop checked `next` before taking it.
-      results[index] = await fn(items[index]!);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
 }
 
 /** The ids of the newest stored logs, newest first. */

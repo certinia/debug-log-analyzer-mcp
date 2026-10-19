@@ -83,11 +83,26 @@ jest.mock("../src/tools/executeAnonymousDefinition", () => ({
   })),
 }));
 
+// The org tools, loaded lazily by the server's own wiring.
+jest.mock("../src/tools/listOrgLogs", () => ({ listOrgLogs: jest.fn() }));
+jest.mock("../src/tools/getOrgLogs", () => ({ getOrgLogs: jest.fn() }));
+jest.mock("../src/tools/deleteOrgLogs", () => ({ deleteOrgLogs: jest.fn() }));
+jest.mock("../src/tools/listTraceFlags", () => ({ listTraceFlags: jest.fn() }));
+jest.mock("../src/tools/createTraceFlag", () => ({ createTraceFlag: jest.fn() }));
+jest.mock("../src/tools/deleteTraceFlags", () => ({ deleteTraceFlags: jest.fn() }));
+
 // Import the tools after mocking
 import { listSlowOperations } from "../src/tools/listSlowOperations";
 import { getLogSummary } from "../src/tools/getLogSummary";
 import { listLimitRisks } from "../src/tools/listLimitRisks";
 import { executeAnonymous } from "../src/tools/executeAnonymous";
+import { listOrgLogs } from "../src/tools/listOrgLogs";
+import { getOrgLogs } from "../src/tools/getOrgLogs";
+import { deleteOrgLogs } from "../src/tools/deleteOrgLogs";
+import { listTraceFlags } from "../src/tools/listTraceFlags";
+import { createTraceFlag } from "../src/tools/createTraceFlag";
+import { deleteTraceFlags } from "../src/tools/deleteTraceFlags";
+import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 
 // Mock process methods
 const mockExit = jest.spyOn(process, "exit").mockImplementation((() => {
@@ -238,13 +253,25 @@ describe("createApexLogServer", () => {
             tools: {},
           },
           enforceStrictCapabilities: true,
-          instructions: expect.any(String),
+          // Said once for every tool that changes an org, not in each description.
+          instructions: expect.stringContaining("ask the user to confirm first"),
           // Verifies a confirmation before any handler sees it.
           requestState: { verify: expect.any(Function) },
           cacheHints: {
             "tools/list": { ttlMs: 3_600_000, cacheScope: "public" },
           },
         },
+      );
+    });
+
+    it("should not tell the agent to confirm when production orgs are allowed", async () => {
+      createApexLogServer({ allowProductionOrgs: true });
+
+      expect(McpServer).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          instructions: expect.not.stringContaining("confirm"),
+        }),
       );
     });
 
@@ -270,21 +297,13 @@ describe("createApexLogServer", () => {
 
       expect(mockConsoleError).toHaveBeenCalledWith("[MCP Error]", testError);
     });
-
-    it.each(["SIGINT", "SIGTERM"])("closes cleanly on %s", async (signal) => {
-      const mockProcessOnce = jest.spyOn(process, "once");
-
-      runStdioServer();
-
-      expect(mockProcessOnce).toHaveBeenCalledWith(signal, expect.any(Function));
-    });
   });
 
   describe("Tool Registration", () => {
-    it("should register all 7 tools via registerTool", async () => {
+    it("should register all 11 tools via registerTool", async () => {
       createApexLogServer();
 
-      expect(mockRegisterTool).toHaveBeenCalledTimes(7);
+      expect(mockRegisterTool).toHaveBeenCalledTimes(11);
       expect(mockRegisterTool).toHaveBeenCalledWith(
         "apexlog_list_slow_operations",
         expect.any(Object),
@@ -297,6 +316,11 @@ describe("createApexLogServer", () => {
       );
       expect(mockRegisterTool).toHaveBeenCalledWith(
         "apexlog_list_limit_risks",
+        expect.any(Object),
+        expect.any(Function),
+      );
+      expect(mockRegisterTool).toHaveBeenCalledWith(
+        "apexlog_search_events",
         expect.any(Object),
         expect.any(Function),
       );
@@ -315,11 +339,18 @@ describe("createApexLogServer", () => {
         expect.any(Object),
         expect.any(Function),
       );
-      expect(mockRegisterTool).toHaveBeenCalledWith(
+      for (const name of [
         "apexlog_delete_org_logs",
-        expect.any(Object),
-        expect.any(Function),
-      );
+        "apexlog_list_trace_flags",
+        "apexlog_create_trace_flag",
+        "apexlog_delete_trace_flags",
+      ]) {
+        expect(mockRegisterTool).toHaveBeenCalledWith(
+          name,
+          expect.any(Object),
+          expect.any(Function),
+        );
+      }
     });
 
     it("should always leave apexlog_execute_anonymous discoverable", async () => {
@@ -433,6 +464,47 @@ describe("createApexLogServer", () => {
       expect(result).toEqual(mockExecuteAnonymousResult);
     });
 
+    // Every org tool reaches the deny list and the production gate through this policy.
+    it.each([
+      ["apexlog_list_org_logs", listOrgLogs],
+      ["apexlog_get_org_logs", getOrgLogs],
+      ["apexlog_delete_org_logs", deleteOrgLogs],
+      ["apexlog_list_trace_flags", listTraceFlags],
+      ["apexlog_create_trace_flag", createTraceFlag],
+      ["apexlog_delete_trace_flags", deleteTraceFlags],
+    ])("should pass the args, ctx and org policy to %s", async (name, handler) => {
+      (handler as jest.Mock).mockResolvedValue(mockAnalysisResult);
+      createApexLogServer({ allowProductionOrgs: true });
+
+      const args = { targetOrg: "psa" };
+      const ctx = { mcpReq: {} };
+      const result = await registeredTools.get(name)!.callback(args, ctx);
+
+      expect(handler).toHaveBeenCalledWith(expect.anything(), args, ctx, {
+        allowProductionOrgs: true,
+        denyList: { patterns: [], types: [] },
+        classificationCache: expect.any(Map),
+        mintConfirmationState: expect.any(Function),
+        consumeConfirmation: expect.any(Function),
+      });
+      expect(result).toBe(mockAnalysisResult);
+    });
+
+    it.each([
+      ["apexlog_list_org_logs", listOrgLogs],
+      ["apexlog_execute_anonymous", executeAnonymous],
+    ])("should tell the agent to ask for a new login when %s finds the session dead", async (name, handler) => {
+      const dead = Object.assign(new Error("Session expired or invalid"), {
+        errorCode: "INVALID_SESSION_ID",
+      });
+      (handler as jest.Mock).mockRejectedValueOnce(dead);
+      createApexLogServer();
+
+      await expect(
+        registeredTools.get(name)!.callback({ apex: "System.debug(1);" }, {} as any),
+      ).rejects.toThrow(`Session expired or invalid ${RELOGIN_HINT}`);
+    });
+
     it("should pass --allow-production-orgs through to apexlog_execute_anonymous", async () => {
       createApexLogServer({ allowProductionOrgs: true });
 
@@ -508,81 +580,22 @@ describe("createApexLogServer", () => {
       expect(McpServer).toHaveBeenCalledTimes(2);
     });
 
-    it("should handle SIGINT and close server", async () => {
+    it.each(["SIGINT", "SIGTERM"])("should close the server on %s", async (signal) => {
+      const processOnce = jest.spyOn(process, "once");
       runStdioServer();
-
-      // Find the SIGINT handler
-      const processOnceCalls = jest.spyOn(process, "once").mock.calls;
-      const sigintCall = processOnceCalls.find(
-        (call: any) => call[0] === "SIGINT",
+      const signalCall = processOnce.mock.calls.find(
+        (call: any) => call[0] === signal,
       );
-      expect(sigintCall).toBeDefined();
+      processOnce.mockRestore();
+      expect(signalCall).toBeDefined();
 
-      const sigintHandler = sigintCall![1] as () => Promise<void>;
+      const signalHandler = signalCall![1] as () => Promise<void>;
 
-      // Test SIGINT handler
-      try {
-        await sigintHandler();
-      } catch (error) {
-        // Expected to throw due to mocked process.exit
-        expect((error as Error).message).toBe("Process exit called");
-      }
+      // The mocked process.exit throws.
+      await expect(signalHandler()).rejects.toThrow("Process exit called");
 
       expect(mockHandleClose).toHaveBeenCalled();
       expect(mockExit).toHaveBeenCalledWith(0);
-    });
-  });
-
-  describe("Integration Tests", () => {
-    it("should handle complete workflow for apexlog_list_slow_operations", async () => {
-      createApexLogServer();
-
-      // Verify all tools registered
-      expect(registeredTools.size).toBe(7);
-
-      // Test tool execution
-      const tool = registeredTools.get("apexlog_list_slow_operations")!;
-      const args = {
-        logFilePath: "/path/to/test.log",
-        limit: 10,
-        minSelfMs: 1000,
-      };
-
-      const result = await tool.callback(args, {} as any);
-      expect(result).toEqual(mockAnalysisResult);
-      expect(listSlowOperations).toHaveBeenCalledWith(args);
-    });
-
-    it("should handle edge cases with malformed requests", async () => {
-      createApexLogServer();
-
-      (
-        listSlowOperations as jest.MockedFunction<
-          typeof listSlowOperations
-        >
-      ).mockRejectedValueOnce(new Error("Invalid arguments"));
-
-      const tool = registeredTools.get("apexlog_list_slow_operations")!;
-
-      await expect(tool.callback(null as any, {} as any)).rejects.toThrow(
-        "Invalid arguments",
-      );
-    });
-  });
-
-  describe("Type Safety", () => {
-    it("should handle typed arguments correctly", async () => {
-      createApexLogServer();
-
-      const tool = registeredTools.get("apexlog_list_limit_risks")!;
-      const args = {
-        logFilePath: "/path/to/test.log",
-        threshold: 50,
-      };
-
-      await tool.callback(args, {} as any);
-
-      expect(listLimitRisks).toHaveBeenCalledWith(args);
     });
   });
 });

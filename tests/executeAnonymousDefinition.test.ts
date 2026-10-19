@@ -14,8 +14,9 @@ describe("executeAnonymousToolConfig", () => {
   it("should have correct tool definition", () => {
     const config = executeAnonymousToolConfig();
 
-    expect(config.description).toContain("Execute a snippet of anonymous Apex");
-    expect(config.description).toContain("--allow-production-orgs");
+    expect(config.description).toContain("Execute anonymous Apex");
+    // Who it runs as decides what it can see; the production gate is in the server instructions.
+    expect(config.description).toContain("as the targetOrg user");
     expect(config.description).not.toContain("[DISABLED");
     expect(config.annotations.destructiveHint).toBe(true);
     expect(executeAnonymousInputSchema.apex).toBeDefined();

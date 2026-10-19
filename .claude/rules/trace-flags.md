@@ -20,4 +20,7 @@ Tested in a scratch org on 2026-09-30. Table and method: https://github.com/cert
 - With no header, the returned log is empty, and the stored log carries the flag's levels. An empty `<DebuggingHeader/>` does the same. A `debugLevel` preset such as `DEBUGONLY`, which `sf apex run` and the VS Code extension send, beats the flag like a categories header. Tested 2026-10-09: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
 - So no header form defers to the flag and returns the log: to run at a flag's levels, read its `DebugLevel` and send them.
 - A flag also logs the user's other traffic (e.g. `/aura` requests) while it lives.
-- Not tested: `CLASS_TRACING`.
+- `CLASS_TRACING`: a flag on a class is accepted, and a second whose window overlaps is refused the same way. Tested 2026-10-09 (#211).
+- A class or trigger flag stores no log itself: it only overrides the levels of that code's work, in logs a user flag stores. Documented, not tested: https://help.salesforce.com/s/articleView?id=platform.code_debug_log_classes_setup.htm
+- An edit can end a flag early, but only to a future time: an `ExpirationDate` 5 seconds ahead is accepted; one in the past, or not after `StartDate`, is refused with `FIELD_INTEGRITY_EXCEPTION`. Tested on a `CLASS_TRACING` flag in the psa scratch org 2026-10-10 (#213); `USER_DEBUG` not tested. So a delete stops logging now; an edit cannot.
+- A delete of a flag already deleted fails with `INVALID_CROSS_REFERENCE_KEY` when sent by id (`tooling.destroy(type, id)`); a list of ids goes to an endpoint the Tooling API lacks and fails with `NOT_FOUND`. Tested in the psa scratch org 2026-10-10 (#237).

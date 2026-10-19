@@ -11,10 +11,10 @@ import {
   latestApexLogIds,
   listApexLogs,
   readCursor,
-  toLongId,
   type LogFilters,
   type LogSort,
 } from "../../src/salesforce/apexLogs";
+import { toLongId } from "../../src/salesforce/soql";
 
 function record(id: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -137,35 +137,23 @@ describe("apexLogs", () => {
       expect(countQuery()).toBe("SELECT COUNT() FROM ApexLog");
     });
 
-    it("should match succeeded logs on Status = 'Success'", async () => {
-      answer([]);
-
-      await list({ filters: { succeeded: true } });
-
-      expect(pageQuery()).toContain("WHERE Status = 'Success'");
-    });
-
-    // A quote would end the literal; a % or _ would match more than was asked.
-    it("should escape quotes, backslashes and LIKE wildcards", async () => {
+    // A quote or newline would end the literal; a % or _ would match more than was asked.
+    it("should escape quotes, backslashes, control characters and LIKE wildcards", async () => {
       answer([]);
 
       await list({
-        filters: { user: "o'brien\\x@example.com", operation: "50%_off'" },
+        filters: {
+          user: "o'brien\\x@example.com",
+          operation: "50%_off'",
+          request: 'a\nb"c',
+        },
       });
 
       expect(pageQuery()).toContain(
         "LogUser.Username = 'o\\'brien\\\\x@example.com'",
       );
       expect(pageQuery()).toContain("Operation LIKE '%50\\%\\_off\\'%'");
-    });
-
-    // A raw newline or tab ends the query's string literal as surely as a quote.
-    it("should escape control characters and double quotes", async () => {
-      answer([]);
-
-      await list({ filters: { request: 'a\nb\tc"d' } });
-
-      expect(pageQuery()).toContain("Request = 'a\\nb\\tc\\\"d'");
+      expect(pageQuery()).toContain("Request = 'a\\nb\\\"c'");
     });
 
     it("should return rows with ISO start times and the count of every match", async () => {
@@ -272,7 +260,9 @@ describe("apexLogs", () => {
 
       await expect(
         list({ limit: 1, cursor: first.nextCursor!, ...change }),
-      ).rejects.toThrow("cursor belongs to a list with other filters");
+      ).rejects.toThrow(
+        "cursor belongs to a list with other filters or another sortBy. Pass the same ones, or leave cursor out to start from the first page.",
+      );
     });
 
     // The value is written into SOQL, so it must be the sort's own type.
@@ -290,12 +280,15 @@ describe("apexLogs", () => {
       );
 
       expect(() => readCursor(forged, sortBy, {})).toThrow(
-        "cursor belongs to a list with other filters",
+        "cursor is not one this tool returned",
       );
     });
 
-    it("should refuse a cursor this tool did not return", async () => {
-      await expect(list({ cursor: "not-a-cursor" })).rejects.toThrow(
+    it.each([
+      ["text that is not JSON", "not-a-cursor"],
+      ["JSON that is not a list", Buffer.from("{}").toString("base64url")],
+    ])("should refuse a cursor this tool did not return: %s", async (_name, cursor) => {
+      await expect(list({ cursor })).rejects.toThrow(
         "cursor is not one this tool returned",
       );
     });

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Changed
 
+- **Breaking:** apexlog_execute_anonymous: rename `durationMs` to `durationTotalMs`, the name apexlog_get_summary gives the same figure ([#240])
 - apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, or at the defaults - never at the levels a previous run left. Pass `"traceFlag"` to require the flag ([#230])
 - apexlog_execute_anonymous: set the categories an object `debugLevel` names over the defaults, not over the levels a previous run left ([#230])
 - apexlog_execute_anonymous: show a live Developer Console trace flag's levels in a production confirmation, and report them as `levelsSource` `developerConsole` rather than as `levelsOverridden` ([#230])
@@ -16,8 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
+- apexlog_search_events: search a log's events in log order - what the code printed, the validation rules, or everything under one method - filtered by type, category, level, namespace or text, and paged ([#144])
 - apexlog_list_org_logs, apexlog_get_org_logs: list the debug logs stored in an org, filtered, sorted and paged in the org, and download them by id or the newest N for the analysis tools ([#209])
 - apexlog_delete_org_logs: delete stored logs by id or by the list's filters, so an org whose log storage is full can set a trace flag again ([#210])
+- apexlog_list_trace_flags, apexlog_create_trace_flag, apexlog_delete_trace_flags: see which users, classes and triggers are traced, start logging a user or set a class's levels, and stop it now ([#211])
 - --deny-orgs: refuse named orgs, or an org type with `type:production`, to every org tool - running Apex and reading logs alike. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186], [#209])
 - apexlog_execute_anonymous: run from a file with `apexFilePath`, reuse saved scripts and save tokens ([#212])
 - apexlog_get_summary: report the exceptions a transaction threw, with where and how often, and how many flow elements failed ([#208])
@@ -31,6 +34,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: stop a 60-second stall waiting on roots ([#222])
 - apexlog_execute_anonymous: require `targetOrg` when the client's roots can't be used ([#225])
 - apexlog_get_summary, apexlog_list_slow_operations: time a method that the log never closes up to the end of the log, instead of reporting it too short ([#226])
+- apexlog_execute_anonymous: say when the org's login has expired and how to log in again ([#239])
+- apexlog_execute_anonymous: say when `targetOrg` names no authenticated org, instead of the Salesforce SDK's raw error ([#236])
+- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks: say a `logFilePath` that is a directory is one, instead of Node's raw error ([#234])
 
 ## [2.0.1] - 2026-09-11
 
@@ -131,5 +137,11 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#225]: https://github.com/certinia/debug-log-analyzer-mcp/pull/225
 [#228]: https://github.com/certinia/debug-log-analyzer-mcp/issues/228
 [#230]: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
+[#234]: https://github.com/certinia/debug-log-analyzer-mcp/issues/234
+[#236]: https://github.com/certinia/debug-log-analyzer-mcp/issues/236
+[#239]: https://github.com/certinia/debug-log-analyzer-mcp/issues/239
+[#240]: https://github.com/certinia/debug-log-analyzer-mcp/issues/240
+[#211]: https://github.com/certinia/debug-log-analyzer-mcp/issues/211
 [#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
+[#144]: https://github.com/certinia/debug-log-analyzer-mcp/issues/144

@@ -49,7 +49,7 @@ const ORG_ID = /^00D[a-z0-9]{12}(?:[a-z0-9]{3})?$/i;
 const TYPE_ENTRY = /^type:/i;
 
 const DENY_IS_ABSOLUTE =
-  "A deny is absolute: no flag and no confirmation lifts it.";
+  "A deny is absolute: no flag and no confirmation lifts it. Ask the user which org to use.";
 
 // The 18-char suffix only encodes the case of the first 15.
 const toOrgId15 = (orgId: string): string => orgId.slice(0, 15);

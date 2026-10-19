@@ -8,8 +8,8 @@ import path from "node:path";
 import type { Workspace } from "../salesforce/orgAccess.js";
 import { outsideRoots } from "./localFile.js";
 
-/** Where debug logs go when the caller names no `outputDir`, under the project root. */
-const DEFAULT_OUTPUT_DIR = ".apex-log-mcp";
+/** Where debug logs go when the caller names no `outputDir`, under the first client root, else the working directory. */
+export const DEFAULT_OUTPUT_DIR = ".apex-log-mcp";
 
 /** The directory every org tool saves debug logs to. */
 export type LogStore = {
