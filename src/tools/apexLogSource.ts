@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs, type BigIntStats } from "fs";
+import { constants, promises as fs, type BigIntStats } from "fs";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 import { absolutePathSchema, fileReadError } from "./localFile.js";
@@ -80,7 +80,8 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
   let handle;
   let stats;
   try {
-    handle = await fs.open(logFilePath, "r");
+    // Non-blocking, so a FIFO opens and is refused below instead of waiting forever for a writer.
+    handle = await fs.open(logFilePath, constants.O_RDONLY | constants.O_NONBLOCK);
     stats = await handle.stat({ bigint: true });
   } catch (error) {
     await handle?.close();

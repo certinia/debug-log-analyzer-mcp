@@ -31,6 +31,7 @@ jest.mock("fs", () => {
   // A handle is the file at one path, so its stat and read delegate to the
   // mocks above with that path filled in. Tests set and assert on those.
   return {
+    constants: jest.requireActual("fs").constants,
     promises: {
       stat,
       readFile,

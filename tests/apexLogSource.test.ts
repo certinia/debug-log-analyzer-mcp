@@ -19,6 +19,7 @@ jest.mock("fs", () => {
   // A handle is the file at one path, so its stat and read delegate to the
   // mocks above with that path filled in. Tests set and assert on those.
   return {
+    constants: jest.requireActual("fs").constants,
     promises: {
       stat,
       readFile,
@@ -89,7 +90,7 @@ describe("apexLogSource", () => {
     it("parses the file on the first call", async () => {
       const log = await loadApexLog(logPath);
 
-      expect(mockFs.open).toHaveBeenCalledWith(logPath, "r");
+      expect(mockFs.open).toHaveBeenCalledWith(logPath, expect.any(Number));
       expect(mockFs.readFile).toHaveBeenCalledWith(logPath, "utf-8");
       expect(mockParse).toHaveBeenCalledWith("log content");
       expect(log).toBe(mockParse.mock.results[0]?.value);

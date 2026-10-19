@@ -38,8 +38,9 @@ const UNREAD = new Set(["$schema", "minimum", "maximum"]);
  */
 export function toolInputSchema<S extends z.ZodRawShape>(
   shape: S,
-): z.ZodObject<S> {
-  const object = z.object(shape);
+): z.ZodObject<S, z.core.$strict> {
+  // Strict, so a misnamed parameter is refused rather than dropped and the call run unfiltered.
+  const object = z.strictObject(shape);
   const standard = object["~standard"];
   // A zod that no longer publishes the converter is one the SDK falls back to
   // `z.toJSONSchema` for, and 14 tokens are not worth trading that for a throw
@@ -52,11 +53,17 @@ export function toolInputSchema<S extends z.ZodRawShape>(
     ...standard,
     jsonSchema: {
       ...standard.jsonSchema,
-      input: (options) => withoutUnread(standard.jsonSchema.input(options)),
+      input: (options) => withoutStrictness(withoutUnread(standard.jsonSchema.input(options))),
     },
   };
 
   return object;
+}
+
+// zod refuses an unknown key itself; saying so on the wire costs tokens on every request. Top level only: a record's is its value schema.
+function withoutStrictness(schema: Record<string, unknown>): Record<string, unknown> {
+  const { additionalProperties, ...rest } = schema;
+  return additionalProperties === false ? rest : schema;
 }
 
 /**
