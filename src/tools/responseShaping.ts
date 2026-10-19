@@ -194,15 +194,40 @@ export function elide(text: string, maxChars: number): string {
   }
   const head = Math.ceil((maxChars - 1) / 2);
   const tail = maxChars - 1 - head;
-  // A cut inside a surrogate pair would send half a character, so step off it.
-  const first = text.charCodeAt(head - 1);
-  const from = first >= 0xd800 && first <= 0xdbff ? head - 1 : head;
-  const last = text.charCodeAt(text.length - tail);
-  const to =
-    last >= 0xdc00 && last <= 0xdfff
-      ? text.length - tail + 1
-      : text.length - tail;
-  return `${text.slice(0, from)}…${text.slice(to)}`;
+  return `${text.slice(0, offPair(text, head, -1))}…${text.slice(offPair(text, text.length - tail, 1))}`;
+}
+
+/**
+ * Cut `text` to `maxChars` as `elide` does, unless that hides the span from
+ * `start` for `length` characters: then keep a window around the span, with an
+ * ellipsis at each end cut. A span longer than the window keeps its start.
+ */
+export function elideAround(
+  text: string,
+  maxChars: number,
+  start: number,
+  length: number,
+): string {
+  const head = Math.ceil((maxChars - 1) / 2);
+  const tail = maxChars - 1 - head;
+  if (text.length <= maxChars || start + length <= head || start >= text.length - tail) {
+    return elide(text, maxChars);
+  }
+  // Two ellipses, so the window is two shorter than the limit.
+  const width = maxChars - 2;
+  const centred = length >= width ? start : start - Math.floor((width - length) / 2);
+  const at = Math.min(Math.max(0, centred), text.length - width);
+  const from = offPair(text, at, 1);
+  const to = offPair(text, at + width, -1);
+  return `${from > 0 ? "…" : ""}${text.slice(from, to)}${to < text.length ? "…" : ""}`;
+}
+
+// A cut inside a surrogate pair would send half a character, so step `step` off it.
+function offPair(text: string, index: number, step: 1 | -1): number {
+  return (text.charCodeAt(index - 1) & 0xfc00) === 0xd800 &&
+    (text.charCodeAt(index) & 0xfc00) === 0xdc00
+    ? index + step
+    : index;
 }
 
 /**

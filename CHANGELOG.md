@@ -18,7 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ### Added
 
-- apexlog_search_events: search a log's events in log order - what the code printed, the validation rules, or everything under one method - filtered by type, category, level, namespace or text, and paged ([#144])
+- apexlog_search_events: search a log's events in log order - what the code printed, the validation rules, or everything under one method - filtered by type, namespace or text, and paged ([#144])
 - apexlog_list_org_logs, apexlog_get_org_logs: list the debug logs stored in an org, filtered, sorted and paged in the org, and download them by id or the newest N for the analysis tools ([#209])
 - apexlog_create_trace_flag: start logging a user, or set a class's or trigger's levels, for a while ([#211])
 - --deny-orgs: refuse named orgs, or an org type with `type:production`, to every org tool - running Apex and reading logs alike. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186], [#209])

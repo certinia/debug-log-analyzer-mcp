@@ -34,14 +34,59 @@ function search(
 
 // The default page, a search by type and an empty search are pinned by the eval goldens.
 describe("searchEvents", () => {
-  it("should walk on from offset, with the same matchedCount", async () => {
+  // The levels come once: a later page reads the same log.
+  it("should walk on from nextOffset, with the same matchedCount, and the levels on the first page only", async () => {
     const first = await search("governor-heavy", { limit: 10 });
-    const next = await search("governor-heavy", { limit: 10, offset: 10 });
+    const next = await search("governor-heavy", { limit: 10, offset: first.nextOffset! });
 
+    expect(first.nextOffset).toBe(10);
+    expect(first.capturedAt).toBeDefined();
+    expect(next.capturedAt).toBeUndefined();
     expect(next.matchedCount).toBe(first.matchedCount);
     expect(next.events[0]!.eventIndex).toBeGreaterThan(
       first.events[9]!.eventIndex,
     );
+  });
+
+  it("should give no nextOffset on the last page", async () => {
+    const { matchedCount } = await search("governor-heavy", { limit: 0 });
+    const last = await search("governor-heavy", { offset: matchedCount - 1 });
+
+    expect(last.events).toHaveLength(1);
+    expect(last.nextOffset).toBeUndefined();
+  });
+
+  // An empty page's nextOffset would equal its offset, so a caller following it would never move.
+  it("should give no nextOffset for limit 0", async () => {
+    const { matchedCount, nextOffset } = await search("governor-heavy", { limit: 0 });
+
+    expect(matchedCount).toBeGreaterThan(0);
+    expect(nextOffset).toBeUndefined();
+  });
+
+  // The page budget, not limit, ends this page: nextOffset follows the rows sent.
+  it("should give nextOffset after the last row sent when the page budget cuts the page", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "search-"));
+    const logFilePath = join(dir, "many.log");
+    const minimal = readFileSync(join(FIXTURES, "minimal.log"), "utf8");
+    const line = "09:00:00.1 (1731239)|USER_DEBUG|[1]|DEBUG|";
+    writeFileSync(
+      logFilePath,
+      minimal.replace(line, Array.from({ length: 500 }, () => `${line}${"x".repeat(400)}`).join("\n")),
+    );
+
+    try {
+      const { events, nextOffset, matchedCount } = await searchAt(logFilePath, {
+        type: ["USER_DEBUG"],
+        limit: 500,
+      });
+
+      expect(matchedCount).toBe(500);
+      expect(events.length).toBeLessThan(500);
+      expect(nextOffset).toBe(events.length);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("should match text ignoring case", async () => {
@@ -51,19 +96,6 @@ describe("searchEvents", () => {
 
     expect(events).toHaveLength(3);
     expect(events.every((row) => row.type === "EXCEPTION_THROWN")).toBe(true);
-  });
-
-  // A log at DEBUG drops the FINE and finer events, which is the noise.
-  it("should keep only events a log captured at maxLevel carries", async () => {
-    const { events } = await search("governor-heavy", {
-      maxLevel: "INFO",
-      limit: 1000,
-    });
-    const types = new Set(events.map((row) => row.type));
-
-    expect(types.has("SOQL_EXECUTE_BEGIN")).toBe(true);
-    expect(types.has("METHOD_ENTRY")).toBe(false);
-    expect(types.has("SOQL_EXECUTE_EXPLAIN")).toBe(false);
   });
 
   it("should return only the events below parentEventIndex", async () => {
@@ -119,6 +151,30 @@ describe("searchEvents", () => {
     }
   });
 
+  // The head and tail a long line keeps would hide a match in its middle.
+  it("should cut a long line around the contains match", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "search-"));
+    const logFilePath = join(dir, "long.log");
+    const minimal = readFileSync(join(FIXTURES, "minimal.log"), "utf8");
+    writeFileSync(
+      logFilePath,
+      minimal.replace(
+        "|USER_DEBUG|[1]|DEBUG|",
+        `|USER_DEBUG|[1]|DEBUG|${"x".repeat(2_000)}OrderId=42${"y".repeat(2_000)}`,
+      ),
+    );
+
+    try {
+      const { events } = await searchAt(logFilePath, { contains: "orderid=42" });
+
+      expect(events[0]!.text).toHaveLength(400);
+      expect(events[0]!.text).toContain("OrderId=42");
+      expect(events[0]!.text).toMatch(/^…x+OrderId=42y+…$/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("should send no text where the event states none but its type", async () => {
     const { events } = await search("governor-heavy", {
       type: ["EXECUTION_STARTED"],
@@ -143,24 +199,6 @@ describe("searchEvents", () => {
     await expect(search("governor-heavy", args)).rejects.toThrow(
       `Pass as ${Object.keys(args)[0]} an eventIndex from a row this tool returned.`,
     );
-  });
-
-  it("should keep a USER_DEBUG line by the level the code logged it at", async () => {
-    const { events } = await search("minimal", { maxLevel: "ERROR", type: ["USER_DEBUG"] });
-
-    // The fixture's line is logged at DEBUG, which an ERROR log does not carry.
-    expect(events).toEqual([]);
-  });
-
-  // An empty page names no category, so the filter's stands in for it, matched or not.
-  it.each([
-    { limit: 0, debugCategory: ["database" as const] },
-    { debugCategory: ["validation" as const] },
-  ])("should give only the filter's levels when no row is returned: %o", async (args) => {
-    const { events, capturedAt } = await search("governor-heavy", args);
-
-    expect(events).toEqual([]);
-    expect(capturedAt?.map((row) => row.debugCategory)).toEqual(args.debugCategory);
   });
 
   it("should return an event asked for by id only if it is below parentEventIndex", async () => {

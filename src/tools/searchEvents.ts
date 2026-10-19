@@ -12,9 +12,9 @@ import type {
 import { loadApexLog, logFilePathSchema, walkLog } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { capturedAt, declaredLevels, type DeclaredLevel } from "./operations.js";
-import { DEBUG_CATEGORIES, LOG_LEVELS } from "../salesforce/debugLevels.js";
 import {
   elide,
+  elideAround,
   fitPage,
   matches,
   NAME_LIMIT,
@@ -31,14 +31,6 @@ const searchEventsInputSchema = {
     .array(z.string())
     .optional()
     .describe("Only these log event types, e.g. USER_DEBUG, VALIDATION_RULE"),
-  debugCategory: z
-    .array(z.enum(DEBUG_CATEGORIES))
-    .optional()
-    .describe("Only these debug log categories"),
-  maxLevel: z
-    .enum(LOG_LEVELS)
-    .optional()
-    .describe("Only events a log captured at this level carries"),
   namespace: z.array(z.string()).optional().describe("Only these namespaces"),
   contains: z
     .string()
@@ -61,15 +53,13 @@ const searchEventsInputSchema = {
     .int()
     .min(0)
     .optional()
-    .describe("Page size (default: 50); fewer if the page would be too large"),
+    .describe("Page size (default: 50)"),
   offset: z
     .number()
     .int()
     .min(0)
     .optional()
-    .describe(
-      "Matched rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.",
-    ),
+    .describe("Rows to skip (default: 0): the last page's nextOffset"),
 };
 
 // Half the page budget, so a message that escaping doubles still fits on the page.
@@ -82,7 +72,7 @@ export type SearchEventsArgs = z.infer<
 export const searchEventsToolConfig = {
   title: "Search Apex Log Events",
   description:
-    `Search the events of an Apex debug log in log order: what the code printed (USER_DEBUG), validation rules, statements, or every event under one method. Each row gives the event's eventIndex, its parent's, its type, category, namespace, line and text, with no timing. Text past ${NAME_LIMIT} characters is elided; ask for one event by eventIndex to read up to ${ONE_EVENT_TEXT_LIMIT.toLocaleString("en-US")}.`,
+    `Search the events of an Apex debug log in log order: what the code printed (USER_DEBUG), validation rules, statements, or every event under one method. For plain text in the saved .log, grep is cheaper; use this for event types, nesting, or without a shell. Text past ${NAME_LIMIT} characters is elided; ask for one event by eventIndex to read up to ${ONE_EVENT_TEXT_LIMIT.toLocaleString("en-US")}.`,
   inputSchema: toolInputSchema(searchEventsInputSchema),
   annotations: {
     readOnlyHint: true,
@@ -97,11 +87,10 @@ export interface EventRow {
   /** The event it sits under, which `parentEventIndex` searches below. */
   parentEventIndex: number;
   type: string;
-  debugCategory: DebugCategory;
   namespace: string;
   /** The Apex line, `EXTERNAL` for code outside the org, or null where the log states none. */
   lineNumber: LineNumber;
-  /** Empty where the event states none; elided past `NAME_LIMIT`, or past `ONE_EVENT_TEXT_LIMIT` for one event asked for by id. */
+  /** Empty where the event states none; cut past `NAME_LIMIT`, or past `ONE_EVENT_TEXT_LIMIT` for one event asked for by id, around the `contains` match when there is one. */
   text: string;
 }
 
@@ -112,32 +101,29 @@ export interface SearchEventsResult {
    */
   matchedCount: number;
   /**
-   * The level each category searched was captured at: those the `debugCategory`
-   * filter names, or else those every match came from when each `type` named
-   * matched or one event was asked for. Otherwise, or when these name no
-   * declared category, every level the header declared: a category with no
-   * match may have none only because its level did not capture it.
+   * The level each category searched was captured at: those every match came
+   * from when each `type` named matched or one event was asked for. Otherwise,
+   * or when these name no declared category, every level the header declared:
+   * a category with no match may have none only because its level did not
+   * capture it. On the first page, or for one event, since a later page reads the same log.
    */
   capturedAt?: DeclaredLevel[];
   events: EventRow[];
-}
-
-const LEVEL_RANK = new Map<string, number>(
-  LOG_LEVELS.map((level, rank) => [level, rank]),
-);
-
-// The parser stamps every USER_DEBUG as DEBUG; the line itself states the level the code logged at.
-function levelOf(event: LogEvent): string {
-  if (event.type !== "USER_DEBUG") {
-    return event.debugLevel;
-  }
-  const stated = /^[A-Z]+/.exec(event.text)?.[0] ?? "";
-  return LEVEL_RANK.has(stated) ? stated : event.debugLevel;
+  /** The `offset` of the next page, while matches remain past this one. */
+  nextOffset?: number;
 }
 
 // What a row shows as text: none where the parser named the event after its type.
 function shownText(event: LogEvent): string {
   return event.text === event.type ? "" : event.text;
+}
+
+// Kept around the `contains` match, so a cut cannot hide why the row matched.
+function cut(text: string, maxChars: number, pattern: RegExp | undefined): string {
+  const found = text.length > maxChars ? pattern?.exec(text) : undefined;
+  return found
+    ? elideAround(text, maxChars, found.index, found[0].length)
+    : elide(text, maxChars);
 }
 
 // An index that names nothing in the tree - past the log, or a line the parser folded - must not read as no match.
@@ -162,8 +148,6 @@ export async function searchEvents(args: SearchEventsArgs) {
   const {
     logFilePath,
     type,
-    debugCategory,
-    maxLevel,
     namespace,
     contains,
     eventIndex,
@@ -180,7 +164,6 @@ export async function searchEvents(args: SearchEventsArgs) {
       : resolve(apexLog, parentEventIndex, "parentEventIndex");
   const one = eventIndex === undefined ? undefined : resolve(apexLog, eventIndex, "eventIndex");
 
-  const maxRank = maxLevel === undefined ? undefined : LEVEL_RANK.get(maxLevel);
   // One pattern per call, so no event's text is copied to compare it.
   const pattern =
     contains === undefined
@@ -195,11 +178,7 @@ export async function searchEvents(args: SearchEventsArgs) {
   const consider = (event: LogEvent): void => {
     const kept =
       matches(type, event.type ?? "") &&
-      matches(debugCategory, event.debugCategory) &&
       matches(namespace, event.namespace) &&
-      // An event that states no level is kept: nothing says a level hides it.
-      (maxRank === undefined ||
-        (LEVEL_RANK.get(levelOf(event)) ?? -1) <= maxRank) &&
       (pattern === undefined || pattern.test(shownText(event)));
     if (!kept) {
       return;
@@ -225,29 +204,27 @@ export async function searchEvents(args: SearchEventsArgs) {
     // In range: every event in the tree has a parent.
     parentEventIndex: event.parent!.eventIndex,
     type: event.type ?? "",
-    debugCategory: event.debugCategory,
     namespace: event.namespace,
     lineNumber: event.lineNumber,
-    text: elide(shownText(event), textLimit),
+    text: cut(shownText(event), textLimit, pattern),
   });
 
   const events = fitPage(page, toRow).rows;
   // Only these fix the categories searched; a type that matched nothing names no category.
   const allTypesSeen =
     !!type?.length && type.every((name) => matchedTypes.has(name));
-  const searched = debugCategory?.length
-    ? debugCategory
-    : one || allTypesSeen
-      ? matchedCategories
-      : [];
-  const levels = capturedAt(apexLog, searched);
+  const levels = capturedAt(apexLog, one || allTypesSeen ? matchedCategories : []);
+  const next = offset + events.length;
 
   const result: SearchEventsResult = {
     matchedCount,
-    ...omitEmpty({
-      capturedAt: levels.length ? levels : declaredLevels(apexLog),
-    }),
+    ...((offset === 0 || one) &&
+      omitEmpty({
+        capturedAt: levels.length ? levels : declaredLevels(apexLog),
+      })),
     events,
+    // Not after an empty page, whose nextOffset would never move.
+    ...(events.length > 0 && next < matchedCount && { nextOffset: next }),
   };
 
   return toonResult(result);
