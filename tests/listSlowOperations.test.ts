@@ -338,6 +338,22 @@ describe("listSlowOperations", () => {
     // The rows behind the page are still counted, or a caller cannot tell it
     // has reached the end.
     expect(result.matchedCount).toBe(3);
+    expect(result.nextOffset).toBe(2);
+  });
+
+  // An empty page's nextOffset would equal its offset, so a caller following it would never move.
+  it.each([
+    ["the last page", { limit: 1, offset: 2 }],
+    ["limit 0", { limit: 0 }],
+  ])("gives no nextOffset on %s", async (_name, page) => {
+    mockLog(
+      1000 * MS,
+      method({ text: "A.run", totalNs: 500 * MS }),
+      method({ text: "B.run", totalNs: 400 * MS }),
+      method({ text: "C.run", totalNs: 300 * MS }),
+    );
+
+    expect((await ranked({ ...ARGS, ...page })).nextOffset).toBeUndefined();
   });
 
   // `slice(0, -5)` drops the five fastest rows and returns all the rest, so a
@@ -391,6 +407,7 @@ describe("listSlowOperations", () => {
     expect(result.operations.length).toBeLessThan(200);
     // Rows returned read against rows matched is what says the page was cut.
     expect(result.matchedCount).toBe(200);
+    expect(result.nextOffset).toBe(result.operations.length);
   });
 
   it("spends the same budget on the plans behind a namespace row", async () => {

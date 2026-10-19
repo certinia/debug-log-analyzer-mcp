@@ -156,7 +156,7 @@ export const DEFAULT_TRACE_CONFIG: Required<TraceConfig> = {
   workflow: "FINE",
 };
 
-export type DebugLevelInput = "traceFlag" | "default" | LogLevel | TraceConfig;
+export type DebugLevelInput = "default" | LogLevel | TraceConfig;
 
 /** Levels grouped by level, short enough for the wire: "apexCode, workflow FINE; callout DEBUG". */
 export function levelsClause(levels: Required<TraceConfig>): string {

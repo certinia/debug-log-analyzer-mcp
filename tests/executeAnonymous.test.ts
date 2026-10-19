@@ -488,49 +488,6 @@ describe("Execute Anonymous", () => {
         expect(toonDecode(result).levelsSource).toBe("default");
       });
 
-      it('should run at the trace flag levels for "traceFlag"', async () => {
-        withFlag();
-
-        const result = await executeAnonymous(
-          mockServer,
-          { apex: testApexCode, debugLevel: "traceFlag" },
-          ctx,
-          policy(),
-        );
-
-        expect(toonDecode(result).levelsSource).toBe("traceFlag");
-      });
-
-      // Flags expire within a day, and a caller who named the flag must hear it is gone.
-      it('should refuse "traceFlag" when the user has no flag, before the org is written to', async () => {
-        await expect(
-          executeAnonymous(
-            mockServer,
-            { apex: testApexCode, debugLevel: "traceFlag" },
-            ctx,
-            policy(),
-          ),
-        ).rejects.toThrow(
-          "test@example.com has no active USER_DEBUG trace flag, so there are no levels to use. Create one with apexlog_create_trace_flag, or leave out debugLevel to run at the defaults.",
-        );
-        expect(ensureDebugLevel).not.toHaveBeenCalled();
-        expect(createTraceFlag).not.toHaveBeenCalled();
-        expect(mockRequest).not.toHaveBeenCalled();
-      });
-
-      it('should refuse "traceFlag" when only a Developer Console flag is live', async () => {
-        mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: true });
-
-        await expect(
-          executeAnonymous(
-            mockServer,
-            { apex: testApexCode, debugLevel: "traceFlag" },
-            ctx,
-            policy(),
-          ),
-        ).rejects.toThrow("has no active USER_DEBUG trace flag");
-      });
-
       // It outranks the header, so its levels are the run's whatever was asked for.
       it("should run at a live Developer Console flag's levels, and say so", async () => {
         mockFindActiveTraceFlags.mockResolvedValue({

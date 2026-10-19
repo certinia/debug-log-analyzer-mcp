@@ -340,7 +340,7 @@ const DEFINITION_BUDGET = {
   // cannot show the case for is `sortBy`: on the 40 logs of a 123-log corpus that
   // record an allocation, a heap ranking's top ten holds a median six rows the
   // self-time top ten never returns.
-  apexlog_list_slow_operations: 557,
+  apexlog_list_slow_operations: 550,
   // Covers the facts the summary gained: per-namespace limit usage, time by
   // category, and the exceptions and flow errors #208 added, which a caller
   // asking what failed would otherwise not look for here.
@@ -348,13 +348,13 @@ const DEFINITION_BUDGET = {
   apexlog_list_limit_risks: 158,
   // Raised for `apexFilePath` (#212): without it, a script in a file is read
   // into context and then written out again as `apex`, paid for twice.
-  apexlog_execute_anonymous: 450,
+  apexlog_execute_anonymous: 445,
   // Seven optional filters and a cursor, each run in SOQL, so a busy org's log
   // list costs what `limit` asks for, not what the org holds (#209).
-  apexlog_list_org_logs: 344,
+  apexlog_list_org_logs: 322,
   apexlog_get_org_logs: 219,
   // Measured + 5% (#211). The levels union is the costly part.
-  apexlog_create_trace_flag: 369,
+  apexlog_create_trace_flag: 362,
   // Measured + 5% (#144). Six filters and a page, each a question the
   // ranking cannot ask: what the code printed, what ran under one method.
   // The category and level filters went: `type` asks both more exactly.
@@ -380,9 +380,9 @@ const V1_DEFINITION_TOTAL = 1529;
  * The ceiling on the sum of the definition budgets. It sat at
  * `V1_DEFINITION_TOTAL` until the org log tools: reaching a log stored in the
  * org was a deliberate purchase of a capability 1.x never had (#209): the two
- * definitions measure ~525 tokens a request, inside their budgets of 563.
+ * definitions measure ~507 tokens a request, inside their budgets of 541.
  * Tracing a user, so the org stores the logs those tools read, or setting a
- * class's levels, added ~350 inside a budget of 369 (#211). Listing and
+ * class's levels, added ~345 inside a budget of 362 (#211). Listing and
  * deleting flags and deleting stored logs were dropped: each answered a rare
  * need that Setup or `sf` meets, at ~500 tokens on every request.
  * Searching a log's events, for what the code printed or what ran under one
@@ -390,7 +390,7 @@ const V1_DEFINITION_TOTAL = 1529;
  * cap, so raising any budget means raising the cap, on purpose, with the
  * reason here.
  */
-const DEFINITION_TOTAL_CAP = 2607;
+const DEFINITION_TOTAL_CAP = 2566;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which

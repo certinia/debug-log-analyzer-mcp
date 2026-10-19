@@ -248,7 +248,7 @@ describe("createApexLogServer", () => {
           },
           enforceStrictCapabilities: true,
           // Said once for every tool that changes an org, not in each description.
-          instructions: expect.stringContaining("ask the user to confirm first"),
+          instructions: expect.stringContaining("ask the user first"),
           // Verifies a confirmation before any handler sees it.
           requestState: { verify: expect.any(Function) },
           cacheHints: {
