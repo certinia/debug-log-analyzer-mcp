@@ -21,6 +21,16 @@ describe("toolInputSchema", () => {
     );
   });
 
+  it("refuses a parameter the tool does not have, at no cost on the wire", () => {
+    const result = schema.safeParse({ logFilePath, eventType: ["USER_DEBUG"] });
+    const json = schema["~standard"].jsonSchema.input({
+      target: "draft-2020-12",
+    });
+
+    expect(result.error?.issues[0]?.message).toBe('Unrecognized key: "eventType"');
+    expect(json).not.toHaveProperty("additionalProperties");
+  });
+
   // The safe-integer bound is dropped where the figure is zod's, and kept where
   // the field asked for it - `limit` states `.min(0)`, and 0 reaches the wire.
   it("drops what only zod reads, at any depth", () => {

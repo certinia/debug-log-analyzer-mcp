@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: say when the org's login has expired and how to log in again ([#239])
 - apexlog_execute_anonymous: say when `targetOrg` names no authenticated org, instead of the Salesforce SDK's raw error ([#236])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks: say a `logFilePath` that is a directory is one, instead of Node's raw error ([#234])
+- every tool: refuse a parameter it does not have, instead of ignoring it and running without it ([#244])
 
 ## [2.0.1] - 2026-09-11
 
@@ -145,3 +146,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
 [#144]: https://github.com/certinia/debug-log-analyzer-mcp/issues/144
+[#244]: https://github.com/certinia/debug-log-analyzer-mcp/pull/244
