@@ -44,6 +44,7 @@ import {
 import { compileDenyList } from "../src/policy/orgDenyList";
 import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
 import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
+import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<typeof readLocalOrg>;
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
@@ -237,6 +238,20 @@ describe("createTraceFlag", () => {
     const result = await createTraceFlag(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
 
     expect(text(result)).toContain("apexlog_delete_org_logs");
+  });
+
+  // The login can lapse while the user confirms; the error is returned, so server.ts's wrapper never adds the hint.
+  it("should ask for a new login when the org refuses the stored one mid-call", async () => {
+    mockEnsureLevel.mockRejectedValue(
+      Object.assign(new Error("Error authenticating with the refresh token due to: expired access/refresh token"), {
+        name: "RefreshTokenAuthError",
+        cause: Object.assign(new Error("expired access/refresh token"), { name: "invalid_grant" }),
+      }),
+    );
+
+    const result = await createTraceFlag(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
+
+    expect(text(result)).toContain(RELOGIN_HINT);
   });
 
   // A flag set while the call waited for a confirmation was not there to name.

@@ -22,6 +22,7 @@ import {
   type TraceFlagRow,
 } from "../salesforce/traceFlags.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
+import { withReloginHint } from "../salesforce/authFailure.js";
 import { toonResult } from "./responseShaping.js";
 import type { CreateTraceFlagArgs } from "./traceFlagsDefinition.js";
 
@@ -111,7 +112,9 @@ export async function createTraceFlag(
       startTime: isoSeconds(window.start.toISOString()),
       expirationTime: isoSeconds(window.end.toISOString()),
     };
-  } catch (error) {
+  } catch (caught) {
+    // Returned, not thrown, so server.ts's relogin wrapper never sees it.
+    const error = withReloginHint(caught);
     const message = error instanceof Error ? error.message : String(error);
     const next = /storage/i.test(message)
       ? // When the org's log storage is full, no flag can be written until logs are deleted.
