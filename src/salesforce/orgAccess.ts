@@ -64,7 +64,8 @@ export type OrgRequest<T, V = T> = {
   /**
    * `false` for a read. A write reads what it needs from the connected org and
    * returns it with what a production org must confirm, so it does exactly
-   * what was confirmed. Required, so no write skips the gate by leaving it out.
+   * what was confirmed. Required, so no write skips the gate by leaving it out;
+   * `confirm: null` says, explicitly, that the write found nothing to change.
    */
   write:
     | false
@@ -73,7 +74,7 @@ export type OrgRequest<T, V = T> = {
         connection: Connection;
         local: LocalOrg;
         orgLabel: string;
-      }) => Promise<{ value: V; confirm: Confirmable }>);
+      }) => Promise<{ value: V; confirm: Confirmable | null }>);
 };
 
 export type OrgAccess<T> =
@@ -164,24 +165,27 @@ export async function openOrg<T = undefined, V = T>(
   if (request.write) {
     const planned = await request.write({ value, connection, local, orgLabel });
     result = planned.value;
-    const decision = await authorizeOperation({
-      ctx,
-      mintConfirmationState: policy.mintConfirmationState,
-      consumeConfirmation: policy.consumeConfirmation,
-      classification,
-      orgId: local.orgId,
-      orgLabel,
-      allowProductionOrgs: policy.allowProductionOrgs,
-      unverifiedReason,
-      tool: request.tool,
-      action: request.action,
-      confirm: planned.confirm,
-    });
-    if (decision.outcome === "confirmationRequired") {
-      return { granted: false, result: decision.result };
-    }
-    if (decision.outcome === "refused") {
-      return refuse(decision.reason);
+    // Nothing to change is nothing to confirm: asking would put a no-op to a person as a destructive prompt.
+    if (planned.confirm) {
+      const decision = await authorizeOperation({
+        ctx,
+        mintConfirmationState: policy.mintConfirmationState,
+        consumeConfirmation: policy.consumeConfirmation,
+        classification,
+        orgId: local.orgId,
+        orgLabel,
+        allowProductionOrgs: policy.allowProductionOrgs,
+        unverifiedReason,
+        tool: request.tool,
+        action: request.action,
+        confirm: planned.confirm,
+      });
+      if (decision.outcome === "confirmationRequired") {
+        return { granted: false, result: decision.result };
+      }
+      if (decision.outcome === "refused") {
+        return refuse(decision.reason);
+      }
     }
   }
 

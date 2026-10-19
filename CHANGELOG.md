@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Added
 
 - apexlog_list_org_logs, apexlog_get_org_logs: list the debug logs stored in an org, filtered, sorted and paged in the org, and download them by id or the newest N for the analysis tools ([#209])
+- apexlog_delete_org_logs: delete stored logs by id or by the list's filters, so an org whose log storage is full can set a trace flag again ([#210])
 - --deny-orgs: refuse named orgs, or an org type with `type:production`, to every org tool - running Apex and reading logs alike. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186], [#209])
 - apexlog_execute_anonymous: run from a file with `apexFilePath`, reuse saved scripts and save tokens ([#212])
 - apexlog_get_summary: report the exceptions a transaction threw, with where and how often, and how many flow elements failed ([#208])
@@ -130,4 +131,5 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#225]: https://github.com/certinia/debug-log-analyzer-mcp/pull/225
 [#228]: https://github.com/certinia/debug-log-analyzer-mcp/issues/228
 [#230]: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
+[#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209

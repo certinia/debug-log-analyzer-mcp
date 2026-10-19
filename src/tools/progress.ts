@@ -6,7 +6,8 @@ import type { ServerContext } from "@modelcontextprotocol/server";
 
 /**
  * Report each of `total` steps, but only to a caller that asked for progress.
- * The spec gives a token only when it wants the notifications.
+ * The spec gives a token only when it wants the notifications. Nothing is
+ * reported once the call is cancelled, since the SDK sends nothing after.
  *
  * A failed notification is reported and stepped over. The work is done by the
  * last step, so a rejected notify must not throw away what it produced.
@@ -14,14 +15,14 @@ import type { ServerContext } from "@modelcontextprotocol/server";
 export function progressReporter(
   ctx: ServerContext,
   total: number,
-): (message: string) => Promise<void> {
+): (message: string, steps?: number) => Promise<void> {
   const progressToken = ctx.mcpReq._meta?.progressToken;
   let progress = 0;
-  return async (message: string) => {
-    if (progressToken === undefined) {
+  return async (message: string, steps = 1) => {
+    if (progressToken === undefined || ctx.mcpReq.signal.aborted) {
       return;
     }
-    progress += 1;
+    progress += steps;
     try {
       await ctx.mcpReq.notify({
         method: "notifications/progress",

@@ -281,10 +281,10 @@ describe("createApexLogServer", () => {
   });
 
   describe("Tool Registration", () => {
-    it("should register all 6 tools via registerTool", async () => {
+    it("should register all 7 tools via registerTool", async () => {
       createApexLogServer();
 
-      expect(mockRegisterTool).toHaveBeenCalledTimes(6);
+      expect(mockRegisterTool).toHaveBeenCalledTimes(7);
       expect(mockRegisterTool).toHaveBeenCalledWith(
         "apexlog_list_slow_operations",
         expect.any(Object),
@@ -312,6 +312,11 @@ describe("createApexLogServer", () => {
       );
       expect(mockRegisterTool).toHaveBeenCalledWith(
         "apexlog_get_org_logs",
+        expect.any(Object),
+        expect.any(Function),
+      );
+      expect(mockRegisterTool).toHaveBeenCalledWith(
+        "apexlog_delete_org_logs",
         expect.any(Object),
         expect.any(Function),
       );
@@ -533,7 +538,7 @@ describe("createApexLogServer", () => {
       createApexLogServer();
 
       // Verify all tools registered
-      expect(registeredTools.size).toBe(6);
+      expect(registeredTools.size).toBe(7);
 
       // Test tool execution
       const tool = registeredTools.get("apexlog_list_slow_operations")!;
