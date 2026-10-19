@@ -353,12 +353,8 @@ const DEFINITION_BUDGET = {
   // list costs what `limit` asks for, not what the org holds (#209).
   apexlog_list_org_logs: 344,
   apexlog_get_org_logs: 219,
-  // Measured + 5% (#210). Its filters go undescribed: the list tool describes them.
-  apexlog_delete_org_logs: 221,
-  // Measured + 5% each (#211). Create carries the levels union, the costly part.
-  apexlog_list_trace_flags: 160,
+  // Measured + 5% (#211). The levels union is the costly part.
   apexlog_create_trace_flag: 369,
-  apexlog_delete_trace_flags: 150,
   // Measured + 5% (#144). Eight filters and a page, each a question the
   // ranking cannot ask: what the code printed, what ran under one method.
   apexlog_search_events: 473,
@@ -384,15 +380,16 @@ const V1_DEFINITION_TOTAL = 1529;
  * `V1_DEFINITION_TOTAL` until the org log tools: reaching a log stored in the
  * org was a deliberate purchase of a capability 1.x never had (#209): the two
  * definitions measure ~525 tokens a request, inside their budgets of 563.
- * Deleting them, so a full org can set a trace flag again, added ~210 inside a
- * budget of 221 (#210). Tracing a user, so the org stores the logs those tools
- * read, or setting a class's levels, added ~646 inside budgets of 679 (#211).
+ * Tracing a user, so the org stores the logs those tools read, or setting a
+ * class's levels, added ~350 inside a budget of 369 (#211). Listing and
+ * deleting flags and deleting stored logs were dropped: each answered a rare
+ * need that Setup or `sf` meets, at ~500 tokens on every request.
  * Searching a log's events, for what the code printed or what ran under one
  * method, added ~450 inside a budget of 473 (#144). The budgets sum to this
  * cap, so raising any budget means raising the cap, on purpose, with the
  * reason here.
  */
-const DEFINITION_TOTAL_CAP = 3264;
+const DEFINITION_TOTAL_CAP = 2733;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -415,10 +412,7 @@ const SELECTION_KEYWORDS = {
   apexlog_execute_anonymous: ["anonymous Apex", "Salesforce org"],
   apexlog_list_org_logs: ["debug logs", "Salesforce org"],
   apexlog_get_org_logs: ["debug logs", "Salesforce org"],
-  apexlog_delete_org_logs: ["debug logs", "storage"],
-  apexlog_list_trace_flags: ["trace flags", "Salesforce org"],
   apexlog_create_trace_flag: ["trace flag", "Salesforce org"],
-  apexlog_delete_trace_flags: ["trace flags", "Salesforce org"],
 };
 
 /**

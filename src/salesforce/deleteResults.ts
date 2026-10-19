@@ -5,7 +5,7 @@
 /** One record's outcome: deleted, gone before the delete reached it, or failed with the cause. */
 export type DeleteResult = { id: string; alreadyGone?: true; error?: string };
 
-// What the org answers for a record deleted since it was found; a log or a trace flag has no recycle bin.
+// What the org answers for a record deleted since it was found; a trace flag has no recycle bin.
 const GONE_CODES: ReadonlySet<unknown> = new Set(["INVALID_CROSS_REFERENCE_KEY", "ENTITY_IS_DELETED"]);
 
 // jsforce types `errorCode`, but the collection API sends `statusCode`.
@@ -20,7 +20,7 @@ function isAlreadyGone(errors: object[]): boolean {
   );
 }
 
-/** One record's outcome, from the result a delete of many returns for it. */
+/** One record's outcome, from the result a delete returns for it. */
 export function savedOutcome(result: {
   success: boolean;
   errors?: unknown;

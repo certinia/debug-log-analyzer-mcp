@@ -29,13 +29,8 @@ import {
   executeAnonymousToolConfig,
   type ExecuteAnonymousArgs,
 } from "./tools/executeAnonymousDefinition.js";
+import { createTraceFlagToolConfig } from "./tools/traceFlagsDefinition.js";
 import {
-  createTraceFlagToolConfig,
-  deleteTraceFlagsToolConfig,
-  listTraceFlagsToolConfig,
-} from "./tools/traceFlagsDefinition.js";
-import {
-  deleteOrgLogsToolConfig,
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
 } from "./tools/orgLogsDefinition.js";
@@ -198,27 +193,9 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   );
 
   server.registerTool(
-    "apexlog_delete_org_logs",
-    deleteOrgLogsToolConfig,
-    orgTool(async () => (await import("./tools/deleteOrgLogs.js")).deleteOrgLogs),
-  );
-
-  server.registerTool(
-    "apexlog_list_trace_flags",
-    listTraceFlagsToolConfig,
-    orgTool(async () => (await import("./tools/listTraceFlags.js")).listTraceFlags),
-  );
-
-  server.registerTool(
     "apexlog_create_trace_flag",
     createTraceFlagToolConfig,
     orgTool(async () => (await import("./tools/createTraceFlag.js")).createTraceFlag),
-  );
-
-  server.registerTool(
-    "apexlog_delete_trace_flags",
-    deleteTraceFlagsToolConfig,
-    orgTool(async () => (await import("./tools/deleteTraceFlags.js")).deleteTraceFlags),
   );
 
   // Always registered, so agents can discover it regardless of configuration.

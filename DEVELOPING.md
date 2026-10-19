@@ -102,7 +102,7 @@ Once you’ve built the server or run the watcher, you can run the MCP server fo
 
 3. **Run against a production org:**
 
-   All eleven tools are available by default. A write against a production org - running Apex, deleting logs, or creating or deleting a trace flag - needs a per-call confirmation, or this flag; a read does not:
+   All eight tools are available by default. A write against a production org - running Apex or creating a trace flag - needs a per-call confirmation, or this flag; a read does not:
 
    ```zsh
    node dist/index.js --allow-production-orgs

@@ -15,7 +15,9 @@ import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { isoSeconds } from "../salesforce/soql.js";
 import {
   createTraceFlag as writeTraceFlag,
+  deleteTraceFlagCommand,
   findOverlappingTraceFlag,
+  storageFullHint,
   logTypeFor,
   resolveTracedEntity,
   traceFlagWindow,
@@ -87,7 +89,7 @@ export async function createTraceFlag(
   const { entity, logType, existing, notBefore } = access.value;
   if (existing) {
     return toolError(
-      `${entity.name} already has a ${logType} trace flag, ${existing.id}, at ${existing.levels}, from ${existing.startTime} until ${existing.expirationTime}. Delete it with apexlog_delete_trace_flags, then call this tool again.`,
+      `${entity.name} already has a ${logType} trace flag, ${existing.id}, at ${existing.levels}, from ${existing.startTime} until ${existing.expirationTime}. Wait for it to expire, or delete it (${deleteTraceFlagCommand(existing.id, access.local.username)}), then call this tool again.`,
     );
   }
 
@@ -116,13 +118,10 @@ export async function createTraceFlag(
     // Returned, not thrown, so server.ts's relogin wrapper never sees it.
     const error = withReloginHint(caught);
     const message = error instanceof Error ? error.message : String(error);
-    const next = /storage/i.test(message)
-      ? // When the org's log storage is full, no flag can be written until logs are deleted.
-        " Free the org's debug log storage with apexlog_delete_org_logs, then try again."
-      : /already being traced/i.test(message)
-        ? // A flag set while the call waited, such as for a confirmation, was not there to name.
-          " Find the flag in the way with apexlog_list_trace_flags, delete it with apexlog_delete_trace_flags, then call this tool again."
-        : "";
+    const next = /already being traced/i.test(message)
+      ? // A flag set while the call waited, such as for a confirmation, was not there to name.
+        " Another flag was set on it while this call waited: call this tool again to see it."
+      : storageFullHint(message);
     return toolError(message + next);
   }
 

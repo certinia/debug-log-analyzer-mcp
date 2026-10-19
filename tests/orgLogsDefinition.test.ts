@@ -5,7 +5,6 @@
 // No jest.mock in this file: what `tools/list` puts on the wire needs no org fakes.
 
 import {
-  deleteOrgLogsToolConfig,
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
 } from "../src/tools/orgLogsDefinition";
@@ -15,7 +14,6 @@ describe("org log tool annotations", () => {
   it.each([
     ["list", listOrgLogsToolConfig, { readOnlyHint: true }],
     ["get", getOrgLogsToolConfig, { destructiveHint: false }],
-    ["delete", deleteOrgLogsToolConfig, { destructiveHint: true }],
   ])("should annotate %s", (_name, config, annotations) => {
     expect(config.annotations).toEqual(annotations);
   });

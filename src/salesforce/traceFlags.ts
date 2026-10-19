@@ -7,7 +7,6 @@ import {
   type TraceConfig,
 } from "./debugLevels.js";
 import { saveErrorText, savedOutcome, thrownOutcome, type DeleteResult } from "./deleteResults.js";
-import { mapRequests } from "./parallelRequests.js";
 import {
   CLOCK_SKEW_MS,
   isIdShaped,
@@ -19,13 +18,6 @@ import {
 } from "./soql.js";
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
-
-/**
- * The most flags one query returns, and so the most ids a name lookup or a
- * delete names: an `Id IN` list this long stays well inside the URI length a
- * GET allows.
- */
-export const IDS_PER_QUERY = 200;
 
 // A Developer Console flag stores the user's logs too - see .claude/rules/trace-flags.md.
 const STORING_LOG_TYPES = ["USER_DEBUG", "DEVELOPER_LOG"];
@@ -139,28 +131,30 @@ export async function createTraceFlag(
 }
 
 /**
- * Delete trace flags, one request each, a failure kept beside its id. Once
- * `signal` aborts, no further flag is sent, and the call rejects.
+ * The next step when Salesforce refused a flag because the org holds more than
+ * 1,000 MB of debug logs, else "". Only deleting logs lifts it; they expire in 24 hours.
  */
-export async function destroyTraceFlags(
+export function storageFullHint(message: string): string {
+  return /storage/i.test(message)
+    ? " The org's debug log storage is full: ask the user to delete logs in Setup > Debug Logs, then try again."
+    : "";
+}
+
+/** How to delete a flag by hand: by id, as the Tooling API takes a delete, in the org it is in. */
+export function deleteTraceFlagCommand(id: string, username: string): string {
+  return `sf data delete record --use-tooling-api --sobject TraceFlag --record-id ${id} --target-org ${username}`;
+}
+
+/** Delete a trace flag; a failure is returned, not thrown. */
+export async function destroyTraceFlag(
   connection: Connection,
-  ids: string[],
-  signal?: AbortSignal,
-): Promise<DeleteResult[]> {
-  const results = await mapRequests(ids, async (id): Promise<DeleteResult[]> => {
-    // Returns, not throws, so the pool waits for the requests in flight before the call rejects.
-    if (signal?.aborted) {
-      return [];
-    }
-    try {
-      const result = await connection.tooling.sobject(TRACE_FLAG_SOBJECT).destroy(id);
-      return [{ id, ...savedOutcome(result) }];
-    } catch (error) {
-      return [{ id, ...thrownOutcome(error) }];
-    }
-  });
-  signal?.throwIfAborted();
-  return results.flat();
+  id: string,
+): Promise<Omit<DeleteResult, "id">> {
+  try {
+    return savedOutcome(await connection.tooling.sobject(TRACE_FLAG_SOBJECT).destroy(id));
+  } catch (error) {
+    return thrownOutcome(error);
+  }
 }
 
 /** A user is traced as `USER_DEBUG`; a class or a trigger as `CLASS_TRACING`. */
@@ -298,82 +292,6 @@ export function logTypeFor(entity: TracedEntity): TraceLogType {
   return entity.type === "User" ? "USER_DEBUG" : "CLASS_TRACING";
 }
 
-// Named by `known`, or looked up, since TracedEntity.Name gives a user's full name, not the username.
-async function queryTraceFlags(
-  connection: Connection,
-  where: string,
-  known?: TracedEntity,
-): Promise<TraceFlagRow[]> {
-  const { records } = await connection.tooling.query<{
-    Id: string;
-    TracedEntityId: string;
-    LogType: string;
-    DebugLevel: Record<string, unknown> | null;
-    StartDate: string | null;
-    CreatedDate: string;
-    ExpirationDate: string;
-  }>(
-    `SELECT Id, TracedEntityId, LogType, ${DEBUG_LEVEL_SELECT}, StartDate, CreatedDate, ExpirationDate
-     FROM ${TRACE_FLAG_SOBJECT}
-     WHERE ${where}
-     ORDER BY ExpirationDate DESC
-     LIMIT ${IDS_PER_QUERY}`,
-  );
-  const names = known
-    ? new Map([[known.id, known.name]])
-    : await entityNames(connection, records.map((flag) => flag.TracedEntityId));
-  return records.map((flag) => ({
-    id: flag.Id,
-    tracedEntity: names.get(flag.TracedEntityId) ?? flag.TracedEntityId,
-    entityType: ENTITY_TYPES[flag.TracedEntityId.slice(0, 3)]?.type ?? "",
-    logType: flag.LogType,
-    debugLevelName: String(flag.DebugLevel?.["DeveloperName"] ?? ""),
-    levels: levelsClause(toTraceConfig(flag.DebugLevel)),
-    // A flag set with no StartDate starts when it is created.
-    startTime: isoSeconds(flag.StartDate ?? flag.CreatedDate),
-    expirationTime: isoSeconds(flag.ExpirationDate),
-  }));
-}
-
-async function entityNames(
-  connection: Connection,
-  entityIds: string[],
-): Promise<Map<string, string>> {
-  // One query per type: queryTraceFlags returns at most IDS_PER_QUERY flags.
-  const found = await Promise.all(
-    Object.keys(ENTITY_TYPES).map((prefix) => {
-      const ids = [...new Set(entityIds.filter((id) => id.startsWith(prefix)))];
-      return ids.length
-        ? queryEntities(connection, prefix, `Id IN (${ids.map(quote).join(", ")})`)
-        : [];
-    }),
-  );
-  return new Map(found.flat().map((entity) => [entity.id, entity.name]));
-}
-
-/**
- * The flags not yet expired, on one entity or on all, latest to expire first:
- * the first `IDS_PER_QUERY`, and how many there are in all.
- */
-export async function listTraceFlags(
-  connection: Connection,
-  entity?: TracedEntity,
-): Promise<{ flags: TraceFlagRow[]; matchedCount: number }> {
-  const now = toDateTimeLiteral(new Date());
-  const where = `ExpirationDate > ${now}${entity ? ` AND TracedEntityId = ${quote(entity.id)}` : ""}`;
-  const flags = await queryTraceFlags(connection, where, entity);
-  // Under the cap, the rows are every match, so only a full page costs a count.
-  const matchedCount =
-    flags.length < IDS_PER_QUERY
-      ? flags.length
-      : (
-          await connection.tooling.query(
-            `SELECT COUNT() FROM ${TRACE_FLAG_SOBJECT} WHERE ${where}`,
-          )
-        ).totalSize;
-  return { flags, matchedCount };
-}
-
 /** What a new flag meets: a live flag that blocks it, or the time after which it must start. */
 export type TraceFlagOverlap = { live?: TraceFlagRow; notBefore?: Date };
 
@@ -391,25 +309,41 @@ export async function findOverlappingTraceFlag(
   durationMs: number,
 ): Promise<TraceFlagOverlap> {
   const window = traceFlagWindow(durationMs);
-  const [flag] = await queryTraceFlags(
-    connection,
+  const {
+    records: [found],
+  } = await connection.tooling.query<{
+    Id: string;
+    LogType: string;
+    DebugLevel: Record<string, unknown> | null;
+    StartDate: string | null;
+    CreatedDate: string;
+    ExpirationDate: string;
+  }>(
     // A flag set with no StartDate starts when it is created, so it has started.
-    `TracedEntityId = ${quote(entity.id)} AND LogType = ${quote(logType)}
+    `SELECT Id, LogType, ${DEBUG_LEVEL_SELECT}, StartDate, CreatedDate, ExpirationDate
+     FROM ${TRACE_FLAG_SOBJECT}
+     WHERE TracedEntityId = ${quote(entity.id)} AND LogType = ${quote(logType)}
        AND ExpirationDate > ${toDateTimeLiteral(window.start)}
-       AND (StartDate = null OR StartDate < ${toDateTimeLiteral(window.end)})`,
-    entity,
+       AND (StartDate = null OR StartDate < ${toDateTimeLiteral(window.end)})
+     ORDER BY ExpirationDate DESC
+     LIMIT 1`,
   );
-  if (!flag) {
+  if (!found) {
     return {};
   }
+  const flag: TraceFlagRow = {
+    id: found.Id,
+    // The entity's name, since TracedEntity.Name gives a user's full name, not the username.
+    tracedEntity: entity.name,
+    entityType: entity.type,
+    logType: found.LogType,
+    debugLevelName: String(found.DebugLevel?.["DeveloperName"] ?? ""),
+    levels: levelsClause(toTraceConfig(found.DebugLevel)),
+    // A flag set with no StartDate starts when it is created.
+    startTime: isoSeconds(found.StartDate ?? found.CreatedDate),
+    expirationTime: isoSeconds(found.ExpirationDate),
+  };
   const end = Date.parse(flag.expirationTime);
   return end > Date.now() ? { live: flag } : { notBefore: new Date(end + 1000) };
 }
 
-/** The flags with these ids, whether or not they have expired. */
-export async function findTraceFlags(
-  connection: Connection,
-  ids: string[],
-): Promise<TraceFlagRow[]> {
-  return queryTraceFlags(connection, `Id IN (${ids.map(quote).join(", ")})`);
-}

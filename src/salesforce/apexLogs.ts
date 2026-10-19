@@ -6,15 +6,12 @@ import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
 import {
   CLOCK_SKEW_MS,
-  chunk,
   containing,
   isoSeconds,
   isSalesforceId,
   quote,
   toDateTimeLiteral,
 } from "./soql.js";
-import { savedOutcome, type DeleteResult } from "./deleteResults.js";
-import { mapRequests } from "./parallelRequests.js";
 
 const APEX_LOG_SOBJECT = "ApexLog";
 
@@ -135,32 +132,6 @@ function listKey(sort: LogSort, filters: LogFilters): string {
 /** Where a cursor resumes, and the count its first page took. */
 export type ResumePoint = { value: string | number; id: string; matchedCount: number };
 
-/** The filters as the SOQL condition they become, empty when they narrow nothing. */
-export function filterCondition(filters: LogFilters): string {
-  return whereClauses(filters).join(" AND ");
-}
-
-// How each filter matches, as `whereClauses` writes it, for a person to read.
-const FILTER_MATCH: Record<keyof LogFilters, string> = {
-  user: "=",
-  operation: "contains, any case,",
-  request: "=",
-  succeeded: "=",
-  startTimeFrom: ">=",
-  startTimeTo: "<=",
-  minFileSizeBytes: ">=",
-};
-
-/** The filters a person reads: each by parameter name, with how it matches. */
-export function describeFilters(filters: LogFilters): string {
-  return Object.entries(activeFilters(filters))
-    .map(
-      ([name, value]) =>
-        `${name} ${FILTER_MATCH[name as keyof LogFilters]} ${JSON.stringify(value)}`,
-    )
-    .join(", ");
-}
-
 /**
  * Read a cursor back, refusing one this list did not give.
  *
@@ -270,97 +241,6 @@ export async function listApexLogs(
         ).toString("base64url"),
       }),
   };
-}
-
-/** Most logs one delete reads, so a call ends inside a client's timeout; `remainingCount` says when more match. */
-const MAX_LOGS_PER_DELETE = 10_000;
-
-/** One request's worth: the API deletes at most 200 records a call. */
-export const DELETE_BATCH_SIZE = 200;
-
-/** What a delete is asked to remove: ids, or every log the filters match. */
-export type LogSelection = { ids: string[] } | { filters: LogFilters };
-
-/** The stored logs a selection names, with their sizes, and how many match in all. */
-export type FoundApexLogs = {
-  logs: { id: string; fileSizeBytes: number }[];
-  matchedCount: number;
-};
-
-/**
- * The stored logs a selection names, oldest first, at most
- * `MAX_LOGS_PER_DELETE` of them; `matchedCount` counts every match.
- */
-export async function findApexLogs(
-  connection: Connection,
-  selection: LogSelection,
-): Promise<FoundApexLogs> {
-  const where =
-    "ids" in selection
-      ? [`Id IN (${selection.ids.map(quote).join(", ")})`]
-      : whereClauses(selection.filters);
-  const result = await connection.query<{ Id: string; LogLength: number }>(
-    `SELECT Id, LogLength FROM ${APEX_LOG_SOBJECT}${whereText(where)} ORDER BY StartTime, Id`,
-    { autoFetch: true, maxFetch: MAX_LOGS_PER_DELETE },
-  );
-  return {
-    logs: result.records.map((record) => ({
-      id: record.Id,
-      fileSizeBytes: record.LogLength,
-    })),
-    matchedCount: result.totalSize,
-  };
-}
-
-/**
- * Delete stored logs, each failure kept beside its id rather than failing the
- * rest. After a request fails, no further batch is sent. Once `signal` aborts,
- * none is, and the call rejects. `onBatchDone` gets each batch's size.
- */
-export async function deleteApexLogs(
-  connection: Connection,
-  ids: string[],
-  {
-    signal,
-    onBatchDone,
-  }: { signal?: AbortSignal; onBatchDone?: (count: number) => void } = {},
-): Promise<DeleteResult[]> {
-  // A failed request, such as a missing permission or a spent API limit, would fail every batch after it.
-  let requestError: string | undefined;
-  const results = await mapRequests(
-    chunk(ids, DELETE_BATCH_SIZE),
-    async (batch): Promise<DeleteResult[]> => {
-      // Returns, not throws, so the pool waits for the requests in flight before the call rejects.
-      if (signal?.aborted) {
-        return [];
-      }
-      try {
-        if (requestError !== undefined) {
-          return batch.map((id) => ({
-            id,
-            error: `not sent, after an earlier request failed: ${requestError}`,
-          }));
-        }
-        const saved = await connection
-          .sobject(APEX_LOG_SOBJECT)
-          .destroy(batch, { allOrNone: false });
-        return saved.map((result, index) => ({
-          // In range: the API returns one result per id sent, in order.
-          id: batch[index]!,
-          ...savedOutcome(result),
-        }));
-      } catch (error) {
-        // A failed request costs its own batch, not the report of what the others deleted.
-        const message = error instanceof Error ? error.message : String(error);
-        requestError ??= message;
-        return batch.map((id) => ({ id, error: message }));
-      } finally {
-        onBatchDone?.(batch.length);
-      }
-    },
-  );
-  signal?.throwIfAborted();
-  return results.flat();
 }
 
 /** The ids of the newest stored logs, newest first. */

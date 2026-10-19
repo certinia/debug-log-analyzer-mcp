@@ -50,13 +50,6 @@ export function containing(value: string): string {
   return `'%${escapeWith(LIKE_ESCAPES, value)}%'`;
 }
 
-/** `items` in runs of at most `size`, so no `IN` list makes a query too long to send. */
-export function chunk<T>(items: T[], size: number): T[][] {
-  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
-    items.slice(index * size, (index + 1) * size),
-  );
-}
-
 /**
  * ISO 8601 in UTC to the second, as every tool writes a time and the time
  * filters take it. The org sends `+0000`, and milliseconds it never sets.

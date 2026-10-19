@@ -18,9 +18,11 @@ import {
 } from "../salesforce/anonymousApex.js";
 import {
   createTraceFlag,
-  destroyTraceFlags,
+  deleteTraceFlagCommand,
+  destroyTraceFlag,
   findActiveTraceFlags,
   findUsersByUsername,
+  storageFullHint,
   traceFlagWindow,
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
@@ -242,6 +244,7 @@ export async function executeAnonymous(
   const {
     value: { apex, userId, storesLogs, run },
     connection,
+    local,
     orgLabel,
     classification,
     workspace,
@@ -259,6 +262,7 @@ export async function executeAnonymous(
   } = await withTraceFlagForRun(
     connection,
     userId,
+    local.username,
     debugLevelId,
     async (flagLive) => {
       await report("Executing the Apex");
@@ -338,6 +342,7 @@ export async function executeAnonymous(
 async function withTraceFlagForRun<T>(
   connection: Connection,
   userId: string,
+  username: string,
   flagLevelId: string | undefined,
   run: (flagLive: boolean) => Promise<T>,
 ): Promise<{ value: T; warnings: string[] }> {
@@ -351,7 +356,7 @@ async function withTraceFlagForRun<T>(
   try {
     value = await run(flagLevelId === undefined || created.id !== undefined);
   } finally {
-    deleteWarning = await removeRunTraceFlag(connection, created.id);
+    deleteWarning = await removeRunTraceFlag(connection, created.id, username);
   }
   return {
     value,
@@ -377,7 +382,8 @@ async function createRunTraceFlag(
       ),
     };
   } catch (error) {
-    const warning = `Could not set a trace flag for this run, so the org may not store its log and the file may be named by time, not log id: ${error instanceof Error ? error.message : String(error)}`;
+    const message = error instanceof Error ? error.message : String(error);
+    const warning = `Could not set a trace flag for this run, so the org may not store its log and the file may be named by time, not log id: ${message}${storageFullHint(message)}`;
     console.error(`[apex-log-mcp] ${warning}`);
     return { warning };
   }
@@ -387,15 +393,16 @@ async function createRunTraceFlag(
 async function removeRunTraceFlag(
   connection: Connection,
   traceFlagId: string | undefined,
+  username: string,
 ): Promise<string | undefined> {
   if (traceFlagId === undefined) {
     return undefined;
   }
-  const [result] = await destroyTraceFlags(connection, [traceFlagId]);
-  if (result?.error === undefined) {
+  const result = await destroyTraceFlag(connection, traceFlagId);
+  if (result.error === undefined) {
     return undefined;
   }
-  const warning = `Could not delete trace flag ${traceFlagId}, created for this run. It expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes; to end it sooner, delete it with apexlog_delete_trace_flags.`;
+  const warning = `Could not delete trace flag ${traceFlagId}, created for this run. It expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes; to end it sooner: ${deleteTraceFlagCommand(traceFlagId, username)}`;
   console.error(`[apex-log-mcp] ${warning} ${result.error}`);
   return warning;
 }

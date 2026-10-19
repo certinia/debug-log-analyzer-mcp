@@ -27,7 +27,7 @@ pnpm start
 ### Core Components
 
 - **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else. A bad flag exits 1 with one `[apex-log-mcp]` line, checked by `pnpm run eval`.
-- **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the eleven tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
+- **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the eight tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
 - **src/tools/responseShaping.ts**: the shared response helpers - `toonResult`, `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`, `elide`, `NAME_LIMIT`, and the page every analysis table stops at - `fitPage`, `rowCost`, `PAGE_CHAR_BUDGET` - with the `matches` filter they share.
 - **src/tools/localFile.ts**: `absolutePathSchema` and `fileReadError`, shared by every tool that reads a local file - a log or a file of Apex.
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
@@ -75,12 +75,11 @@ dist/               # Compiled JavaScript output
 5. **`apexlog_execute_anonymous`**: runs Apex, saves the log, returns its path
 6. **`apexlog_list_org_logs`**: the debug logs stored in an org, filtered, sorted and paged in SOQL
 7. **`apexlog_get_org_logs`**: downloads stored logs by id or the newest N, returns their paths
-8. **`apexlog_delete_org_logs`**: deletes stored logs by id or by the list tool's filters, to free the org's log storage
-9. **`apexlog_list_trace_flags`**: the trace flags not yet expired, with their levels
-10. **`apexlog_create_trace_flag`**: traces a user, or sets a class's or trigger's levels, for a while; refused when the entity has a flag of its log type already
-11. **`apexlog_delete_trace_flags`**: deletes trace flags by id, to stop logging now
+8. **`apexlog_create_trace_flag`**: traces a user, or sets a class's or trigger's levels, for a while; refused when the entity has a flag of its log type already
 
-Tools 1-4 take an absolute path to a `.log` file. Tools 5-11 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all of them; only a write (5, 8, 10 and 11) meets the production gate.
+Tools 1-4 take an absolute path to a `.log` file. Tools 5-8 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all of them; only a write (5 and 8) meets the production gate.
+
+No tool deletes stored logs or trace flags: the need is rare, Setup and `sf` meet it, and each tool cost ~150-210 definition tokens on every request.
 
 ## Naming
 
