@@ -20,8 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 - apexlog_search_events: search a log's events in log order - what the code printed, the validation rules, or everything under one method - filtered by type, category, level, namespace or text, and paged ([#144])
 - apexlog_list_org_logs, apexlog_get_org_logs: list the debug logs stored in an org, filtered, sorted and paged in the org, and download them by id or the newest N for the analysis tools ([#209])
-- apexlog_delete_org_logs: delete stored logs by id or by the list's filters, so an org whose log storage is full can set a trace flag again ([#210])
-- apexlog_list_trace_flags, apexlog_create_trace_flag, apexlog_delete_trace_flags: see which users, classes and triggers are traced, start logging a user or set a class's levels, and stop it now ([#211])
+- apexlog_create_trace_flag: start logging a user, or set a class's or trigger's levels, for a while ([#211])
 - --deny-orgs: refuse named orgs, or an org type with `type:production`, to every org tool - running Apex and reading logs alike. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186], [#209])
 - apexlog_execute_anonymous: run from a file with `apexFilePath`, reuse saved scripts and save tokens ([#212])
 - apexlog_get_summary: report the exceptions a transaction threw, with where and how often, and how many flow elements failed ([#208])
@@ -39,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: say when `targetOrg` names no authenticated org, instead of the Salesforce SDK's raw error ([#236])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks: say a `logFilePath` that is a directory is one, instead of Node's raw error ([#234])
 - every tool: refuse a parameter it does not have, instead of ignoring it and running without it ([#244])
+- apexlog_execute_anonymous: say when the org's log storage is full and where to free it, instead of only that the trace flag was refused ([#245])
 
 ## [2.0.1] - 2026-09-11
 
@@ -144,8 +144,8 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#239]: https://github.com/certinia/debug-log-analyzer-mcp/issues/239
 [#240]: https://github.com/certinia/debug-log-analyzer-mcp/issues/240
 [#211]: https://github.com/certinia/debug-log-analyzer-mcp/issues/211
-[#210]: https://github.com/certinia/debug-log-analyzer-mcp/issues/210
 [#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
 [#144]: https://github.com/certinia/debug-log-analyzer-mcp/issues/144
 [#244]: https://github.com/certinia/debug-log-analyzer-mcp/pull/244
 [#246]: https://github.com/certinia/debug-log-analyzer-mcp/pull/246
+[#245]: https://github.com/certinia/debug-log-analyzer-mcp/pull/245

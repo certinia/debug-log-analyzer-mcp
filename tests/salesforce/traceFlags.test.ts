@@ -5,12 +5,11 @@
 import { Connection } from "@salesforce/core";
 import {
   createTraceFlag,
-  destroyTraceFlags,
+  destroyTraceFlag,
   findActiveTraceFlags,
   findOverlappingTraceFlag,
   MAX_DURATION_MINUTES,
   traceFlagWindow,
-  listTraceFlags,
   resolveTracedEntity,
 } from "../../src/salesforce/traceFlags";
 
@@ -351,107 +350,6 @@ describe("Trace Flags", () => {
     });
   });
 
-  describe("listTraceFlags", () => {
-    // A capped table must say it is capped, so the count comes beside it.
-    it("returns at most 200 flags, with how many match in all", async () => {
-      const page = Array.from({ length: 200 }, (_, index) => ({
-        Id: `7tf${String(index).padStart(12, "0")}AAA`,
-        TracedEntityId: "005000000000001AAA",
-        LogType: "USER_DEBUG",
-        DebugLevel: null,
-        StartDate: null,
-        CreatedDate: "2025-01-15T09:00:00.000+0000",
-        ExpirationDate: "2025-01-15T09:30:00.000+0000",
-      }));
-      mockQuery.mockImplementation(async (soql: string) =>
-        soql.startsWith("SELECT COUNT()") ? { totalSize: 250, records: [] } : { records: page },
-      );
-      mockDataQuery.mockResolvedValue({ records: [] });
-
-      const { flags, matchedCount } = await listTraceFlags(mockConnection);
-
-      expect(mockQuery.mock.calls[0][0]).toMatch(/ORDER BY ExpirationDate DESC\s+LIMIT 200$/);
-      expect(mockQuery.mock.calls[1][0]).toMatch(
-        /^SELECT COUNT\(\) FROM TraceFlag WHERE ExpirationDate > 2025-01-15T09:00:00.000Z$/,
-      );
-      expect(matchedCount).toBe(250);
-      expect(flags).toHaveLength(200);
-      // Every flag is on one user, so one lookup names them all.
-      expect(mockDataQuery).toHaveBeenCalledTimes(1);
-    });
-
-    // Under the cap the rows are every match, so no count is asked for.
-    it("counts the rows themselves when fewer than 200 come back", async () => {
-      mockQuery.mockResolvedValue({ records: [] });
-
-      await expect(listTraceFlags(mockConnection)).resolves.toEqual({ flags: [], matchedCount: 0 });
-      expect(mockQuery).toHaveBeenCalledTimes(1);
-    });
-
-    it("names each entity as resolveTracedEntity takes it back, with its type", async () => {
-      mockQuery.mockImplementation(async (soql: string) => ({
-        records: soql.includes("FROM TraceFlag")
-          ? [
-              {
-                Id: "7tf000000000001AAA",
-                TracedEntityId: "005000000000001AAA",
-                TracedEntity: { Name: "Jo Bloggs", Type: "User" },
-                LogType: "USER_DEBUG",
-                DebugLevel: { DeveloperName: "Mine", ApexCode: "FINEST" },
-                StartDate: "2025-01-15T09:00:00.000+0000",
-                ExpirationDate: "2025-01-15T09:30:00.000+0000",
-              },
-              {
-                Id: "7tf000000000002AAA",
-                TracedEntityId: "01p000000000001AAA",
-                // The org sends a class's key prefix as its type.
-                TracedEntity: { Name: "MyClass", Type: "01p" },
-                LogType: "CLASS_TRACING",
-                DebugLevel: { DeveloperName: "Mine" },
-                // Set with no StartDate, so it started when it was created.
-                StartDate: null,
-                CreatedDate: "2025-01-15T08:50:00.000+0000",
-                ExpirationDate: "2025-01-15T09:20:00.000+0000",
-              },
-            ]
-          : [{ Id: "01p000000000001AAA", Name: "MyClass", NamespacePrefix: "ns" }],
-      }));
-      mockDataQuery.mockResolvedValue({
-        records: [{ Id: "005000000000001AAA", Username: "jo@example.com" }],
-      });
-
-      const { flags } = await listTraceFlags(mockConnection);
-
-      expect(flags.map((flag) => [flag.tracedEntity, flag.entityType])).toEqual([
-        ["jo@example.com", "User"],
-        ["ns.MyClass", "ApexClass"],
-      ]);
-      expect(flags[1]?.startTime).toBe("2025-01-15T08:50:00Z");
-      expect(flags[0]).toMatchObject({
-        debugLevelName: "Mine",
-        startTime: "2025-01-15T09:00:00Z",
-        expirationTime: "2025-01-15T09:30:00Z",
-      });
-      expect(flags[0]?.levels).toMatch(/^apexCode, database FINEST;/);
-    });
-
-    it("asks only for flags not yet expired, on the one entity when given", async () => {
-      mockQuery.mockResolvedValue({ records: [] });
-
-      await listTraceFlags(mockConnection, {
-        id: "005000000000001AAA",
-        name: "jo@example.com",
-        type: "User",
-      });
-
-      expect(mockQuery.mock.calls[0][0]).toMatch(
-        /WHERE ExpirationDate > 2025-01-15T09:00:00.000Z AND TracedEntityId = '005000000000001AAA'/,
-      );
-      // The entity is named already, so no lookup is made.
-      expect(mockDataQuery).not.toHaveBeenCalled();
-    });
-  });
-
   describe("findOverlappingTraceFlag", () => {
     // A new flag starts back by the skew, so one that ended inside it still overlaps.
     it("asks for a flag of the same log type ending after the new one starts", async () => {
@@ -509,62 +407,35 @@ describe("Trace Flags", () => {
     });
   });
 
-  describe("destroyTraceFlags", () => {
+  describe("destroyTraceFlag", () => {
     // Deleted by another call, or expired, since it was found: what the org sends, checked on a real org.
-    it("marks a flag already gone, and keeps another failure beside its id", async () => {
-      mockDestroy.mockImplementation(async (id: string) => {
-        if (id === "7tf000000000001AAA") {
-          throw Object.assign(new Error("invalid cross reference id"), {
-            errorCode: "INVALID_CROSS_REFERENCE_KEY",
-          });
+    it.each([
+      ["thrown", Object.assign(new Error("invalid cross reference id"), { errorCode: "INVALID_CROSS_REFERENCE_KEY" })],
+      ["returned", { success: false, errors: [{ statusCode: "ENTITY_IS_DELETED", message: "entity is deleted" }] }],
+    ])("marks a flag already gone, when the org's answer is %s", async (how, answer) => {
+      mockDestroy.mockImplementation(async () => {
+        if (how === "thrown") {
+          throw answer;
         }
-        if (id === "7tf000000000002AAA") {
-          throw new Error("insufficient access rights");
-        }
-        if (id === "7tf000000000004AAA") {
-          return {
-            success: false,
-            errors: [{ statusCode: "ENTITY_IS_DELETED", message: "entity is deleted" }],
-          };
-        }
-        return { success: true, id };
+        return answer;
       });
 
-      await expect(
-        destroyTraceFlags(mockConnection, [
-          "7tf000000000001AAA",
-          "7tf000000000002AAA",
-          "7tf000000000003AAA",
-          "7tf000000000004AAA",
-        ]),
-      ).resolves.toEqual([
-        { id: "7tf000000000001AAA", alreadyGone: true },
-        { id: "7tf000000000002AAA", error: "insufficient access rights" },
-        { id: "7tf000000000003AAA" },
-        { id: "7tf000000000004AAA", alreadyGone: true },
-      ]);
+      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toEqual({ alreadyGone: true });
     });
 
-    // A request left running could delete a flag under a retry sent right after the cancel.
-    it("waits for the deletes in flight, sends no more, then rejects once cancelled", async () => {
-      jest.useRealTimers();
-      const controller = new AbortController();
-      let settled = 0;
-      // The fourth delete cancels and returns at once, while the first three still run.
-      mockDestroy.mockImplementation(async (id: string) => {
-        if (mockDestroy.mock.calls.length === 4) {
-          controller.abort();
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-        settled += 1;
-        return { success: true, id };
-      });
-      const ids = Array.from({ length: 8 }, (_, index) => `7tf00000000000${index}AAA`);
+    it("returns another failure, not throws it", async () => {
+      mockDestroy.mockRejectedValue(new Error("insufficient access rights"));
 
-      await expect(destroyTraceFlags(mockConnection, ids, controller.signal)).rejects.toThrow();
-      expect(mockDestroy).toHaveBeenCalledTimes(4);
-      expect(settled).toBe(4);
+      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toEqual({
+        error: "insufficient access rights",
+      });
+    });
+
+    it("returns nothing for a flag deleted", async () => {
+      mockDestroy.mockResolvedValue({ success: true, id: "7tf000000000001AAA" });
+
+      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toEqual({});
+      expect(mockDestroy).toHaveBeenCalledWith("7tf000000000001AAA");
     });
   });
 });

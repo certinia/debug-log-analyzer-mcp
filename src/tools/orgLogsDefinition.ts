@@ -11,11 +11,7 @@
 
 import { z } from "zod";
 import { DEFAULT_OUTPUT_DIR } from "./logStore.js";
-import {
-  DELETE_BATCH_SIZE,
-  isApexLogId,
-  LOG_SORTS,
-} from "../salesforce/apexLogs.js";
+import { isApexLogId, LOG_SORTS } from "../salesforce/apexLogs.js";
 import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
 
 /** Per `apexlog_get_org_logs` call, so one call cannot download for minutes. */
@@ -38,30 +34,20 @@ const dateTime = z
     "must be an ISO 8601 date-time with a zone, e.g. 2026-10-09T09:00:00Z",
   );
 
-// One object, so list and delete filter alike and a list call is the delete's dry run.
-const logFilters = {
-  user: z.string().optional(),
-  operation: z.string().optional(),
-  request: z.string().optional(),
-  succeeded: z.boolean().optional(),
-  startTimeFrom: dateTime.optional(),
-  startTimeTo: dateTime.optional(),
-  minFileSizeBytes: z.number().int().nonnegative().optional(),
-};
-
 const listOrgLogsInputSchema = {
   targetOrg: targetOrgSchema,
-  ...logFilters,
-  // Described here only: delete's description points at these, and each costs tokens on every request.
-  user: logFilters.user.describe("Username whose activity was logged"),
-  operation: logFilters.operation.describe(
-    'Part of the operation, any case, e.g. "aura" for /aura',
-  ),
-  request: logFilters.request.describe('e.g. "Api" or "Application"'),
-  succeeded: logFilters.succeeded.describe("false for failed logs only"),
-  startTimeFrom: logFilters.startTimeFrom.describe(
-    "ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z",
-  ),
+  user: z.string().optional().describe("Username whose activity was logged"),
+  operation: z
+    .string()
+    .optional()
+    .describe('Part of the operation, any case, e.g. "aura" for /aura'),
+  request: z.string().optional().describe('e.g. "Api" or "Application"'),
+  succeeded: z.boolean().optional().describe("false for failed logs only"),
+  startTimeFrom: dateTime
+    .optional()
+    .describe("ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z"),
+  startTimeTo: dateTime.optional(),
+  minFileSizeBytes: z.number().int().nonnegative().optional(),
   sortBy: z
     .enum(LOG_SORTS)
     .optional()
@@ -126,32 +112,5 @@ export const getOrgLogsToolConfig = {
   // Writes local files and nothing in the org; not idempotent, because `latest` names newer logs over time.
   annotations: {
     destructiveHint: false,
-  },
-};
-
-const deleteOrgLogsInputSchema = {
-  targetOrg: targetOrgSchema,
-  ids: z
-    .array(logId)
-    .min(1)
-    // One delete request's worth.
-    .max(DELETE_BATCH_SIZE)
-    .optional()
-    .describe("Log ids, in place of filters"),
-  ...logFilters,
-};
-
-export type DeleteOrgLogsArgs = z.infer<
-  z.ZodObject<typeof deleteOrgLogsInputSchema>
->;
-
-export const deleteOrgLogsToolConfig = {
-  title: "Delete Org Debug Logs",
-  description:
-    "Delete debug logs from a Salesforce org, by id or by apexlog_list_org_logs's filters, to free its log storage, which blocks trace flags when full. A deleted log cannot be restored.",
-  inputSchema: toolInputSchema(deleteOrgLogsInputSchema),
-  // Not idempotent: a call by filter deletes the next logs that match.
-  annotations: {
-    destructiveHint: true,
   },
 };

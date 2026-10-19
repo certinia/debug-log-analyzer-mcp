@@ -15,10 +15,7 @@ jest.mock("../src/salesforce/orgClassification", () => ({
 jest.mock("../src/salesforce/traceFlags", () => ({
   ...jest.requireActual("../src/salesforce/traceFlags"),
   createTraceFlag: jest.fn(),
-  destroyTraceFlags: jest.fn(),
   findOverlappingTraceFlag: jest.fn(),
-  findTraceFlags: jest.fn(),
-  listTraceFlags: jest.fn(),
   resolveTracedEntity: jest.fn(),
 }));
 
@@ -30,9 +27,7 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { AuthInfo, Org } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
-import { listTraceFlags } from "../src/tools/listTraceFlags";
 import { createTraceFlag } from "../src/tools/createTraceFlag";
-import { deleteTraceFlags } from "../src/tools/deleteTraceFlags";
 import { connectOrg, readLocalOrg, type LocalOrg } from "../src/salesforce/connection";
 import { classifyOrg } from "../src/salesforce/orgClassification";
 import * as flags from "../src/salesforce/traceFlags";
@@ -49,12 +44,9 @@ import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<typeof readLocalOrg>;
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
 const mockClassifyOrg = classifyOrg as jest.MockedFunction<typeof classifyOrg>;
-const mockList = flags.listTraceFlags as jest.MockedFunction<typeof flags.listTraceFlags>;
-const mockFind = flags.findTraceFlags as jest.MockedFunction<typeof flags.findTraceFlags>;
 const mockOverlap = flags.findOverlappingTraceFlag as jest.MockedFunction<typeof flags.findOverlappingTraceFlag>;
 const mockResolve = flags.resolveTracedEntity as jest.MockedFunction<typeof flags.resolveTracedEntity>;
 const mockCreate = flags.createTraceFlag as jest.MockedFunction<typeof flags.createTraceFlag>;
-const mockDestroy = flags.destroyTraceFlags as jest.MockedFunction<typeof flags.destroyTraceFlags>;
 const mockEnsureLevel = ensureLevelsDebugLevel as jest.MockedFunction<typeof ensureLevelsDebugLevel>;
 
 const LOCAL_ORG: LocalOrg = {
@@ -108,32 +100,6 @@ beforeEach(() => {
   mockConnectOrg.mockResolvedValue({ getConnection: () => connection } as unknown as Org);
   mockClassifyOrg.mockResolvedValue({ classification: "scratch" });
   mockResolve.mockResolvedValue(USER);
-});
-
-describe("listTraceFlags", () => {
-  it("should list one entity's flags, naming the entity beside an empty table", async () => {
-    mockList.mockResolvedValue({ flags: [], matchedCount: 0 });
-
-    const result = await listTraceFlags(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
-
-    expect(mockList).toHaveBeenCalledWith(connection, USER);
-    expect(decode(text(result))).toEqual({
-      org: "me@example.com (psa)",
-      tracedEntity: "jo@example.com",
-      matchedCount: 0,
-      flags: [],
-    });
-  });
-
-  it("should list every flag without asking, on production too", async () => {
-    mockClassifyOrg.mockResolvedValue({ classification: "production" });
-    mockList.mockResolvedValue({ flags: [FLAG], matchedCount: 1 });
-
-    const result = await listTraceFlags(server(), {}, ctx, policy());
-
-    expect(mockList).toHaveBeenCalledWith(connection, undefined);
-    expect(decode(text(result))).toMatchObject({ flags: [FLAG] });
-  });
 });
 
 describe("createTraceFlag", () => {
@@ -195,7 +161,7 @@ describe("createTraceFlag", () => {
     expect(text(result)).toContain("already has a USER_DEBUG trace flag, 7tf000000000001AAA");
     // A flag set for later reads as logging now without its start.
     expect(text(result)).toContain(`from ${FLAG.startTime} until ${FLAG.expirationTime}`);
-    expect(text(result)).toContain("apexlog_delete_trace_flags");
+    expect(text(result)).toContain("sf data delete record --use-tooling-api --sobject TraceFlag --record-id 7tf000000000001AAA --target-org me@example.com");
     expect(mint).not.toHaveBeenCalled();
     expect(mockEnsureLevel).not.toHaveBeenCalled();
     expect(mockCreate).not.toHaveBeenCalled();
@@ -232,12 +198,12 @@ describe("createTraceFlag", () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
-  it("should name apexlog_delete_org_logs when the org's log storage is full", async () => {
+  it("should send the user to Setup when the org's log storage is full", async () => {
     mockCreate.mockRejectedValue(new Error("Debug log storage limit exceeded"));
 
     const result = await createTraceFlag(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
 
-    expect(text(result)).toContain("apexlog_delete_org_logs");
+    expect(text(result)).toContain("Setup > Debug Logs");
   });
 
   // The login can lapse while the user confirms; the error is returned, so server.ts's wrapper never adds the hint.
@@ -255,15 +221,14 @@ describe("createTraceFlag", () => {
   });
 
   // A flag set while the call waited for a confirmation was not there to name.
-  it("should name the tools to clear a flag Salesforce found in the way", async () => {
+  it("should say to call again to see a flag Salesforce found in the way", async () => {
     mockCreate.mockRejectedValue(
       new Error("FIELD_INTEGRITY_EXCEPTION: This entity is already being traced."),
     );
 
     const result = await createTraceFlag(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
 
-    expect(text(result)).toContain("apexlog_list_trace_flags");
-    expect(text(result)).toContain("apexlog_delete_trace_flags");
+    expect(text(result)).toContain("call this tool again to see it");
   });
 
   it("should refuse a denied org before connecting", async () => {
@@ -276,63 +241,5 @@ describe("createTraceFlag", () => {
 
     expect(text(result)).toContain("Cannot create a trace flag against org");
     expect(mockConnectOrg).not.toHaveBeenCalled();
-  });
-});
-
-describe("deleteTraceFlags", () => {
-  const FOUND = [{ ...FLAG, tracedEntity: "Jo" }];
-
-  // Not a failure: a retry after a lost response finds the flags it deleted gone.
-  it("should delete the flags found and list an unknown id apart, as sent", async () => {
-    mockFind.mockResolvedValue(FOUND);
-    mockDestroy.mockResolvedValue([{ id: FLAG.id }]);
-
-    const result = await deleteTraceFlags(
-      server(),
-      { ids: [FLAG.id, "7tf000000000009"] },
-      ctx,
-      policy(),
-    );
-
-    expect(mockDestroy).toHaveBeenCalledWith(expect.anything(), [FLAG.id], ctx.mcpReq.signal);
-    expect(decode(text(result))).toEqual({
-      org: "me@example.com (psa)",
-      deletedCount: 1,
-      notFoundCount: 1,
-      notFoundIds: ["7tf000000000009"],
-    });
-  });
-
-  it("should report a flag Salesforce refuses to delete as a row by cause", async () => {
-    mockFind.mockResolvedValue(FOUND);
-    mockDestroy.mockResolvedValue([{ id: FLAG.id, error: "insufficient access rights" }]);
-
-    const result = await deleteTraceFlags(server(), { ids: [FLAG.id] }, ctx, policy());
-
-    expect(decode(text(result))).toMatchObject({
-      deletedCount: 0,
-      failed: [{ error: "insufficient access rights", idCount: 1, ids: [FLAG.id] }],
-    });
-  });
-
-  it("should ask production first, naming each flag, and delete nothing yet", async () => {
-    mockClassifyOrg.mockResolvedValue({ classification: "production" });
-    mockFind.mockResolvedValue(FOUND);
-
-    const result = await deleteTraceFlags(server(), { ids: [FLAG.id] }, ctx, policy());
-
-    expect(JSON.stringify(result)).toContain(`Stop logging: Jo (USER_DEBUG, ${FLAG.id})`);
-    expect(mockDestroy).not.toHaveBeenCalled();
-  });
-
-  it("should not ask production about ids that name no flag", async () => {
-    mockClassifyOrg.mockResolvedValue({ classification: "production" });
-    mockFind.mockResolvedValue([]);
-    const mint = jest.fn();
-
-    const result = await deleteTraceFlags(server(), { ids: [FLAG.id] }, ctx, policy({ mintConfirmationState: mint }));
-
-    expect(mint).not.toHaveBeenCalled();
-    expect(decode(text(result))).toMatchObject({ deletedCount: 0 });
   });
 });

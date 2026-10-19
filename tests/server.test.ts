@@ -86,10 +86,7 @@ jest.mock("../src/tools/executeAnonymousDefinition", () => ({
 // The org tools, loaded lazily by the server's own wiring.
 jest.mock("../src/tools/listOrgLogs", () => ({ listOrgLogs: jest.fn() }));
 jest.mock("../src/tools/getOrgLogs", () => ({ getOrgLogs: jest.fn() }));
-jest.mock("../src/tools/deleteOrgLogs", () => ({ deleteOrgLogs: jest.fn() }));
-jest.mock("../src/tools/listTraceFlags", () => ({ listTraceFlags: jest.fn() }));
 jest.mock("../src/tools/createTraceFlag", () => ({ createTraceFlag: jest.fn() }));
-jest.mock("../src/tools/deleteTraceFlags", () => ({ deleteTraceFlags: jest.fn() }));
 
 // Import the tools after mocking
 import { listSlowOperations } from "../src/tools/listSlowOperations";
@@ -98,10 +95,7 @@ import { listLimitRisks } from "../src/tools/listLimitRisks";
 import { executeAnonymous } from "../src/tools/executeAnonymous";
 import { listOrgLogs } from "../src/tools/listOrgLogs";
 import { getOrgLogs } from "../src/tools/getOrgLogs";
-import { deleteOrgLogs } from "../src/tools/deleteOrgLogs";
-import { listTraceFlags } from "../src/tools/listTraceFlags";
 import { createTraceFlag } from "../src/tools/createTraceFlag";
-import { deleteTraceFlags } from "../src/tools/deleteTraceFlags";
 import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 
 // Mock process methods
@@ -300,10 +294,10 @@ describe("createApexLogServer", () => {
   });
 
   describe("Tool Registration", () => {
-    it("should register all 11 tools via registerTool", async () => {
+    it("should register all 8 tools via registerTool", async () => {
       createApexLogServer();
 
-      expect(mockRegisterTool).toHaveBeenCalledTimes(11);
+      expect(mockRegisterTool).toHaveBeenCalledTimes(8);
       expect(mockRegisterTool).toHaveBeenCalledWith(
         "apexlog_list_slow_operations",
         expect.any(Object),
@@ -339,18 +333,11 @@ describe("createApexLogServer", () => {
         expect.any(Object),
         expect.any(Function),
       );
-      for (const name of [
-        "apexlog_delete_org_logs",
-        "apexlog_list_trace_flags",
+      expect(mockRegisterTool).toHaveBeenCalledWith(
         "apexlog_create_trace_flag",
-        "apexlog_delete_trace_flags",
-      ]) {
-        expect(mockRegisterTool).toHaveBeenCalledWith(
-          name,
-          expect.any(Object),
-          expect.any(Function),
-        );
-      }
+        expect.any(Object),
+        expect.any(Function),
+      );
     });
 
     it("should always leave apexlog_execute_anonymous discoverable", async () => {
@@ -468,10 +455,7 @@ describe("createApexLogServer", () => {
     it.each([
       ["apexlog_list_org_logs", listOrgLogs],
       ["apexlog_get_org_logs", getOrgLogs],
-      ["apexlog_delete_org_logs", deleteOrgLogs],
-      ["apexlog_list_trace_flags", listTraceFlags],
       ["apexlog_create_trace_flag", createTraceFlag],
-      ["apexlog_delete_trace_flags", deleteTraceFlags],
     ])("should pass the args, ctx and org policy to %s", async (name, handler) => {
       (handler as jest.Mock).mockResolvedValue(mockAnalysisResult);
       createApexLogServer({ allowProductionOrgs: true });
