@@ -199,7 +199,7 @@ describe("createTraceFlag", () => {
   });
 
   it("should send the user to Setup when the org's log storage is full", async () => {
-    mockCreate.mockRejectedValue(new Error("Debug log storage limit exceeded"));
+    mockCreate.mockRejectedValue(new Error("You have 260 MB of the maximum 250 MB of debug logs. Before you can edit trace flags, delete some debug logs."));
 
     const result = await createTraceFlag(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
 
@@ -217,6 +217,18 @@ describe("createTraceFlag", () => {
     expect(result).toMatchObject({ isError: true });
     expect(text(result)).toContain("edited to other levels");
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  // Data storage, full in a sandbox, refuses any insert; deleting logs does not free it.
+  it("should not send the user to delete logs when the org's data storage is full", async () => {
+    mockCreate.mockRejectedValue(
+      new Error("STORAGE_LIMIT_EXCEEDED: storage limit exceeded"),
+    );
+
+    const result = await createTraceFlag(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
+
+    expect(text(result)).toContain("STORAGE_LIMIT_EXCEEDED");
+    expect(text(result)).not.toContain("Debug Logs");
   });
 
   // The login can lapse while the user confirms; the error is returned, so server.ts's wrapper never adds the hint.

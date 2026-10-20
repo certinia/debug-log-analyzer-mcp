@@ -134,7 +134,9 @@ export async function createTraceFlag(
  * 1,000 MB of debug logs, else "". Only deleting logs lifts it; they expire in 24 hours.
  */
 export function storageFullHint(message: string): string {
-  return /storage/i.test(message)
+  // Salesforce: "You have 260 MB of the maximum 250 MB of debug logs. Before you can edit trace flags, delete some debug logs."
+  // Not STORAGE_LIMIT_EXCEEDED: that is data storage, which deleting logs does not free.
+  return /MB of debug logs|delete some debug logs/i.test(message)
     ? " The org's debug log storage is full: ask the user to delete logs in Setup > Debug Logs, then try again."
     : "";
 }

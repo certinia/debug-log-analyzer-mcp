@@ -87,6 +87,7 @@ export interface EventRow {
   /** The event it sits under, which `parentEventIndex` searches below. */
   parentEventIndex: number;
   type: string;
+  /** On every row, though most rows share one: hoisting a shared namespace to one field saved 0-12 tokens a response on the eval logs, and none where namespaces mix. */
   namespace: string;
   /** The Apex line, `EXTERNAL` for code outside the org, or null where the log states none. */
   lineNumber: LineNumber;

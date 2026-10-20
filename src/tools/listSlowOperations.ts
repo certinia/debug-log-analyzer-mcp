@@ -171,11 +171,17 @@ export interface SlowOperation {
    * `Operation.heapSelfNetBytes`.
    *
    * Present under `sortBy: "heapSelfNetBytes"` alone, because most logs record
-   * no allocation and every other ranking would carry a column of zeros - see
-   * DEVELOPING.md for the corpus behind that. A zero here means none was
-   * retained, and the `apexCode` row of `capturedAt`, where the log's header
-   * declared a level, says whether that can be true: nothing below
-   * `APEX_CODE,FINER` records an allocation.
+   * no allocation and every other ranking would carry a column of zeros. Yet
+   * the ranking is not derivable from the default one: on the 40 logs of a
+   * 123-log corpus that record an allocation, its top ten holds a median 6 rows
+   * the self-time top ten never returns, with a different top row on 31. Only
+   * 1 of the 103 logs that state a heap limit passes half of it, so a fixed
+   * column would be zeros on two thirds of responses for a one-in-a-hundred
+   * question.
+   *
+   * A zero here means none was retained, and the `apexCode` row of
+   * `capturedAt`, where the log's header declared a level, says whether that
+   * can be true: nothing below `APEX_CODE,FINER` records an allocation.
    */
   heapSelfNetBytes?: number;
 }
