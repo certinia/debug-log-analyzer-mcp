@@ -100,7 +100,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       },
       // Never send a request the client did not declare: it may never be answered.
       enforceStrictCapabilities: true,
-      instructions: `Analysis tools take an absolute .log file path and never contact an org. Every duration in a response is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper with the other tools. A zero count or limit is measured, not missing.${allowProductionOrgs ? "" : " Tools that change a production org, or one of unknown type, ask the user to confirm first, or refuse when the client cannot ask."}`,
+      instructions: `Analysis tools take an absolute .log path and never contact an org. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper. A zero count or limit is measured, not missing.${allowProductionOrgs ? "" : " Tools that change a production org, or one of unknown type, ask the user first, or refuse if the client cannot ask."}`,
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },

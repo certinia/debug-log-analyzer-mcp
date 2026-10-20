@@ -26,7 +26,7 @@ const createTraceFlagInputSchema = {
     ])
     .optional()
     .describe(
-      "A level for every category, or an object setting the named ones over apexlog_execute_anonymous's defaults (default: those defaults)",
+      "A level for every category, or the named ones over apexlog_execute_anonymous's defaults (default: those)",
     ),
   durationMinutes: z
     .number()
@@ -44,7 +44,7 @@ export type CreateTraceFlagArgs = z.infer<
 export const createTraceFlagToolConfig = {
   title: "Create Trace Flag",
   description:
-    "Start logging a user in a Salesforce org with a trace flag: every transaction they run is stored as a debug log until the flag expires, which can fill the org's log storage. A class or trigger flag stores no log, only sets that code's levels. Refused when the entity has a flag of its log type. Leaves a debug level in the org.",
+    "Trace a user, class or trigger in a Salesforce org until the trace flag expires. A user's flag stores each transaction they run as a debug log, which can fill log storage; a class or trigger flag only sets that code's levels. Refused if one of its log type exists. Leaves a debug level in the org.",
   inputSchema: toolInputSchema(createTraceFlagInputSchema),
   annotations: {
     destructiveHint: false,

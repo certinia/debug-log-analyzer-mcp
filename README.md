@@ -42,7 +42,7 @@ Then ask your assistant to analyze a log. The org tools also need an org authent
 
 <!-- token-cost-summary:start -->
 
-Keeping the server connected costs ~2,495 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~2,435 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
 
 <!-- token-cost-summary:end -->
 
@@ -70,7 +70,7 @@ A default response returns:
 
 <!-- shape-apexlog_list_slow_operations:end -->
 
-Each response also gives `durationTotalMs` for the whole transaction, `returnedSelfPercentage` for the share these rows account for, and `matchedCount` for the rows that matched before paging.
+Each response also gives `durationTotalMs` for the whole transaction, `returnedSelfPercentage` for the share these rows account for, and `matchedCount` for the rows that matched before paging. `nextOffset`, while more remain, is the `offset` of the next page.
 
 `durationSelfMaxMs` is the slowest single call in a grouped row. Read it against `durationSelfMs` to tell one bad call from many small ones. It is absent when the row is already one call.
 
@@ -99,7 +99,7 @@ Watch for `ENTERING_MANAGED_PKG`. It is time a package spent where the log shows
 | `namespace`     | string[] | No       | Rank only these namespaces |
 | `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0), whichever sortBy is used |
 | `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large |
-| `offset`        | number   | No       | Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit. |
+| `offset`        | number   | No       | Ranked rows to skip (default: 0): the last page's nextOffset |
 | `groupBy`       | string   | No       | Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. |
 | `sortBy`        | string   | No       | Default durationSelfMs. heapSelfNetBytes adds that column. |
 
@@ -220,7 +220,7 @@ The response also gives the org username, its alias if set, the org type, and a 
 | `apexFilePath` | string           | No       | Absolute path to a file of anonymous Apex |
 | `targetOrg`    | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
 | `outputDir`    | string           | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
-| `debugLevel`   | string \| object | No       | This run's log levels. Omit for the user's trace flag levels, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
+| `debugLevel`   | string \| object | No       | This run's log levels. Omit for the user's trace flag levels, else the defaults; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
 
@@ -259,9 +259,9 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 | `startTimeFrom`    | string  | No       | ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z |
 | `startTimeTo`      | string  | No       |  |
 | `minFileSizeBytes` | number  | No       |  |
-| `sortBy`           | string  | No       | Newest, slowest or largest first (default: startTime) |
+| `sortBy`           | string  | No       | Descending (default: startTime) |
 | `limit`            | number  | No       | Page size (default: 20) |
-| `cursor`           | string  | No       | nextCursor from the previous page, with the same filters and sortBy |
+| `cursor`           | string  | No       | nextCursor from the previous page |
 
 <!-- params-apexlog_list_org_logs:end -->
 
@@ -296,7 +296,7 @@ Every transaction a traced user runs while the flag lives is stored, which can f
 | ----------------- | ---------------- | -------- | --- |
 | `targetOrg`       | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
 | `tracedEntity`    | string           | Yes      | A username or user id, or a class or trigger name (ns.Name if namespaced) |
-| `debugLevel`      | string \| object | No       | A level for every category, or an object setting the named ones over apexlog_execute_anonymous's defaults (default: those defaults) |
+| `debugLevel`      | string \| object | No       | A level for every category, or the named ones over apexlog_execute_anonymous's defaults (default: those) |
 | `durationMinutes` | number           | No       | How long it logs (default: 30) |
 
 <!-- params-apexlog_create_trace_flag:end -->
@@ -309,15 +309,15 @@ Every request carries every tool definition, whether you call them or not. Each 
 
 | Tool                           | Tokens                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
-| `apexlog_list_slow_operations` | ~533                                                        |
-| `apexlog_execute_anonymous`    | ~447                                                        |
-| `apexlog_create_trace_flag`    | ~359                                                        |
+| `apexlog_list_slow_operations` | ~524                                                        |
+| `apexlog_execute_anonymous`    | ~424                                                        |
+| `apexlog_create_trace_flag`    | ~345                                                        |
 | `apexlog_search_events`        | ~330                                                        |
-| `apexlog_list_org_logs`        | ~321                                                        |
+| `apexlog_list_org_logs`        | ~307                                                        |
 | `apexlog_get_org_logs`         | ~200                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~2,495** (1.2% of a 200K context), **+63% vs 1.x ~1,529** |
+| **Total**                      | **~2,435** (1.2% of a 200K context), **+59% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
@@ -332,7 +332,7 @@ Cost does not grow with the log size. The figures below are measured against a 4
 | Tool                           | Response | 1.x  | Change |
 | ------------------------------ | -------- | ---- | ------ |
 | `apexlog_get_summary`          | ~342     | ~293 | +17%   |
-| `apexlog_list_slow_operations` | ~396     | ~408 | -3%    |
+| `apexlog_list_slow_operations` | ~400     | ~408 | -2%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
 | `apexlog_search_events`        | ~881     | -    | -      |
 

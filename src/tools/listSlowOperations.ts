@@ -108,9 +108,7 @@ export const listSlowOperationsInputSchema = {
     .int()
     .min(0)
     .optional()
-    .describe(
-      "Ranked rows to skip (default: 0). Advance it by the rows you got, which can be fewer than limit.",
-    ),
+    .describe("Ranked rows to skip (default: 0): the last page's nextOffset"),
   groupBy: z
     .enum([...GROUP_BY, "none"])
     .optional()
@@ -244,6 +242,8 @@ export interface SlowOperationsResult {
    * query, and by `name` where it is not - see `PlanRow`.
    */
   queryPlans?: PlanRow[];
+  /** The `offset` of the next page, while ranked rows remain past this one. */
+  nextOffset?: number;
 }
 
 /**
@@ -496,6 +496,11 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     }),
     operations,
     ...omitEmpty({ queryPlans }),
+    // Not after an empty page, whose nextOffset would never move.
+    ...(operations.length > 0 &&
+      offset + operations.length < matched.length && {
+        nextOffset: offset + operations.length,
+      }),
   };
 
   return toonResult(result);

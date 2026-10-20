@@ -51,7 +51,7 @@ const listOrgLogsInputSchema = {
   sortBy: z
     .enum(LOG_SORTS)
     .optional()
-    .describe("Newest, slowest or largest first (default: startTime)"),
+    .describe("Descending (default: startTime)"),
   limit: z
     .number()
     .int()
@@ -62,7 +62,7 @@ const listOrgLogsInputSchema = {
   cursor: z
     .string()
     .optional()
-    .describe("nextCursor from the previous page, with the same filters and sortBy"),
+    .describe("nextCursor from the previous page"),
 };
 
 export type ListOrgLogsArgs = z.infer<

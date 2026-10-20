@@ -127,37 +127,26 @@ const SOURCE_TEXT: Record<LevelsSource, string> = {
 function resolveRunLevels(
   debugLevel: DebugLevelInput | undefined,
   flags: ActiveTraceFlags,
-  username: string,
 ): RunLevels {
-  // First, so a bad debugLevel or a missing USER_DEBUG flag is refused even when the console wins.
-  const asked = askedLevels(debugLevel, flags.userDebugLevels, username);
   return flags.developerConsoleLevels
     ? { levels: flags.developerConsoleLevels, source: "developerConsole" }
-    : asked;
+    : askedLevels(debugLevel, flags.userDebugLevels);
 }
 
 // Read from the flag and sent, not left to it: with no header the returned log is empty.
 function askedLevels(
   debugLevel: DebugLevelInput | undefined,
   userDebugLevels: Required<TraceConfig> | undefined,
-  username: string,
 ): RunLevels {
   if (debugLevel === "default") {
     return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
   }
-  if (debugLevel !== undefined && debugLevel !== "traceFlag") {
+  if (debugLevel !== undefined) {
     return { levels: requestedLevels(debugLevel), source: "request" };
   }
-  if (userDebugLevels !== undefined) {
-    return { levels: userDebugLevels, source: "traceFlag" };
-  }
-  // Asked for by name, so a flag that has expired is said, not papered over with the defaults.
-  if (debugLevel === "traceFlag") {
-    throw new Error(
-      `${username} has no active USER_DEBUG trace flag, so there are no levels to use. Create one with apexlog_create_trace_flag, or leave out debugLevel to run at the defaults.`,
-    );
-  }
-  return { levels: DEFAULT_TRACE_CONFIG, source: "default" };
+  return userDebugLevels
+    ? { levels: userDebugLevels, source: "traceFlag" }
+    : { levels: DEFAULT_TRACE_CONFIG, source: "default" };
 }
 
 // All of it, never cut, between markers and with its size, so Apex cannot pass for the end of the prompt.
@@ -228,7 +217,7 @@ export async function executeAnonymous(
         const userId = user.id;
         // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
         const flags = await findActiveTraceFlags(connection, userId);
-        const run = resolveRunLevels(debugLevel, flags, local.username);
+        const run = resolveRunLevels(debugLevel, flags);
         return {
           value: { apex, userId, storesLogs: flags.storesLogs, run },
           confirm: apexConfirmable(apex, run, orgLabel),

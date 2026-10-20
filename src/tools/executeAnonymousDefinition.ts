@@ -46,12 +46,12 @@ export const executeAnonymousInputSchema = {
   // defaults, read from `DEFAULT_TRACE_CONFIG` so they cannot go stale.
   debugLevel: z
     .union([
-      z.enum(["traceFlag", "default", ...LOG_LEVELS]),
+      z.enum(["default", ...LOG_LEVELS]),
       z.partialRecord(z.enum(TRACE_CATEGORIES), logLevelSchema),
     ])
     .optional()
     .describe(
-      `This run's log levels. Omit for the user's trace flag levels, else the defaults; "traceFlag" requires the flag; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}.`,
+      `This run's log levels. Omit for the user's trace flag levels, else the defaults; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}.`,
     ),
 };
 
@@ -60,7 +60,7 @@ export type ExecuteAnonymousArgs = z.infer<
 >;
 
 const EXECUTE_ANONYMOUS_DESCRIPTION =
-  "Execute anonymous Apex in an authenticated Salesforce org as the targetOrg user; its DML commits unless the run fails. Saves the debug log locally and returns its path for the analysis tools. If the user has no active trace flag, adds a debug level, left in the org, and a trace flag for the run, deleted after.";
+  "Execute anonymous Apex in a Salesforce org as the targetOrg user; DML commits unless the run fails. Saves the debug log and returns its path for the analysis tools. With no active trace flag, adds one for the run, deleted after, and a debug level, left in the org.";
 
 /**
  * The tool is always registered so that agents can discover it. When Apex
