@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
 
-**MCP Server to Analyze Salesforce Apex debug logs from your AI assistant. Finds slow methods, governor limit risks, and where a transaction spent its time. In your org, runs anonymous Apex, fetches and deletes logs, and sets trace flags.**
+**MCP Server to Analyze Salesforce Apex debug logs from your AI assistant. Finds slow methods, governor limit risks, and where a transaction spent its time. In your org, runs anonymous Apex, fetches logs, and sets trace flags.**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/certinia/debug-log-analyzer-mcp/main/docs/images/apex-log-mcp.png" alt="Claude analyzing an Apex debug log for performance bottlenecks and governor limit concerns" width="800" />
@@ -321,7 +321,13 @@ Every request carries every tool definition, whether you call them or not. Each 
 
 <!-- token-cost-definitions:end -->
 
-Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the three org tools, which reach logs and trace flags 1.x could not, and `apexlog_search_events`, which reaches the events 1.x parsed and dropped; the four tools 1.x also had cost ~1,282.
+Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the three org tools, which reach logs and trace flags 1.x could not, and `apexlog_search_events`, which reaches the events 1.x parsed and dropped.
+
+<!-- token-cost-v1-tools:start -->
+
+The 4 tools 1.x also had cost ~1,253.
+
+<!-- token-cost-v1-tools:end -->
 
 A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
 

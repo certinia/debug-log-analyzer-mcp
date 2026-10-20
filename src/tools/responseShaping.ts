@@ -22,7 +22,14 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { encode } from "@toon-format/toon";
 
-/** A tool's answer: `value` as one TOON text block. */
+/**
+ * A tool's answer: `value` as one TOON text block, at TOON's defaults.
+ *
+ * None of the options paid, measured: `indentSize: 1` saves 2.4% but `decode`
+ * then needs the same option; keyed tables (`[n:]`) cost a character a row;
+ * a tab or pipe `delimiter` saved 2 tokens of 9,365; and every table is
+ * already flat, so there are no field groups to fold.
+ */
 export function toonResult(value: object): CallToolResult {
   return { content: [{ type: "text", text: encode(value) }] };
 }
@@ -86,7 +93,9 @@ export interface LimitRow {
  * a missing row would be a question the caller cannot answer. The saving comes
  * from the shape: as rows sharing three keys, TOON emits one header plus one
  * line per limit, which on a real log is a little over half the cost of the same
- * data as thirteen nested objects.
+ * data as thirteen nested objects: ~84 tokens against ~151. Dropping the zero
+ * rows from the nested form was cheaper still, ~42, but could no longer say
+ * "0 DML statements".
  *
  * The one flattener in the server, so no two tools can name a limit differently
  * or count a different set of them.
