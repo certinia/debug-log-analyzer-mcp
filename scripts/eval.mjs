@@ -355,7 +355,7 @@ const DEFINITION_BUDGET = {
   apexlog_get_org_logs: 219,
   // Measured + 5% (#211). The levels union is the costly part.
   apexlog_create_trace_flag: 362,
-  // Measured + 5% (#144). Six filters and a page, each a question the
+  // Measured + 5% (#144). Five filters and a page, each a question the
   // ranking cannot ask: what the code printed, what ran under one method.
   // The category and level filters went: `type` asks both more exactly.
   apexlog_search_events: 347,
@@ -375,6 +375,14 @@ const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
  * measured as `V1_RESPONSE_TOKENS` was. The README publishes it.
  */
 const V1_DEFINITION_TOTAL = 1529;
+
+/** The tools that replaced 1.x's four, which the README sets apart from the ones 1.x never had. */
+const V1_TOOLS = [
+  "apexlog_list_slow_operations",
+  "apexlog_get_summary",
+  "apexlog_list_limit_risks",
+  "apexlog_execute_anonymous",
+];
 
 /**
  * The ceiling on the sum of the definition budgets. It sat at
@@ -1087,6 +1095,14 @@ function renderTokenCost(costs, responses) {
           ],
         ],
       ),
+    },
+    {
+      id: "token-cost-v1-tools",
+      table: `The four tools 1.x also had cost ~${thousands(
+        costs
+          .filter(({ name }) => V1_TOOLS.includes(name))
+          .reduce((sum, cost) => sum + cost.tokens, 0),
+      )}.`,
     },
     {
       id: "token-cost-answers",

@@ -28,8 +28,8 @@ pnpm start
 
 - **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else. A bad flag exits 1 with one `[apex-log-mcp]` line, checked by `pnpm run eval`.
 - **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the eight tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
-- **src/tools/responseShaping.ts**: the shared response helpers - `toonResult`, `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `roundMs`, `roundPercent`, `NS_TO_MS`, `elide`, `elideAround`, `NAME_LIMIT`, and the page every analysis table stops at - `fitPage`, `rowCost`, `PAGE_CHAR_BUDGET` - with the `matches` filter they share.
-- **src/tools/localFile.ts**: `absolutePathSchema` and `fileReadError`, shared by every tool that reads a local file - a log or a file of Apex.
+- **src/tools/responseShaping.ts**: the shared response helpers - `toonResult`, `omitEmpty`, `toLimitRows`, `toNamespaceLimitRows`, `limitUnitsClause`, `limitGatingCategory`, `roundMs`, `roundPercent`, `percentageOf`, `NS_TO_MS`, `elide`, `elideAround`, `NAME_LIMIT`, and the page every analysis table stops at - `fitPage`, `rowCost`, `PAGE_CHAR_BUDGET` - with the `matches` filter they share.
+- **src/tools/localFile.ts**: `absolutePathSchema`, `fileReadError` and `outsideRoots`, shared by every tool that reads a local file - a log or a file of Apex.
 - **src/tools/inputSchema.ts**: `toolInputSchema`, which wraps every tool's parameters so a parameter the tool does not have is refused, and `targetOrgSchema`.
 - **src/tools/logStore.ts**: `openLogStore`, `writeDebugLog` and `saveStoredLog` - where every org tool saves a log, and never over a different one.
 - **src/tools/progress.ts**: `progressReporter`, the progress notifications of a long org call, sent only to a caller that asked.
@@ -65,7 +65,7 @@ src/
   server.ts         # MCP server implementation
   tools/            # One module per MCP tool
   salesforce/       # Org connection, org classification, debug levels, trace flags
-  policy/           # Per-call authorization for anonymous Apex execution
+  policy/           # Org deny list for every org tool; production gate for the writes
 dist/               # Compiled JavaScript output
 ```
 
@@ -82,7 +82,7 @@ dist/               # Compiled JavaScript output
 
 Tools 1-4 take an absolute path to a `.log` file. Tools 5-8 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all of them; only a write (5 and 8) meets the production gate.
 
-No tool deletes stored logs or trace flags: the need is rare, Setup and `sf` meet it, and each tool cost ~150-210 definition tokens on every request.
+No tool deletes stored logs, or lists or deletes trace flags: the need is rare, Setup and `sf` meet it, and the three tools cost ~143-210 definition tokens each, ~505 together, on every request.
 
 ## Naming
 
@@ -102,7 +102,7 @@ The tool definitions follow the same rule and are charged on every turn, called 
 
 ## Anonymous Apex
 
-`apexlog_execute_anonymous` writes the debug log under `.apex-log-mcp/`, or `outputDir`, and returns the path beside a summary, the org alias and the detected org type. Left out, `debugLevel` runs at the user's active `USER_DEBUG` flag's levels, else the defaults; it sets them per category, or all at once. The levels always go in the header, because with no header the returned log is empty. It never changes the user's trace flag.
+`apexlog_execute_anonymous` writes the debug log under `.apex-log-mcp/`, or `outputDir`, and returns the path beside a summary, the org alias and the detected org type. Left out, `debugLevel` runs at the user's active `USER_DEBUG` flag's levels, else the defaults; it sets them per category, or all at once. A live `DEVELOPER_LOG` flag outranks all of these, `debugLevel` too. The levels always go in the header, because with no header the returned log is empty. It never changes the user's trace flag.
 
 It is always registered so agents can discover it; each call passes the deny list below, then is authorized in `src/policy/orgExecutionPolicy.ts`. A production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation, decided before any `DebugLevel` or `TraceFlag` is written. `--no-apex-execution` refuses every call; the 1.x `--allowed-orgs` is accepted, ignored and warned about.
 

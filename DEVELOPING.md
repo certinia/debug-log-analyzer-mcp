@@ -48,9 +48,9 @@ To get started, clone this repository and install the necessary dependencies.
    pnpm i
    ```
 
-4. **Optional: Set a default org (apexlog_execute_anonymous tool only)**
+4. **Optional: Set a default org (org tools only)**
 
-   The execute anonymous Apex tool requires a default org to be set using the Salesforce CLI. To do this in a repository that has no `sfdx-project.json` like this one, set your default org globally:
+   The org tools use the Salesforce CLI's default org when `targetOrg` is left out. To set one in a repository that has no `sfdx-project.json` like this one, set your default org globally:
 
    ```zsh
    sf config set target-org <username-or-alias> --global
@@ -232,8 +232,8 @@ one-liners.
 - **Report the fact, not the advice.** A tip is a rule applied to a fact the caller cannot see. Report
   the fact instead and let the agent apply its own rule: `outputDirCreated` is 4 tokens where the
   ".gitignore" sentence it replaced was ~15, and it answers the question either way.
-- **Say in the tool description what is omitted and when.** Currently that is one sentence per tool,
-  because there is one omission per tool.
+- **Say in the tool description what is omitted and when.** Today only `apexlog_search_events`
+  omits anything a caller must know of - text past `NAME_LIMIT` - so only its description says so.
 - **Encode with the TOON defaults.** Measured, none of the alternatives pay:
   - `indentSize: 1` - saves 2.4%, but `decode` rejects it without a matching `indentSize`.
   - keyed tabular (`[n:]`) - costs one character per row, `,` becoming `: `.

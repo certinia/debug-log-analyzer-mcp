@@ -5,8 +5,8 @@
 /**
  * What `tools/list` puts on the wire for `apexlog_execute_anonymous`, apart
  * from the handler, so registration stays synchronous while `src/server.ts`
- * loads the handler lazily. The other three tools need no such module: nothing
- * they import is expensive.
+ * loads the handler lazily. The analysis tools need no such module: nothing
+ * they import is expensive. The other org tools have their own `*Definition.ts`.
  *
  * This module must never import `./executeAnonymous.js`, which would put the
  * Salesforce SDK back in the startup graph.
