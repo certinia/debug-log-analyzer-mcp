@@ -86,6 +86,8 @@ export const listSlowOperationsInputSchema = {
       "Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY",
     ),
   namespace: z.array(z.string()).optional().describe("Rank only these namespaces"),
+  // "Self" in the name: 1.x's `minDuration` filtered on total time while the
+  // ranking used self time, and the name hid it.
   minSelfMs: z
     .number()
     .optional()

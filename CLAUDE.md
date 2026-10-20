@@ -82,7 +82,7 @@ dist/               # Compiled JavaScript output
 
 Tools 1-4 take an absolute path to a `.log` file. Tools 5-8 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all of them; only a write (5 and 8) meets the production gate.
 
-No tool deletes stored logs, or lists or deletes trace flags: the need is rare, Setup and `sf` meet it, and the three tools cost ~143-210 definition tokens each, ~505 together, on every request.
+No tool deletes stored logs, or lists or deletes trace flags: the need is rare, Setup and `sf` meet it, and their definitions would be charged on every request - the cost is in the `DEFINITION_TOTAL_CAP` comment in `scripts/eval.mjs`.
 
 ## Naming
 
@@ -92,7 +92,7 @@ No tool deletes stored logs, or lists or deletes trace flags: the need is rare, 
 
 Responses are TOON-encoded and lean, but the saving comes from shape, never from dropping a fact - conventions in [DEVELOPING.md](DEVELOPING.md#️-shaping-tool-responses), helpers in `src/tools/responseShaping.ts`. Two rules bite most often: report a fixed-schema field even at zero, since an absent count reads as one never parsed, and use `omitEmpty` **only** for occurrence lists.
 
-A decision's evidence - a measurement, a rejected alternative - goes in a doc comment on the code it governs, not in DEVELOPING.md, which holds rules only. Read those comments before you change the code. The rules most easily broken: no prose `summary` or `recommendations`; report a table even when empty, beside the parameter that selected it, since a cutoff left unstated cannot be read; a column only one `sortBy` populates appears under that `sortBy` alone.
+A decision's evidence - a measurement, a rejected alternative - goes in a doc comment on the code it governs, or in `.claude/rules/` when it is Salesforce behaviour tested in an org - not in DEVELOPING.md, which holds rules only. Read those comments before you change the code. The rules most easily broken: no prose `summary` or `recommendations`; report a table even when empty, beside the parameter that selected it, since a cutoff left unstated cannot be read; a column only one `sortBy` populates appears under that `sortBy` alone.
 
 The tool definitions follow the same rule and are charged on every turn, called or not - the budgets and the checks are in [`scripts/eval.mjs`](scripts/eval.mjs). An enum already lists its values, so a `.describe()` must not repeat them; set `title` at the top level only, because `annotations.title` is an alias and is sent twice; anything true of every tool goes in the server `instructions` once.
 

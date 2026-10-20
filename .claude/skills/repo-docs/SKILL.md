@@ -17,6 +17,7 @@ Voice comes from the `developer-writing` skill. This skill says **which file** a
 | What a reader of the released package can see changed      | `CHANGELOG.md` (`changelog-entry` skill) |
 | The rules every change follows, and how to build and release | `DEVELOPING.md` - rules only, no evidence |
 | Why code is the way it is: a measurement, a rejected alternative | a doc comment on that code               |
+| How Salesforce behaves, tested in an org                   | `.claude/rules/<topic>.md`, dated, with the issue link; the code links to it |
 | What a contributor or agent needs before touching the code | `CLAUDE.md`                              |
 | Why a budget number is what it is                          | the comment beside it in `scripts/eval.mjs` |
 

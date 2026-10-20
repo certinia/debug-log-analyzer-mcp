@@ -39,7 +39,9 @@ export function declaredLevels({ debugLevels }: ApexLog): DeclaredLevel[] {
  *
  * A capture level decides what reaches the log at all, so it qualifies the
  * figures beside it: a self time under `apexCode,ERROR` is the work of
- * everything the level hid, pooled at the nearest logged boundary. The caller
+ * everything the level hid, pooled at the nearest logged boundary. On one such
+ * log no `METHOD_ENTRY` was emitted, and 8,161 ms of self time landed on a
+ * Visualforce page that did none of that work. The caller
  * names the categories its own figures came from, so a response states only the
  * levels that could explain them, keyed as its rows are.
  *
@@ -97,12 +99,14 @@ export interface Operation {
    * packages throughout, and on 2 of 39,415 rows of a 39 MB one, so a column
    * would repeat `namespace` on nearly every row; `groupBy: "callerNamespace"`
    * asks the question instead. The rows that differ hold the time: DML differs
-   * on 4 of 5 rows, carrying 934 of its 944 ms.
+   * on 4 of 5 rows, carrying 934 of its 944 ms, and `codeUnit` on 17% of rows,
+   * carrying 10,600 of its 10,904 ms.
    *
    * The direct parent, not the nearest ancestor that ranks as an operation: on
    * 298 logs and 1,178,604 operations the two agree on every row, as the parser
    * copies a namespace down to a child that has none, so the simpler reading
-   * holds even if the ranking skips more frames.
+   * holds even if the ranking skips more frames. They could differ only on the
+   * 289 rows whose parent is the `EXECUTION_STARTED` frame, which is `default`.
    */
   callerNamespace: string;
   /** One, until `groupOperations` folds repeats together. */

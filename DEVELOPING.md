@@ -3,9 +3,9 @@
 **What this file is for:** how to set up, build, run, test and release the server, and the rules every
 change follows. It is for developers and coding agents.
 
-**What it is not for:** recording decisions. Write a rule here as what to do. Put the evidence for a
-rule - a measurement, a rejected alternative - in a doc comment on the code it governs, where the
-next person to change that code reads it. Add a rule here only if it applies across tools.
+**What it is not for:** recording decisions. Write a rule here as what to do, and only if it applies
+across tools. The [`repo-docs`](.claude/skills/repo-docs/SKILL.md) skill says where the evidence for
+a rule goes.
 
 - The source code is [TypeScript](https://www.typescriptlang.org/).
 - `src/tools/` holds one module per MCP tool, and the helpers they share.
@@ -120,11 +120,13 @@ is visible.
 | `create_` / `update_` / `delete_` / `write_` | one resource, written; a `delete_` may name several, by id or by the filters of its `list_` |
 | `execute_` / `run_` | an effect outside this server |
 
-- A filter does not make it a `search_`. `search_` is for a caller's query string.
+- A filter does not make it a `search_`: Sentry's `list_issues` and GitHub's `list_pull_requests` both
+  take filters. `search_` is for a caller's query string.
 - Do not use `analyze`, `process`, `handle` or `manage`: they name work, so two tools can both claim
   them. Do not use `find`, `detect`, `check` or `fetch`: they are synonyms of the verbs above.
 - The noun states what the result is, in the caller's words: `slow_operations`, not `timed_nodes`.
 - Always use a verb. A bare noun (`apexlog_summary`) cannot say whether one thing or many come back.
+  `git_status` works only because git's subcommands are its vocabulary; ours are not.
 
 ### Fields
 
@@ -230,10 +232,8 @@ built server:
 pnpm run build && pnpm run eval
 ```
 
-[`pnpm run eval`](tests/eval/README.md) drives the built server over stdio against committed fixtures.
-Per tool and fixture, it checks that realistic questions are still answerable, that no figure appears
-twice, that the payload is under its token budget, and that it matches its golden file. It also
-checks the definition budgets, and that the README's generated blocks match the run.
+`pnpm run eval` drives the built server over stdio against committed fixtures.
+[`tests/eval/README.md`](tests/eval/README.md) lists what it checks.
 
 Re-record the goldens and the README blocks with `pnpm run build && pnpm run eval:update`, then read
 the diff: the
@@ -269,7 +269,7 @@ The version string picks the channel, and the pre-release tick has to agree with
 1. Bump the version, without a local tag - GitHub creates the tag when the release is published:
 
    ```zsh
-   pnpm version premajor --preid beta --no-git-tag-version   # 2.1.0 -> 3.0.0-beta.0
+   pnpm version premajor --preid beta --no-git-tag-version   # 2.x.y -> 3.0.0-beta.0
    ```
 
 2. Commit and push it to `main`.
