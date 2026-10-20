@@ -9,6 +9,7 @@ import { decode } from "@toon-format/toon";
 
 import {
   searchEvents,
+  searchEventsToolConfig,
   type SearchEventsArgs,
   type SearchEventsResult,
 } from "../src/tools/searchEvents";
@@ -34,6 +35,13 @@ function search(
 
 // The default page, a search by type and an empty search are pinned by the eval goldens.
 describe("searchEvents", () => {
+  it("should annotate only the hints that carry meaning for a read-only tool", () => {
+    expect(searchEventsToolConfig.annotations).toEqual({
+      readOnlyHint: true,
+      openWorldHint: false,
+    });
+  });
+
   // The levels come once: a later page reads the same log.
   it("should walk on from nextOffset, with the same matchedCount, and the levels on the first page only", async () => {
     const first = await search("governor-heavy", { limit: 10 });

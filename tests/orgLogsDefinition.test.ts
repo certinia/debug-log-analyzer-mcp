@@ -8,12 +8,14 @@ import {
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
 } from "../src/tools/orgLogsDefinition";
+import { createTraceFlagToolConfig } from "../src/tools/traceFlagsDefinition";
 
 // A hint left out reads as its default, which no token budget with headroom would notice.
-describe("org log tool annotations", () => {
+describe("org tool annotations", () => {
   it.each([
     ["list", listOrgLogsToolConfig, { readOnlyHint: true }],
     ["get", getOrgLogsToolConfig, { destructiveHint: false }],
+    ["create trace flag", createTraceFlagToolConfig, { destructiveHint: false }],
   ])("should annotate %s", (_name, config, annotations) => {
     expect(config.annotations).toEqual(annotations);
   });
