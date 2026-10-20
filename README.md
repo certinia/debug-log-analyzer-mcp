@@ -187,7 +187,7 @@ Searches a log's events in log order, for what the other tools rank or total: wh
 
 A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventIndex` names an event and `parentEventIndex` the one it sits under, so a row found here can be opened up with `parentEventIndex`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
 
-Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision, and a long row is cut around the match. For plain text, grep the saved `.log` instead: it is cheaper, and this tool earns its tokens on event types, nesting, and clients with no shell. `matchedCount` says how many events matched in all; `nextOffset`, while more remain, is the `offset` of the next page. `capturedAt` comes on the first page only. When every `type` named matched, or you asked for one event, it gives the levels of the categories the matches came from. Otherwise, or when those name no category the header declared, it gives every level the header declared. A search that finds no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
+Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision, and a long row is cut around the match. For plain text, grep the saved `.log` instead: it is cheaper, and this tool earns its tokens on event types, nesting, and clients with no shell. `matchedCount` says how many events matched in all; `nextOffset`, while more remain, is the `offset` of the next page. `capturedAt` comes on the first page, or with one event asked for. When every `type` named matched, or you asked for one event, it gives the levels of the categories the matches came from. Otherwise, or when those name no category the header declared, it gives every level the header declared. A search that finds no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
 
 <!-- params-apexlog_search_events:start -->
 
@@ -269,7 +269,7 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 
 Downloads logs by `ids` or the newest `latest`, as `sf apex get log` does. Returns each saved path, for the analysis tools.
 
-Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved.
+Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. If `apexlog_get_summary` reports `truncated: true` with no `truncatedBy` for a saved log, the file may have been cut off while it was written: delete it and call this tool again. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved.
 
 <!-- params-apexlog_get_org_logs:start -->
 

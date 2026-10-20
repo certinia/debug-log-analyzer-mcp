@@ -253,7 +253,7 @@ categories its query fixes - the matches' when every `type` named matched or one
 for - and otherwise, or when those hold no declared category, every declared level, because a
 category with no match may have none only because its level did not capture it. Its rows carry no
 `debugCategory`: a row's `type` decides it, and there the levels explain what is missing, not the
-rows shown. It sends them on the first page only.
+rows shown. It sends them on the first page, or with one event asked for.
 
 They matter because a capture level silently changes what every figure beside it means. On a log
 taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self

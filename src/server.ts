@@ -92,7 +92,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       name: "apex-log-mcp",
       version: packageJson.version,
       description:
-        "Analyzes Salesforce Apex debug logs for bottlenecks and governor limit usage; runs Apex, fetches logs and manages trace flags in an org.",
+        "Analyzes Salesforce Apex debug logs for bottlenecks and governor limit usage; runs Apex, fetches logs and creates trace flags in an org.",
     },
     {
       capabilities: {
