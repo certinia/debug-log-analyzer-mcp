@@ -66,6 +66,16 @@ jest.mock("../src/tools/listLimitRisks", () => ({
   },
 }));
 
+jest.mock("../src/tools/searchEvents", () => ({
+  searchEvents: jest.fn(),
+  searchEventsToolConfig: {
+    title: "Search Apex Log Events",
+    description: "Search the events of an Apex debug log",
+    inputSchema: {},
+    annotations: {},
+  },
+}));
+
 jest.mock("../src/tools/executeAnonymous", () => ({
   executeAnonymous: jest.fn(),
 }));
@@ -92,6 +102,7 @@ jest.mock("../src/tools/createTraceFlag", () => ({ createTraceFlag: jest.fn() })
 import { listSlowOperations } from "../src/tools/listSlowOperations";
 import { getLogSummary } from "../src/tools/getLogSummary";
 import { listLimitRisks } from "../src/tools/listLimitRisks";
+import { searchEvents } from "../src/tools/searchEvents";
 import { executeAnonymous } from "../src/tools/executeAnonymous";
 import { listOrgLogs } from "../src/tools/listOrgLogs";
 import { getOrgLogs } from "../src/tools/getOrgLogs";
@@ -125,32 +136,6 @@ describe("createApexLogServer", () => {
           durationTotalMs: 1000,
           returnedSelfPercentage: 0,
           operations: [],
-        }),
-      },
-    ],
-  };
-
-  const mockSummaryResult = {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify({
-          file: "test.log",
-          totalExecutionTime: 1000000,
-          totalMethods: 5,
-          governorLimits: {},
-        }),
-      },
-    ],
-  };
-
-  const mockBottleneckResult = {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify({
-          threshold: 80,
-          atRisk: [],
         }),
       },
     ],
@@ -210,12 +195,15 @@ describe("createApexLogServer", () => {
     ).mockResolvedValue(mockAnalysisResult);
     (
       getLogSummary as jest.MockedFunction<typeof getLogSummary>
-    ).mockResolvedValue(mockSummaryResult);
+    ).mockResolvedValue(mockAnalysisResult);
     (
       listLimitRisks as jest.MockedFunction<
         typeof listLimitRisks
       >
-    ).mockResolvedValue(mockBottleneckResult);
+    ).mockResolvedValue(mockAnalysisResult);
+    (
+      searchEvents as jest.MockedFunction<typeof searchEvents>
+    ).mockResolvedValue(mockAnalysisResult);
     (
       executeAnonymous as jest.MockedFunction<typeof executeAnonymous>
     ).mockResolvedValue(mockExecuteAnonymousResult);
@@ -368,46 +356,20 @@ describe("createApexLogServer", () => {
   });
 
   describe("Tool Request Handling", () => {
-    it("should handle apexlog_list_slow_operations tool correctly", async () => {
+    // An analysis tool takes its args and nothing else: no ctx, no org policy.
+    it.each([
+      ["apexlog_list_slow_operations", listSlowOperations],
+      ["apexlog_get_summary", getLogSummary],
+      ["apexlog_list_limit_risks", listLimitRisks],
+      ["apexlog_search_events", searchEvents],
+    ])("should pass only the args to %s, and its result back", async (name, handler) => {
       createApexLogServer();
 
-      const tool = registeredTools.get("apexlog_list_slow_operations")!;
-      const args = {
-        logFilePath: "/path/to/test.log",
-        limit: 5,
-      };
-
-      const result = await tool.callback(args, {} as any);
-
-      expect(listSlowOperations).toHaveBeenCalledWith(args);
-      expect(result).toEqual(mockAnalysisResult);
-    });
-
-    it("should handle apexlog_get_summary tool correctly", async () => {
-      createApexLogServer();
-
-      const tool = registeredTools.get("apexlog_get_summary")!;
       const args = { logFilePath: "/path/to/test.log" };
+      const result = await registeredTools.get(name)!.callback(args, {} as any);
 
-      const result = await tool.callback(args, {} as any);
-
-      expect(getLogSummary).toHaveBeenCalledWith(args);
-      expect(result).toEqual(mockSummaryResult);
-    });
-
-    it("should handle apexlog_list_limit_risks tool correctly", async () => {
-      createApexLogServer();
-
-      const tool = registeredTools.get("apexlog_list_limit_risks")!;
-      const args = {
-        logFilePath: "/path/to/test.log",
-        threshold: 90,
-      };
-
-      const result = await tool.callback(args, {} as any);
-
-      expect(listLimitRisks).toHaveBeenCalledWith(args);
-      expect(result).toEqual(mockBottleneckResult);
+      expect(handler).toHaveBeenCalledWith(args);
+      expect(result).toBe(mockAnalysisResult);
     });
 
     it("should handle tool execution errors gracefully", async () => {

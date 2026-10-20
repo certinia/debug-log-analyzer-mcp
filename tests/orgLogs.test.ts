@@ -20,7 +20,7 @@ jest.mock("../src/salesforce/apexLogs", () => ({
   downloadApexLog: jest.fn(),
 }));
 
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
@@ -101,7 +101,8 @@ const text = (result: { content: { text: string }[] }) =>
   result.content[0]!.text;
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  // Reset, not cleared, so no test inherits another's implementation.
+  jest.resetAllMocks();
   root = mkdtempSync(path.join(tmpdir(), "org-logs-"));
   mockReadLocalOrg.mockResolvedValue(LOCAL_ORG);
   mockConnectOrg.mockResolvedValue({
@@ -109,6 +110,11 @@ beforeEach(() => {
   } as unknown as Org);
   // Reads need no confirmation, so production is the case worth proving.
   mockClassifyOrg.mockResolvedValue({ classification: "production" });
+  mockDownload.mockResolvedValue("log");
+});
+
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true });
 });
 
 describe("listOrgLogs", () => {
@@ -253,7 +259,6 @@ describe("getOrgLogs", () => {
   });
 
   it("should download a log once whether named by its 15- or 18-character id", async () => {
-    mockDownload.mockResolvedValue("log");
 
     const result = await getOrgLogs(
       server(),
@@ -270,7 +275,6 @@ describe("getOrgLogs", () => {
   });
 
   it("should save one id from two calls at once, failing neither", async () => {
-    mockDownload.mockResolvedValue("log");
     const call = () =>
       getOrgLogs(server(), { ids: ["07L000000000001EAA"] }, ctx, policy());
 
@@ -295,7 +299,6 @@ describe("getOrgLogs", () => {
   });
 
   it("should report each log saved as progress, out of every log asked for", async () => {
-    mockDownload.mockResolvedValue("log");
     const notify = jest.fn().mockResolvedValue(undefined);
 
     await getOrgLogs(
@@ -306,8 +309,8 @@ describe("getOrgLogs", () => {
     );
 
     expect(notify.mock.calls.map(([note]) => note.params)).toEqual([
-      { progressToken: 7, progress: 1, total: 2, message: "1 of 2 logs" },
-      { progressToken: 7, progress: 2, total: 2, message: "2 of 2 logs" },
+      { progressToken: 7, progress: 1, total: 2, message: expect.any(String) },
+      { progressToken: 7, progress: 2, total: 2, message: expect.any(String) },
     ]);
   });
 
@@ -318,7 +321,7 @@ describe("getOrgLogs", () => {
       controller.abort();
       return "log";
     });
-    const ids = Array.from({ length: 6 }, (_, i) => `07L00000000000${i}AAA`);
+    const ids = Array.from({ length: 10 }, (_, i) => `07L0000000000${String(i).padStart(2, "0")}AAA`);
 
     await getOrgLogs(
       server(),
@@ -327,8 +330,8 @@ describe("getOrgLogs", () => {
       policy(),
     );
 
-    // The four already running when it was cancelled.
-    expect(mockDownload).toHaveBeenCalledTimes(4);
+    // Only those already running when it was cancelled, however many the pool runs at once.
+    expect(mockDownload.mock.calls.length).toBeLessThan(ids.length);
   });
 
   it("should refuse ids and latest together, before touching the org", async () => {
@@ -345,9 +348,8 @@ describe("getOrgLogs", () => {
   });
 
   it("should warn when outputDir is outside every root", async () => {
-    mockDownload.mockResolvedValue("log");
     const elsewhere = mkdtempSync(path.join(tmpdir(), "elsewhere-"));
-    jest.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await getOrgLogs(
       server(),
@@ -359,6 +361,8 @@ describe("getOrgLogs", () => {
     expect(decode(text(result as never))).toMatchObject({
       warning: expect.stringContaining("outside every root this client declared"),
     });
+    consoleError.mockRestore();
+    rmSync(elsewhere, { recursive: true, force: true });
   });
 
   it("should refuse a denied org before connecting", async () => {

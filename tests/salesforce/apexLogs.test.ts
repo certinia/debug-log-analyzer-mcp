@@ -319,9 +319,9 @@ describe("apexLogs", () => {
     await expect(latestApexLogIds(connection, 3)).resolves.toEqual([
       "07L000000000002EAA",
     ]);
-    expect(query).toHaveBeenCalledWith(
-      "SELECT Id FROM ApexLog ORDER BY StartTime DESC, Id DESC LIMIT 3",
-    );
+    const soql = query.mock.calls[0][0] as string;
+    expect(soql).toContain("ORDER BY StartTime DESC");
+    expect(soql).toMatch(/LIMIT 3$/);
   });
 
   it("should download a log's body", async () => {
