@@ -42,6 +42,10 @@ export function declaredLevels({ debugLevels }: ApexLog): DeclaredLevel[] {
  * everything the level hid, pooled at the nearest logged boundary. The caller
  * names the categories its own figures came from, so a response states only the
  * levels that could explain them, keyed as its rows are.
+ *
+ * Rows, not one grouped string such as "apexCode FINE; database FINEST": the
+ * string saved 6-20 tokens a response on the eval logs, but a row joins the
+ * operation rows on `debugCategory`, and the shape has shipped.
  */
 export function capturedAt(
   apexLog: ApexLog,
@@ -89,9 +93,16 @@ export interface Operation {
    * `default` however it was reached, so only the caller says which package
    * drove it.
    *
-   * Internal. The two are the same on all but a few percent of rows, so a
-   * column would cost every response for an answer almost none of them carry;
-   * `groupBy: "callerNamespace"` asks the question instead.
+   * Internal. The two differ on 2.9% of 2,469 rows of a 19 MB log with managed
+   * packages throughout, and on 2 of 39,415 rows of a 39 MB one, so a column
+   * would repeat `namespace` on nearly every row; `groupBy: "callerNamespace"`
+   * asks the question instead. The rows that differ hold the time: DML differs
+   * on 4 of 5 rows, carrying 934 of its 944 ms.
+   *
+   * The direct parent, not the nearest ancestor that ranks as an operation: on
+   * 298 logs and 1,178,604 operations the two agree on every row, as the parser
+   * copies a namespace down to a child that has none, so the simpler reading
+   * holds even if the ranking skips more frames.
    */
   callerNamespace: string;
   /** One, until `groupOperations` folds repeats together. */

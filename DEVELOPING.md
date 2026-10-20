@@ -1,10 +1,15 @@
 # 🛠️ Developing the Apex Log MCP Server
 
-Welcome to the development guide for the **Apex Log MCP Server**. This document will walk you through the steps required to get started with the development environment, run the server locally, and contribute to the project.
+**What this file is for:** how to set up, build, run, test and release the server, and the rules every
+change follows. It is for developers and coding agents.
 
-- The source code is written in [TypeScript](https://www.typescriptlang.org/).
-- The tools directory contains the source code for the functionality available on the server.
-- The salesforce directory contains a set of utilities for connecting to a Salesforce org.
+**What it is not for:** recording decisions. Write a rule here as what to do. Put the evidence for a
+rule - a measurement, a rejected alternative - in a doc comment on the code it governs, where the
+next person to change that code reads it. Add a rule here only if it applies across tools.
+
+- The source code is [TypeScript](https://www.typescriptlang.org/).
+- `src/tools/` holds one module per MCP tool, and the helpers they share.
+- `src/salesforce/` connects to a Salesforce org.
 
 ## 📚 Table of Contents
 
@@ -20,17 +25,11 @@ Welcome to the development guide for the **Apex Log MCP Server**. This document 
 
 ## 🔧 Prerequisites
 
-Before you start developing, make sure you have the following tools installed:
-
 - **Node.js** v22 or above: [Install Node.js](https://nodejs.org/en/)
-- **[pnpm](https://pnpm.io/)**: Preferred package manager
-- **[Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli)**: This is used to connect to a Salesforce org.
-
-Once you’ve got these ready, you’re all set to get started! 🚀
+- **[pnpm](https://pnpm.io/)**: the package manager
+- **[Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli)**: connects to a Salesforce org
 
 ## 💻 Setting Up the Development Environment
-
-To get started, clone this repository and install the necessary dependencies.
 
 1. **Create a fork of the repository first**
 2. **Clone the repository:**
@@ -41,8 +40,6 @@ To get started, clone this repository and install the necessary dependencies.
    ```
 
 3. **Install dependencies:**
-
-   Use [pnpm](https://pnpm.io/) to install project dependencies:
 
    ```zsh
    pnpm i
@@ -56,9 +53,7 @@ To get started, clone this repository and install the necessary dependencies.
    sf config set target-org <username-or-alias> --global
    ```
 
-5. **Optional: Install MCP Inspector**
-
-   This will allow you to view a UI to easily interact with the MCP server:
+5. **Optional: Install MCP Inspector**, a UI to call the server's tools:
 
    ```zsh
    npm install -g @modelcontextprotocol/inspector
@@ -66,19 +61,13 @@ To get started, clone this repository and install the necessary dependencies.
 
 ## 📦 Building
 
-You can build the server and prepare it for local development, run the watcher to re build automatically or production use. Here's how:
-
-1. **Watch Build:**
-
-   To build the server and then watch for file changes for a fast dev experience, use:
+1. **Watch build**, which rebuilds on each file change:
 
    ```bash
    pnpm run dev
    ```
 
-2. **Production Build:**
-
-   To build the server, use:
+2. **Production build:**
 
    ```bash
    pnpm run build
@@ -86,7 +75,7 @@ You can build the server and prepare it for local development, run the watcher t
 
 ## 🚀 Running the Server Locally
 
-Once you’ve built the server or run the watcher, you can run the MCP server for testing and development.
+Build the server, or run the watcher, first.
 
 1. **Run in terminal:**
 
@@ -117,16 +106,11 @@ reader is an agent that cannot ask what a name means.
 
 ### Prefix every tool with `apexlog_`
 
-Unprefixed names collide across servers. `get_issue` and `list_issues` ship in both the GitHub and the
-Sentry server; `search_files` and `read_file` in both Filesystem and Google Drive. A client with two of
-those loaded cannot tell them apart.
-
-One unbroken unit - `apexlog_`, not `apex_log_`, as `slack_` is - so the boundary between the namespace
-and the verb is visible.
+Unprefixed names collide across servers: `get_issue` ships in both the GitHub and the Sentry server.
+Write it as one unit - `apexlog_`, not `apex_log_` - so the boundary between the prefix and the verb
+is visible.
 
 ### The verb states the shape of the result
-
-The result is what the caller plans around. The work is invisible to it.
 
 | Verb | The caller gets back |
 | --- | --- |
@@ -136,253 +120,130 @@ The result is what the caller plans around. The work is invisible to it.
 | `create_` / `update_` / `delete_` / `write_` | one resource, written; a `delete_` may name several, by id or by the filters of its `list_` |
 | `execute_` / `run_` | an effect outside this server |
 
-A filter does not make it a `search_` - Sentry's `list_issues` and GitHub's `list_pull_requests` both
-take filters. `search_` is for a caller's query string.
-
-Banned: `analyze`, `process`, `handle` and `manage`, because they name work, so two tools can both
-claim them; `find`, `detect`, `check` and `fetch`, because they are synonyms of the verbs above.
-
-The noun states what the result is, in the caller's words: `slow_operations`, not `timed_nodes`.
-
-A bare noun (`apexlog_summary`) is shorter, and `git_status` shows it can work - but only because git's
-subcommands *are* its vocabulary, so `status` reads as a verb there. Ours is not, and a bare noun
-cannot say whether one thing or many come back.
+- A filter does not make it a `search_`. `search_` is for a caller's query string.
+- Do not use `analyze`, `process`, `handle` or `manage`: they name work, so two tools can both claim
+  them. Do not use `find`, `detect`, `check` or `fetch`: they are synonyms of the verbs above.
+- The noun states what the result is, in the caller's words: `slow_operations`, not `timed_nodes`.
+- Always use a verb. A bare noun (`apexlog_summary`) cannot say whether one thing or many come back.
 
 ### Fields
 
 1. **Name the fact, not the calculation**: `returnedSelfPercentage`, not `coveredSelfPercentage`.
 2. **Carry the unit** when the type cannot: `durationSelfMs`, `fileSizeBytes`.
 3. **`total` always means "including children", `self` always means "excluding them".** Never "summed
-   across rows". A log's duration *is* its root frame's, so `durationTotalMs` names it at every scope,
-   and the parser's own `duration.total` / `duration.self` reach the wire unrenamed.
-4. **One name per fact, in every tool.** A word may still serve two unrelated facts where position
-   prevents confusion: `limit` is both the input row count and the column naming which governor limit
-   a row is about.
+   across rows". A log's duration is its root frame's, so `durationTotalMs` names it at every scope.
+4. **One name per fact, in every tool.** A word may serve two unrelated facts where position prevents
+   confusion: `limit` is both the input row count and the column naming a governor limit.
 5. **Counts are `<singularNoun>Count`**: `soqlCount`, `dmlRowCount`. Not `totalX`, not a plural alone.
 6. **lowerCamel, acronyms folded**: `soqlCount`.
 7. **Booleans are bare adjectives that read true**: `truncated`, `succeeded`. No `isX`, no `hasX`.
-8. **An input names what it limits, on the axis it acts on**: `limit`, `minSelfMs`. `minDuration`
-   filtered on total time while the ranking used self time, and the name hid it.
+8. **An input names what it limits, on the axis it acts on**: `limit`, `minSelfMs`.
 
 ## ✂️ Shaping Tool Responses
 
-Every token a tool returns is a token the agent cannot spend on reasoning, so responses are kept as
-small as they can be - but the saving has to come from *shape*, never from dropping a fact. If a user
-asks "how many DML statements did this transaction consume?", the agent has to be able to answer from
-the payload alone.
+Every token a tool returns is a token the agent cannot spend on reasoning, so keep responses small.
+Get the saving from the *shape*, never from dropping a fact: the agent must be able to answer from the
+payload alone. The helpers in [`src/tools/responseShaping.ts`](src/tools/responseShaping.ts) make
+most of these rules one-liners.
 
-### Restructure before you delete
+### What to report
 
-Flattening a nested object into a TOON table is almost always a bigger win than deleting rows from
-it, and it costs nothing. Measured on the 13 governor limits of a real 19 MB log:
+- **Restructure before you delete.** Flatten nested objects into a table first (`toLimitRows`): it is
+  cheaper and keeps every fact.
+- **Report a fixed-schema field even at zero.** The set of governor limits, debug categories and
+  columns is fixed, so a zero is a fact and an absent key reads as "never parsed".
+- **Omit only an empty occurrence list** - issues found, errors met - with `omitEmpty`. Never pass a
+  fixed-schema field through it. `false` is not empty: it is an answer.
+- **Say it once.** Never restate a table's figure in prose, and never report a value in two sections.
+  Where prose carried a fact no table holds, replace it with a scalar rather than delete it.
+- **Do not state what the caller can derive.** Report the fact, not the advice built on it: the agent
+  reads every column and applies its own rule.
+- **Do not echo the input back.** A file path or flag the caller supplied does not belong in the
+  response.
+- **Round to the precision someone acts on**: `roundMs` (3dp) for durations, `roundPercent` (1dp) for
+  percentages.
 
-| `governorLimits`, 13 entries | tokens | can answer "0 DML statements"? |
-| --- | --- | --- |
-| Nested objects, all 13 | ~151 | yes |
-| Nested objects, `used > 0` only | ~42 | **no** |
-| **Flat table (`{limit, used, max}`), all 13** | **~84** | yes |
+### Bounding a response
 
-The flat table is 45% cheaper than the nested form *and* complete. Deleting the zero rows buys 42
-more tokens and costs the answer, so we don't. `toLimitRows` is the helper that does this.
+- **Read the bounded view, and cap what is still unbounded in it.** Prefer a deduped source to one that
+  lists every occurrence. Cap free text the log controls - a message, a stack - since its size is the
+  log's to choose.
+- **Cap the payload, not the row count.** A page stops at `PAGE_CHAR_BUDGET` (`fitPage`), and a long
+  name is elided at `NAME_LIMIT`. Return fewer rows than asked rather than overflow; `matchedCount`
+  says the page was cut.
+- **Say in the tool description what is omitted, and when.**
 
-Per-namespace usage is the exception that proves the rule. `toNamespaceLimitRows` reports only the
-limits a namespace consumed, because there a row *is* an occurrence: whether a limit was measured at
-all is a property of the transaction, which the whole-log table already answers, so a namespace with
-no row for a limit consumed none of it. It states no ceiling either - the parser keeps one ceiling
-per limit for the whole transaction, and it is already in `governorLimits`.
+### The shape
 
-### The conventions
+- **A fact that qualifies the whole response is a scalar, stated once; a fact that varies per row is a
+  column.**
+- **Keep table rows identical in shape.** TOON writes one header per table only while every row has the
+  same keys, so a column is on every row or on none.
+- **Report the capture level beside the figures it qualifies** (`capturedAt`, or a `level` column). A
+  level silently changes what each figure means. Name the categories the figures came from; where the
+  query does not fix them, name every declared level.
+- **Never default a level the header did not declare.** A level has no zero: leave the category out, or
+  state it empty.
+- **No caveat prose, and no magnitude.** Report the level and stop: a figure measured once, against
+  one org, cannot be re-derived by CI and goes stale.
+- **A fact worth an answer but not worth a column is a parameter that reshapes the rows** - a `groupBy`
+  or a `sortBy`. A column only that parameter fills appears under it alone; that is not an omission,
+  because the parameter says which it is.
+- **Report a table even when empty, beside the parameter that selected it**, since a cutoff left
+  unstated cannot be read.
+- **Encode with the TOON defaults** (`toonResult`).
 
-The helpers in [`src/tools/responseShaping.ts`](src/tools/responseShaping.ts) exist to make these
-one-liners.
-
-- **A fixed-schema field is always reported, even at zero.** The set of governor limits, debug
-  categories and method columns is fixed and known, so a zero is a fact and an absent key is an
-  ambiguity - the reader cannot tell "nothing ran" from "never parsed". Report the zero.
-- **Only occurrence lists are omitted when empty** - issues found, errors
-  encountered. There, absence is unambiguous: nothing occurred. `omitEmpty` is for these and nothing
-  else; never pass a fixed-schema scalar through it. (`false` is *not* empty - it is an answer.)
-- **Say it once.** Never restate in prose a figure that is already in a table, and never report a
-  value in two sections. Where prose
-  carried a fact the table could not, replace it with a scalar rather than deleting it -
-  `topMethodsSelfPercentage` is ~8 tokens where the paragraph it replaced was ~55.
-- **Don't state what the caller can derive.** A sentence earns its tokens only if it carries a fact the
-  numbers do not. "No bottlenecks found" follows from an always-present empty list, so the fix is a
-  complete shape, not a sentence; "High CPU usage - consider optimizing algorithms" follows from the
-  percentage beside it. Advice built from one column and a hardcoded threshold is a worse copy of what
-  the agent does anyway, because the agent reads every column.
-- **Take the bounded view, and cap what is still unbounded inside it.** Where the parser offers
-  both, read the deduped one: `logIssues` holds one entry per failure, where `exceptions` holds every
-  occurrence - 4,501 throws in one real log are three messages. Then cap the free text that is left,
-  because its size is the log's to choose and not ours: a fatal states 53 characters of message on
-  the median log and 1,070 on the worst, and one stack runs to 52,009. A field the log controls is a
-  field that will one day fill the caller's context. Where the caller also chooses how many rows come
-  back, cap the payload and not the count: `apexlog_list_slow_operations` elides a row's `name` past
-  400 characters and stops a page at 60,000, because a row cap is a proxy - capping every name still
-  left 5 logs of 124 over a client's ceiling, since a thousand rows cost some 15,000 tokens in their
-  numeric columns alone. Returning fewer rows than were asked for is the honest answer, and the
-  matched count beside them already says the page was cut.
-- **Don't echo the input back.** If the caller supplied it (a file path, a flag), it does not belong
-  in the response.
-- **Round to the precision someone acts on.** `roundMs` for durations (3dp, keeps microsecond
-  resolution) and `roundPercent` for percentages (1dp). Raw float division produces things like
-  `62.569866677679975`, and every one of those digits is a token nobody reads.
-- **Keep table rows identical in shape.** TOON emits one header plus one line per row only while the
-  rows agree on their keys, so a column is either present on every row or on none.
-- **Report the fact, not the advice.** A tip is a rule applied to a fact the caller cannot see. Report
-  the fact instead and let the agent apply its own rule: `outputDirCreated` is 4 tokens where the
-  ".gitignore" sentence it replaced was ~15, and it answers the question either way.
-- **Say in the tool description what is omitted and when.** Today only `apexlog_search_events`
-  omits anything a caller must know of - text past `NAME_LIMIT` - so only its description says so.
-- **Encode with the TOON defaults.** Measured, none of the alternatives pay:
-  - `indentSize: 1` - saves 2.4%, but `decode` rejects it without a matching `indentSize`.
-  - keyed tabular (`[n:]`) - costs one character per row, `,` becoming `: `.
-  - `delimiter` tab or pipe - 2 tokens on a 9,365-token response. Quoting comes from `:` in a name.
-  - nested field groups - nothing left to fold; every table is already flat.
-
-### A scalar qualifies the response, a column varies per row
-
-**A fact that qualifies every number in the response is a response-level scalar, stated once; a fact
-that varies per row is a column.** `threshold` on `apexlog_list_limit_risks` follows this rule, and so
-does `capturedAt` - the level each debug log category was captured at - which
-`apexlog_list_slow_operations` and `apexlog_list_limit_risks` report from the log's header. It is a
-table rather than a set of scalars because it is keyed the way the rows are, on `debugCategory`, so
-the two join; and each tool names only the categories its own figures came from, since a level for a
-category nothing here was logged under qualifies nothing. `apexlog_search_events` names only the
-categories its query fixes - the matches' when every `type` named matched or one event was asked
-for - and otherwise, or when those hold no declared category, every declared level, because a
-category with no match may have none only because its level did not capture it. Its rows carry no
-`debugCategory`: a row's `type` decides it, and there the levels explain what is missing, not the
-rows shown. It sends them on the first page, or with one event asked for.
-
-They matter because a capture level silently changes what every figure beside it means. On a log
-taken at `APEX_CODE,ERROR` no `METHOD_ENTRY` is emitted at all, so the ranking puts 8,161 ms of self
-time on a Visualforce page. That is not the page's work - it is everything the level hid, pooled at
-the nearest logged boundary. Without the level the number reads as a finding, and any advice built on
-it is confidently wrong.
-
-Two consequences:
-
-- **A level the header never declared is never defaulted.** A level has no zero, so the usual
-  "report the fixed-schema field anyway" does not apply - naming a default would state a value the
-  log never did. `capturedAt` leaves the category out; `apexlog_get_summary`, whose rows are the
-  fixed eleven, states the level empty. Both mean unstated.
-- **No caveat prose and no magnitude.** The response reports the level and stops. A figure measured
-  once against one org, with the harness not committed, cannot be re-derived by CI and will rot.
-
-`apexlog_get_summary` states the level as a column of `categories`, beside the time each category
-took. Two tables keyed on `debugCategory` in the same order named every category twice and left the
-join to the caller.
-
-### When a fact earns a grouping and not a column
-
-`namespace` on an operation is the namespace of the frame, which is not always the namespace that
-asked for the work. `DMLBeginLine` pins `namespace = "default"` however the DML was reached, while
-`SOQLExecuteBeginLine` and `SOSLExecuteBeginLine` carry no namespace logic at all and so inherit the
-caller's. The caller is a second fact, and `Operation.callerNamespace` holds it.
-
-It is read off the **direct parent event**, not off the nearest ancestor that ranks as an operation.
-Measured over 298 real logs and 1,178,604 operations the two readings agree on every row, because
-the parser copies a namespace down to every child that has none. The only rows where they could
-diverge are the 289 whose parent is the `EXECUTION_STARTED` frame, and that frame is `default`. So
-the reading is the cheaper one to reason about rather than a different answer: it holds even if the
-set of frames the ranking skips grows.
-
-It does not earn a column. Measured over two real logs:
-
-| log | rows | caller differs |
-| --- | ---: | ---: |
-| 19 MB, managed packages throughout | 2,469 | 72 (**2.9%**) |
-| 39 MB, every category at `INFO` | 39,415 | 2 (**0.0%**) |
-
-Flows, SOQL, workflow and methods differ on **0%** of rows. The *time* sits entirely in the rows that
-do differ: DML differs on 4 of 5 rows carrying 934 of its 944 ms, and `codeUnit` on 17% of rows
-carrying 10,600 of its 10,904 ms. So the fact matters and the column does not - it would repeat
-`namespace` on 97% of every response.
-
-`groupBy: "callerNamespace"` asks the question instead, for one enum value and the clause that says
-what it attributes. Every response that does not pass it is unchanged. The rule: **a fact worth an
-answer but not worth a column belongs in a parameter that reshapes the rows, not in the rows.**
-
-Heap goes one step further and earns a **sort key, plus the column and scalar only that key carries**.
-On the 40 logs of a 123-log corpus that record an allocation, a ranking by the net heap each row's own
-code retained holds a median 6 of 10 rows the self-time ranking never returns, and a different top row
-on 31 of the 40, so the answer is not derivable from the default response. But only 1 of the 103 logs
-that state a heap limit passes half of it, so permanent fields would be zeros on two thirds of
-responses for a one-in-a-hundred question. `sortBy: "heapSelfNetBytes"` asks for all three together,
-and `durationSelfMaxMs` under `groupBy` is the same shape. This is the boundary of the fixed-schema
-rule: **a field the caller's own parameter turns on is not an omission, because the parameter says
-which it is.**
-
-The scalar it turns on, `returnedHeapPercentage`, follows the rule two sections above: a share the
-returned rows carry qualifies the whole response rather than any one row. It earns its place because
-neither the rows nor another tool can imply it - the figures are on the field itself in
-[`listSlowOperations.ts`](src/tools/listSlowOperations.ts).
-
-### The gate
-
-Output changes are checked by [`pnpm run eval`](tests/eval/README.md), which drives the built server
-over stdio against committed fixtures and asserts four things per (tool, fixture): that realistic
-user questions are still answerable, that no figure appears twice, that the payload is under a token
-budget, and that it matches its golden file. Run it - and `pnpm run eval:update` to re-record the
-goldens - for any change to a response shape; the golden diff *is* the review of the change.
-
-Further checks run once per run: the definition budgets in [`scripts/eval.mjs`](scripts/eval.mjs),
-and the generated README blocks - both
-[Token Cost](README.md#token-cost) tables, each tool's parameter table, and the shape of each
-response. A change that moves any of them fails until `pnpm run eval:update` regenerates the README
-with it, so the prose beside those blocks is the only part you edit by hand.
-
-The unit tests cannot substitute for it: jest maps `@toon-format/toon` to a JSON stand-in, so it
-never sees the real encoding.
-
-If you change a tool's output shape, update the [CHANGELOG](CHANGELOG.md) and the tool's entry in the
-[README](README.md#tools-reference) - the output contract is part of the public API.
+If you change what a tool returns, update the [CHANGELOG](CHANGELOG.md) and the tool's entry in the
+[README](README.md#tools-reference): the output contract is part of the public API.
 
 ## 🏷️ Shaping Tool Definitions
 
 A definition is charged on every request, called or not. Server `instructions` are charged once per
-session, a response only when the tool is called. So a fact true of every tool belongs in
-`instructions`, and a fact true of one belongs in that tool's description.
+session, and a response only when the tool is called.
 
-The [MCP spec](https://modelcontextprotocol.io/specification/latest/server/tools) covers the
-rest - what `title`, `description` and each annotation are for. Where it is silent, `pnpm run eval`
-is the rule, not this file: it measures every wire object in a live `tools/list` and fails with the
-reason. Read `scripts/eval.mjs` for the current budgets, and the definition tests in `tests/` for
-the annotations, which no budget with headroom would notice coming back.
+- Put a fact true of every tool in `instructions`, and a fact true of one in that tool's description.
+- Put a parameter's range in its schema constraints, and its format and default in its `.describe()`.
+  The description repeats none of them, because the client receives the schema beside it - even where
+  a directory that scores descriptions on their own marks this down.
+- Do not describe a failure several tools share, such as a bad path or a denied org, in each tool. The
+  error text says it when it happens.
+- A description is a selection prompt, so a trim can cost discovery. `SELECTION_KEYWORDS` in
+  [`scripts/eval.mjs`](scripts/eval.mjs) fails a trim that drops a word clients search on.
 
-One trade a budget cannot see: a description is a selection prompt, so a trim that saves tokens can
-cost discovery. `SELECTION_KEYWORDS` makes that fail loudly instead of passing quietly.
-
-Two rules are deliberate, though a directory that scores a description on its own (Glama, for
-one) marks them down:
-
-- A parameter's range lives in its schema constraints, and its format and default in its
-  `.describe()`. The description repeats none of them, because the client receives the schema
-  beside it.
-- A failure several tools share, such as a bad path or a denied org, is not described in each
-  tool. The error text says it when it happens.
+The [MCP spec](https://modelcontextprotocol.io/specification/latest/server/tools) says what `title`,
+`description` and each annotation are for. Where it is silent, `pnpm run eval` is the rule. Pin each
+annotation in the tool's definition test: a budget with headroom does not notice one coming back.
 
 ## 🧪 Testing Your Changes
 
-Make sure your changes don’t break anything. If you’re working on a feature or bug fix that requires tests, be sure to add or update the relevant tests.
-
-Run Tests Locally:
-If you have added or modified tests, you can run them with:
+Add or update tests for the behaviour you change. Run them, or run them from the VS Code test
+explorer:
 
 ```zsh
 pnpm test
 ```
 
-or run the tests from the test explorer in VScode
-
-If you changed anything a tool returns, also run the evaluation suite against the built server:
+If you changed what a tool returns or how it is defined, also run the evaluation suite against the
+built server:
 
 ```zsh
 pnpm run build && pnpm run eval
 ```
 
-Ensure all tests pass before submitting your pull request.
+[`pnpm run eval`](tests/eval/README.md) drives the built server over stdio against committed fixtures.
+Per tool and fixture, it checks that realistic questions are still answerable, that no figure appears
+twice, that the payload is under its token budget, and that it matches its golden file. It also
+checks the definition budgets, and that the README's generated blocks match the run.
+
+Re-record the goldens and the README blocks with `pnpm run build && pnpm run eval:update`, then read
+the diff: the
+golden diff *is* the review of a shape change. Edit only the prose around the generated blocks by
+hand.
+
+The unit tests cannot replace the eval: jest maps `@toon-format/toon` to a JSON stand-in, so it never
+sees the real encoding.
+
+Make sure all tests pass before you open a pull request.
 
 ## 🚢 Releasing
 
@@ -403,17 +264,17 @@ So the version chooses the channel:
 
 ### Publishing a beta
 
-Nothing changes in the release flow itself. The version string picks the channel, and the pre-release tick has to agree with it.
+The version string picks the channel, and the pre-release tick has to agree with it.
 
 1. Bump the version, without a local tag - GitHub creates the tag when the release is published:
 
    ```zsh
-   pnpm version premajor --preid beta --no-git-tag-version   # 1.0.0 -> 2.0.0-beta.0
+   pnpm version premajor --preid beta --no-git-tag-version   # 2.1.0 -> 3.0.0-beta.0
    ```
 
 2. Commit and push it to `main`.
-3. Draft a new GitHub release, and create the tag `2.0.0-beta.0` on publish, as usual.
-4. **Tick “Set as a pre-release”.** This is the only new step.
+3. Draft a new GitHub release, and create the tag `3.0.0-beta.0` on publish.
+4. **Tick “Set as a pre-release”.**
 5. Publish. The workflow reads the tag, resolves `beta`, and publishes there.
 6. Check the pointers: `npm dist-tag ls @certinia/apex-log-mcp`. `latest` must still be the last stable.
 
@@ -422,7 +283,7 @@ Later betas come from `pnpm version prerelease --no-git-tag-version`, and the st
 To see the dist-tag before you tag anything:
 
 ```zsh
-RELEASE_TAG=2.0.0-beta.0 PRERELEASE=true node scripts/release-tag.mjs
+RELEASE_TAG=3.0.0-beta.0 PRERELEASE=true node scripts/release-tag.mjs
 ```
 
 ### When the release is refused
@@ -433,4 +294,4 @@ Re-running the failed job does not help: a re-run replays the original event, so
 
 ### The changelog
 
-`## [Unreleased]` stays as it is through the betas. A beta is a preview of the same unreleased content, not its own set of changes; the heading becomes `## [2.0.0] - <date>` when the stable release is tagged.
+`## [Unreleased]` stays as it is through the betas. A beta is a preview of the same unreleased content, not its own set of changes; the heading becomes `## [3.0.0] - <date>` when the stable release is tagged.

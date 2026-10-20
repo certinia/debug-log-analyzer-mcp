@@ -49,7 +49,8 @@ A budget over `{name, description, inputSchema}` guards a subset of the cost: it
 runs the server:
 
 1. A per-tool budget, ~5% headroom, so one careless sentence fails.
-2. A total under the last released figure, held as a constant. This also catches a new tool.
+2. A cap on the total, held as a constant and raised only on purpose, with the reason beside it.
+   This also catches a new tool.
 3. Selection keywords, one or two per tool. Clients match the words in the description, so a trim
    that saves tokens can cost discovery. Make that trade fail loudly.
 

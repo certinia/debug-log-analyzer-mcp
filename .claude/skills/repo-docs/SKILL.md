@@ -15,7 +15,8 @@ Voice comes from the `developer-writing` skill. This skill says **which file** a
 | What a tool returns, its parameters, its response fields   | `README.md`, Tools Reference             |
 | What a 1.x caller must change                              | `MIGRATING.md`                           |
 | What a reader of the released package can see changed      | `CHANGELOG.md` (`changelog-entry` skill) |
-| Why a response is shaped that way; the shaping rules       | `DEVELOPING.md`                          |
+| The rules every change follows, and how to build and release | `DEVELOPING.md` - rules only, no evidence |
+| Why code is the way it is: a measurement, a rejected alternative | a doc comment on that code               |
 | What a contributor or agent needs before touching the code | `CLAUDE.md`                              |
 | Why a budget number is what it is                          | the comment beside it in `scripts/eval.mjs` |
 
@@ -41,6 +42,7 @@ A new parameter regenerates its own row. Write prose for it only if it changes w
 
 - `token-cost-summary` - the line on what keeping the server connected costs
 - `token-cost-definitions` and `token-cost-answers` - the two token tables
+- `token-cost-v1-tools` - what the tools that replaced 1.x's cost now
 - `params-<tool>` - the parameter table, from the schema the client is served, for every tool
 - `shape-<tool>` - the response fields, from the fixture the figures are measured against, for the
   analysis tools only
@@ -57,8 +59,8 @@ moves. It is the one figure in the file nothing checks.
 
 Any figure a reader can check must match the code: percentages against 1.x, token counts, corpus
 sizes, row caps such as `NAME_LIMIT` and the page budget. When a change moves one, grep the docs for
-the old number before you commit - `README.md`, `DEVELOPING.md`, `CLAUDE.md` and `MIGRATING.md` all
-quote them.
+the old number before you commit - `README.md`, `CLAUDE.md` and `MIGRATING.md` quote them, and so
+do doc comments in `src/`.
 
 ## MIGRATING
 
