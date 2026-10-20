@@ -205,7 +205,7 @@ describe("searchEvents", () => {
     { parentEventIndex: 10_000 },
   ])("should refuse an index no search reaches: %o", async (args) => {
     await expect(search("governor-heavy", args)).rejects.toThrow(
-      `Pass as ${Object.keys(args)[0]} an eventIndex from a row this tool returned.`,
+      `No event in this log has eventIndex ${Object.values(args)[0]}. Pass as ${Object.keys(args)[0]} an eventIndex from a row this tool returned.`,
     );
   });
 

@@ -192,27 +192,27 @@ describe("Trace Flags", () => {
         createTraceFlag(mockConnection, tracedEntityId, debugLevelId, traceFlagWindow(900_000)),
       ).rejects.toThrow("Network error");
     });
-  });
 
-  // Salesforce refuses a window of 24 hours or more from its StartDate.
-  it("starts back less than the skew when the window would otherwise reach a day", () => {
-    const { start, end } = traceFlagWindow(MAX_DURATION_MINUTES * 60_000);
+    it("creates a CLASS_TRACING flag when asked", async () => {
+      mockCreate.mockResolvedValue({ success: true, id: traceFlagId });
 
-    expect(end.getTime() - start.getTime()).toBeLessThan(24 * 60 * 60_000);
-    expect(start.getTime()).toBeLessThan(Date.parse(now));
-  });
+      await createTraceFlag(mockConnection, tracedEntityId, debugLevelId, traceFlagWindow(60_000), "CLASS_TRACING");
 
-  it("creates a CLASS_TRACING flag when asked", async () => {
-    mockCreate.mockResolvedValue({ success: true, id: traceFlagId });
-
-    await createTraceFlag(mockConnection, tracedEntityId, debugLevelId, traceFlagWindow(60_000), "CLASS_TRACING");
-
-    expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ LogType: "CLASS_TRACING" }),
-    );
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ LogType: "CLASS_TRACING" }),
+      );
+    });
   });
 
   describe("traceFlagWindow", () => {
+    // Salesforce refuses a window of 24 hours or more from its StartDate.
+    it("starts back less than the skew when the window would otherwise reach a day", () => {
+      const { start, end } = traceFlagWindow(MAX_DURATION_MINUTES * 60_000);
+
+      expect(end.getTime() - start.getTime()).toBeLessThan(24 * 60 * 60_000);
+      expect(start.getTime()).toBeLessThan(Date.parse(now));
+    });
+
     it("starts no earlier than notBefore", () => {
       const notBefore = new Date("2025-01-15T08:58:00.000Z");
 
@@ -352,16 +352,24 @@ describe("Trace Flags", () => {
   });
 
   describe("findOverlappingTraceFlag", () => {
+    const jo = { id: "005000000000001AAA", name: "jo@example.com", type: "User" as const };
+    const flagEnding = (ExpirationDate: string) => ({
+      records: [
+        {
+          Id: "7tf000000000001AAA",
+          LogType: "USER_DEBUG",
+          DebugLevel: null,
+          StartDate: "2025-01-15T08:00:00.000+0000",
+          ExpirationDate,
+        },
+      ],
+    });
+
     // A new flag starts back by the skew, so one that ended inside it still overlaps.
     it("asks for a flag of the same log type ending after the new one starts", async () => {
       mockQuery.mockResolvedValue({ records: [] });
 
-      await findOverlappingTraceFlag(
-        mockConnection,
-        { id: "005000000000001AAA", name: "jo@example.com", type: "User" },
-        "USER_DEBUG",
-        900_000,
-      );
+      await findOverlappingTraceFlag(mockConnection, jo, "USER_DEBUG", 900_000);
 
       const query = mockQuery.mock.calls[0][0] as string;
       expect(query).toMatch(
@@ -371,22 +379,6 @@ describe("Trace Flags", () => {
       expect(query).toContain(
         "AND (StartDate = null OR StartDate < 2025-01-15T09:15:00.000Z)",
       );
-    });
-  });
-
-  describe("findOverlappingTraceFlag's answer", () => {
-    const jo = { id: "005000000000001AAA", name: "jo@example.com", type: "User" as const };
-    const flagEnding = (ExpirationDate: string) => ({
-      records: [
-        {
-          Id: "7tf000000000001AAA",
-          TracedEntityId: jo.id,
-          LogType: "USER_DEBUG",
-          DebugLevel: null,
-          StartDate: "2025-01-15T08:00:00.000+0000",
-          ExpirationDate,
-        },
-      ],
     });
 
     it("returns a flag still live as blocking", async () => {
