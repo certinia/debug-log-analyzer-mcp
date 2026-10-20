@@ -81,7 +81,7 @@ describe("Trace Flags", () => {
         system: "WARN",
         workflow: "NONE",
       });
-      expect(flags.developerConsoleLevels).toMatchObject({ apexCode: "FINEST" });
+      expect(flags.developerLogLevels).toMatchObject({ apexCode: "FINEST" });
     });
 
     // A concurrent run's flag, or one a failed delete left, is the tool's, not the user's.
@@ -101,7 +101,7 @@ describe("Trace Flags", () => {
     });
 
     // Its levels beat the header, so they are the run's, but they are not the user's flag.
-    it("stores logs and gives its own levels for a Developer Console flag alone", async () => {
+    it("stores logs and gives its own levels for a DEVELOPER_LOG flag alone", async () => {
       mockQuery.mockResolvedValue({
         records: [{ LogType: "DEVELOPER_LOG", DebugLevel: flagLevels }],
       });
@@ -110,7 +110,7 @@ describe("Trace Flags", () => {
 
       expect(flags.storesLogs).toBe(true);
       expect(flags.userDebugLevels).toBeUndefined();
-      expect(flags.developerConsoleLevels).toMatchObject({ apexCode: "ERROR" });
+      expect(flags.developerLogLevels).toMatchObject({ apexCode: "ERROR" });
     });
 
     it("stores nothing when the entity has no live flag", async () => {

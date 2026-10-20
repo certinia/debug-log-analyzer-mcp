@@ -433,7 +433,7 @@ describe("Execute Anonymous", () => {
       expect(envelope).not.toContain("Data_access");
     });
 
-    // APEX_CODE lowered, as a Developer Console flag would.
+    // APEX_CODE lowered, as a DEVELOPER_LOG flag would.
     it("reports levelsOverridden when the log came back at other levels", async () => {
       mockLoadApexLog.mockResolvedValue({
         duration: { total: 150_000_000 },
@@ -489,10 +489,10 @@ describe("Execute Anonymous", () => {
       });
 
       // It outranks the header, so its levels are the run's whatever was asked for.
-      it("should run at a live Developer Console flag's levels, and say so", async () => {
+      it("should run at a live DEVELOPER_LOG flag's levels, and say so", async () => {
         mockFindActiveTraceFlags.mockResolvedValue({
           storesLogs: true,
-          developerConsoleLevels: FLAG_LEVELS,
+          developerLogLevels: FLAG_LEVELS,
         });
 
         const result = await executeAnonymous(
@@ -505,7 +505,7 @@ describe("Execute Anonymous", () => {
         expect(postedEnvelope()).toContain(
           "<apex:category>Apex_code</apex:category><apex:level>Error</apex:level>",
         );
-        expect(toonDecode(result).levelsSource).toBe("developerConsole");
+        expect(toonDecode(result).levelsSource).toBe("traceFlag");
       });
 
       it('should run at the defaults for "default", even with a flag', async () => {
@@ -1891,11 +1891,11 @@ describe("Execute Anonymous", () => {
       );
     });
 
-    it("should show a Developer Console flag's levels over the ones asked for", async () => {
+    it("should show a DEVELOPER_LOG flag's levels over the ones asked for", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       mockFindActiveTraceFlags.mockResolvedValue({
         storesLogs: true,
-        developerConsoleLevels: FLAG_LEVELS,
+        developerLogLevels: FLAG_LEVELS,
       });
 
       const params = confirmRequest(
@@ -1910,7 +1910,7 @@ describe("Execute Anonymous", () => {
       );
 
       expect(params.message).toContain(
-        `Log levels, your Developer Console trace flag's: ${levelsClause(FLAG_LEVELS)}.`,
+        `Log levels, your trace flag's: ${levelsClause(FLAG_LEVELS)}.`,
       );
     });
 

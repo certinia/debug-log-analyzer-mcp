@@ -9,9 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Changed
 
 - **Breaking:** apexlog_execute_anonymous: rename `durationMs` to `durationTotalMs`, the name apexlog_get_summary gives the same figure ([#240])
-- apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, or at the defaults - never at the levels a previous run left ([#230])
-- apexlog_execute_anonymous: set the categories an object `debugLevel` names over the defaults, not over the levels a previous run left ([#230])
-- apexlog_execute_anonymous: show a live Developer Console trace flag's levels in a production confirmation, and report them as `levelsSource` `developerConsole` rather than as `levelsOverridden` ([#230])
+- apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, else at the defaults, and set the categories an object `debugLevel` names over the defaults - never over the levels a previous run left ([#230])
 - apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `unattributed` row holds the time no event spans ([#226])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: parse a log of 20 MB or more about 28% faster ([#246])
 - apexlog_list_slow_operations: give `nextOffset`, the `offset` of the next page, instead of leaving you to count the rows you got ([#248])
@@ -29,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 
 - apexlog_execute_anonymous: show all of the Apex in a production confirmation, and refuse Apex too long to show ([#221])
-- apexlog_execute_anonymous: show the log levels in a production confirmation, and refuse a run at levels other than the ones confirmed ([#228])
+- apexlog_execute_anonymous: show the log levels in a production confirmation - a live trace flag's where it outranks `debugLevel` - and refuse a run at levels other than the ones confirmed ([#228], [#230])
 - apexlog_execute_anonymous: stop changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
 - apexlog_execute_anonymous: run the Apex with a warning when the org refuses a trace flag, instead of failing the call ([#207])
 - apexlog_execute_anonymous: stop a 60-second stall waiting on roots ([#222])

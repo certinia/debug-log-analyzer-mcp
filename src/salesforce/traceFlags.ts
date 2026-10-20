@@ -19,7 +19,7 @@ import {
 
 const TRACE_FLAG_SOBJECT = "TraceFlag";
 
-// A Developer Console flag stores the user's logs too - see .claude/rules/trace-flags.md.
+// A DEVELOPER_LOG flag stores the user's logs too - see .claude/rules/trace-flags.md.
 const STORING_LOG_TYPES = ["USER_DEBUG", "DEVELOPER_LOG"];
 
 /** The flag's DebugLevel: its name, then the fields that hold its levels. */
@@ -30,10 +30,10 @@ const DEBUG_LEVEL_SELECT = ["DeveloperName", ...DEBUG_LEVEL_FIELDS]
 /** The entity's flags live now: whether one stores its logs, and the levels of each kind. */
 export type ActiveTraceFlags = {
   storesLogs: boolean;
-  /** Undefined when only a Developer Console flag, or none, is live. */
+  /** Undefined when only a DEVELOPER_LOG flag, or none, is live. */
   userDebugLevels?: Required<TraceConfig>;
-  /** The Developer Console flag's, which outrank every other; undefined when none is live. */
-  developerConsoleLevels?: Required<TraceConfig>;
+  /** The DEVELOPER_LOG flag's, which outrank every other; undefined when none is live. */
+  developerLogLevels?: Required<TraceConfig>;
 };
 
 /**
@@ -62,14 +62,13 @@ export async function findActiveTraceFlags(
       flag.LogType === "USER_DEBUG" &&
       flag.DebugLevel?.["DeveloperName"] !== DEBUG_LEVEL_NAME,
   );
-  const developerConsole = records.find(
+  const developerLog = records.find(
     (flag) => flag.LogType === "DEVELOPER_LOG",
   );
   return {
     storesLogs: records.length > 0,
     userDebugLevels: userDebug && toTraceConfig(userDebug.DebugLevel),
-    developerConsoleLevels:
-      developerConsole && toTraceConfig(developerConsole.DebugLevel),
+    developerLogLevels: developerLog && toTraceConfig(developerLog.DebugLevel),
   };
 }
 
