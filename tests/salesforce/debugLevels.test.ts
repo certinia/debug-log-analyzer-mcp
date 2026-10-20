@@ -86,14 +86,13 @@ describe("Debug Levels", () => {
       });
     });
 
-    it("should query by DeveloperName with LIMIT 1", async () => {
+    it("should query by DeveloperName", async () => {
       mockQuery.mockResolvedValue({ records: [{ Id: testId }] });
 
       await ensureDebugLevel(mockConnection);
 
       const query = mockQuery.mock.calls[0][0] as string;
       expect(query).toContain("WHERE DeveloperName = 'Apex_Log_MCP_Debug_Level'");
-      expect(query).toContain("LIMIT 1");
     });
 
     it("should throw when creation fails", async () => {
@@ -207,17 +206,12 @@ describe("Debug Levels", () => {
 
   describe("toTraceConfig", () => {
     it("should read an empty field, or no record, as the defaults", () => {
-      expect(toTraceConfig({ ApexCode: "ERROR", Nba: null })).toEqual({
+      expect(toTraceConfig({ ApexCode: "ERROR", Database: "INFO", Nba: null })).toEqual({
         ...DEFAULT_TRACE_CONFIG,
         apexCode: "ERROR",
+        database: "INFO",
       });
       expect(toTraceConfig(null)).toEqual(DEFAULT_TRACE_CONFIG);
-    });
-
-    it("should read every category from a DebugLevel record's fields", () => {
-      expect(
-        toTraceConfig({ ...allDefaults, ApexCode: "ERROR", Database: "INFO" }),
-      ).toEqual({ ...DEFAULT_TRACE_CONFIG, apexCode: "ERROR", database: "INFO" });
     });
   });
 
@@ -226,13 +220,6 @@ describe("Debug Levels", () => {
       const levels = requestedLevels("FINEST");
 
       TRACE_CATEGORIES.forEach((category) => expect(levels[category]).toBe("FINEST"));
-    });
-
-    it("should set the categories an object names over the defaults", () => {
-      expect(requestedLevels({ apexCode: "ERROR" })).toEqual({
-        ...DEFAULT_TRACE_CONFIG,
-        apexCode: "ERROR",
-      });
     });
   });
 

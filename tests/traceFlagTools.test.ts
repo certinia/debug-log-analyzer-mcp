@@ -206,6 +206,19 @@ describe("createTraceFlag", () => {
     expect(text(result)).toContain("Setup > Debug Logs");
   });
 
+  // Returned, so the agent reads the fix; and nothing is written on a level it would not log at.
+  it("should return the refusal of an edited debug level, and create no flag", async () => {
+    mockEnsureLevel.mockRejectedValue(
+      new Error("DebugLevel Apex_Log_MCP_x has been edited to other levels, so a flag on it would not log at the levels asked for."),
+    );
+
+    const result = await createTraceFlag(server(), { tracedEntity: "jo@example.com" }, ctx, policy());
+
+    expect(result).toMatchObject({ isError: true });
+    expect(text(result)).toContain("edited to other levels");
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
   // The login can lapse while the user confirms; the error is returned, so server.ts's wrapper never adds the hint.
   it("should ask for a new login when the org refuses the stored one mid-call", async () => {
     mockEnsureLevel.mockRejectedValue(

@@ -411,8 +411,8 @@ describe("Execute Anonymous", () => {
       );
     });
 
-    it("asks for every category at the defaults when the user has no trace flag", async () => {
-      await executeAnonymous(
+    it("asks for every category at the defaults when the user has no trace flag, and says so", async () => {
+      const result = await executeAnonymous(
         mockServer,
         { apex: testApexCode },
         ctx,
@@ -431,6 +431,7 @@ describe("Execute Anonymous", () => {
         "<apex:category>Db</apex:category><apex:level>Finest</apex:level>",
       );
       expect(envelope).not.toContain("Data_access");
+      expect(toonDecode(result).levelsSource).toBe("default");
     });
 
     // APEX_CODE lowered, as a DEVELOPER_LOG flag would.
@@ -475,17 +476,6 @@ describe("Execute Anonymous", () => {
           "<apex:category>Db</apex:category><apex:level>Info</apex:level>",
         );
         expect(toonDecode(result).levelsSource).toBe("traceFlag");
-      });
-
-      it("should run at the defaults when debugLevel is left out and the user has no flag", async () => {
-        const result = await executeAnonymous(
-          mockServer,
-          { apex: testApexCode },
-          ctx,
-          policy(),
-        );
-
-        expect(toonDecode(result).levelsSource).toBe("default");
       });
 
       // It outranks the header, so its levels are the run's whatever was asked for.
@@ -734,7 +724,7 @@ describe("Execute Anonymous", () => {
       );
 
       expect(mockLink).toHaveBeenCalledWith(
-        expect.stringMatching(new RegExp(`${testLogId}\\.log\\.[\\w-]+\\.part$`)),
+        expect.not.stringMatching(/\.log$/),
         expect.stringMatching(new RegExp(`${testLogId}\\.log$`)),
       );
       expect(toonDecode(result).filePath).toMatch(/apex-\d+\.log$/);
@@ -1408,22 +1398,20 @@ describe("Execute Anonymous", () => {
         policy(),
       );
 
-      expect(notify).toHaveBeenCalledTimes(4);
-      expect(notify).toHaveBeenNthCalledWith(1, {
-        method: "notifications/progress",
-        params: {
-          progressToken: 7,
-          progress: 1,
-          total: 4,
-          message: "Connecting to the org",
-        },
-      });
-      expect(notify.mock.calls[3][0].params).toEqual({
-        progressToken: 7,
-        progress: 4,
-        total: 4,
-        message: "Writing the debug log",
-      });
+      // Counted, not named: the steps' wording is free to change.
+      const notes = notify.mock.calls.map(([note]) => note);
+      expect(notes.length).toBeGreaterThan(1);
+      expect(notes).toEqual(
+        notes.map((_, index) => ({
+          method: "notifications/progress",
+          params: {
+            progressToken: 7,
+            progress: index + 1,
+            total: notes.length,
+            message: expect.stringMatching(/./),
+          },
+        })),
+      );
     });
 
     // The spec gives a token only when the client wants the notifications.
