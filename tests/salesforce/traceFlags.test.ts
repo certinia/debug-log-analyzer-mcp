@@ -9,6 +9,7 @@ import {
   findActiveTraceFlags,
   findOverlappingTraceFlag,
   MAX_DURATION_MINUTES,
+  storageFullHint,
   traceFlagWindow,
   resolveTracedEntity,
 } from "../../src/salesforce/traceFlags";
@@ -404,6 +405,22 @@ describe("Trace Flags", () => {
       await expect(
         findOverlappingTraceFlag(mockConnection, jo, "USER_DEBUG", 900_000),
       ).resolves.toEqual({ notBefore: new Date("2025-01-15T08:58:01.000Z") });
+    });
+  });
+
+  describe("storageFullHint", () => {
+    const HINT =
+      " The org's debug log storage is full: ask the user to delete logs in Setup > Debug Logs, then try again.";
+
+    it.each([
+      ["the whole message", "You have 260 MB of the maximum 250 MB of debug logs. Before you can edit trace flags, delete some debug logs.", HINT],
+      ["its first sentence alone", "You have 1,010 MB of the maximum 1,000 MB of debug logs.", HINT],
+      ["its second sentence alone", "Before you can edit trace flags, delete some debug logs.", HINT],
+      // Data storage: deleting logs does not free it.
+      ["STORAGE_LIMIT_EXCEEDED", "STORAGE_LIMIT_EXCEEDED: storage limit exceeded", ""],
+      ["a message that only names storage", "Debug log storage limit exceeded", ""],
+    ])("for %s", (_name, message, hint) => {
+      expect(storageFullHint(message)).toBe(hint);
     });
   });
 
