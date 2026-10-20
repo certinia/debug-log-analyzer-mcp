@@ -955,7 +955,9 @@ describe("Execute Anonymous", () => {
 
     // Only deleting logs lifts a full store, and no tool here deletes them.
     it("sends the user to Setup when the org's log storage is full", async () => {
-      mockCreateTraceFlag.mockRejectedValue(new Error("Debug log storage limit exceeded"));
+      mockCreateTraceFlag.mockRejectedValue(
+        new Error("You have 260 MB of the maximum 250 MB of debug logs. Before you can edit trace flags, delete some debug logs."),
+      );
 
       const result = await executeAnonymous(
         mockServer,
