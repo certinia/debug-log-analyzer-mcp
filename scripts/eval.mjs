@@ -371,18 +371,21 @@ const DEFINITION_BUDGET = {
 const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
 
 /**
- * What 1.x charged for the whole of `tools/list`: 247 + 171 + 267 + 844,
- * measured as `V1_RESPONSE_TOKENS` was. The README publishes it.
+ * What each 1.x tool's definition cost, under the name of the tool that
+ * replaced it, measured as `V1_RESPONSE_TOKENS` was. The README publishes the
+ * total, and the current cost of these tools apart from the ones 1.x never had.
  */
-const V1_DEFINITION_TOTAL = 1529;
+const V1_DEFINITION_TOKENS = {
+  apexlog_list_slow_operations: 247, // analyze_apex_log_performance
+  apexlog_get_summary: 171, // get_apex_log_summary
+  apexlog_list_limit_risks: 267, // find_performance_bottlenecks
+  apexlog_execute_anonymous: 844, // execute_anonymous
+};
 
-/** The tools that replaced 1.x's four, which the README sets apart from the ones 1.x never had. */
-const V1_TOOLS = [
-  "apexlog_list_slow_operations",
-  "apexlog_get_summary",
-  "apexlog_list_limit_risks",
-  "apexlog_execute_anonymous",
-];
+const V1_DEFINITION_TOTAL = Object.values(V1_DEFINITION_TOKENS).reduce(
+  (sum, tokens) => sum + tokens,
+  0,
+);
 
 /**
  * The ceiling on the sum of the definition budgets. It sat at
@@ -948,6 +951,12 @@ function checkDefinitionBudget(costs, failures) {
       failures.push(`${name}: budgeted but absent from tools/list`);
     }
   }
+  // A renamed or dropped tool would otherwise fall out of the published sum unseen.
+  for (const name of Object.keys(V1_DEFINITION_TOKENS)) {
+    if (!costs.some((cost) => cost.name === name)) {
+      failures.push(`${name}: a 1.x definition cost is declared for a tool absent from tools/list`);
+    }
+  }
   // The budgets themselves, not the measurements: every tool has one - the loop
   // above fails a tool that does not - so a run under all of them is under
   // their sum, and a new tool cannot slip past. What no per-tool budget can say
@@ -1057,6 +1066,8 @@ function renderTable(headers, rows) {
 
 const thousands = (value) => value.toLocaleString("en-US");
 
+const tokensOf = (costs) => costs.reduce((sum, cost) => sum + cost.tokens, 0);
+
 /** The two comparison cells: what 1.x cost, and the signed change since. */
 function comparison(before, after) {
   if (before === undefined) {
@@ -1071,7 +1082,7 @@ function comparison(before, after) {
  * published figures cannot go stale. The prose around them stays in the README.
  */
 function renderTokenCost(costs, responses) {
-  const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
+  const total = tokensOf(costs);
   const share = ((100 * total) / CONTEXT_WINDOW).toFixed(1);
   const [v1TotalCell, totalChange] = comparison(V1_DEFINITION_TOTAL, total);
 
@@ -1098,10 +1109,8 @@ function renderTokenCost(costs, responses) {
     },
     {
       id: "token-cost-v1-tools",
-      table: `The four tools 1.x also had cost ~${thousands(
-        costs
-          .filter(({ name }) => V1_TOOLS.includes(name))
-          .reduce((sum, cost) => sum + cost.tokens, 0),
+      table: `The ${Object.keys(V1_DEFINITION_TOKENS).length} tools 1.x also had cost ~${thousands(
+        tokensOf(costs.filter(({ name }) => name in V1_DEFINITION_TOKENS)),
       )}.`,
     },
     {
@@ -1297,7 +1306,7 @@ async function main() {
       failures,
       update,
     );
-    const total = costs.reduce((sum, cost) => sum + cost.tokens, 0);
+    const total = tokensOf(costs);
     console.log(
       `${update ? "updated" : "checked"} tool definitions - ~${total} tokens across ${costs.length} tools`,
     );

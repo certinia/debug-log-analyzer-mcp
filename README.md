@@ -325,7 +325,7 @@ Only the total compares with 1.x: per tool it would compare different tools, sin
 
 <!-- token-cost-v1-tools:start -->
 
-The four tools 1.x also had cost ~1,253.
+The 4 tools 1.x also had cost ~1,253.
 
 <!-- token-cost-v1-tools:end -->
 
