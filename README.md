@@ -321,11 +321,11 @@ Every request carries every tool definition, whether you call them or not. Each 
 
 <!-- token-cost-definitions:end -->
 
-Only the total compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the three org tools, which reach logs and trace flags 1.x could not, and `apexlog_search_events`, which reaches the events 1.x parsed and dropped.
+No single row compares with 1.x: per tool it would compare different tools, since `apexlog_list_slow_operations` replaced one that took three selection parameters and ranked methods where this one takes eight and ranks every timed event. The total is above 1.x because of the three org tools, which reach logs and trace flags 1.x could not, and `apexlog_search_events`, which reaches the events 1.x parsed and dropped.
 
 <!-- token-cost-v1-tools:start -->
 
-The 4 tools 1.x also had cost ~1,253.
+The 4 tools that replaced 1.x's now cost ~1,253 tokens.
 
 <!-- token-cost-v1-tools:end -->
 

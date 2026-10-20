@@ -20,17 +20,9 @@
  * 4. Golden files - the exact payload, committed, so any shape change is a diff
  *    a reviewer can read.
  *
- * Four more are checked once per run:
- *
- * 5. Definition budget - what `tools/list` costs on every request, per tool and
- *    in total, measured over the whole wire object the client receives.
- * 6. Selection keywords - the words a client's tool search matches on, so a
- *    trim that saves tokens cannot quietly cost discovery.
- * 7. README blocks - the published figures, the parameter tables and the shape
- *    of each response are generated from this run, so a change that moves any
- *    of them fails until the README is regenerated with it.
- * 8. Startup cost - listing the tools must not load the Salesforce SDK, which
- *    is five times the rest of startup. Only this sees the built output.
+ * More are checked once per run - the definitions, startup, the cache hint and
+ * the README blocks. tests/eval/README.md lists them; each check's doc comment
+ * says why it exists.
  *
  * Usage:
  *   node scripts/eval.mjs            # assert
@@ -374,6 +366,7 @@ const TOOLS_LIST_CACHE_HINT = { ttlMs: 3_600_000, cacheScope: "public" };
  * What each 1.x tool's definition cost, under the name of the tool that
  * replaced it, measured as `V1_RESPONSE_TOKENS` was. The README publishes the
  * total, and the current cost of these tools apart from the ones 1.x never had.
+ * Kept per tool, not as one total, so each figure names the 1.x tool it came from.
  */
 const V1_DEFINITION_TOKENS = {
   apexlog_list_slow_operations: 247, // analyze_apex_log_performance
@@ -382,10 +375,7 @@ const V1_DEFINITION_TOKENS = {
   apexlog_execute_anonymous: 844, // execute_anonymous
 };
 
-const V1_DEFINITION_TOTAL = Object.values(V1_DEFINITION_TOKENS).reduce(
-  (sum, tokens) => sum + tokens,
-  0,
-);
+const V1_DEFINITION_TOTAL = sum(Object.values(V1_DEFINITION_TOKENS));
 
 /**
  * The ceiling on the sum of the definition budgets. It sat at
@@ -395,7 +385,8 @@ const V1_DEFINITION_TOTAL = Object.values(V1_DEFINITION_TOKENS).reduce(
  * Tracing a user, so the org stores the logs those tools read, or setting a
  * class's levels, added ~345 inside a budget of 362 (#211). Listing and
  * deleting flags and deleting stored logs were dropped: each answered a rare
- * need that Setup or `sf` meets, at ~500 tokens on every request.
+ * need that Setup or `sf` meets, at ~143-210 tokens each and ~505 together on
+ * every request.
  * Searching a log's events, for what the code printed or what ran under one
  * method, added ~330 inside a budget of 347 (#144). The budgets sum to this
  * cap, so raising any budget means raising the cap, on purpose, with the
@@ -946,25 +937,29 @@ function checkDefinitionBudget(costs, failures) {
       );
     }
   }
-  for (const name of Object.keys(DEFINITION_BUDGET)) {
-    if (!costs.some((cost) => cost.name === name)) {
-      failures.push(`${name}: budgeted but absent from tools/list`);
-    }
-  }
-  // A renamed or dropped tool would otherwise fall out of the published sum unseen.
-  for (const name of Object.keys(V1_DEFINITION_TOKENS)) {
-    if (!costs.some((cost) => cost.name === name)) {
-      failures.push(`${name}: a 1.x definition cost is declared for a tool absent from tools/list`);
+  const listed = new Set(costs.map(({ name }) => name));
+  for (const [what, declared, fix] of [
+    ["a definition budget", DEFINITION_BUDGET, "rename it with the tool, or drop it"],
+    // Dropping this one would lower the published 1.x total unseen.
+    [
+      "a 1.x definition cost",
+      V1_DEFINITION_TOKENS,
+      "rename it with the tool, or move it to the tool that replaced it",
+    ],
+  ]) {
+    for (const name of Object.keys(declared)) {
+      if (!listed.has(name)) {
+        failures.push(
+          `${name}: ${what} is declared for a tool absent from tools/list - ${fix}`,
+        );
+      }
     }
   }
   // The budgets themselves, not the measurements: every tool has one - the loop
-  // above fails a tool that does not - so a run under all of them is under
+  // at the top fails a tool that does not - so a run under all of them is under
   // their sum, and a new tool cannot slip past. What no per-tool budget can say
   // is that the sum is still under the cap.
-  const budgeted = Object.values(DEFINITION_BUDGET).reduce(
-    (sum, budget) => sum + budget,
-    0,
-  );
+  const budgeted = sum(Object.values(DEFINITION_BUDGET));
   if (budgeted > DEFINITION_TOTAL_CAP) {
     failures.push(
       `the definition budgets sum to ${budgeted}, over the ${DEFINITION_TOTAL_CAP} cap on tools/list`,
@@ -1066,7 +1061,11 @@ function renderTable(headers, rows) {
 
 const thousands = (value) => value.toLocaleString("en-US");
 
-const tokensOf = (costs) => costs.reduce((sum, cost) => sum + cost.tokens, 0);
+function sum(numbers) {
+  return numbers.reduce((total, number) => total + number, 0);
+}
+
+const tokensOf = (costs) => sum(costs.map(({ tokens }) => tokens));
 
 /** The two comparison cells: what 1.x cost, and the signed change since. */
 function comparison(before, after) {
@@ -1109,9 +1108,9 @@ function renderTokenCost(costs, responses) {
     },
     {
       id: "token-cost-v1-tools",
-      table: `The ${Object.keys(V1_DEFINITION_TOKENS).length} tools 1.x also had cost ~${thousands(
+      table: `The ${Object.keys(V1_DEFINITION_TOKENS).length} tools that replaced 1.x's now cost ~${thousands(
         tokensOf(costs.filter(({ name }) => name in V1_DEFINITION_TOKENS)),
-      )}.`,
+      )} tokens.`,
     },
     {
       id: "token-cost-answers",
