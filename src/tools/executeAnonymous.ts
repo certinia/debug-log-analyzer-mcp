@@ -53,7 +53,7 @@ const ONE_APEX_SOURCE =
   "Give exactly one of apex and apexFilePath: the Apex inline, or the absolute path to a file of it.";
 
 const NO_LOG_CAPTURED_WARNING =
-  "Salesforce returned no debug log for this run, so the saved file is empty and durationTotalMs is 0. A live Developer Console trace flag, or a trace flag the org refused, can take the log away.";
+  "Salesforce returned no debug log for this run, so the saved file is empty and durationTotalMs is 0. A live DEVELOPER_LOG trace flag, or a trace flag the org refused, can take the log away.";
 
 export type ExecuteAnonymousPolicy = OrgAccessPolicy & {
   apexExecutionDisabled: boolean;
@@ -111,8 +111,8 @@ function apexSource({
   return undefined;
 }
 
-/** Where a run's levels came from: the user's trace flag, the defaults, the call, or a Developer Console flag. */
-type LevelsSource = "traceFlag" | "default" | "request" | "developerConsole";
+/** Where a run's levels came from: one of the user's trace flags, the defaults, or the call. */
+type LevelsSource = "traceFlag" | "default" | "request";
 
 type RunLevels = { levels: Required<TraceConfig>; source: LevelsSource };
 
@@ -120,16 +120,15 @@ const SOURCE_TEXT: Record<LevelsSource, string> = {
   traceFlag: "your trace flag's",
   default: "the defaults",
   request: "as requested",
-  developerConsole: "your Developer Console trace flag's",
 };
 
-// A Developer Console flag outranks the header (.claude/rules/trace-flags.md), so its levels are the ones confirmed and run.
+// A DEVELOPER_LOG flag outranks the header (.claude/rules/trace-flags.md), so its levels are the ones confirmed and run.
 function resolveRunLevels(
   debugLevel: DebugLevelInput | undefined,
   flags: ActiveTraceFlags,
 ): RunLevels {
-  return flags.developerConsoleLevels
-    ? { levels: flags.developerConsoleLevels, source: "developerConsole" }
+  return flags.developerLogLevels
+    ? { levels: flags.developerLogLevels, source: "traceFlag" }
     : askedLevels(debugLevel, flags.userDebugLevels);
 }
 
@@ -315,7 +314,7 @@ export async function executeAnonymous(
     }),
     durationTotalMs: parsedLog ? roundMs(parsedLog.duration.total / NS_TO_MS) : 0,
     // True when the log carries levels other than the ones levelsSource
-    // names - a Developer Console flag set during the run, say. Reported
+    // names - a DEVELOPER_LOG flag set during the run, say. Reported
     // either way, for the same reason as below.
     levelsOverridden: levelsWereOverridden(run.levels, parsedLog?.debugLevels),
     // Where the levels came from, so a log far thinner or fuller than expected explains itself.

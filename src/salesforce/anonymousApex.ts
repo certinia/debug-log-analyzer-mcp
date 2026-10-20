@@ -28,8 +28,8 @@ export type AnonymousApexResult = {
  * The REST Tooling API returns no log, which is why the log had to be guessed
  * from the newest `ApexLog` row before. A `DebuggingHeader` outranks any
  * `USER_DEBUG` trace flag, so the levels asked for here are the levels the
- * returned log carries - unless a `DEVELOPER_LOG` flag (the Developer Console)
- * is live, which outranks both.
+ * returned log carries - unless a `DEVELOPER_LOG` flag is live, which outranks
+ * both.
  */
 export async function executeAnonymousWithLog(
   connection: Connection,
