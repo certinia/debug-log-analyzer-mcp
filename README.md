@@ -11,7 +11,7 @@
   <img src="https://raw.githubusercontent.com/certinia/debug-log-analyzer-mcp/main/docs/images/apex-log-mcp.png" alt="Claude analyzing an Apex debug log for performance bottlenecks and governor limit concerns" width="800" />
 </p>
 
-Instead of scrolling thousands of log lines, ask what's slow and why. Uses the same parser as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer).
+Instead of scrolling thousands of log lines, ask what's slow and why. Uses the same [Apex log parser](https://github.com/apex-dev-tools/apex-log-parser) as the [Apex Log Analyzer VS Code extension](https://github.com/certinia/debug-log-analyzer).
 
 ## Quick Start
 
