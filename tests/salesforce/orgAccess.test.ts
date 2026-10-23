@@ -325,7 +325,7 @@ describe("openOrg", () => {
     const access = await openOrg(
       server(),
       makeCtx(state, {
-        confirm: { action: "accept", content: { confirm: true } },
+        confirm: { action: "accept", content: {} },
       }),
       request(write),
       policy(),

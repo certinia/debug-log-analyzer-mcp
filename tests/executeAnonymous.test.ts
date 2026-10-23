@@ -1650,13 +1650,8 @@ describe("Execute Anonymous", () => {
       );
 
       expect(params.message).toContain(
-        `Apex, 303 lines and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----\n\nProceed?`,
-      );
-      const schema = params.requestedSchema as {
-        properties: { confirm: { title: string } };
-      };
-      expect(schema.properties.confirm.title).toBe(
-        "Run 303 lines of Apex against production org 'test@example.com'?",
+        `Apex, 303 lines and ${apex.length} characters:\n----- BEGIN APEX -----\n${apex}\n----- END APEX -----\n\n` +
+          "Run 303 lines of Apex against production org 'test@example.com'?",
       );
     });
 
@@ -1768,7 +1763,7 @@ describe("Execute Anonymous", () => {
         args,
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
@@ -1780,10 +1775,6 @@ describe("Execute Anonymous", () => {
     it.each([
       ["decline", { action: "decline" }],
       ["cancel", { action: "cancel" }],
-      [
-        "accept with confirm false",
-        { action: "accept", content: { confirm: false } },
-      ],
     ])("should refuse when the retry answers %s", async (_name, response) => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
@@ -1819,7 +1810,7 @@ describe("Execute Anonymous", () => {
         { apex: "delete [SELECT Id FROM Account];" },
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
@@ -1921,7 +1912,7 @@ describe("Execute Anonymous", () => {
         { apex: testApexCode },
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
@@ -1948,7 +1939,7 @@ describe("Execute Anonymous", () => {
         { apex: testApexCode },
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
@@ -1975,7 +1966,7 @@ describe("Execute Anonymous", () => {
         { apex: testApexCode, debugLevel: "FINEST" },
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
@@ -2002,7 +1993,7 @@ describe("Execute Anonymous", () => {
         { apex: testApexCode, debugLevel: { apexCode: "FINEST", database: "INFO" } },
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
