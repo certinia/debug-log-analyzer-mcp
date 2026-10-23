@@ -4,13 +4,11 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import {
-  acceptedContent,
   inputRequired,
   inputResponse,
   type InputRequiredResult,
   type ServerContext,
 } from "@modelcontextprotocol/server";
-import { z } from "zod";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
 
 export type PolicyDecision =
@@ -77,8 +75,6 @@ export function createConfirmationLedger(
 
 /** The key this server assigns its one embedded request, and reads back. */
 const CONFIRM_KEY = "confirm";
-
-const confirmSchema = z.object({ confirm: z.boolean() });
 
 /** Keep the prompt readable, and out of the way of client UI limits. */
 const MAX_APEX_IN_PROMPT = 2000;
@@ -154,20 +150,9 @@ function confirmationRequest(
 
   return inputRequired.elicit({
     message: `${preamble}\n\nApex:\n${truncate(apex, MAX_APEX_IN_PROMPT)}\n\nProceed?`,
-    requestedSchema: {
-      type: "object",
-      properties: {
-        confirm: {
-          type: "boolean",
-          // Drop the classification when it could not be verified.
-          title: `Run against ${unverifiedReason ? "" : "production "}org '${orgLabel}'?`,
-          description: "true to run, false to cancel",
-          // A client that applies defaults should pre-fill "no".
-          default: false,
-        },
-      },
-      required: ["confirm"],
-    },
+    // Accept is the confirmation. A form field as well made "Accept" with an
+    // unchecked box mean "no", and Enter in Claude Code submitted exactly that.
+    requestedSchema: { type: "object", properties: {} },
   });
 }
 
@@ -247,17 +232,12 @@ export async function authorizeExecution(opts: {
 
   // A client that echoes the state but carries no answer cannot confirm at all,
   // so it gets the routes that need no confirmation rather than a decline.
-  if (inputResponse(ctx.mcpReq.inputResponses, CONFIRM_KEY).kind === "missing") {
+  const answer = inputResponse(ctx.mcpReq.inputResponses, CONFIRM_KEY);
+  if (answer.kind === "missing") {
     return { outcome: "refused", reason: refusal(orgLabel, unverifiedReason) };
   }
 
-  const answer = acceptedContent(
-    ctx.mcpReq.inputResponses,
-    CONFIRM_KEY,
-    confirmSchema,
-  );
-
-  if (answer?.confirm === true) {
+  if (answer.kind === "elicit" && answer.action === "accept") {
     if (!opts.consumeConfirmation(confirmed.nonce)) {
       return {
         outcome: "refused",
