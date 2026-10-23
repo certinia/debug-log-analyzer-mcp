@@ -151,7 +151,7 @@ describe("authorizeExecution", () => {
   });
 
   describe("the first round", () => {
-    it("should ask with the org label, the Apex and a boolean schema", async () => {
+    it("should ask with the org label, the Apex and no form fields", async () => {
       const params = confirmRequest(
         assertConfirmationRequired(await authorize()),
       );
@@ -160,16 +160,7 @@ describe("authorizeExecution", () => {
       expect(params.message).toContain(apex);
       expect(params.requestedSchema).toEqual({
         type: "object",
-        properties: {
-          confirm: {
-            type: "boolean",
-            title: `Run against production org '${orgLabel}'?`,
-            description: expect.any(String),
-            // Fail closed if the client pre-fills defaults.
-            default: false,
-          },
-        },
-        required: ["confirm"],
+        properties: {},
       });
     });
 
@@ -193,12 +184,6 @@ describe("authorizeExecution", () => {
       expect(params.message).toContain("treated as production");
       expect(params.message).toContain("Reason: inactive organization");
       expect(params.message).not.toContain("PRODUCTION org");
-      const schema = params.requestedSchema as {
-        properties: { confirm: { title: string } };
-      };
-      expect(schema.properties.confirm.title).toBe(
-        `Run against org '${orgLabel}'?`,
-      );
     });
 
     it("should truncate a long Apex snippet", async () => {
@@ -226,7 +211,7 @@ describe("authorizeExecution", () => {
       const result = assertConfirmationRequired(await authorize());
       const ctx = await retryCtx(result, {
         action: "accept",
-        content: { confirm: true },
+        content: {},
       });
 
       await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
@@ -239,7 +224,7 @@ describe("authorizeExecution", () => {
       const result = assertConfirmationRequired(await authorize());
       const ctx = await retryCtx(result, {
         action: "accept",
-        content: { confirm: true },
+        content: {},
       });
 
       await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
@@ -257,15 +242,23 @@ describe("authorizeExecution", () => {
       await authorize({
         ctx: await retryCtx(first, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
       });
 
       const second = assertConfirmationRequired(await authorize());
       const ctx = await retryCtx(second, {
         action: "accept",
-        content: { confirm: true },
+        content: {},
       });
+
+      await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
+    });
+
+    // An empty form may come back with or without a content object.
+    it("should allow an accept that carries no content", async () => {
+      const result = assertConfirmationRequired(await authorize());
+      const ctx = await retryCtx(result, { action: "accept" });
 
       await expect(authorize({ ctx })).resolves.toEqual({ outcome: "allowed" });
     });
@@ -273,15 +266,6 @@ describe("authorizeExecution", () => {
     it.each([
       ["decline", { action: "decline" }],
       ["cancel", { action: "cancel" }],
-      [
-        "accept with confirm false",
-        { action: "accept", content: { confirm: false } },
-      ],
-      ["accept with no content", { action: "accept" }],
-      [
-        "accept with a non-boolean confirm",
-        { action: "accept", content: { confirm: "yes" } },
-      ],
     ])("should refuse on %s", async (_name, response) => {
       const result = assertConfirmationRequired(await authorize());
       const decision = await authorize({
@@ -314,7 +298,7 @@ describe("authorizeExecution", () => {
       const result = assertConfirmationRequired(await authorize());
       const ctx = await retryCtx(result, {
         action: "accept",
-        content: { confirm: true },
+        content: {},
       });
 
       const decision = await authorize({
@@ -333,7 +317,7 @@ describe("authorizeExecution", () => {
       const result = assertConfirmationRequired(await authorize());
       const ctx = await retryCtx(result, {
         action: "accept",
-        content: { confirm: true },
+        content: {},
       });
 
       const decision = await authorize({ ctx, orgId: "00D000000000002EAA" });

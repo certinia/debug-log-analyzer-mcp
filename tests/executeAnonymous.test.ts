@@ -877,7 +877,7 @@ describe("Execute Anonymous", () => {
         args,
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
@@ -889,10 +889,6 @@ describe("Execute Anonymous", () => {
     it.each([
       ["decline", { action: "decline" }],
       ["cancel", { action: "cancel" }],
-      [
-        "accept with confirm false",
-        { action: "accept", content: { confirm: false } },
-      ],
     ])("should refuse when the retry answers %s", async (_name, response) => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
@@ -928,7 +924,7 @@ describe("Execute Anonymous", () => {
         { apex: "delete [SELECT Id FROM Account];" },
         await retryCtx(asked, {
           action: "accept",
-          content: { confirm: true },
+          content: {},
         }),
         policy(),
       );
