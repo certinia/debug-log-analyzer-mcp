@@ -9,6 +9,7 @@ import {
   downloadApexLog,
   latestApexLogIds,
 } from "../salesforce/apexLogs.js";
+import { isLoginFailure, RELOGIN_HINT } from "../salesforce/authFailure.js";
 import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
@@ -20,6 +21,8 @@ import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 
 type Saved = { id: string } & StoredLog;
 type Failed = { id: string; error: string };
+
+const NOT_TRIED = "not downloaded: an earlier download found the org's login no longer works";
 
 export async function getOrgLogs(
   server: McpServer,
@@ -64,6 +67,8 @@ export async function getOrgLogs(
   const { signal } = ctx.mcpReq;
   const report = progressReporter(ctx, ids.length);
   let done = 0;
+  // The login can lapse part way, after some logs saved; every download after it fails the same way.
+  let loginFailed = false;
   // One failed log is a row with its cause; the rest still save.
   const results = !store
     ? []
@@ -73,6 +78,9 @@ export async function getOrgLogs(
           try {
             // The SDK sends no result once cancelled, so this only stops the work.
             signal.throwIfAborted();
+            if (loginFailed) {
+              return { id, error: NOT_TRIED };
+            }
             return {
               id,
               ...(await saveStoredLog(store.dir, id, () =>
@@ -80,6 +88,7 @@ export async function getOrgLogs(
               )),
             };
           } catch (error) {
+            loginFailed ||= isLoginFailure(error);
             return {
               id,
               error: error instanceof Error ? error.message : String(error),
@@ -93,10 +102,14 @@ export async function getOrgLogs(
       );
   const logs = results.filter((r): r is Saved => !("error" in r));
   const failed = results.filter((r): r is Failed => "error" in r);
+  // Once, not on every row: a failed row is returned, so server.ts's relogin wrapper never adds it.
+  const warnings = [store?.warning, loginFailed ? RELOGIN_HINT : undefined].filter(
+    (text): text is string => text !== undefined,
+  );
 
   return toonResult({
     org: access.orgLabel,
-    ...(store?.warning !== undefined && { warning: store.warning }),
+    ...(warnings.length && { warning: warnings.join(" ") }),
     logs,
     ...omitEmpty({ failed }),
     outputDirCreated: store?.created ?? false,
