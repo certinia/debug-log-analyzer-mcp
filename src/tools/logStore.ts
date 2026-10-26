@@ -3,10 +3,10 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { promises as fs, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import type { Workspace } from "../salesforce/orgAccess.js";
-import { outsideRoots } from "./localFile.js";
+import { fsErrorWords, outsideRoots } from "./localFile.js";
 
 /** Where debug logs go when the caller names no `outputDir`, under the first client root, else the working directory. */
 export const DEFAULT_OUTPUT_DIR = ".apex-log-mcp";
@@ -27,9 +27,44 @@ function logWarning(warning: string): string {
 }
 
 /**
- * Resolve and create `outputDir`. A relative one anchors to the project root,
- * the same base the default uses, not to wherever the client spawned this
- * server.
+ * The directory debug logs go to. A relative `outputDir` anchors to the
+ * project root, the same base the default uses, not to wherever the client
+ * spawned this server.
+ */
+export function logStoreDir(
+  outputDir: string | undefined,
+  rootPaths: string[],
+): string {
+  return path.resolve(rootPaths[0] ?? process.cwd(), outputDir ?? DEFAULT_OUTPUT_DIR);
+}
+
+/**
+ * Why debug logs cannot be written to `dir`, or undefined. Creates nothing, so
+ * a caller about to do what cannot be undone can refuse first, and make the
+ * directory only once it has a log to put there.
+ */
+export async function unwritableLogDir(dir: string): Promise<string | undefined> {
+  // `mkdir` makes what is missing, so the nearest directory that exists is the one to check.
+  let nearest = dir;
+  for (;;) {
+    try {
+      if (!(await fs.stat(nearest)).isDirectory()) {
+        return `Cannot write debug logs to ${dir}: ${fsErrorWords({ code: "ENOTDIR" })}.`;
+      }
+      await fs.access(nearest, fsConstants.W_OK);
+      return undefined;
+    } catch (error) {
+      const parent = path.dirname(nearest);
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === nearest) {
+        return `Cannot write debug logs to ${dir}: ${fsErrorWords(error)}.`;
+      }
+      nearest = parent;
+    }
+  }
+}
+
+/**
+ * Resolve and create `outputDir`, at `logStoreDir`.
  *
  * The MCP spec expects a server to work inside the roots the client declares,
  * and `outputDir` is agent-supplied, so it is the path an injected instruction
@@ -42,10 +77,7 @@ export async function openLogStore(
   workspace: Workspace,
   rootPaths: string[],
 ): Promise<LogStore> {
-  const dir = path.resolve(
-    rootPaths[0] ?? process.cwd(),
-    outputDir ?? DEFAULT_OUTPUT_DIR,
-  );
+  const dir = logStoreDir(outputDir, rootPaths);
   // Resolves to the first directory created, or undefined when it already existed.
   const created = Boolean(await fs.mkdir(dir, { recursive: true }));
 

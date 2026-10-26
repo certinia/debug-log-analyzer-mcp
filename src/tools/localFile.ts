@@ -28,7 +28,16 @@ const CODE_WORDS: Partial<Record<string, string>> = {
   ELOOP: "too many symbolic links",
   EMFILE: "too many open files",
   ENFILE: "too many open files",
+  ENOTDIR: "not a directory",
+  EROFS: "read-only file system",
 };
+
+/** An fs error's cause in words, with its code beside them, e.g. "permission denied (EACCES)". */
+export function fsErrorWords(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException).code ?? String(error);
+  const cause = CODE_WORDS[code];
+  return cause ? `${cause} (${code})` : code;
+}
 
 /**
  * Why a file could not be read, by its errno. A missing file is one of several
@@ -43,12 +52,10 @@ export function fileReadError(
   filePath: string,
   error: unknown,
 ): Error {
-  const code = (error as NodeJS.ErrnoException).code ?? String(error);
-  const cause = CODE_WORDS[code];
   const message =
-    code === "ENOENT"
+    (error as NodeJS.ErrnoException).code === "ENOENT"
       ? `${noun.charAt(0).toUpperCase()}${noun.slice(1)} not found: ${filePath}`
-      : `Cannot read ${noun} ${filePath}: ${cause ? `${cause} (${code})` : code}`;
+      : `Cannot read ${noun} ${filePath}: ${fsErrorWords(error)}`;
   return new Error(message, { cause: error });
 }
 
