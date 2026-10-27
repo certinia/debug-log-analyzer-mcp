@@ -75,6 +75,15 @@ export function omitEmpty<T extends Record<string, readonly unknown[]>>(
   ) as Partial<T>;
 }
 
+/**
+ * `{ warning }`, the texts given joined into one, or `{}` when none is given.
+ * A warning is an occurrence, so, as with `omitEmpty`, absent means none.
+ */
+export function warningField(...texts: (string | undefined)[]): { warning?: string } {
+  const given = texts.filter((text): text is string => text !== undefined);
+  return given.length ? { warning: given.join(" ") } : {};
+}
+
 export interface LimitRow {
   limit: string;
   /**

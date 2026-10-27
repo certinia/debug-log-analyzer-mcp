@@ -30,7 +30,7 @@ import { loadApexLog } from "./apexLogSource.js";
 import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, unwritableLogDir, writeDebugLog } from "./logStore.js";
-import { NS_TO_MS, roundMs, toonResult } from "./responseShaping.js";
+import { NS_TO_MS, roundMs, toonResult, warningField } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import {
@@ -301,17 +301,15 @@ export async function executeAnonymous(
     ? await loadApexLog(filePath)
     : undefined;
 
-  const warnings = [
-    // Said outright, because an empty file and a zero duration otherwise read
-    // as a run that did nothing rather than a log that was never captured.
-    apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
-    ...traceFlagWarnings,
-    store.warning,
-  ].filter((text): text is string => text !== undefined);
-
   return toonResult({
     filePath,
-    ...(warnings.length && { warning: warnings.join(" ") }),
+    ...warningField(
+      // Said outright, because an empty file and a zero duration otherwise read
+      // as a run that did nothing rather than a log that was never captured.
+      apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
+      ...traceFlagWarnings,
+      store.warning,
+    ),
     fileSizeBytes: stats.size,
     org: orgLabel,
     orgType: classification,
@@ -340,7 +338,7 @@ async function withTraceFlagForRun<T>(
   username: string,
   flagLevelId: string | undefined,
   run: (flagLive: boolean) => Promise<T>,
-): Promise<{ value: T; warnings: string[] }> {
+): Promise<{ value: T; warnings: (string | undefined)[] }> {
   const created =
     flagLevelId === undefined
       ? {}
@@ -355,9 +353,7 @@ async function withTraceFlagForRun<T>(
   }
   return {
     value,
-    warnings: [created.warning, deleteWarning].filter(
-      (warning): warning is string => warning !== undefined,
-    ),
+    warnings: [created.warning, deleteWarning],
   };
 }
 
