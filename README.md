@@ -28,6 +28,8 @@ Requires [Node.js](https://nodejs.org/) 22 or later. Add this to your MCP client
 }
 ```
 
+In VS Code `mcp.json`, use `"servers"` in place of `"mcpServers"`.
+
 Then ask your assistant to analyze a log. The org tools also need an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).
 
 ## Example Prompts
@@ -50,11 +52,13 @@ Keeping the server connected costs ~2,445 tokens, 1.2% of a 200K context. See [T
 
 The analysis tools take an absolute path to a `.log` file.
 
-Every tool returns one flat table, encoded as [TOON](https://github.com/toon-format/toon). Nothing is repeated, and nothing is dropped to save space.
+The org tools use the default org of the project your client's first root is in, unless you pass `targetOrg`. When the server cannot use your client's roots, each org tool needs `targetOrg`, since the project's default org cannot be found. That happens on MCP 2026-07-28, when the client does not answer in 5 seconds, or when no root is on this machine.
+
+Every tool answers in [TOON](https://github.com/toon-format/toon).
 
 A `0` means none, not "not measured". Only what did not happen is left out: fatal errors, lost log content, query plans. Durations are in milliseconds to 3 decimal places, percentages to 1.
 
-The server runs as a local process started by your client over stdio, with no API keys. The analysis tools make no network calls. Each log is parsed once, so follow up questions are faster.
+The server runs as a local process started by your client over stdio, with no API keys. The analysis tools make no network calls. The server keeps the last log it parsed until 5 minutes after its last use, so follow-up questions on that log are faster.
 
 ### apexlog_list_slow_operations
 
@@ -208,9 +212,13 @@ Text past 400 characters is elided; ask for one event by `eventIndex` to read up
 
 Runs anonymous Apex against an authenticated org, saves the debug log locally, and returns the path. Pass that path to any analysis tool. The Apex runs as the `targetOrg` user, with that user's permissions. Its DML commits when the run succeeds; a compile failure or an uncaught exception rolls it back.
 
-Give exactly one of `apex` or `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. A file outside the roots your client declares is refused, as is anything but a regular file. When the server cannot use your client's roots, a file is refused, and so is a call without `targetOrg`, since the project's default org cannot be found. That happens on MCP 2026-07-28, when the client does not answer in 5 seconds, or when no root is on this machine. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
+Give exactly one of `apex` or `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. A file outside the roots your client declares is refused, as is anything but a regular file. When the server cannot use your client's roots, a file is refused. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
 
-The response also gives the org username, its alias if set, the org type, and a summary of the run. Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
+The response gives `filePath`, `org` (the username, with its alias if set), `orgType`, `succeeded`, `exceptionMessage` when the run failed, `durationTotalMs`, `levelsSource`, `levelsOverridden`, `outputDirCreated`, and a `warning` when something needs your attention.
+
+The run changes the org. With no live `USER_DEBUG` or `DEVELOPER_LOG` trace flag on the user, it adds a trace flag for the run and deletes it after. The debug level that flag uses, `Apex_Log_MCP_Debug_Level`, stays in the org for the next run.
+
+Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
 
 <!-- params-apexlog_execute_anonymous:start -->
 
@@ -350,7 +358,7 @@ The [Quick Start](#quick-start) config gives you every tool.
 
 ### Production safety
 
-Every tool that changes an org - `apexlog_execute_anonymous` and `apexlog_create_trace_flag` - identifies the org first:
+Every org tool reads the org's type. Only the two tools that change an org - `apexlog_execute_anonymous` and `apexlog_create_trace_flag` - are gated by it:
 
 | Org type     | Identified by                     | Behaviour             |
 | ------------ | --------------------------------- | --------------------- |
@@ -361,7 +369,7 @@ Every tool that changes an org - `apexlog_execute_anonymous` and `apexlog_create
 | `production` | Anything else                     | Confirmation required |
 | `unknown`    | The org could not be queried      | Confirmation required |
 
-For a production org, `--allow-production-orgs` skips the confirmation. Otherwise the server asks you to confirm, naming the org and what the call would do - for Apex, all of it with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one call.
+For a production org, `--allow-production-orgs` skips the confirmation. Otherwise the server asks you to confirm, naming the org and what the call would do - for Apex, all of it with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one call, and expires after 10 minutes.
 
 An org that cannot be identified is treated as production, so a network or permissions problem can never quietly downgrade one.
 
