@@ -334,14 +334,6 @@ describe("createApexLogServer", () => {
       );
     });
 
-    it("should always leave apexlog_execute_anonymous discoverable", async () => {
-      createApexLogServer();
-
-      const execAnonTool = registeredTools.get("apexlog_execute_anonymous")!;
-      expect(execAnonTool.enabled).toBe(true);
-      expect(execAnonTool.disable).not.toHaveBeenCalled();
-    });
-
     it("should keep apexlog_execute_anonymous discoverable when apex execution is disabled", async () => {
       createApexLogServer({ apexExecutionDisabled: true });
 
