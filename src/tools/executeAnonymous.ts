@@ -33,11 +33,7 @@ import { openLogStore, unwritableLogDir, writeDebugLog } from "./logStore.js";
 import { NS_TO_MS, roundMs, toonResult, warningField } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
-import {
-  apexExecutionRefusal,
-  toolError,
-  type Confirmable,
-} from "../policy/orgExecutionPolicy.js";
+import { toolError, type Confirmable } from "../policy/orgExecutionPolicy.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */
@@ -54,10 +50,6 @@ const ONE_APEX_SOURCE =
 
 const NO_LOG_CAPTURED_WARNING =
   "Salesforce returned no debug log for this run, so the saved file is empty and durationTotalMs is 0. A live DEVELOPER_LOG trace flag, or a trace flag the org refused, can take the log away.";
-
-export type ExecuteAnonymousPolicy = OrgAccessPolicy & {
-  apexExecutionDisabled: boolean;
-};
 
 // Refused where `outputDir` only warns: the file's text goes to the org, and a compile error can echo it.
 async function readApexFile(
@@ -176,18 +168,9 @@ export async function executeAnonymous(
   server: McpServer,
   args: ExecuteAnonymousArgs,
   ctx: ServerContext,
-  policy: ExecuteAnonymousPolicy,
+  policy: OrgAccessPolicy,
 ) {
   const { targetOrg, debugLevel } = args;
-
-  // Short-circuit before touching the client or the org, so a server running with
-  // --no-apex-execution makes no Salesforce calls at all. `src/server.ts` asks
-  // the same question before it loads this module; this stands for a direct
-  // caller.
-  const refused = apexExecutionRefusal(policy.apexExecutionDisabled);
-  if (refused) {
-    return refused;
-  }
 
   const readApex = apexSource(args);
   if (!readApex) {

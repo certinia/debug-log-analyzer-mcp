@@ -15,7 +15,7 @@ describe("org tool annotations", () => {
   it.each([
     ["list", listOrgLogsToolConfig, { readOnlyHint: true }],
     ["get", getOrgLogsToolConfig, { destructiveHint: false }],
-    ["create trace flag", createTraceFlagToolConfig, { destructiveHint: false }],
+    ["create trace flag", createTraceFlagToolConfig(), { destructiveHint: false }],
   ])("should annotate %s", (_name, config, annotations) => {
     expect(config.annotations).toEqual(annotations);
   });

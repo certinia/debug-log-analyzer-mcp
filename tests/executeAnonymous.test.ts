@@ -189,14 +189,12 @@ const codec = createRequestStateCodec<ConfirmationState>({
 function policy(
   overrides: {
     allowProductionOrgs?: boolean;
-    apexExecutionDisabled?: boolean;
     denyList?: DenyList;
     classificationCache?: Map<string, OrgClassification>;
   } = {},
 ) {
   return {
     allowProductionOrgs: false,
-    apexExecutionDisabled: false,
     denyList: compileDenyList([]),
     classificationCache: new Map<string, OrgClassification>(),
     mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
@@ -2053,25 +2051,6 @@ describe("Execute Anonymous", () => {
       );
 
       expect(mockRetrieveOrgInfo).toHaveBeenCalledTimes(1);
-    });
-
-    it("should refuse immediately when apex execution is disabled", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({ apexExecutionDisabled: true }),
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain(
-        "disabled by server configuration (--no-apex-execution)",
-      );
-      expect(mockConnectOrg).not.toHaveBeenCalled();
-      expect(mockServer.server.listRoots).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
     });
   });
 
