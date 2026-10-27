@@ -96,7 +96,7 @@ const MAX_REASON = 300;
 
 export const APEX_EXECUTION_DISABLED_MESSAGE =
   "Anonymous Apex execution is disabled by server configuration (--no-apex-execution). " +
-  "The log analysis tools remain available.";
+  "Other tools remain available.";
 
 export function toolError(text: string) {
   return {

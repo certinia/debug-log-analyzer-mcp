@@ -441,9 +441,7 @@ describe("authorizeOperation", () => {
 describe("APEX_EXECUTION_DISABLED_MESSAGE", () => {
   it("should name the flag and point at the remaining tools", () => {
     expect(APEX_EXECUTION_DISABLED_MESSAGE).toContain("--no-apex-execution");
-    expect(APEX_EXECUTION_DISABLED_MESSAGE).toContain(
-      "log analysis tools remain available",
-    );
+    expect(APEX_EXECUTION_DISABLED_MESSAGE).toContain("Other tools remain available.");
   });
 });
 
