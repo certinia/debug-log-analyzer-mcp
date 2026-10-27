@@ -95,17 +95,17 @@ Watch for `ENTERING_MANAGED_PKG`. It is time a package spent where the log shows
 
 <!-- params-apexlog_list_slow_operations:start -->
 
-| Parameter       | Type     | Required | Description |
-| --------------- | -------- | -------- | --- |
-| `logFilePath`   | string   | Yes      | Absolute path |
-| `debugCategory` | string[] | No       | Rank only these debug log categories |
+| Parameter       | Type | Required | Description |
+| --------------- | --- | -------- | --- |
+| `logFilePath`   | string | Yes      | Absolute path |
+| `debugCategory` | (`apexCode` \| `apexProfiling` \| `callout` \| `dataAccess` \| `database` \| `nba` \| `system` \| `validation` \| `visualforce` \| `wave` \| `workflow`)[] | No       | Rank only these debug log categories |
 | `type`          | string[] | No       | Rank only these log event types, e.g. SOQL_EXECUTE_BEGIN, DML_BEGIN, METHOD_ENTRY |
 | `namespace`     | string[] | No       | Rank only these namespaces |
-| `minSelfMs`     | number   | No       | Drop operations below this self time (default: 0), whichever sortBy is used |
-| `limit`         | number   | No       | Page size (default: 10); fewer if the page would be too large |
-| `offset`        | number   | No       | Ranked rows to skip (default: 0): the last page's nextOffset |
-| `groupBy`       | string   | No       | Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. |
-| `sortBy`        | string   | No       | Default durationSelfMs. heapSelfNetBytes adds that column. |
+| `minSelfMs`     | number | No       | Drop operations below this self time (default: 0), whichever sortBy is used |
+| `limit`         | number ≥ 0 | No       | Page size (default: 10); fewer if the page would be too large |
+| `offset`        | number ≥ 0 | No       | Ranked rows to skip (default: 0): the last page's nextOffset |
+| `groupBy`       | `name` \| `namespace` \| `callerNamespace` \| `debugCategory` \| `none` | No       | Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. |
+| `sortBy`        | `durationSelfMs` \| `heapSelfNetBytes` | No       | Default durationSelfMs. heapSelfNetBytes adds that column. |
 
 <!-- params-apexlog_list_slow_operations:end -->
 
@@ -195,16 +195,16 @@ Text past 400 characters is elided; ask for one event by `eventIndex` to read up
 
 <!-- params-apexlog_search_events:start -->
 
-| Parameter          | Type     | Required | Description                                                  |
-| ------------------ | -------- | -------- | ------------------------------------------------------------ |
-| `logFilePath`      | string   | Yes      | Absolute path                                                |
-| `type`             | string[] | No       | Only these log event types, e.g. USER_DEBUG, VALIDATION_RULE |
-| `namespace`        | string[] | No       | Only these namespaces                                        |
-| `contains`         | string   | No       | Only events whose text holds this, ignoring case             |
-| `eventIndex`       | number   | No       | Only this event, with more of its text                       |
-| `parentEventIndex` | number   | No       | Only events below this one                                   |
-| `limit`            | number   | No       | Page size (default: 50)                                      |
-| `offset`           | number   | No       | Rows to skip (default: 0): the last page's nextOffset        |
+| Parameter          | Type       | Required | Description                                                  |
+| ------------------ | ---------- | -------- | ------------------------------------------------------------ |
+| `logFilePath`      | string     | Yes      | Absolute path                                                |
+| `type`             | string[]   | No       | Only these log event types, e.g. USER_DEBUG, VALIDATION_RULE |
+| `namespace`        | string[]   | No       | Only these namespaces                                        |
+| `contains`         | string     | No       | Only events whose text holds this, ignoring case             |
+| `eventIndex`       | number ≥ 0 | No       | Only this event, with more of its text                       |
+| `parentEventIndex` | number ≥ 0 | No       | Only events below this one                                   |
+| `limit`            | number ≥ 0 | No       | Page size (default: 50)                                      |
+| `offset`           | number ≥ 0 | No       | Rows to skip (default: 0): the last page's nextOffset        |
 
 <!-- params-apexlog_search_events:end -->
 
@@ -222,13 +222,13 @@ Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production
 
 <!-- params-apexlog_execute_anonymous:start -->
 
-| Parameter      | Type             | Required | Description |
-| -------------- | ---------------- | -------- | --- |
-| `apex`         | string           | No       | The anonymous Apex to execute, or use apexFilePath |
-| `apexFilePath` | string           | No       | Absolute path to a file of anonymous Apex |
-| `targetOrg`    | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `outputDir`    | string           | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
-| `debugLevel`   | string \| object | No       | This run's log levels. Omit for the user's trace flag levels, else the defaults; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
+| Parameter      | Type | Required | Description |
+| -------------- | --- | -------- | --- |
+| `apex`         | string | No       | The anonymous Apex to execute, or use apexFilePath |
+| `apexFilePath` | string | No       | Absolute path to a file of anonymous Apex |
+| `targetOrg`    | string | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `outputDir`    | string | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
+| `debugLevel`   | `default` \| `NONE` \| `ERROR` \| `WARN` \| `INFO` \| `DEBUG` \| `FINE` \| `FINER` \| `FINEST` \| object: (`apexCode` \| `apexProfiling` \| `callout` \| `database` \| `nba` \| `system` \| `validation` \| `visualforce` \| `wave` \| `workflow`) → (`NONE` \| `ERROR` \| `WARN` \| `INFO` \| `DEBUG` \| `FINE` \| `FINER` \| `FINEST`) | No       | This run's log levels. Omit for the user's trace flag levels, else the defaults; "default" forces the defaults; a bare level sets every category; an object sets the named categories over the defaults. Defaults: apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO. |
 
 <!-- params-apexlog_execute_anonymous:end -->
 
@@ -237,8 +237,6 @@ An object `debugLevel` looks like this:
 ```json
 { "database": "FINEST", "apexCode": "FINE" }
 ```
-
-Levels are `NONE`, `ERROR`, `WARN`, `INFO`, `DEBUG`, `FINE`, `FINER`, `FINEST`.
 
 Set a `USER_DEBUG` trace flag on your user - in Setup, for example - and every run you start without `debugLevel` logs at its levels; your flag is never changed. `levelsSource` in the response says where a run's levels came from: `traceFlag`, `default` or `request`. A live `DEVELOPER_LOG` trace flag on your user outranks `debugLevel` and the defaults, so the run takes its levels and `levelsSource` is `traceFlag`. `levelsOverridden` says when the log carries levels other than the ones `levelsSource` names.
 
@@ -257,19 +255,19 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 
 <!-- params-apexlog_list_org_logs:start -->
 
-| Parameter          | Type    | Required | Description |
-| ------------------ | ------- | -------- | --- |
-| `targetOrg`        | string  | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `user`             | string  | No       | Username whose activity was logged |
-| `operation`        | string  | No       | Part of the operation, any case, e.g. "aura" for /aura |
-| `request`          | string  | No       | e.g. "Api" or "Application" |
-| `succeeded`        | boolean | No       | true: succeeded logs only; false: failed logs only |
-| `startTimeFrom`    | string  | No       | ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z |
-| `startTimeTo`      | string  | No       |  |
-| `minFileSizeBytes` | number  | No       |  |
-| `sortBy`           | string  | No       | Descending (default: startTime) |
-| `limit`            | number  | No       | Page size (default: 20) |
-| `cursor`           | string  | No       | nextCursor from the previous page |
+| Parameter          | Type                                                | Required | Description |
+| ------------------ | --------------------------------------------------- | -------- | --- |
+| `targetOrg`        | string                                              | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `user`             | string                                              | No       | Username whose activity was logged |
+| `operation`        | string                                              | No       | Part of the operation, any case, e.g. "aura" for /aura |
+| `request`          | string                                              | No       | e.g. "Api" or "Application" |
+| `succeeded`        | boolean                                             | No       | true: succeeded logs only; false: failed logs only |
+| `startTimeFrom`    | string                                              | No       | ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z |
+| `startTimeTo`      | string                                              | No       |  |
+| `minFileSizeBytes` | number ≥ 0                                          | No       |  |
+| `sortBy`           | `startTime` \| `durationTotalMs` \| `fileSizeBytes` | No       | Descending (default: startTime) |
+| `limit`            | number 1–200                                        | No       | Page size (default: 20) |
+| `cursor`           | string                                              | No       | nextCursor from the previous page |
 
 <!-- params-apexlog_list_org_logs:end -->
 
@@ -277,16 +275,16 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 
 Downloads logs by `ids` or the newest `latest`, as `sf apex get log` does. Returns each saved path, for the analysis tools.
 
-Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. If `apexlog_get_summary` reports `truncated: true` with no `truncatedBy` for a saved log, the file may have been cut off while it was written: delete it and call this tool again. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved. If the org's login stops working, it also starts no more: those ids are rows in `failed`, and `warning` says how to log in again.
+A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. If `apexlog_get_summary` reports `truncated: true` with no `truncatedBy` for a saved log, the file may have been cut off while it was written: delete it and call this tool again. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved. If the org's login stops working, it also starts no more: those ids are rows in `failed`, and `warning` says how to log in again.
 
 <!-- params-apexlog_get_org_logs:start -->
 
-| Parameter   | Type     | Required | Description |
-| ----------- | -------- | -------- | --- |
-| `targetOrg` | string   | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `ids`       | string[] | No       | Log ids, from apexlog_list_org_logs |
-| `latest`    | number   | No       | The newest N logs, in place of ids (default: 1) |
-| `outputDir` | string   | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
+| Parameter   | Type          | Required | Description |
+| ----------- | ------------- | -------- | --- |
+| `targetOrg` | string        | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `ids`       | string[] 1–25 | No       | Log ids, from apexlog_list_org_logs |
+| `latest`    | number 1–25   | No       | The newest N logs, in place of ids (default: 1) |
+| `outputDir` | string        | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
 
 <!-- params-apexlog_get_org_logs:end -->
 
@@ -294,18 +292,18 @@ Up to 25 a call. A log already saved under `outputDir` is not downloaded again, 
 
 Starts logging a user, so an integration user's requests reach the org's logs, for `apexlog_list_org_logs` to find. A flag on a class or trigger stores no log itself: it sets the levels of that code's work in the logs a user's flag stores. A user is traced as `USER_DEBUG`; a class or trigger as `CLASS_TRACING`.
 
-A flag lives up to 1,439 minutes: Salesforce refuses a flag of a full day. The debug level it uses stays in the org after the flag ends, for the next flag at the same levels.
+`durationMinutes` stops a minute short of a day, because Salesforce refuses a flag of a full day. The debug level it uses stays in the org after the flag ends, for the next flag at the same levels.
 
 Every transaction a traced user runs while the flag lives is stored, which can fill the org's 1,000 MB of log storage: when it is full, no one can set a flag until logs are deleted in Setup > Debug Logs, or expire after 24 hours. When the entity already has a flag of its type whose time overlaps the new one, the call is refused and names it, with its levels, its expiry and the `sf` command that deletes it - a flag is never changed here. Against a production org, the call asks first, naming the entity, the levels and the minutes.
 
 <!-- params-apexlog_create_trace_flag:start -->
 
-| Parameter         | Type             | Required | Description |
-| ----------------- | ---------------- | -------- | --- |
-| `targetOrg`       | string           | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `tracedEntity`    | string           | Yes      | A username or user id, or a class or trigger name (ns.Name if namespaced) |
-| `debugLevel`      | string \| object | No       | A level for every category, or the named ones over apexlog_execute_anonymous's defaults (default: those) |
-| `durationMinutes` | number           | No       | How long it logs (default: 30) |
+| Parameter         | Type | Required | Description |
+| ----------------- | --- | -------- | --- |
+| `targetOrg`       | string | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `tracedEntity`    | string | Yes      | A username or user id, or a class or trigger name (ns.Name if namespaced) |
+| `debugLevel`      | `NONE` \| `ERROR` \| `WARN` \| `INFO` \| `DEBUG` \| `FINE` \| `FINER` \| `FINEST` \| object: (`apexCode` \| `apexProfiling` \| `callout` \| `database` \| `nba` \| `system` \| `validation` \| `visualforce` \| `wave` \| `workflow`) → (`NONE` \| `ERROR` \| `WARN` \| `INFO` \| `DEBUG` \| `FINE` \| `FINER` \| `FINEST`) | No       | A level for every category, or the named ones over apexlog_execute_anonymous's defaults (default: those) |
+| `durationMinutes` | number 1–1439 | No       | How long it logs (default: 30) |
 
 <!-- params-apexlog_create_trace_flag:end -->
 
