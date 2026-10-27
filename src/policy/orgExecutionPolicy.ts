@@ -4,13 +4,11 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import {
-  acceptedContent,
   inputRequired,
   inputResponse,
   type InputRequiredResult,
   type ServerContext,
 } from "@modelcontextprotocol/server";
-import { z } from "zod";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
 import { RELOGIN_HINT } from "../salesforce/authFailure.js";
 
@@ -41,7 +39,7 @@ export type Confirmable = {
   effect: string;
   /** Shown in full between the preamble and the question. */
   detail: string;
-  /** The confirm field's title, before " against … org '…'?". */
+  /** The question that ends the prompt, before " against … org '…'?". */
   title: string;
   /** When set, the refusal to return instead of asking: the write cannot be shown whole. */
   unshowable?: string;
@@ -92,8 +90,6 @@ export function createConfirmationLedger(
 
 /** The key this server assigns its one embedded request, and reads back. */
 const CONFIRM_KEY = "confirm";
-
-const confirmSchema = z.object({ confirm: z.boolean() });
 
 /** Underlying API errors can be verbose; keep the actionable part. */
 const MAX_REASON = 300;
@@ -171,21 +167,13 @@ function confirmationRequest(
     : `About to ${action} against PRODUCTION org '${orgLabel}'.`;
 
   return inputRequired.elicit({
-    message: `${preamble}\n\n${confirm.detail}\n\nProceed?`,
-    requestedSchema: {
-      type: "object",
-      properties: {
-        confirm: {
-          type: "boolean",
-          // Drop the classification when it could not be verified.
-          title: `${confirm.title} against ${unverifiedReason ? "" : "production "}org '${orgLabel}'?`,
-          description: "true to run, false to cancel",
-          // A client that applies defaults should pre-fill "no".
-          default: false,
-        },
-      },
-      required: ["confirm"],
-    },
+    // Drop the classification when it could not be verified.
+    message:
+      `${preamble}\n\n${confirm.detail}\n\n` +
+      `${confirm.title} against ${unverifiedReason ? "" : "production "}org '${orgLabel}'?`,
+    // Accept is the confirmation. A form field as well made "Accept" with an
+    // unchecked box mean "no", and Enter in Claude Code submitted exactly that.
+    requestedSchema: { type: "object", properties: {} },
   });
 }
 
@@ -289,20 +277,15 @@ export async function authorizeOperation(opts: {
 
   // A client that echoes the state but carries no answer cannot confirm at all,
   // so it gets the routes that need no confirmation rather than a decline.
-  if (inputResponse(ctx.mcpReq.inputResponses, CONFIRM_KEY).kind === "missing") {
+  const answer = inputResponse(ctx.mcpReq.inputResponses, CONFIRM_KEY);
+  if (answer.kind === "missing") {
     return {
       outcome: "refused",
       reason: refusal(action, orgLabel, unverifiedReason),
     };
   }
 
-  const answer = acceptedContent(
-    ctx.mcpReq.inputResponses,
-    CONFIRM_KEY,
-    confirmSchema,
-  );
-
-  if (answer?.confirm === true) {
+  if (answer.kind === "elicit" && answer.action === "accept") {
     if (!opts.consumeConfirmation(confirmed.nonce)) {
       return {
         outcome: "refused",
