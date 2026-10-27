@@ -14,7 +14,12 @@ import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
-import { openLogStore, saveStoredLog, type StoredLog } from "./logStore.js";
+import {
+  openLogStore,
+  saveStoredLog,
+  unwritableLogDir,
+  type StoredLog,
+} from "./logStore.js";
 import { progressReporter } from "./progress.js";
 import { omitEmpty, toonResult } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
@@ -58,6 +63,13 @@ export async function getOrgLogs(
       ).map(toLongId),
     ),
   ];
+  // `mkdir` passes an existing directory it cannot write, so check, or each download fails only once fetched.
+  const unwritable = ids.length
+    ? await unwritableLogDir(args.outputDir, access.rootPaths)
+    : undefined;
+  if (unwritable) {
+    return toolError(`${unwritable} No log was downloaded. Pass a writable outputDir.`);
+  }
   // After the ids, so a failed query leaves no directory and no stderr line behind; none at all for no logs.
   const store = ids.length
     ? await openLogStore(args.outputDir, access.workspace, access.rootPaths)

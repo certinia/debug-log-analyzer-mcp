@@ -341,6 +341,26 @@ describe("getOrgLogs", () => {
     expect(existsSync(path.join(root, ".apex-log-mcp"))).toBe(false);
   });
 
+  // Root writes anywhere, and Windows ignores the mode on a directory.
+  (process.platform === "win32" || process.getuid?.() === 0 ? it.skip : it)(
+    "should refuse an outputDir it cannot write before downloading anything",
+    async () => {
+      const readOnly = path.join(root, "read-only");
+      mkdirSync(readOnly, { mode: 0o555 });
+
+      const result = await getOrgLogs(
+        server(),
+        { ids: ["07L000000000001EAA"], outputDir: readOnly },
+        ctx,
+        policy(),
+      );
+
+      expect(result).toMatchObject({ isError: true });
+      expect(text(result as never)).toContain(`Cannot write debug logs to ${readOnly}`);
+      expect(mockDownload).not.toHaveBeenCalled();
+    },
+  );
+
   it("should report each log saved as progress, out of every log asked for", async () => {
     const notify = jest.fn().mockResolvedValue(undefined);
 

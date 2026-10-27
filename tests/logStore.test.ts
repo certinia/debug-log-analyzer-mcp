@@ -10,6 +10,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -116,31 +117,44 @@ describe("unwritableLogDir", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  // An absolute outputDir resolves to itself, whatever the roots.
+  const check = (target: string) => unwritableLogDir(target, []);
+
   it("should accept a directory not made yet, and make nothing", async () => {
     const target = path.join(dir, "a", "b");
 
-    expect(await unwritableLogDir(target)).toBeUndefined();
+    expect(await check(target)).toBeUndefined();
     expect(existsSync(path.join(dir, "a"))).toBe(false);
   });
 
-  it("should refuse a path through a file", async () => {
+  it.each([
+    ["is a file", ["file"]],
+    ["runs through a file", ["file", "logs"]],
+  ])("should refuse a path that %s", async (_name, parts) => {
     writeFileSync(path.join(dir, "file"), "");
-    const target = path.join(dir, "file", "logs");
+    const target = path.join(dir, ...parts);
 
-    expect(await unwritableLogDir(target)).toBe(
+    expect(await check(target)).toBe(
       `Cannot write debug logs to ${target}: not a directory (ENOTDIR).`,
     );
   });
 
-  // Root writes anywhere, so the refusal cannot show there.
-  (process.getuid?.() === 0 ? it.skip : it)(
-    "should refuse a directory that exists but cannot be written",
-    async () => {
-      chmodSync(dir, 0o555);
+  it("should refuse a symbolic link to nothing", async () => {
+    const target = path.join(dir, "logs");
+    symlinkSync(path.join(dir, "missing"), target);
 
-      expect(await unwritableLogDir(dir)).toBe(
-        `Cannot write debug logs to ${dir}: permission denied (EACCES).`,
-      );
-    },
-  );
+    expect(await check(target)).toBe(
+      `Cannot write debug logs to ${target}: a symbolic link to nothing.`,
+    );
+  });
+
+  // Root writes anywhere, and Windows ignores these modes on a directory.
+  (process.platform === "win32" || process.getuid?.() === 0 ? it.each.skip : it.each)([
+    ["cannot be written", 0o555],
+    ["cannot be searched", 0o200],
+  ])("should refuse a directory that %s", async (_name, mode) => {
+    chmodSync(dir, mode);
+
+    expect(await check(dir)).toBe(`Cannot write debug logs to ${dir}: permission denied (EACCES).`);
+  });
 });

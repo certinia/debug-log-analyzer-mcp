@@ -14,7 +14,7 @@ jest.mock("node:fs", () => ({
     // No symlinks in the test filesystem, so every path resolves to itself.
     realpath: jest.fn((target: string) => Promise.resolve(target)),
   },
-  constants: { O_RDONLY: 0, O_NONBLOCK: 4, W_OK: 2 },
+  constants: { O_RDONLY: 0, O_NONBLOCK: 4, W_OK: 2, X_OK: 1 },
 }));
 
 // Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
@@ -279,6 +279,9 @@ describe("Execute Anonymous", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Cleared keeps a test's override, and both serve the directory check as well as the log.
+    mockStat.mockResolvedValue({ size: 1024, isDirectory: () => true } as any);
+    (fs.access as jest.Mock).mockResolvedValue(undefined);
 
     ctx = makeCtx();
 
@@ -2096,26 +2099,21 @@ describe("Execute Anonymous", () => {
   });
 
   describe("log file saving", () => {
-    it("should refuse an outputDir it cannot write before the Apex runs", async () => {
+    // Production, so a check made after the confirmation would ask the user to confirm a run that cannot happen.
+    it("should refuse an outputDir it cannot write before asking to confirm or running the Apex", async () => {
+      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       (fs.access as jest.Mock).mockRejectedValueOnce(
         Object.assign(new Error("EACCES: permission denied, access '/readonly/logs'"), { code: "EACCES" }),
       );
 
-      const result = await executeAnonymous(
+      const run = executeAnonymous(
         mockServer,
         { apex: testApexCode, outputDir: "/readonly/logs" },
         ctx,
         policy(),
       );
 
-      expect(result).toMatchObject({
-        isError: true,
-        content: [
-          {
-            text: "Cannot write debug logs to /readonly/logs: permission denied (EACCES). The Apex was not run. Pass a writable outputDir.",
-          },
-        ],
-      });
+      await expect(run).rejects.toThrow(/^Cannot write debug logs to \/readonly\/logs: .* The Apex was not run\./);
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
