@@ -22,7 +22,7 @@ import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 type Saved = { id: string } & StoredLog;
 type Failed = { id: string; error: string };
 
-const NOT_TRIED = "not downloaded: an earlier download found the org's login no longer works";
+const NOT_TRIED = "Skipped: the org's login failed on an earlier log in this call.";
 
 export async function getOrgLogs(
   server: McpServer,
@@ -78,13 +78,13 @@ export async function getOrgLogs(
           try {
             // The SDK sends no result once cancelled, so this only stops the work.
             signal.throwIfAborted();
-            if (loginFailed) {
-              return { id, error: NOT_TRIED };
-            }
             return {
               id,
+              // Inside the download, so a log already saved is still found with no org call.
               ...(await saveStoredLog(store.dir, id, () =>
-                downloadApexLog(connection, id),
+                loginFailed
+                  ? Promise.reject(new Error(NOT_TRIED))
+                  : downloadApexLog(connection, id),
               )),
             };
           } catch (error) {

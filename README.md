@@ -269,7 +269,7 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 
 Downloads logs by `ids` or the newest `latest`, as `sf apex get log` does. Returns each saved path, for the analysis tools.
 
-Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. If `apexlog_get_summary` reports `truncated: true` with no `truncatedBy` for a saved log, the file may have been cut off while it was written: delete it and call this tool again. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved.
+Up to 25 a call. A log already saved under `outputDir` is not downloaded again, since a stored log never changes; `downloaded` says which were. A log that cannot be downloaded is a row in `failed`, with the cause, and the rest still save. If `apexlog_get_summary` reports `truncated: true` with no `truncatedBy` for a saved log, the file may have been cut off while it was written: delete it and call this tool again. It reports progress as each log saves. Cancelled, it starts no more downloads; those already running finish and are saved. If the org's login stops working, it also starts no more: those ids are rows in `failed`, and `warning` says how to log in again.
 
 <!-- params-apexlog_get_org_logs:start -->
 
