@@ -510,8 +510,8 @@ describe("createApexLogServer", () => {
       await tool.callback({ apex: "System.debug(2);" }, {} as any);
 
       const calls = (executeAnonymous as jest.Mock).mock.calls;
-      expect(calls[0][2].classificationCache).toBe(
-        calls[1][2].classificationCache,
+      expect(calls[0][3].classificationCache).toBe(
+        calls[1][3].classificationCache,
       );
     });
   });
