@@ -83,10 +83,10 @@ jest.mock("../src/tools/executeAnonymous", () => ({
 // A module of its own in `src/`, so the server can register the tool without
 // loading the handler and the Salesforce SDK behind it.
 jest.mock("../src/tools/executeAnonymousDefinition", () => ({
-  executeAnonymousToolConfig: jest.fn((disabled = false) => ({
+  executeAnonymousToolConfig: jest.fn((refusal?: string) => ({
     title: "Execute Anonymous Apex",
-    description: disabled
-      ? "[DISABLED on this server] Execute a snippet of anonymous Apex and retrieve the resulting log"
+    description: refusal
+      ? `[DISABLED on this server] Execute a snippet of anonymous Apex and retrieve the resulting log ${refusal}`
       : "Execute a snippet of anonymous Apex and retrieve the resulting log",
     inputSchema: {},
     annotations: {},
@@ -246,8 +246,11 @@ describe("createApexLogServer", () => {
       );
     });
 
-    it("should not tell the agent to confirm when production orgs are allowed", async () => {
-      createApexLogServer({ allowProductionOrgs: true });
+    it.each([
+      ["production orgs are allowed", { allowProductionOrgs: true }],
+      ["no tool may change an org", { readOnly: true }],
+    ])("should not tell the agent to confirm when %s", async (_, config) => {
+      createApexLogServer(config);
 
       expect(McpServer).toHaveBeenCalledWith(
         expect.anything(),
@@ -257,8 +260,11 @@ describe("createApexLogServer", () => {
       );
     });
 
-    it("should not offer the definitions to a shared cache when a flag changed them", async () => {
-      createApexLogServer({ apexExecutionDisabled: true });
+    it.each([
+      ["--no-apex-execution", { apexExecutionDisabled: true }],
+      ["--read-only", { readOnly: true }],
+    ])("should not offer the definitions to a shared cache when %s changed them", async (_, config) => {
+      createApexLogServer(config);
 
       expect(McpServer).toHaveBeenCalledWith(
         expect.anything(),
@@ -347,6 +353,21 @@ describe("createApexLogServer", () => {
       );
     });
 
+    // An agent that reads the list must not have to call a tool to learn it is refused.
+    it("should mark both tools that change an org disabled under --read-only, and leave them discoverable", async () => {
+      createApexLogServer({ readOnly: true });
+
+      for (const name of ["apexlog_create_trace_flag", "apexlog_execute_anonymous"]) {
+        const tool = registeredTools.get(name)!;
+        expect(tool.enabled).toBe(true);
+        expect(tool.config.description).toContain("[DISABLED on this server]");
+        expect(tool.config.description).toContain("--read-only");
+      }
+      expect(registeredTools.get("apexlog_list_org_logs")!.config.description).not.toContain(
+        "[DISABLED",
+      );
+    });
+
     it("should not mark the tool disabled in its description by default", async () => {
       createApexLogServer();
 
@@ -389,38 +410,16 @@ describe("createApexLogServer", () => {
       ).rejects.toThrow("Tool execution failed");
     });
 
-    it("should pass the default policy to apexlog_execute_anonymous", async () => {
-      createApexLogServer();
-
-      const tool = registeredTools.get("apexlog_execute_anonymous")!;
-      const args = { apex: "System.debug('test');" };
-
-      const result = await tool.callback(args, {} as any);
-
-      expect(executeAnonymous).toHaveBeenCalledWith(
-        expect.anything(),
-        args,
-        expect.anything(),
-        {
-          allowProductionOrgs: false,
-          apexExecutionDisabled: false,
-          denyList: { patterns: [], types: [] },
-          classificationCache: expect.any(Map),
-          mintConfirmationState: expect.any(Function),
-          consumeConfirmation: expect.any(Function),
-        },
-      );
-      expect(result).toEqual(mockExecuteAnonymousResult);
-    });
-
     // Every org tool reaches the deny list and the production gate through this policy.
+    // A flag that refuses some tools must leave the others running.
     it.each([
-      ["apexlog_list_org_logs", listOrgLogs],
-      ["apexlog_get_org_logs", getOrgLogs],
-      ["apexlog_create_trace_flag", createTraceFlag],
-    ])("should pass the args, ctx and org policy to %s", async (name, handler) => {
+      ["apexlog_list_org_logs", listOrgLogs, {}],
+      ["apexlog_get_org_logs", getOrgLogs, { readOnly: true }],
+      ["apexlog_create_trace_flag", createTraceFlag, { apexExecutionDisabled: true }],
+      ["apexlog_execute_anonymous", executeAnonymous, {}],
+    ])("should pass the args, ctx and org policy to %s", async (name, handler, flags) => {
       (handler as jest.Mock).mockResolvedValue(mockAnalysisResult);
-      createApexLogServer({ allowProductionOrgs: true });
+      createApexLogServer({ allowProductionOrgs: true, ...flags });
 
       const args = { targetOrg: "psa" };
       const ctx = { mcpReq: {} };
@@ -451,20 +450,6 @@ describe("createApexLogServer", () => {
       ).rejects.toThrow(`Session expired or invalid ${RELOGIN_HINT}`);
     });
 
-    it("should pass --allow-production-orgs through to apexlog_execute_anonymous", async () => {
-      createApexLogServer({ allowProductionOrgs: true });
-
-      const tool = registeredTools.get("apexlog_execute_anonymous")!;
-      await tool.callback({ apex: "System.debug('test');" }, {} as any);
-
-      expect(executeAnonymous).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.objectContaining({ allowProductionOrgs: true }),
-      );
-    });
-
     it("should refuse apexlog_execute_anonymous under --no-apex-execution, and not load the tool", async () => {
       createApexLogServer({ apexExecutionDisabled: true });
 
@@ -485,6 +470,36 @@ describe("createApexLogServer", () => {
         }),
       );
       expect(executeAnonymous).not.toHaveBeenCalled();
+    });
+
+    // --no-apex-execution alone left trace flags writable; --read-only must stop both writes.
+    it.each([
+      ["apexlog_create_trace_flag", createTraceFlag, { readOnly: true }],
+      ["apexlog_execute_anonymous", executeAnonymous, { readOnly: true }],
+      // The wider flag names itself, even when the narrower one is also set.
+      [
+        "apexlog_execute_anonymous",
+        executeAnonymous,
+        { readOnly: true, apexExecutionDisabled: true },
+      ],
+    ])("should refuse %s under --read-only, and not load the tool", async (name, handler, config) => {
+      createApexLogServer(config);
+
+      const result = await registeredTools.get(name)!.callback(
+        { targetOrg: "psa", tracedEntity: "dev@example.com", apex: "System.debug(1);" },
+        {} as any,
+      );
+
+      expect(result).toEqual({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Tools that change an org are disabled by server configuration (--read-only). Other tools remain available.",
+          },
+        ],
+      });
+      expect(handler).not.toHaveBeenCalled();
     });
 
     it("should reuse one classification cache across calls", async () => {
@@ -562,6 +577,7 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig([])).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
+      readOnly: false,
       denyList: { patterns: [], types: [] },
     });
   });
@@ -570,6 +586,7 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig(["--allow-production-orgs"])).toEqual({
       allowProductionOrgs: true,
       apexExecutionDisabled: false,
+      readOnly: false,
       denyList: { patterns: [], types: [] },
     });
   });
@@ -578,6 +595,16 @@ describe("parseServerConfig", () => {
     expect(parseServerConfig(["--no-apex-execution"])).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: true,
+      readOnly: false,
+      denyList: { patterns: [], types: [] },
+    });
+  });
+
+  it("should read --read-only", () => {
+    expect(parseServerConfig(["--read-only"])).toEqual({
+      allowProductionOrgs: false,
+      apexExecutionDisabled: false,
+      readOnly: true,
       denyList: { patterns: [], types: [] },
     });
   });
@@ -624,6 +651,7 @@ describe("parseServerConfig", () => {
     ).toEqual({
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
+      readOnly: false,
       denyList: { patterns: [], types: [] },
     });
   });

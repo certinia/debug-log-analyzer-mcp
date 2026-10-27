@@ -10,6 +10,7 @@
  */
 
 import { z } from "zod";
+import { describeDisabled } from "../policy/orgExecutionPolicy.js";
 import { LOG_LEVELS, TRACE_CATEGORIES } from "../salesforce/debugLevels.js";
 import { MAX_DURATION_MINUTES } from "../salesforce/traceFlags.js";
 import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
@@ -41,12 +42,17 @@ export type CreateTraceFlagArgs = z.infer<
   z.ZodObject<typeof createTraceFlagInputSchema>
 >;
 
-export const createTraceFlagToolConfig = {
-  title: "Create Trace Flag",
-  description:
-    "Trace a user, class or trigger in a Salesforce org until the trace flag expires. A user's flag stores each transaction they run as a debug log, which can fill log storage; a class or trigger flag only sets that code's levels. Refused if a flag of its log type overlaps the new one. Leaves a debug level in the org.",
-  inputSchema: toolInputSchema(createTraceFlagInputSchema),
-  annotations: {
-    destructiveHint: false,
-  },
-};
+const CREATE_TRACE_FLAG_DESCRIPTION =
+  "Trace a user, class or trigger in a Salesforce org until the trace flag expires. A user's flag stores each transaction they run as a debug log, which can fill log storage; a class or trigger flag only sets that code's levels. Refused if a flag of its log type overlaps the new one. Leaves a debug level in the org.";
+
+/** `refusal` is what this server answers every call, or undefined when it writes to orgs. */
+export function createTraceFlagToolConfig(refusal?: string) {
+  return {
+    title: "Create Trace Flag",
+    description: describeDisabled(CREATE_TRACE_FLAG_DESCRIPTION, refusal),
+    inputSchema: toolInputSchema(createTraceFlagInputSchema),
+    annotations: {
+      destructiveHint: false,
+    },
+  };
+}

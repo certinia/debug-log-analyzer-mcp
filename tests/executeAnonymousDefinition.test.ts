@@ -9,6 +9,7 @@ import {
   executeAnonymousInputSchema,
   executeAnonymousToolConfig,
 } from "../src/tools/executeAnonymousDefinition";
+import { APEX_EXECUTION_DISABLED_MESSAGE } from "../src/policy/orgExecutionPolicy";
 
 describe("executeAnonymousToolConfig", () => {
   it("should have correct tool definition", () => {
@@ -40,7 +41,7 @@ describe("executeAnonymousToolConfig", () => {
   });
 
   it("should flag the tool as disabled in its description when execution is off", () => {
-    const config = executeAnonymousToolConfig(true);
+    const config = executeAnonymousToolConfig(APEX_EXECUTION_DISABLED_MESSAGE);
 
     expect(config.description).toContain("[DISABLED on this server]");
     expect(config.description).toContain("--no-apex-execution");

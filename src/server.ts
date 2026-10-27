@@ -25,19 +25,18 @@ import {
 import { withReloginHint } from "./salesforce/authFailure.js";
 import { limitUnitsClause } from "./tools/responseShaping.js";
 import { searchEvents, searchEventsToolConfig } from "./tools/searchEvents.js";
-import {
-  executeAnonymousToolConfig,
-  type ExecuteAnonymousArgs,
-} from "./tools/executeAnonymousDefinition.js";
+import { executeAnonymousToolConfig } from "./tools/executeAnonymousDefinition.js";
 import { createTraceFlagToolConfig } from "./tools/traceFlagsDefinition.js";
 import {
   getOrgLogsToolConfig,
   listOrgLogsToolConfig,
 } from "./tools/orgLogsDefinition.js";
 import {
-  apexExecutionRefusal,
+  APEX_EXECUTION_DISABLED_MESSAGE,
   CONFIRMATION_TTL_SECONDS,
   createConfirmationLedger,
+  READ_ONLY_MESSAGE,
+  toolError,
   type ConfirmationState,
 } from "./policy/orgExecutionPolicy.js";
 import { compileDenyList, type DenyList } from "./policy/orgDenyList.js";
@@ -47,6 +46,7 @@ import packageJson from "../package.json" with { type: "json" };
 export type ServerConfig = {
   allowProductionOrgs?: boolean;
   apexExecutionDisabled?: boolean;
+  readOnly?: boolean;
   denyList?: DenyList;
 };
 
@@ -76,17 +76,24 @@ const consumeConfirmation = createConfirmationLedger();
  *
  * Two servers that answer `tools/list` differently must not share a cached
  * answer, so extend this whenever a new option changes a name, a schema or a
- * description. `--no-apex-execution` does: it stamps a disabled marker into
- * `apexlog_execute_anonymous`.
+ * description. `--no-apex-execution` and `--read-only` do: they stamp a
+ * disabled marker into the tools they refuse.
  */
 function definitionsVaryByConfig(config: Required<ServerConfig>): boolean {
-  return config.apexExecutionDisabled;
+  return config.apexExecutionDisabled || config.readOnly;
 }
 
 export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const allowProductionOrgs = config.allowProductionOrgs ?? false;
   const apexExecutionDisabled = config.apexExecutionDisabled ?? false;
+  const readOnly = config.readOnly ?? false;
   const denyList = config.denyList ?? { patterns: [], types: [] };
+  // The refusal each tool that changes an org gives every call, or undefined.
+  // --read-only covers more than --no-apex-execution, so its message wins.
+  const orgWriteRefusal = readOnly ? READ_ONLY_MESSAGE : undefined;
+  const apexRefusal =
+    orgWriteRefusal ??
+    (apexExecutionDisabled ? APEX_EXECUTION_DISABLED_MESSAGE : undefined);
   const server = new McpServer(
     {
       name: "apex-log-mcp",
@@ -100,7 +107,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       },
       // Never send a request the client did not declare: it may never be answered.
       enforceStrictCapabilities: true,
-      instructions: `Analysis tools take an absolute .log path and never contact an org. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper. A zero count or limit is measured, not missing.${allowProductionOrgs ? "" : " Tools that change a production org, or one of unknown type, ask the user first, or refuse if the client cannot ask."}`,
+      instructions: `Analysis tools take an absolute .log path and never contact an org. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper. A zero count or limit is measured, not missing.${allowProductionOrgs || readOnly ? "" : " Tools that change a production org, or one of unknown type, ask the user first, or refuse if the client cannot ask."}`,
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },
@@ -114,6 +121,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
           cacheScope: definitionsVaryByConfig({
             allowProductionOrgs,
             apexExecutionDisabled,
+            readOnly,
             denyList,
           })
             ? "private"
@@ -157,7 +165,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     consumeConfirmation,
   };
 
-  // The org tools load lazily, as apexlog_execute_anonymous does: they reach
+  // The org tools load lazily: they reach
   // `@salesforce/core`, which a session that only reads logs must not pay for.
   type OrgToolHandler<Args, Result> = (
     server: McpServer,
@@ -179,6 +187,11 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     withRelogin(async (args: Args, ctx: ServerContext) =>
       (await load())(server, args, ctx, orgAccessPolicy),
     );
+  // A tool that changes an org; refused, it never loads, so it loads no Salesforce SDK.
+  const orgWriteTool = <Args, Result>(
+    refusal: string | undefined,
+    load: () => Promise<OrgToolHandler<Args, Result>>,
+  ) => (refusal === undefined ? orgTool(load) : async () => toolError(refusal));
 
   server.registerTool(
     "apexlog_list_org_logs",
@@ -194,29 +207,22 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
 
   server.registerTool(
     "apexlog_create_trace_flag",
-    createTraceFlagToolConfig,
-    orgTool(async () => (await import("./tools/createTraceFlag.js")).createTraceFlag),
+    createTraceFlagToolConfig(orgWriteRefusal),
+    orgWriteTool(
+      orgWriteRefusal,
+      async () => (await import("./tools/createTraceFlag.js")).createTraceFlag,
+    ),
   );
 
   // Always registered, so agents can discover it regardless of configuration.
-  // Whether a given call is permitted is decided per call, inside the handler.
+  // A flag refuses every call here; otherwise the handler decides per call.
   server.registerTool(
     "apexlog_execute_anonymous",
-    executeAnonymousToolConfig(apexExecutionDisabled),
-    withRelogin(async (args: unknown, ctx: ServerContext) => {
-      const refused = apexExecutionRefusal(apexExecutionDisabled);
-      if (refused) {
-        return refused;
-      }
-      // Loaded here and not at the top of the file: the tool reaches
-      // `@salesforce/core`, and a session that only reads logs must not pay
-      // the 250 ms it costs to load.
-      const { executeAnonymous } = await import("./tools/executeAnonymous.js");
-      return executeAnonymous(server, args as ExecuteAnonymousArgs, ctx, {
-        ...orgAccessPolicy,
-        apexExecutionDisabled,
-      });
-    }),
+    executeAnonymousToolConfig(apexRefusal),
+    orgWriteTool(
+      apexRefusal,
+      async () => (await import("./tools/executeAnonymous.js")).executeAnonymous,
+    ),
   );
 
   return server;
@@ -265,6 +271,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
       "allowed-orgs": { type: "string" },
       "allow-production-orgs": { type: "boolean" },
       "no-apex-execution": { type: "boolean" },
+      "read-only": { type: "boolean" },
       "deny-orgs": { type: "string", multiple: true },
     },
   });
@@ -280,6 +287,7 @@ export function parseServerConfig(argv: string[]): ServerConfig {
   return {
     allowProductionOrgs: values["allow-production-orgs"] ?? false,
     apexExecutionDisabled: values["no-apex-execution"] ?? false,
+    readOnly: values["read-only"] ?? false,
     denyList,
   };
 }

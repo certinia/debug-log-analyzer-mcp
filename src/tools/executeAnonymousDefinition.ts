@@ -20,7 +20,7 @@ import {
   LOG_LEVELS,
   TRACE_CATEGORIES,
 } from "../salesforce/debugLevels.js";
-import { APEX_EXECUTION_DISABLED_MESSAGE } from "../policy/orgExecutionPolicy.js";
+import { describeDisabled } from "../policy/orgExecutionPolicy.js";
 import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
 import { absolutePathSchema } from "./localFile.js";
 
@@ -63,16 +63,13 @@ const EXECUTE_ANONYMOUS_DESCRIPTION =
   "Execute anonymous Apex in a Salesforce org as the targetOrg user; DML commits unless the run fails. Saves the debug log and returns its path for the analysis tools. With no active trace flag, adds one for the run, deleted after, and a debug level, left in the org.";
 
 /**
- * The tool is always registered so that agents can discover it. When Apex
- * execution is disabled the description says so up front, which saves the agent
- * a call to find out.
+ * The tool is always registered so that agents can discover it. `refusal` is
+ * what this server answers every call, or undefined when it runs Apex.
  */
-export function executeAnonymousToolConfig(apexExecutionDisabled = false) {
+export function executeAnonymousToolConfig(refusal?: string) {
   return {
     title: "Execute Anonymous Apex",
-    description: apexExecutionDisabled
-      ? `[DISABLED on this server] ${EXECUTE_ANONYMOUS_DESCRIPTION} ${APEX_EXECUTION_DISABLED_MESSAGE}`
-      : EXECUTE_ANONYMOUS_DESCRIPTION,
+    description: describeDisabled(EXECUTE_ANONYMOUS_DESCRIPTION, refusal),
     inputSchema: toolInputSchema(executeAnonymousInputSchema),
     // All four hints, where the read-only tools state only the two that differ
     // from the spec default: this is the one tool where a client that misreads a

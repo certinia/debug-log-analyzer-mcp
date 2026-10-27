@@ -97,7 +97,7 @@ Build the server, or run the watcher, first.
    node dist/index.js --allow-production-orgs
    ```
 
-   To disable Apex execution altogether, use `--no-apex-execution`. To refuse named orgs or whole org types, whatever `--allow-production-orgs` says, use `--deny-orgs`. See the [README](README.md#production-safety) for the full policy.
+   To disable Apex execution altogether, use `--no-apex-execution`. To refuse every tool that changes an org, use `--read-only`. To refuse named orgs or whole org types, whatever `--allow-production-orgs` says, use `--deny-orgs`. See the [README](README.md#production-safety) for the full policy.
 
 ## 🔤 Naming Tools and Fields
 

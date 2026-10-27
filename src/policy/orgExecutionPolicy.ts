@@ -98,25 +98,28 @@ export const APEX_EXECUTION_DISABLED_MESSAGE =
   "Anonymous Apex execution is disabled by server configuration (--no-apex-execution). " +
   "Other tools remain available.";
 
+export const READ_ONLY_MESSAGE =
+  "Tools that change an org are disabled by server configuration (--read-only). " +
+  "Other tools remain available.";
+
+/**
+ * A tool's description, marked up front when this server refuses every call
+ * to it, which saves the agent a call to find out.
+ */
+export function describeDisabled(
+  description: string,
+  refusal: string | undefined,
+): string {
+  return refusal === undefined
+    ? description
+    : `[DISABLED on this server] ${description} ${refusal}`;
+}
+
 export function toolError(text: string) {
   return {
     content: [{ type: "text" as const, text }],
     isError: true,
   };
-}
-
-/**
- * The refusal a server started with `--no-apex-execution` owes every call, or
- * `undefined` when execution is allowed.
- *
- * Asked by the registered handler before it loads the tool, and by the tool
- * itself for a direct caller, so the decision exists once and a disabled server
- * loads no Salesforce SDK at all.
- */
-export function apexExecutionRefusal(apexExecutionDisabled: boolean) {
-  return apexExecutionDisabled
-    ? toolError(APEX_EXECUTION_DISABLED_MESSAGE)
-    : undefined;
 }
 
 function truncate(text: string, max: number): string {
