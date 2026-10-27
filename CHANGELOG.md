@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - --deny-orgs: refuse named orgs, or an org type with `type:production`, to every org tool - running Apex and reading logs alike. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186], [#209])
 - apexlog_execute_anonymous: run from a file with `apexFilePath`, reuse saved scripts and save tokens ([#212])
 - apexlog_get_summary: report the exceptions a transaction threw, with where and how often, and how many flow elements failed ([#208])
-- --read-only: refuse every tool that changes an org - running Apex and creating trace flags - while the tools that read logs keep working
+- --read-only: refuse every tool that changes an org - running Apex and creating trace flags - while the tools that read logs keep working ([#265])
 
 ### Fixed
 
@@ -159,3 +159,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#248]: https://github.com/certinia/debug-log-analyzer-mcp/pull/248
 [#256]: https://github.com/certinia/debug-log-analyzer-mcp/issues/256
 [#260]: https://github.com/certinia/debug-log-analyzer-mcp/pull/260
+[#265]: https://github.com/certinia/debug-log-analyzer-mcp/pull/265
