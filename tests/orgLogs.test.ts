@@ -43,6 +43,7 @@ import {
 import { compileDenyList } from "../src/policy/orgDenyList";
 import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
 import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
+import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<typeof readLocalOrg>;
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
@@ -256,6 +257,24 @@ describe("getOrgLogs", () => {
       logs: [{ id: "07L000000000001EAA", downloaded: true }],
       failed: [{ id: "07L000000000009EAA", error: "invalid parameter value" }],
     });
+  });
+
+  // Five ids against four parallel requests, so the fifth starts after the login is known dead.
+  it("should ask once for a new login when the session dies, and try no more downloads", async () => {
+    mockDownload.mockRejectedValue(
+      Object.assign(new Error("Session expired or invalid"), { errorCode: "INVALID_SESSION_ID" }),
+    );
+    const ids = [1, 2, 3, 4, 5].map((n) => `07L00000000000${n}EAA`);
+
+    const result = decode(
+      text((await getOrgLogs(server(), { ids }, ctx, policy())) as never),
+    ) as { warning: string; failed: { id: string; error: string }[] };
+
+    expect(result.warning).toBe(RELOGIN_HINT);
+    expect(result.failed.map((row) => row.error)).toEqual([
+      ...Array(4).fill("Session expired or invalid"),
+      expect.stringMatching(/^not downloaded/),
+    ]);
   });
 
   it("should download a log once whether named by its 15- or 18-character id", async () => {

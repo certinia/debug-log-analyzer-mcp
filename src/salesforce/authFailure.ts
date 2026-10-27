@@ -16,13 +16,18 @@ function isRefusedRefresh(error: Error): boolean {
   return error.name === "RefreshTokenAuthError" && (error.cause as Error | undefined)?.name === "invalid_grant";
 }
 
-/** `error` with `RELOGIN_HINT` added when it says the org's login no longer works, else `error` itself. */
-export function withReloginHint(error: unknown): unknown {
-  if (!(error instanceof Error) || error.message.includes(RELOGIN_HINT)) {
-    return error;
+/** Whether `error` says the org's saved login no longer works. */
+export function isLoginFailure(error: unknown): error is Error {
+  if (!(error instanceof Error)) {
+    return false;
   }
   const { errorCode } = error as { errorCode?: unknown };
-  if (!isRefusedRefresh(error) && !AUTH_FAILURE_CODES.has(errorCode)) {
+  return isRefusedRefresh(error) || AUTH_FAILURE_CODES.has(errorCode);
+}
+
+/** `error` with `RELOGIN_HINT` added when it says the org's login no longer works, else `error` itself. */
+export function withReloginHint(error: unknown): unknown {
+  if (!isLoginFailure(error) || error.message.includes(RELOGIN_HINT)) {
     return error;
   }
   return new Error(`${error.message} ${RELOGIN_HINT}`, { cause: error });
