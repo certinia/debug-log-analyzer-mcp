@@ -42,7 +42,7 @@ const listOrgLogsInputSchema = {
     .optional()
     .describe('Part of the operation, any case, e.g. "aura" for /aura'),
   request: z.string().optional().describe('e.g. "Api" or "Application"'),
-  succeeded: z.boolean().optional().describe("false for failed logs only"),
+  succeeded: z.boolean().optional().describe("true: succeeded logs only; false: failed logs only"),
   startTimeFrom: dateTime
     .optional()
     .describe("ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z"),

@@ -44,7 +44,7 @@ export type CreateTraceFlagArgs = z.infer<
 export const createTraceFlagToolConfig = {
   title: "Create Trace Flag",
   description:
-    "Trace a user, class or trigger in a Salesforce org until the trace flag expires. A user's flag stores each transaction they run as a debug log, which can fill log storage; a class or trigger flag only sets that code's levels. Refused if one of its log type exists. Leaves a debug level in the org.",
+    "Trace a user, class or trigger in a Salesforce org until the trace flag expires. A user's flag stores each transaction they run as a debug log, which can fill log storage; a class or trigger flag only sets that code's levels. Refused if a flag of its log type overlaps the new one. Leaves a debug level in the org.",
   inputSchema: toolInputSchema(createTraceFlagInputSchema),
   annotations: {
     destructiveHint: false,

@@ -42,7 +42,7 @@ Then ask your assistant to analyze a log. The org tools also need an org authent
 
 <!-- token-cost-summary:start -->
 
-Keeping the server connected costs ~2,435 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~2,445 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
 
 <!-- token-cost-summary:end -->
 
@@ -255,7 +255,7 @@ Lists the debug logs stored in an org - a slow UI action, an integration user's 
 | `user`             | string  | No       | Username whose activity was logged |
 | `operation`        | string  | No       | Part of the operation, any case, e.g. "aura" for /aura |
 | `request`          | string  | No       | e.g. "Api" or "Application" |
-| `succeeded`        | boolean | No       | false for failed logs only |
+| `succeeded`        | boolean | No       | true: succeeded logs only; false: failed logs only |
 | `startTimeFrom`    | string  | No       | ISO 8601 with a zone, e.g. 2026-10-09T09:00:00Z |
 | `startTimeTo`      | string  | No       |  |
 | `minFileSizeBytes` | number  | No       |  |
@@ -288,7 +288,7 @@ Starts logging a user, so an integration user's requests reach the org's logs, f
 
 A flag lives up to 1,439 minutes: Salesforce refuses a flag of a full day. The debug level it uses stays in the org after the flag ends, for the next flag at the same levels.
 
-Every transaction a traced user runs while the flag lives is stored, which can fill the org's 1,000 MB of log storage: when it is full, no one can set a flag until logs are deleted in Setup > Debug Logs. When the entity already has a flag of its type that has not ended, the call is refused and names it, with its levels, its expiry and the `sf` command that deletes it - a flag is never changed here. Against a production org, the call asks first, naming the entity, the levels and the minutes.
+Every transaction a traced user runs while the flag lives is stored, which can fill the org's 1,000 MB of log storage: when it is full, no one can set a flag until logs are deleted in Setup > Debug Logs, or expire after 24 hours. When the entity already has a flag of its type whose time overlaps the new one, the call is refused and names it, with its levels, its expiry and the `sf` command that deletes it - a flag is never changed here. Against a production org, the call asks first, naming the entity, the levels and the minutes.
 
 <!-- params-apexlog_create_trace_flag:start -->
 
@@ -311,13 +311,13 @@ Every request carries every tool definition, whether you call them or not. Each 
 | ------------------------------ | ----------------------------------------------------------- |
 | `apexlog_list_slow_operations` | ~524                                                        |
 | `apexlog_execute_anonymous`    | ~424                                                        |
-| `apexlog_create_trace_flag`    | ~345                                                        |
+| `apexlog_create_trace_flag`    | ~349                                                        |
 | `apexlog_search_events`        | ~330                                                        |
-| `apexlog_list_org_logs`        | ~307                                                        |
+| `apexlog_list_org_logs`        | ~313                                                        |
 | `apexlog_get_org_logs`         | ~200                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~2,435** (1.2% of a 200K context), **+59% vs 1.x ~1,529** |
+| **Total**                      | **~2,445** (1.2% of a 200K context), **+60% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 

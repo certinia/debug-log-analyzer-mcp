@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - every tool: refuse a parameter it does not have, instead of ignoring it and running without it ([#244])
 - apexlog_execute_anonymous: say when the org's log storage is full and where to free it, instead of only that the trace flag was refused ([#245])
 - apexlog_execute_anonymous: refuse an `outputDir` it cannot write before running the Apex, instead of failing after its DML has committed ([#260])
+- apexlog_execute_anonymous: say that every other tool stays available when Apex execution is off, not only the log analysis tools
 
 ## [2.0.2] - 2026-10-23
 
