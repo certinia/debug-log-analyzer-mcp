@@ -21,7 +21,7 @@ import {
   type StoredLog,
 } from "./logStore.js";
 import { progressReporter } from "./progress.js";
-import { omitEmpty, toonResult } from "./responseShaping.js";
+import { omitEmpty, toonResult, warningField } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 
 type Saved = { id: string } & StoredLog;
@@ -114,14 +114,10 @@ export async function getOrgLogs(
       );
   const logs = results.filter((r): r is Saved => !("error" in r));
   const failed = results.filter((r): r is Failed => "error" in r);
-  // Once, not on every row: a failed row is returned, so server.ts's relogin wrapper never adds it.
-  const warnings = [store?.warning, loginFailed ? RELOGIN_HINT : undefined].filter(
-    (text): text is string => text !== undefined,
-  );
-
   return toonResult({
     org: access.orgLabel,
-    ...(warnings.length && { warning: warnings.join(" ") }),
+    // The hint once, not on every row: a failed row is returned, so server.ts's relogin wrapper never adds it.
+    ...warningField(store?.warning, loginFailed ? RELOGIN_HINT : undefined),
     logs,
     ...omitEmpty({ failed }),
     outputDirCreated: store?.created ?? false,

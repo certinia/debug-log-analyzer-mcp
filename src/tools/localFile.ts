@@ -20,7 +20,7 @@ export const absolutePathSchema = z
   .string()
   .refine(isAbsolute, "must be an absolute path");
 
-// The codes a read most often fails with, in words; the code stays beside them for a search.
+// The codes a file call most often fails with, in words; the code stays beside them for a search.
 const CODE_WORDS: Partial<Record<string, string>> = {
   EACCES: "permission denied",
   EPERM: "permission denied",
