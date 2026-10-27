@@ -20,7 +20,7 @@ jest.mock("../src/salesforce/apexLogs", () => ({
   downloadApexLog: jest.fn(),
 }));
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
@@ -44,6 +44,7 @@ import { compileDenyList } from "../src/policy/orgDenyList";
 import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
 import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
 import { RELOGIN_HINT } from "../src/salesforce/authFailure";
+import { toLongId } from "../src/salesforce/soql";
 
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<typeof readLocalOrg>;
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
@@ -253,28 +254,51 @@ describe("getOrgLogs", () => {
       policy(),
     );
 
-    expect(decode(text(result as never))).toMatchObject({
+    const decoded = decode(text(result as never));
+    expect(decoded).toMatchObject({
       logs: [{ id: "07L000000000001EAA", downloaded: true }],
       failed: [{ id: "07L000000000009EAA", error: "invalid parameter value" }],
     });
+    // Only a dead login asks for a new one.
+    expect(decoded).not.toHaveProperty("warning");
   });
 
-  // Five ids against four parallel requests, so the fifth starts after the login is known dead.
-  it("should ask once for a new login when the session dies, and try no more downloads", async () => {
-    mockDownload.mockRejectedValue(
-      Object.assign(new Error("Session expired or invalid"), { errorCode: "INVALID_SESSION_ID" }),
-    );
-    const ids = [1, 2, 3, 4, 5].map((n) => `07L00000000000${n}EAA`);
+  describe("when the session dies part way", () => {
+    const sessionDied = () =>
+      Object.assign(new Error("Session expired or invalid"), { errorCode: "INVALID_SESSION_ID" });
+    const ids = Array.from({ length: 10 }, (_, n) => `07L00000000000${n}`);
+    type Result = {
+      warning: string;
+      logs: { id: string; downloaded: boolean }[];
+      failed: { error: string }[];
+    };
+    const run = async () =>
+      decode(text((await getOrgLogs(server(), { ids }, ctx, policy())) as never)) as Result;
 
-    const result = decode(
-      text((await getOrgLogs(server(), { ids }, ctx, policy())) as never),
-    ) as { warning: string; failed: { id: string; error: string }[] };
+    it("should keep what saved, ask once for a new login, and start no more downloads", async () => {
+      mockDownload.mockResolvedValueOnce("log").mockRejectedValue(sessionDied());
 
-    expect(result.warning).toBe(RELOGIN_HINT);
-    expect(result.failed.map((row) => row.error)).toEqual([
-      ...Array(4).fill("Session expired or invalid"),
-      expect.stringMatching(/^not downloaded/),
-    ]);
+      const result = await run();
+
+      const tried = mockDownload.mock.calls.length;
+      expect(result.warning).toBe(RELOGIN_HINT);
+      expect(result.logs).toHaveLength(1);
+      expect(tried).toBeLessThan(ids.length);
+      expect(result.failed.filter((row) => row.error.startsWith("Skipped"))).toHaveLength(
+        ids.length - tried,
+      );
+    });
+
+    it("should still return a log saved by an earlier call", async () => {
+      mockDownload.mockRejectedValue(sessionDied());
+      const saved = toLongId(ids[9]!);
+      mkdirSync(path.join(root, ".apex-log-mcp"));
+      writeFileSync(path.join(root, ".apex-log-mcp", `${saved}.log`), "earlier");
+
+      const result = await run();
+
+      expect(result.logs).toEqual([expect.objectContaining({ id: saved, downloaded: false })]);
+    });
   });
 
   it("should download a log once whether named by its 15- or 18-character id", async () => {
@@ -316,6 +340,26 @@ describe("getOrgLogs", () => {
     });
     expect(existsSync(path.join(root, ".apex-log-mcp"))).toBe(false);
   });
+
+  // Root writes anywhere, and Windows ignores the mode on a directory.
+  (process.platform === "win32" || process.getuid?.() === 0 ? it.skip : it)(
+    "should refuse an outputDir it cannot write before downloading anything",
+    async () => {
+      const readOnly = path.join(root, "read-only");
+      mkdirSync(readOnly, { mode: 0o555 });
+
+      const result = await getOrgLogs(
+        server(),
+        { ids: ["07L000000000001EAA"], outputDir: readOnly },
+        ctx,
+        policy(),
+      );
+
+      expect(result).toMatchObject({ isError: true });
+      expect(text(result as never)).toContain(`Cannot write debug logs to ${readOnly}`);
+      expect(mockDownload).not.toHaveBeenCalled();
+    },
+  );
 
   it("should report each log saved as progress, out of every log asked for", async () => {
     const notify = jest.fn().mockResolvedValue(undefined);

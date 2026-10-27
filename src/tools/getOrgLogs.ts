@@ -14,7 +14,12 @@ import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
 import { toolError } from "../policy/orgExecutionPolicy.js";
-import { openLogStore, saveStoredLog, type StoredLog } from "./logStore.js";
+import {
+  openLogStore,
+  saveStoredLog,
+  unwritableLogDir,
+  type StoredLog,
+} from "./logStore.js";
 import { progressReporter } from "./progress.js";
 import { omitEmpty, toonResult } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
@@ -22,7 +27,7 @@ import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 type Saved = { id: string } & StoredLog;
 type Failed = { id: string; error: string };
 
-const NOT_TRIED = "not downloaded: an earlier download found the org's login no longer works";
+const NOT_TRIED = "Skipped: the org's login failed on an earlier log in this call.";
 
 export async function getOrgLogs(
   server: McpServer,
@@ -58,6 +63,13 @@ export async function getOrgLogs(
       ).map(toLongId),
     ),
   ];
+  // `mkdir` passes an existing directory it cannot write, so check, or each download fails only once fetched.
+  const unwritable = ids.length
+    ? await unwritableLogDir(args.outputDir, access.rootPaths)
+    : undefined;
+  if (unwritable) {
+    return toolError(`${unwritable} No log was downloaded. Pass a writable outputDir.`);
+  }
   // After the ids, so a failed query leaves no directory and no stderr line behind; none at all for no logs.
   const store = ids.length
     ? await openLogStore(args.outputDir, access.workspace, access.rootPaths)
@@ -78,13 +90,13 @@ export async function getOrgLogs(
           try {
             // The SDK sends no result once cancelled, so this only stops the work.
             signal.throwIfAborted();
-            if (loginFailed) {
-              return { id, error: NOT_TRIED };
-            }
             return {
               id,
+              // Inside the download, so a log already saved is still found with no org call.
               ...(await saveStoredLog(store.dir, id, () =>
-                downloadApexLog(connection, id),
+                loginFailed
+                  ? Promise.reject(new Error(NOT_TRIED))
+                  : downloadApexLog(connection, id),
               )),
             };
           } catch (error) {

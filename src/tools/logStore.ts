@@ -31,7 +31,7 @@ function logWarning(warning: string): string {
  * project root, the same base the default uses, not to wherever the client
  * spawned this server.
  */
-export function logStoreDir(
+function logStoreDir(
   outputDir: string | undefined,
   rootPaths: string[],
 ): string {
@@ -39,32 +39,43 @@ export function logStoreDir(
 }
 
 /**
- * Why debug logs cannot be written to `dir`, or undefined. Creates nothing, so
- * a caller about to do what cannot be undone can refuse first, and make the
- * directory only once it has a log to put there.
+ * Why `openLogStore` could not make and write the same directory, or
+ * undefined. Creates nothing, so a caller about to do what cannot be undone
+ * can refuse first, and make the directory only once it has a log for it.
  */
-export async function unwritableLogDir(dir: string): Promise<string | undefined> {
-  // `mkdir` makes what is missing, so the nearest directory that exists is the one to check.
-  let nearest = dir;
-  for (;;) {
-    try {
-      if (!(await fs.stat(nearest)).isDirectory()) {
-        return `Cannot write debug logs to ${dir}: ${fsErrorWords({ code: "ENOTDIR" })}.`;
-      }
-      await fs.access(nearest, fsConstants.W_OK);
-      return undefined;
-    } catch (error) {
-      const parent = path.dirname(nearest);
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === nearest) {
-        return `Cannot write debug logs to ${dir}: ${fsErrorWords(error)}.`;
-      }
-      nearest = parent;
+export async function unwritableLogDir(
+  outputDir: string | undefined,
+  rootPaths: string[],
+): Promise<string | undefined> {
+  const dir = logStoreDir(outputDir, rootPaths);
+  const blocker = await writeBlocker(dir);
+  return blocker && `Cannot write debug logs to ${dir}: ${blocker}.`;
+}
+
+// `mkdir` makes what is missing, so the nearest entry that exists decides.
+async function writeBlocker(target: string): Promise<string | undefined> {
+  try {
+    if (!(await fs.stat(target)).isDirectory()) {
+      return fsErrorWords({ code: "ENOTDIR" });
     }
+    // Search as well as write: without it, nothing can be made inside.
+    await fs.access(target, fsConstants.W_OK | fsConstants.X_OK);
+    return undefined;
+  } catch (error) {
+    const parent = path.dirname(target);
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === target) {
+      return fsErrorWords(error);
+    }
+    // `stat` follows a link, so one to nothing reads as missing, yet `mkdir` cannot make it.
+    if (await fs.lstat(target).then(() => true, () => false)) {
+      return "a symbolic link to nothing";
+    }
+    return writeBlocker(parent);
   }
 }
 
 /**
- * Resolve and create `outputDir`, at `logStoreDir`.
+ * Resolve and create `outputDir`, where `unwritableLogDir` checked.
  *
  * The MCP spec expects a server to work inside the roots the client declares,
  * and `outputDir` is agent-supplied, so it is the path an injected instruction
