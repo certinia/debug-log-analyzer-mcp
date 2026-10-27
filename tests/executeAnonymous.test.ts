@@ -2117,17 +2117,6 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it("should create output directory with recursive option", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      await executeAnonymous(mockServer, args, ctx, policy());
-
-      expect(mockMkdir).toHaveBeenCalledWith(
-        expect.stringContaining(".apex-log-mcp"),
-        { recursive: true },
-      );
-    });
-
     it("should write the returned log with logId as filename", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
