@@ -394,7 +394,7 @@ Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as
 
 | Flag                      | Description                                                                                                              |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `--allow-production-orgs` | Treat production orgs like any other - no confirmation, no refusal. Only set this if production targets are intentional. |
+| `--allow-production-orgs` | Run against production orgs, and orgs whose type cannot be read, with no confirmation. A `--deny-orgs` entry still refuses. Only set this if production targets are intentional. |
 | `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. Every other tool is unaffected.            |
 | `--deny-orgs`             | Refuse these orgs: org id, username, alias or instance URL, with `*` as a glob, or `type:` and an org type. |
 
