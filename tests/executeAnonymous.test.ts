@@ -8,12 +8,13 @@ jest.mock("node:fs", () => ({
     writeFile: jest.fn().mockResolvedValue(undefined),
     link: jest.fn().mockResolvedValue(undefined),
     rm: jest.fn().mockResolvedValue(undefined),
-    stat: jest.fn().mockResolvedValue({ size: 1024 }),
+    stat: jest.fn().mockResolvedValue({ size: 1024, isDirectory: () => true }),
+    access: jest.fn().mockResolvedValue(undefined),
     open: jest.fn(),
     // No symlinks in the test filesystem, so every path resolves to itself.
     realpath: jest.fn((target: string) => Promise.resolve(target)),
   },
-  constants: { O_RDONLY: 0, O_NONBLOCK: 4 },
+  constants: { O_RDONLY: 0, O_NONBLOCK: 4, W_OK: 2 },
 }));
 
 // Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
@@ -568,6 +569,7 @@ describe("Execute Anonymous", () => {
 
       expect(mockSobject).not.toHaveBeenCalled();
       expect(mockWriteFile).not.toHaveBeenCalled();
+      expect(mockMkdir).not.toHaveBeenCalled();
     });
 
     it("should throw error when the response carries no result", async () => {
@@ -2094,6 +2096,29 @@ describe("Execute Anonymous", () => {
   });
 
   describe("log file saving", () => {
+    it("should refuse an outputDir it cannot write before the Apex runs", async () => {
+      (fs.access as jest.Mock).mockRejectedValueOnce(
+        Object.assign(new Error("EACCES: permission denied, access '/readonly/logs'"), { code: "EACCES" }),
+      );
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode, outputDir: "/readonly/logs" },
+        ctx,
+        policy(),
+      );
+
+      expect(result).toMatchObject({
+        isError: true,
+        content: [
+          {
+            text: "Cannot write debug logs to /readonly/logs: permission denied (EACCES). The Apex was not run. Pass a writable outputDir.",
+          },
+        ],
+      });
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
     it("should create output directory with recursive option", async () => {
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
@@ -2295,7 +2320,7 @@ describe("Execute Anonymous", () => {
     });
 
     it("should return file size from stat", async () => {
-      mockStat.mockResolvedValue({ size: 2048 } as any);
+      mockStat.mockResolvedValue({ size: 2048, isDirectory: () => true } as any);
 
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 

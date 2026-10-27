@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks: say a `logFilePath` that is a directory is one, instead of Node's raw error ([#234])
 - every tool: refuse a parameter it does not have, instead of ignoring it and running without it ([#244])
 - apexlog_execute_anonymous: say when the org's log storage is full and where to free it, instead of only that the trace flag was refused ([#245])
+- apexlog_execute_anonymous: refuse an `outputDir` it cannot write before running the Apex, instead of failing after its DML has committed ([#260])
 
 ## [2.0.2] - 2026-10-23
 
@@ -156,3 +157,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#245]: https://github.com/certinia/debug-log-analyzer-mcp/pull/245
 [#248]: https://github.com/certinia/debug-log-analyzer-mcp/pull/248
 [#256]: https://github.com/certinia/debug-log-analyzer-mcp/issues/256
+[#260]: https://github.com/certinia/debug-log-analyzer-mcp/pull/260

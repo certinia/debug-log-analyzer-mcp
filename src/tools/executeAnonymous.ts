@@ -29,7 +29,12 @@ import {
 import { loadApexLog } from "./apexLogSource.js";
 import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
-import { openLogStore, writeDebugLog } from "./logStore.js";
+import {
+  logStoreDir,
+  openLogStore,
+  unwritableLogDir,
+  writeDebugLog,
+} from "./logStore.js";
 import { NS_TO_MS, roundMs, toonResult } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
@@ -238,6 +243,12 @@ export async function executeAnonymous(
     workspace,
     rootPaths,
   } = access;
+
+  // Checked now, made after: the run commits its DML, so a failure found after it invites a second run.
+  const unwritable = await unwritableLogDir(logStoreDir(args.outputDir, rootPaths));
+  if (unwritable) {
+    return toolError(`${unwritable} The Apex was not run. Pass a writable outputDir.`);
+  }
 
   await report("Setting the trace flag");
   const debugLevelId = storesLogs

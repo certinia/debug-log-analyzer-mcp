@@ -4,14 +4,17 @@
 
 import {
   promises as fs,
+  chmodSync,
+  existsSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { writeDebugLog } from "../src/tools/logStore";
+import { unwritableLogDir, writeDebugLog } from "../src/tools/logStore";
 
 type FileHandle = Awaited<ReturnType<typeof fs.open>>;
 
@@ -99,4 +102,45 @@ describe("writeDebugLog", () => {
     expect(readFileSync(path.join(dir, "07L000000000001AAA.log"), "utf8")).toBe("first");
     expect(readFileSync(filePath, "utf8")).toBe("second");
   });
+});
+
+describe("unwritableLogDir", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), "log-dir-"));
+  });
+
+  afterEach(() => {
+    chmodSync(dir, 0o700);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("should accept a directory not made yet, and make nothing", async () => {
+    const target = path.join(dir, "a", "b");
+
+    expect(await unwritableLogDir(target)).toBeUndefined();
+    expect(existsSync(path.join(dir, "a"))).toBe(false);
+  });
+
+  it("should refuse a path through a file", async () => {
+    writeFileSync(path.join(dir, "file"), "");
+    const target = path.join(dir, "file", "logs");
+
+    expect(await unwritableLogDir(target)).toBe(
+      `Cannot write debug logs to ${target}: not a directory (ENOTDIR).`,
+    );
+  });
+
+  // Root writes anywhere, so the refusal cannot show there.
+  (process.getuid?.() === 0 ? it.skip : it)(
+    "should refuse a directory that exists but cannot be written",
+    async () => {
+      chmodSync(dir, 0o555);
+
+      expect(await unwritableLogDir(dir)).toBe(
+        `Cannot write debug logs to ${dir}: permission denied (EACCES).`,
+      );
+    },
+  );
 });
