@@ -401,7 +401,7 @@ const V1_DEFINITION_TOTAL = sum(Object.values(V1_DEFINITION_TOKENS));
  * Searching a log's events, for what the code printed or what ran under one
  * method, added ~330 inside a budget of 347 (#144).
  * Where a slow operation is called from, `groupBy: "callSite"`, added ~26 to
- * the ranking, which then had no headroom left, so its budget rose by 28.
+ * the ranking, which then had no headroom left, so its budget rose by 28 (#274).
  * The budgets sum to this cap, so raising any budget means raising the cap, on
  * purpose, with the reason here.
  */
