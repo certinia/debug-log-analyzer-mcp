@@ -35,6 +35,7 @@ import { NS_TO_MS, roundMs, toolError, toonResult, warningField } from "./respon
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import type { Confirmable } from "../policy/orgExecutionPolicy.js";
+import { errorText } from "../errorText.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */
@@ -360,10 +361,6 @@ async function createRunTraceFlag(
     console.error(`[apex-log-mcp] ${warning}`);
     return { warning };
   }
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 // Reported, not thrown: the log is in hand and the flag expires on its own. A flag already gone is removed.

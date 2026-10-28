@@ -24,6 +24,7 @@ import {
   type TraceFlagRow,
 } from "../salesforce/traceFlags.js";
 import { withReloginHint } from "../salesforce/authFailure.js";
+import { errorText } from "../errorText.js";
 import { toolError, toonResult } from "./responseShaping.js";
 import type { CreateTraceFlagArgs } from "./traceFlagsDefinition.js";
 
@@ -116,7 +117,7 @@ export async function createTraceFlag(
   } catch (caught) {
     // Returned, not thrown, so server.ts's relogin wrapper never sees it.
     const error = withReloginHint(caught);
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorText(error);
     const next = /already being traced/i.test(message)
       ? // A flag set while the call waited, such as for a confirmation, was not there to name.
         " Another flag was set on it while this call waited: call this tool again to see it."

@@ -27,6 +27,7 @@ import {
   type DenyList,
 } from "../policy/orgDenyList.js";
 import { toolError } from "../tools/responseShaping.js";
+import { errorText } from "../errorText.js";
 
 const ROOTS_TIMEOUT_MS = 5_000;
 
@@ -232,7 +233,7 @@ async function getWorkspace(
     if (!(error instanceof SdkError)) {
       return {
         kind: "unknown",
-        reason: `the client's roots could not be read: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `the client's roots could not be read: ${errorText(error)}`,
       };
     }
     switch (error.code) {

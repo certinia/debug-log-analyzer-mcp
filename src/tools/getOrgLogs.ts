@@ -19,6 +19,7 @@ import {
   unwritableLogDir,
   type StoredLog,
 } from "./logStore.js";
+import { errorText } from "../errorText.js";
 import { progressReporter } from "./progress.js";
 import { omitEmpty, toolError, toonResult, warningField } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
@@ -102,7 +103,7 @@ export async function getOrgLogs(
             loginFailed ||= isLoginFailure(error);
             return {
               id,
-              error: error instanceof Error ? error.message : String(error),
+              error: errorText(error),
             };
           } finally {
             done++;

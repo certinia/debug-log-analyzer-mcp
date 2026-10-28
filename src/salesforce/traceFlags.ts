@@ -6,6 +6,7 @@ import {
   toTraceConfig,
   type TraceConfig,
 } from "./debugLevels.js";
+import { errorText } from "../errorText.js";
 import { errorList, saveErrorText } from "./saveErrors.js";
 import {
   CLOCK_SKEW_MS,
@@ -169,7 +170,7 @@ export async function destroyTraceFlag(
     if (typeof error === "object" && error !== null && isAlreadyGone([error])) {
       return undefined;
     }
-    return error instanceof Error ? error.message : String(error);
+    return errorText(error);
   }
 }
 
