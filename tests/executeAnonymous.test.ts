@@ -796,21 +796,6 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it("should propagate errors from ensureDebugLevel", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      mockEnsureDebugLevel.mockRejectedValue(
-        new Error("Failed to create debug level"),
-      );
-
-      await expect(
-        executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Failed to create debug level");
-
-      expect(createTraceFlag).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
     // A live flag already stores the log, and the header sets this run's levels.
     it("runs on the user's live trace flag and leaves it untouched", async () => {
       mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: true });
@@ -916,11 +901,21 @@ describe("Execute Anonymous", () => {
       expect(toonDecode(result).warning).toBeUndefined();
     });
 
-    // The header returns the log without a flag; only the file's log id depends on one.
-    it("runs and warns when Salesforce refuses the run's trace flag", async () => {
-      mockCreateTraceFlag.mockRejectedValue(
-        new Error("FIELD_INTEGRITY_EXCEPTION: overlapping trace flag"),
-      );
+    // The header returns the log without a flag; only the file's log id depends on one, and the debug level is only for the flag.
+    it.each([
+      [
+        "trace flag",
+        () => mockCreateTraceFlag.mockRejectedValue(new Error("FIELD_INTEGRITY_EXCEPTION: overlapping trace flag")),
+        ["overlapping trace flag"],
+      ],
+      [
+        // Salesforce's error does not name the record, so the warning must, or the user looks at their trace flags.
+        "debug level",
+        () => mockEnsureDebugLevel.mockRejectedValue(new Error("INSUFFICIENT_ACCESS_OR_READONLY: insufficient access rights on object id")),
+        ["Apex_Log_MCP_Debug_Level", "insufficient access rights"],
+      ],
+    ])("runs and warns when Salesforce refuses the run's %s", async (_c, refuse, reasons) => {
+      refuse();
 
       const result = await executeAnonymous(
         mockServer,
@@ -937,7 +932,7 @@ describe("Execute Anonymous", () => {
       expect(destroyTraceFlag).not.toHaveBeenCalled();
       expect(decoded.succeeded).toBe(true);
       expect(decoded.warning).toContain("Could not set a trace flag");
-      expect(decoded.warning).toContain("overlapping trace flag");
+      reasons.forEach((reason) => expect(decoded.warning).toContain(reason));
       // Another run's flag may have stored it, or nothing did, so the one match is checked.
       expect(mockRequest).toHaveBeenCalledWith(
         expect.stringMatching(new RegExp(`ApexLog/${testLogId}/Body$`)),

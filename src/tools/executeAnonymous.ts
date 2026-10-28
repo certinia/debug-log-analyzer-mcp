@@ -5,6 +5,7 @@ import { promises as fs, constants as fsConstants } from "node:fs";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import {
+  DEBUG_LEVEL_NAME,
   DEFAULT_TRACE_CONFIG,
   ensureDebugLevel,
   levelsClause,
@@ -230,10 +231,6 @@ export async function executeAnonymous(
   } = access;
 
   await report("Setting the trace flag");
-  const debugLevelId = storesLogs
-    ? undefined
-    : await ensureDebugLevel(connection);
-
   const {
     value: { apexResult, logId },
     warnings: traceFlagWarnings,
@@ -241,7 +238,7 @@ export async function executeAnonymous(
     connection,
     userId,
     local.username,
-    debugLevelId,
+    storesLogs,
     async (flagLive) => {
       await report("Executing the Apex");
       const startedAt = new Date();
@@ -314,23 +311,20 @@ export async function executeAnonymous(
   });
 }
 
-// Only a live flag stores the log the file's id comes from; `flagLevelId` is undefined when the user has one (.claude/rules/trace-flags.md).
+// Only a live flag stores the log the file's id comes from; `storesLogs` is true when the user has one (.claude/rules/trace-flags.md).
 async function withTraceFlagForRun<T>(
   connection: Connection,
   userId: string,
   username: string,
-  flagLevelId: string | undefined,
+  storesLogs: boolean,
   run: (flagLive: boolean) => Promise<T>,
 ): Promise<{ value: T; warnings: (string | undefined)[] }> {
-  const created =
-    flagLevelId === undefined
-      ? {}
-      : await createRunTraceFlag(connection, userId, flagLevelId);
+  const created = storesLogs ? {} : await createRunTraceFlag(connection, userId);
 
   let value: T;
   let deleteWarning: string | undefined;
   try {
-    value = await run(flagLevelId === undefined || created.id !== undefined);
+    value = await run(storesLogs || created.id !== undefined);
   } finally {
     deleteWarning = await removeRunTraceFlag(connection, created.id, username);
   }
@@ -340,13 +334,18 @@ async function withTraceFlagForRun<T>(
   };
 }
 
-// A refused flag costs only the file's log id, so the run goes on and says so.
+// A refused flag, or the debug level it needs, costs only the file's log id, so the run goes on and says so.
 async function createRunTraceFlag(
   connection: Connection,
   userId: string,
-  debugLevelId: string,
 ): Promise<{ id?: string; warning?: string }> {
   try {
+    // Named here, because Salesforce's error does not say which record it refused.
+    const debugLevelId = await ensureDebugLevel(connection).catch(
+      (error: unknown) => {
+        throw new Error(`debug level ${DEBUG_LEVEL_NAME}: ${errorText(error)}`);
+      },
+    );
     return {
       id: await createTraceFlag(
         connection,
@@ -356,11 +355,15 @@ async function createRunTraceFlag(
       ),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorText(error);
     const warning = `Could not set a trace flag for this run, so the org may not store its log and the file may be named by time, not log id: ${message}${storageFullHint(message)}`;
     console.error(`[apex-log-mcp] ${warning}`);
     return { warning };
   }
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 // Reported, not thrown: the log is in hand and the flag expires on its own. A flag already gone is removed.
