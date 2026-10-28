@@ -5,7 +5,7 @@ contact_links:
     about: Read the docs for how the analyzer and its tools work.
   - name: 🛠️ Setup & configuration help (Q&A)
     url: https://github.com/certinia/debug-log-analyzer-mcp/discussions/categories/q-a
-    about: Trouble installing the server, configuring your MCP client, or setting --allowed-orgs? Ask in Q&A.
+    about: Trouble installing the server, configuring your MCP client, or setting --allow-production-orgs or --deny-orgs? Ask in Q&A.
   - name: 💡 Discuss an idea
     url: https://github.com/certinia/debug-log-analyzer-mcp/discussions/categories/ideas
     about: Suggest or validate a feature idea before opening a feature request.
