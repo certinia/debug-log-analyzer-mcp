@@ -37,7 +37,7 @@ export const LOG_CATEGORIES = [
   "WORKFLOW",
 ] as const;
 
-export type LogCategory = (typeof LOG_CATEGORIES)[number];
+type LogCategory = (typeof LOG_CATEGORIES)[number];
 
 /**
  * A settable category under the name a debug log header gives it.
