@@ -45,10 +45,8 @@ export type Workspace =
   | { kind: "none" }
   | { kind: "unknown"; reason: string };
 
-/** What a tool asks of `openOrg`. */
+/** What a tool asks of `open`. */
 export type OrgRequest<T, V = T> = {
-  /** The tool's name, which a production confirmation is bound to. */
-  tool: string;
   /** What the call does, as a verb phrase: every refusal is built from it. */
   action: string;
   targetOrg?: string;
@@ -77,6 +75,26 @@ export type OrgRequest<T, V = T> = {
       }) => Promise<{ value: V; confirm: Confirmable | null }>);
 };
 
+/**
+ * `openOrg` bound to one call: its server, its context, the policy and the
+ * name of the tool, which a production confirmation is bound to. A handler
+ * gets one from `src/server.ts`, and lint rules keep it from making one, so it
+ * does not name another tool.
+ */
+export type OpenOrg = <T = undefined, V = T>(
+  request: OrgRequest<T, V>,
+) => Promise<OrgAccess<V>>;
+
+/** Bind `openOrg` to one call of the tool registered as `tool`. */
+export function bindOpenOrg(
+  server: McpServer,
+  ctx: ServerContext,
+  tool: string,
+  policy: OrgAccessPolicy,
+): OpenOrg {
+  return (request) => openOrg(server, ctx, tool, request, policy);
+}
+
 export type OrgAccess<T> =
   | {
       granted: true;
@@ -97,9 +115,10 @@ export type OrgAccess<T> =
  * production gate, before the tool changes anything. A refusal is returned; a
  * fault still throws.
  */
-export async function openOrg<T = undefined, V = T>(
+async function openOrg<T = undefined, V = T>(
   server: McpServer,
   ctx: ServerContext,
+  tool: string,
   request: OrgRequest<T, V>,
   policy: OrgAccessPolicy,
 ): Promise<OrgAccess<V>> {
@@ -176,7 +195,7 @@ export async function openOrg<T = undefined, V = T>(
         orgLabel,
         allowProductionOrgs: policy.allowProductionOrgs,
         unverifiedReason,
-        tool: request.tool,
+        tool,
         action: request.action,
         confirm: planned.confirm,
       });

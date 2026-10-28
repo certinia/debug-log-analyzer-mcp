@@ -7,7 +7,6 @@ import { promises as fs, type BigIntStats } from "fs";
 import {
   clearApexLogCache,
   loadApexLog,
-  logFilePathSchema,
   walkLog,
 } from "../src/tools/apexLogSource";
 import { parse } from "@apexdevtools/apex-log-parser";
@@ -224,6 +223,18 @@ describe("apexLogSource", () => {
       expect(mockFs.readFile).toHaveBeenCalledTimes(2);
     });
 
+    it("hands a parse failure to the caller, and parses again next time", async () => {
+      mockParse.mockImplementationOnce(() => {
+        throw new Error("Failed to parse log");
+      });
+
+      await expect(loadApexLog(logPath)).rejects.toThrow("Failed to parse log");
+      const retried = await loadApexLog(logPath);
+
+      expect(retried).toBe(mockParse.mock.results[1]?.value);
+      expect(mockParse).toHaveBeenCalledTimes(2);
+    });
+
     it("reports a missing file and does not read it", async () => {
       mockFs.stat.mockRejectedValue(
         Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
@@ -234,24 +245,6 @@ describe("apexLogSource", () => {
       );
       expect(mockFs.readFile).not.toHaveBeenCalled();
     });
-  });
-
-  describe("logFilePathSchema", () => {
-    it("accepts an absolute path", () => {
-      expect(logFilePathSchema.safeParse("/logs/run.log").success).toBe(true);
-    });
-
-    it.each(["./run.log", ""])(
-      "refuses %p rather than resolving it against our cwd",
-      (path) => {
-        const result = logFilePathSchema.safeParse(path);
-
-        expect(result.success).toBe(false);
-        expect(result.error?.issues[0]?.message).toBe(
-          "must be an absolute path",
-        );
-      },
-    );
   });
 
   describe("walkLog", () => {

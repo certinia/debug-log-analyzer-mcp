@@ -14,6 +14,7 @@ jest.mock("../../src/salesforce/orgClassification", () => ({
 
 import { randomBytes } from "node:crypto";
 import {
+  CLIENT_CAPABILITIES_META_KEY,
   createRequestStateCodec,
   SdkError,
   SdkErrorCode,
@@ -23,7 +24,7 @@ import {
 } from "@modelcontextprotocol/server";
 import type { AuthInfo, Org } from "@salesforce/core";
 import {
-  openOrg,
+  bindOpenOrg,
   type OrgAccess,
   type OrgAccessPolicy,
   type OrgRequest,
@@ -102,7 +103,6 @@ function request<T, V = T>(
   overrides: Partial<OrgRequest<T, V>> = {},
 ): OrgRequest<T, V> {
   return {
-    tool: "apexlog_test_tool",
     action: "delete 1 debug log",
     targetOrg: "psa",
     write: false,
@@ -136,6 +136,17 @@ function classifyAs(classification: OrgClassification): void {
   mockClassifyOrg.mockResolvedValue({ classification });
 }
 
+/** One call's `open`, as the server binds it, for the tool named `tool`. */
+function open<T, V = T>(
+  mcpServer: McpServer,
+  ctx: ServerContext,
+  orgRequest: OrgRequest<T, V>,
+  accessPolicy: OrgAccessPolicy,
+  tool = "apexlog_test_tool",
+): Promise<OrgAccess<V>> {
+  return bindOpenOrg(mcpServer, ctx, tool, accessPolicy)(orgRequest);
+}
+
 describe("openOrg", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -153,7 +164,7 @@ describe("openOrg", () => {
   });
 
   it("should grant a sandbox with the prepared value, the connection and the roots", async () => {
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ prepare: async (rootPaths) => `read in ${rootPaths.join()}` }),
@@ -172,7 +183,7 @@ describe("openOrg", () => {
   });
 
   it("should let a write go ahead on a sandbox without asking", async () => {
-    const access = await openOrg(server(), makeCtx(), request(write), policy());
+    const access = await open(server(), makeCtx(), request(write), policy());
 
     expect(access.granted).toBe(true);
     expect(mintConfirmationState).not.toHaveBeenCalled();
@@ -192,7 +203,7 @@ describe("openOrg", () => {
     );
 
     const result = inputRequired(
-      await openOrg(
+      await open(
         server(),
         makeCtx(),
         request({ prepare: async () => "3 logs", write }),
@@ -210,7 +221,7 @@ describe("openOrg", () => {
 
   // So the write does exactly what it read and confirmed, e.g. the log ids it counted.
   it("should grant the value the write planned", async () => {
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({
@@ -234,7 +245,7 @@ describe("openOrg", () => {
       expect(mockConnectOrg).not.toHaveBeenCalled();
     });
 
-    await openOrg(server(), makeCtx(), request({ report }), policy());
+    await open(server(), makeCtx(), request({ report }), policy());
 
     expect(report).toHaveBeenCalledWith("Connecting to the org");
   });
@@ -243,7 +254,7 @@ describe("openOrg", () => {
   it("should refuse a denied identity before prepare and before connecting", async () => {
     const prepare = jest.fn();
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ prepare }),
@@ -261,7 +272,7 @@ describe("openOrg", () => {
   it("should refuse a denied type before a write can ask", async () => {
     classifyAs("production");
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request(write),
@@ -277,7 +288,7 @@ describe("openOrg", () => {
   it("should grant a read against production without asking", async () => {
     classifyAs("production");
 
-    const access = await openOrg(server(), makeCtx(), request(), policy());
+    const access = await open(server(), makeCtx(), request(), policy());
 
     expect(access.granted).toBe(true);
     expect(mintConfirmationState).not.toHaveBeenCalled();
@@ -286,7 +297,7 @@ describe("openOrg", () => {
   it("should ask before a write against production", async () => {
     classifyAs("production");
     const result = inputRequired(
-      await openOrg(server(), makeCtx(), request(write), policy()),
+      await open(server(), makeCtx(), request(write), policy()),
     );
 
     expect(mintConfirmationState).toHaveBeenCalledWith(
@@ -296,10 +307,24 @@ describe("openOrg", () => {
     expect(typeof result.requestState).toBe("string");
   });
 
+  it("should let a production write go ahead without asking when production orgs are allowed", async () => {
+    classifyAs("production");
+
+    const access = await open(
+      server(),
+      makeCtx(),
+      request(write),
+      policy({ allowProductionOrgs: true }),
+    );
+
+    expect(access.granted).toBe(true);
+    expect(mintConfirmationState).not.toHaveBeenCalled();
+  });
+
   it("should not ask about a write that found nothing to change", async () => {
     classifyAs("production");
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ write: async () => ({ value: "nothing", confirm: null }) }),
@@ -313,16 +338,17 @@ describe("openOrg", () => {
   it("should refuse a confirmation given for another tool", async () => {
     classifyAs("production");
     const asked = inputRequired(
-      await openOrg(
+      await open(
         server(),
         makeCtx(),
-        request({ ...write, tool: "apexlog_other_tool" }),
+        request(write),
         policy(),
+        "apexlog_other_tool",
       ),
     );
     const state = await codec.verify(asked.requestState as string, makeCtx());
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(state, {
         confirm: { action: "accept", content: {} },
@@ -342,7 +368,7 @@ describe("openOrg", () => {
     });
 
     it("should refuse a call that names no org, before reading the local org", async () => {
-      const access = await openOrg(
+      const access = await open(
         server(),
         makeCtx(),
         request({ targetOrg: undefined }),
@@ -356,7 +382,7 @@ describe("openOrg", () => {
     });
 
     it("should refuse on an empty refusal rather than fall through", async () => {
-      const access = await openOrg(
+      const access = await open(
         server(),
         makeCtx(),
         request({ targetOrg: undefined, unknownRoots: () => "" }),
@@ -368,7 +394,7 @@ describe("openOrg", () => {
     });
 
     it("should return the tool's own refusal first", async () => {
-      const access = await openOrg(
+      const access = await open(
         server(),
         makeCtx(),
         request({ unknownRoots: (reason) => `No file check: ${reason}` }),
@@ -382,7 +408,7 @@ describe("openOrg", () => {
     });
 
     it("should grant a named org, with the workspace marked unknown", async () => {
-      const access = await openOrg(server(), makeCtx(), request(), policy());
+      const access = await open(server(), makeCtx(), request(), policy());
 
       expect(access).toMatchObject({
         granted: true,
@@ -398,7 +424,7 @@ describe("openOrg", () => {
       new SdkError(SdkErrorCode.CapabilityNotSupported, "no roots"),
     );
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ targetOrg: undefined }),
@@ -407,5 +433,90 @@ describe("openOrg", () => {
 
     expect(access).toMatchObject({ granted: true, workspace: { kind: "none" } });
     expect(mockReadLocalOrg).toHaveBeenCalledWith(undefined, undefined);
+  });
+
+  it("should take a 2026-07-28 client that declared no roots as having none", async () => {
+    listRoots.mockRejectedValue(
+      new SdkError(SdkErrorCode.MethodNotSupportedByProtocolVersion, "not on 2026-07-28"),
+    );
+    const ctx = {
+      mcpReq: {
+        ...makeCtx().mcpReq,
+        envelope: { [CLIENT_CAPABILITIES_META_KEY]: {} },
+      },
+    } as unknown as ServerContext;
+
+    const access = await open(server(), ctx, request(), policy());
+
+    expect(access).toMatchObject({ granted: true, workspace: { kind: "none" } });
+  });
+
+  // Bounded, so a client that never answers costs seconds; the signal, so a cancel ends the wait.
+  it("should wait a bounded time for the roots, on the call's own signal", async () => {
+    const ctx = makeCtx();
+
+    await open(server(), ctx, request(), policy());
+
+    expect(listRoots).toHaveBeenCalledWith(undefined, {
+      timeout: 5_000,
+      signal: ctx.mcpReq.signal,
+    });
+  });
+
+  it("should stop a cancelled call, not run on as if the roots were unreadable", async () => {
+    // An SdkError, which the switch below the abort check would otherwise read as no roots.
+    listRoots.mockRejectedValue(
+      new SdkError(SdkErrorCode.CapabilityNotSupported, "aborted"),
+    );
+    const controller = new AbortController();
+    controller.abort();
+    const ctx = {
+      mcpReq: { ...makeCtx().mcpReq, signal: controller.signal },
+    } as unknown as ServerContext;
+
+    await expect(open(server(), ctx, request(), policy())).rejects.toThrow("aborted");
+    expect(mockReadLocalOrg).not.toHaveBeenCalled();
+  });
+
+  it("should connect to the org it checked, through the same auth", async () => {
+    await open(server(), makeCtx(), request(), policy());
+
+    expect(mockConnectOrg).toHaveBeenCalledWith(LOCAL_ORG);
+  });
+
+  it("should throw a connect fault, not refuse, and plan no write", async () => {
+    mockConnectOrg.mockRejectedValue(new Error("No default org is set."));
+    const plan = jest.fn();
+
+    await expect(
+      open(server(), makeCtx(), request({ write: plan }), policy()),
+    ).rejects.toThrow("No default org is set.");
+    expect(plan).not.toHaveBeenCalled();
+  });
+
+  it("should classify against the policy's cache, so one org is classified once", async () => {
+    const classificationCache = new Map<string, OrgClassification>();
+
+    await open(server(), makeCtx(), request(), policy({ classificationCache }));
+
+    // The same Map, not an equal one: an empty Map equals any other.
+    expect(mockClassifyOrg.mock.calls[0]?.[1]).toBe(classificationCache);
+  });
+
+  // The reason has to reach the person, so the agent can suggest a new login.
+  it("should ask about an org it could not verify, and say why", async () => {
+    mockClassifyOrg.mockResolvedValue({
+      classification: "unknown",
+      unverifiedReason: "Unable to refresh session due to: inactive organization",
+    });
+
+    const result = inputRequired(
+      await open(server(), makeCtx(), request(write), policy()),
+    );
+
+    // The reason only: its framing is orgExecutionPolicy.test's.
+    expect(JSON.stringify(result)).toContain(
+      "Unable to refresh session due to: inactive organization",
+    );
   });
 });

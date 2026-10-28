@@ -7,31 +7,21 @@ import { randomBytes } from "node:crypto";
 import {
   createRequestStateCodec,
   McpServer,
+  type CallToolResult,
+  type InputRequiredResult,
   type ServerContext,
+  type StandardSchemaWithJSON,
+  type ToolAnnotations,
+  type ToolCallback,
 } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import {
-  listSlowOperations,
-  listSlowOperationsToolConfig,
-} from "./tools/listSlowOperations.js";
-import {
-  getLogSummary,
-  getLogSummaryToolConfig,
-} from "./tools/getLogSummary.js";
-import {
-  listLimitRisks,
-  listLimitRisksToolConfig,
-} from "./tools/listLimitRisks.js";
+import { analysisTools } from "./tools/analysisTools.js";
 import { withReloginHint } from "./salesforce/authFailure.js";
 import { limitUnitsClause } from "./tools/responseShaping.js";
 import { toolError } from "./errors.js";
-import { searchEvents, searchEventsToolConfig } from "./tools/searchEvents.js";
-import { executeAnonymousToolConfig } from "./tools/executeAnonymousDefinition.js";
-import { createTraceFlagToolConfig } from "./tools/traceFlagsDefinition.js";
-import {
-  getOrgLogsToolConfig,
-  listOrgLogsToolConfig,
-} from "./tools/orgLogsDefinition.js";
+import { executeAnonymousTool } from "./tools/executeAnonymousDefinition.js";
+import { createTraceFlagTool } from "./tools/traceFlagsDefinition.js";
+import { getOrgLogsTool, listOrgLogsTool } from "./tools/orgLogsDefinition.js";
 import {
   APEX_EXECUTION_DISABLED_MESSAGE,
   CONFIRMATION_TTL_SECONDS,
@@ -41,6 +31,7 @@ import {
 } from "./policy/orgExecutionPolicy.js";
 import { compileDenyList, type DenyList } from "./policy/orgDenyList.js";
 import type { OrgClassification } from "./salesforce/orgClassification.js";
+import type { OpenOrg } from "./salesforce/orgAccess.js";
 import packageJson from "../package.json" with { type: "json" };
 
 export type ServerConfig = {
@@ -131,29 +122,9 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     },
   );
 
-  server.registerTool(
-    "apexlog_list_slow_operations",
-    listSlowOperationsToolConfig,
-    async (args) => listSlowOperations(args),
-  );
-
-  server.registerTool(
-    "apexlog_get_summary",
-    getLogSummaryToolConfig,
-    async (args) => getLogSummary(args),
-  );
-
-  server.registerTool(
-    "apexlog_list_limit_risks",
-    listLimitRisksToolConfig,
-    async (args) => listLimitRisks(args),
-  );
-
-  server.registerTool(
-    "apexlog_search_events",
-    searchEventsToolConfig,
-    async (args) => searchEvents(args),
-  );
+  for (const tool of analysisTools) {
+    server.registerTool(tool.name, tool.config, tool.handle);
+  }
 
   // Every org tool is held to the same deny list and production gate.
   const orgAccessPolicy = {
@@ -167,62 +138,68 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
 
   // The org tools load lazily: they reach
   // `@salesforce/core`, which a session that only reads logs must not pay for.
-  type OrgToolHandler<Args, Result> = (
-    server: McpServer,
-    args: Args,
-    ctx: ServerContext,
-    policy: typeof orgAccessPolicy,
-  ) => Promise<Result>;
-  // A dead login can fail any org call, not only the connect, so every org handler is wrapped.
-  const withRelogin =
-    <Args, Result>(handler: (args: Args, ctx: ServerContext) => Promise<Result>) =>
-    async (args: Args, ctx: ServerContext): Promise<Result> => {
+  // A refusal, set for a tool that changes an org, answers every call, and
+  // the tool never loads.
+  const registerOrgTool = <S extends StandardSchemaWithJSON>(
+    {
+      name,
+      config,
+      refusal,
+    }: {
+      name: string;
+      config: {
+        title: string;
+        description: string;
+        inputSchema: S;
+        annotations: ToolAnnotations;
+      };
+      refusal?: string;
+    },
+    load: () => Promise<
+      (
+        args: StandardSchemaWithJSON.InferOutput<S>,
+        open: OpenOrg,
+        ctx: ServerContext,
+      ) => Promise<CallToolResult | InputRequiredResult>
+    >,
+  ): void => {
+    const handle = async (
+      args: StandardSchemaWithJSON.InferOutput<S>,
+      ctx: ServerContext,
+    ): Promise<CallToolResult | InputRequiredResult> => {
+      if (refusal !== undefined) {
+        return toolError(refusal);
+      }
+      const { bindOpenOrg } = await import("./salesforce/orgAccess.js");
+      const open = bindOpenOrg(server, ctx, name, orgAccessPolicy);
+      // A dead login can fail any org call, not only the connect.
       try {
-        return await handler(args, ctx);
+        return await (await load())(args, open, ctx);
       } catch (error) {
         throw withReloginHint(error);
       }
     };
-  const orgTool = <Args, Result>(load: () => Promise<OrgToolHandler<Args, Result>>) =>
-    withRelogin(async (args: Args, ctx: ServerContext) =>
-      (await load())(server, args, ctx, orgAccessPolicy),
-    );
-  // A tool that changes an org; refused, it never loads, so it loads no Salesforce SDK.
-  const orgWriteTool = <Args, Result>(
-    refusal: string | undefined,
-    load: () => Promise<OrgToolHandler<Args, Result>>,
-  ) => (refusal === undefined ? orgTool(load) : async () => toolError(refusal));
+    // The SDK's callback type is conditional on S, so it cannot be resolved here; `handle` is that type for any S.
+    server.registerTool(name, config, handle as ToolCallback<S>);
+  };
 
-  server.registerTool(
-    "apexlog_list_org_logs",
-    listOrgLogsToolConfig,
-    orgTool(async () => (await import("./tools/listOrgLogs.js")).listOrgLogs),
+  registerOrgTool(
+    listOrgLogsTool,
+    async () => (await import("./tools/listOrgLogs.js")).listOrgLogs,
   );
-
-  server.registerTool(
-    "apexlog_get_org_logs",
-    getOrgLogsToolConfig,
-    orgTool(async () => (await import("./tools/getOrgLogs.js")).getOrgLogs),
+  registerOrgTool(
+    getOrgLogsTool,
+    async () => (await import("./tools/getOrgLogs.js")).getOrgLogs,
   );
-
-  server.registerTool(
-    "apexlog_create_trace_flag",
-    createTraceFlagToolConfig(orgWriteRefusal),
-    orgWriteTool(
-      orgWriteRefusal,
-      async () => (await import("./tools/createTraceFlag.js")).createTraceFlag,
-    ),
+  registerOrgTool(
+    createTraceFlagTool(orgWriteRefusal),
+    async () => (await import("./tools/createTraceFlag.js")).createTraceFlag,
   );
-
   // Always registered, so agents can discover it regardless of configuration.
   // A flag refuses every call here; otherwise the handler decides per call.
-  server.registerTool(
-    "apexlog_execute_anonymous",
-    executeAnonymousToolConfig(apexRefusal),
-    orgWriteTool(
-      apexRefusal,
-      async () => (await import("./tools/executeAnonymous.js")).executeAnonymous,
-    ),
+  registerOrgTool(
+    executeAnonymousTool(apexRefusal),
+    async () => (await import("./tools/executeAnonymous.js")).executeAnonymous,
   );
 
   return server;

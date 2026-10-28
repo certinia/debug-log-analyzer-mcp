@@ -4,14 +4,14 @@
 
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
-import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
+import type { ServerContext } from "@modelcontextprotocol/server";
 import {
   downloadApexLog,
   latestApexLogIds,
 } from "../salesforce/apexLogs.js";
 import { isLoginFailure, RELOGIN_HINT } from "../salesforce/authFailure.js";
 import { mapRequests } from "../salesforce/parallelRequests.js";
-import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
+import type { OpenOrg } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
 import {
   openLogStore,
@@ -30,26 +30,19 @@ type Failed = { id: string; error: string };
 const NOT_TRIED = "Skipped: the org's login failed on an earlier log in this call.";
 
 export async function getOrgLogs(
-  server: McpServer,
   args: GetOrgLogsArgs,
+  open: OpenOrg,
   ctx: ServerContext,
-  policy: OrgAccessPolicy,
 ) {
   if (args.ids !== undefined && args.latest !== undefined) {
     return toolError("Give ids or latest, not both.");
   }
 
-  const access = await openOrg(
-    server,
-    ctx,
-    {
-      tool: "apexlog_get_org_logs",
-      action: "download debug logs",
-      targetOrg: args.targetOrg,
-      write: false,
-    },
-    policy,
-  );
+  const access = await open({
+    action: "download debug logs",
+    targetOrg: args.targetOrg,
+    write: false,
+  });
   if (!access.granted) {
     return access.result;
   }

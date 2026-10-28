@@ -2,12 +2,11 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { toolInputSchema } from "../src/tools/inputSchema";
-import { listSlowOperationsInputSchema } from "../src/tools/listSlowOperations";
+import { listSlowOperationsTool } from "../src/tools/listSlowOperations";
 
-// The shipped shape, because it is the one that has to survive the wrapper: a
+// The shipped schema, because it is the one that has to survive the wrapper: a
 // refinement (`logFilePath`), a floor and an integer (`limit`), and an enum.
-const schema = toolInputSchema(listSlowOperationsInputSchema);
+const schema = listSlowOperationsTool.config.inputSchema;
 const logFilePath = "/tmp/a.log";
 
 describe("toolInputSchema", () => {

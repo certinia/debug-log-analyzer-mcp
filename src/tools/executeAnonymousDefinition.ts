@@ -62,19 +62,23 @@ const EXECUTE_ANONYMOUS_DESCRIPTION =
  * The tool is always registered so that agents can discover it. `refusal` is
  * what this server answers every call, or undefined when it runs Apex.
  */
-export function executeAnonymousToolConfig(refusal?: string) {
+export function executeAnonymousTool(refusal?: string) {
   return {
-    title: "Execute Anonymous Apex",
-    description: describeDisabled(EXECUTE_ANONYMOUS_DESCRIPTION, refusal),
-    inputSchema: toolInputSchema(executeAnonymousInputSchema),
-    // All four hints, where the read-only tools state only the two that differ
-    // from the spec default: this is the one tool where a client that misreads a
-    // default runs Apex against an org.
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: false,
-      openWorldHint: true,
+    name: "apexlog_execute_anonymous",
+    config: {
+      title: "Execute Anonymous Apex",
+      description: describeDisabled(EXECUTE_ANONYMOUS_DESCRIPTION, refusal),
+      inputSchema: toolInputSchema(executeAnonymousInputSchema),
+      // All four hints, where the read-only tools state only the two that differ
+      // from the spec default: this is the one tool where a client that misreads a
+      // default runs Apex against an org.
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
     },
+    refusal,
   };
 }

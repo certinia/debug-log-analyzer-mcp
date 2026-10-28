@@ -2,17 +2,11 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs, type BigIntStats } from "fs";
-
-import {
-  getLogSummary,
-  LogSummaryArgs,
-  getLogSummaryToolConfig,
-} from "../src/tools/getLogSummary";
+import { getLogSummaryTool } from "../src/tools/getLogSummary";
 import { logEvent, type NodeSpec } from "./support/logEvents";
-import { clearApexLogCache, walkLog } from "../src/tools/apexLogSource";
+import { walkLog } from "../src/tools/apexLogSource";
 import { DEBUG_CATEGORIES } from "../src/logLevels";
-import { ALL_LIMIT_METRICS, parse } from "@apexdevtools/apex-log-parser";
+import { ALL_LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
 import type {
   ApexLog,
   ApexLogParser,
@@ -22,66 +16,10 @@ import type {
   LogIssue,
   NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-import { decode } from "@toon-format/toon";
-
-// Mock the dependencies
-jest.mock("fs", () => {
-  const stat = jest.fn();
-  const readFile = jest.fn();
-  // A handle is the file at one path, so its stat and read delegate to the
-  // mocks above with that path filled in. Tests set and assert on those.
-  return {
-    constants: jest.requireActual("fs").constants,
-    promises: {
-      stat,
-      readFile,
-      open: jest.fn(async (path: string) => ({
-        stat: (options: unknown) => stat(path, options),
-        readFile: (encoding: unknown) => readFile(path, encoding),
-        close: jest.fn(),
-      })),
-    },
-  };
-});
-
-jest.mock("@apexdevtools/apex-log-parser", () => ({
-  ...jest.requireActual("@apexdevtools/apex-log-parser"),
-  parse: jest.fn(),
-}));
-
-const mockFs = fs as jest.Mocked<typeof fs>;
-const mockParse = parse as jest.MockedFunction<typeof parse>;
-const mockStats = {
-  ino: 1n,
-  size: 1n,
-  mtimeNs: 1n,
-  ctimeNs: 1n,
-  isFile: () => true,
-} as BigIntStats;
 
 const counts = { total: 0, self: 0 };
 
 describe("getLogSummary", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // The suites reuse one path with different content, which the cache would
-    // otherwise hide.
-    clearApexLogCache();
-  });
-
-  describe("tool configuration", () => {
-    it("should annotate only the hints that carry meaning for a read-only tool", () => {
-      expect(getLogSummaryToolConfig.annotations).toEqual({
-        readOnlyHint: true,
-        openWorldHint: false,
-      });
-    });
-  });
-
-  function toonDecode(result: any): any {
-    return decode(result.content[0].text) as any;
-  }
-
   // From the parser, so the set cannot drift from what the tool emits.
   // `tests/parserContract.test.ts` pins the list itself.
   const LIMIT_NAMES = ALL_LIMIT_METRICS.map((metric) => metric.key);
@@ -142,16 +80,10 @@ describe("getLogSummary", () => {
       ...overrides,
     }) as unknown as ApexLog;
 
-  const summaryOf = async (
+  const summaryOf = (
     overrides: Partial<ApexLog> = {},
-    logFilePath = "/path/to/test-log.log",
-  ) => {
-    mockFs.stat.mockResolvedValue(mockStats);
-    mockFs.readFile.mockResolvedValue("mock log content");
-    mockParse.mockReturnValue(createMockApexLog(overrides));
-
-    return toonDecode(await getLogSummary({ logFilePath } as LogSummaryArgs));
-  };
+  ): ReturnType<typeof getLogSummaryTool.run> =>
+    getLogSummaryTool.run(createMockApexLog(overrides), {});
 
   // The lists the parser fills beside the tree: every event, and every throw and fatal.
   const logOf = (...frames: NodeSpec[]): Partial<ApexLog> => {
@@ -170,13 +102,9 @@ describe("getLogSummary", () => {
   };
 
   describe("the transaction", () => {
-    it("should report how big the log is, how long it ran and whether it is whole", async () => {
-      const summary = await summaryOf();
+    it("should report how big the log is, how long it ran and whether it is whole", () => {
+      const summary = summaryOf();
 
-      expect(mockFs.stat).toHaveBeenCalledWith("/path/to/test-log.log", {
-        bigint: true,
-      });
-      expect(mockParse).toHaveBeenCalledWith("mock log content");
       expect(summary.fileSizeBytes).toBe(15000);
       expect(summary.durationTotalMs).toBe(12500);
       expect(summary.truncated).toBe(false);
@@ -184,10 +112,10 @@ describe("getLogSummary", () => {
       expect(summary.namespaces).toEqual(["default", "MyNamespace"]);
     });
 
-    it("should say when the platform dropped part of the log, and how much", async () => {
+    it("should say when the platform dropped part of the log, and how much", () => {
       // Every figure in a partial log is a floor, so a CPU time read from one as
       // though it were a total is the worst answer the server can give.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         isTruncated: true,
         truncation: {
           regions: [{ kind: "skipped-lines", startTime: 8000 }],
@@ -200,12 +128,12 @@ describe("getLogSummary", () => {
       expect(summary.skippedBytes).toBe(14_680_064);
     });
 
-    it("should say when the log stopped inside a frame it never closed", async () => {
+    it("should say when the log stopped inside a frame it never closed", () => {
       // The platform dropping content and the log stopping mid-frame are
       // different shapes, and the parser only calls the first one truncation. A
       // log cut off by an interrupted download states no region at all, and
       // nothing else in the response would say its figures are floors.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         truncatedEvents: [logEvent({ type: "METHOD_ENTRY", category: "Apex" })],
       });
 
@@ -217,10 +145,10 @@ describe("getLogSummary", () => {
       expect(summary.skippedBytes).toBeUndefined();
     });
 
-    it("should report a zero byte count on a log that hit the maximum size", async () => {
+    it("should report a zero byte count on a log that hit the maximum size", () => {
       // A max-size region states no byte count for what it lost, so 0 beside a
       // true `truncated` is a real answer rather than a missing one.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         isTruncated: true,
         truncation: {
           regions: [{ kind: "max-size", startTime: 9000 }],
@@ -232,10 +160,10 @@ describe("getLogSummary", () => {
       expect(summary.skippedBytes).toBe(0);
     });
 
-    it("should name both losses when a log suffered both", async () => {
+    it("should name both losses when a log suffered both", () => {
       // Two of 124 real logs carry both, and a reader of `skippedBytes` alone
       // would take a hole's byte count for the whole extent of the loss.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         isTruncated: true,
         truncation: {
           regions: [
@@ -249,10 +177,10 @@ describe("getLogSummary", () => {
       expect(summary.truncatedBy).toEqual(["skipped-lines", "max-size"]);
     });
 
-    it("should clip a frames cell one long frame would otherwise fill", async () => {
+    it("should clip a frames cell one long frame would otherwise fill", () => {
       // A single frame runs to 1,081 characters on a 124-log corpus, so capping
       // the frame count alone leaves the cell unbounded.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         logIssues: [
           {
             summary: "System.CalloutException: bad response",
@@ -268,8 +196,8 @@ describe("getLogSummary", () => {
       expect(frames.endsWith("…")).toBe(true);
     });
 
-    it("should report what killed the transaction, and where", async () => {
-      const summary = await summaryOf({
+    it("should report what killed the transaction, and where", () => {
+      const summary = summaryOf({
         logIssues: [
           {
             summary: "System.LimitException: Apex CPU time limit exceeded",
@@ -290,12 +218,12 @@ describe("getLogSummary", () => {
       ]);
     });
 
-    it("should state the innermost frames and say that it dropped the rest", async () => {
+    it("should state the innermost frames and say that it dropped the rest", () => {
       // A real log states 52,009 characters of stack. Three frames name the
       // failing call and its callers; the rest costs more than it says. Half of
       // a 124-log corpus has a fourth, so the drop has to be visible or a deep
       // stack reads like a shallow one.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         logIssues: [
           {
             summary: "System.LimitException: Maximum stack depth reached: 1001",
@@ -309,8 +237,8 @@ describe("getLogSummary", () => {
       expect(summary.fatalErrors[0].frames).toBe("one | two | three | …");
     });
 
-    it("should not claim a drop on a stack that fits", async () => {
-      const summary = await summaryOf({
+    it("should not claim a drop on a stack that fits", () => {
+      const summary = summaryOf({
         logIssues: [
           {
             summary: "System.NullPointerException: Attempt to de-reference null",
@@ -324,11 +252,11 @@ describe("getLogSummary", () => {
       expect(summary.fatalErrors[0].frames).toBe("one | two | three");
     });
 
-    it("should not spend a frame on a blank line inside the stack", async () => {
+    it("should not spend a frame on a blank line inside the stack", () => {
       // The limit counts real frames. Counting raw lines let a blank one inside
       // the stack cost a frame and still claim a drop, so a stack that fits read
       // as one that had been cut.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         logIssues: [
           {
             summary: "System.NullPointerException: Attempt to de-reference null",
@@ -342,12 +270,12 @@ describe("getLogSummary", () => {
       expect(summary.fatalErrors[0].frames).toBe("one | two | three");
     });
 
-    it("should clip a message where it runs into prose", async () => {
+    it("should clip a message where it runs into prose", () => {
       // A DmlException embeds the whole validation message a user would see -
       // 1,070 characters at the worst of 124 real logs. The kept part carries
       // the exception class, the offending row and the error code.
       const prose = "x".repeat(400);
-      const summary = await summaryOf({
+      const summary = summaryOf({
         logIssues: [
           {
             summary: `System.DmlException: Update failed. first error: CANNOT_EXECUTE_FLOW_TRIGGER, ${prose}`,
@@ -364,10 +292,10 @@ describe("getLogSummary", () => {
       expect(message).toContain("CANNOT_EXECUTE_FLOW_TRIGGER");
     });
 
-    it("should keep the frames cell on a fatal the log gave no stack for", async () => {
+    it("should keep the frames cell on a fatal the log gave no stack for", () => {
       // An absent key would put the table out of its one-header form, which
       // costs more than the empty cell it saves.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         logIssues: [
           {
             summary: "Internal Salesforce.com Error",
@@ -383,10 +311,10 @@ describe("getLogSummary", () => {
       ]);
     });
 
-    it("should ignore the issues that are not a fatal", async () => {
+    it("should ignore the issues that are not a fatal", () => {
       // `error` repeats a fatal's message without its stack, and `skip` and
       // `unexpected` say what `truncated` already says.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         logIssues: [
           {
             summary: "System.DmlException: Update failed",
@@ -406,25 +334,13 @@ describe("getLogSummary", () => {
       expect(summary.fatalErrors).toBeUndefined();
     });
 
-    it("should report how many exceptions were thrown, zero included", async () => {
+    it("should report how many exceptions were thrown, zero included", () => {
       // Part of the fixed schema: an absent count could not be told from one
       // the log never carried, and a caught exception is invisible otherwise.
-      expect((await summaryOf()).thrownCount).toBe(0);
-      // A second path, because the parse cache holds one slot and keys on it.
-      const threw = await summaryOf(
-        { thrownCount: { total: 4501, self: 0 } },
-        "/path/to/threw.log",
-      );
+      expect(summaryOf().thrownCount).toBe(0);
+      const threw = summaryOf({ thrownCount: { total: 4501, self: 0 } });
 
       expect(threw.thrownCount).toBe(4501);
-    });
-
-    it("should not echo the log file path back to the caller", async () => {
-      // The caller supplied the path, so repeating it back only costs tokens.
-      const summary = await summaryOf({}, "/Users/test/apex-debug-123.log");
-
-      expect(summary.file).toBeUndefined();
-      expect(summary.logFilePath).toBeUndefined();
     });
   });
 
@@ -440,10 +356,10 @@ describe("getLogSummary", () => {
       children,
     });
 
-    it("should fold repeated throws into one row, most thrown first", async () => {
+    it("should fold repeated throws into one row, most thrown first", () => {
       // One real log throws 4,501 times from one line: a row per throw would
       // be 4,501 rows that say one thing.
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf(
           method(
             "Service.save()",
@@ -478,9 +394,9 @@ describe("getLogSummary", () => {
       ]);
     });
 
-    it("should fold one message thrown from several frames into one row, where it was first thrown", async () => {
+    it("should fold one message thrown from several frames into one row, where it was first thrown", () => {
       // A row per frame cost one real log 15 rows for 4 messages.
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf(
           method("A.run()", thrown("System.QueryException: no rows", 12)),
           method("B.run()", thrown("System.QueryException: no rows", 40)),
@@ -497,8 +413,8 @@ describe("getLogSummary", () => {
       ]);
     });
 
-    it("should name the Apex frame, not the system call or query it was inside", async () => {
-      const summary = await summaryOf(
+    it("should name the Apex frame, not the system call or query it was inside", () => {
+      const summary = summaryOf(
         logOf({
           type: "CODE_UNIT_STARTED",
           text: "OrderTrigger on Order trigger event AfterUpdate",
@@ -517,9 +433,9 @@ describe("getLogSummary", () => {
       );
     });
 
-    it("should state an empty frame and line where the log gives none", async () => {
+    it("should state an empty frame and line where the log gives none", () => {
       // `EXTERNAL` is what a managed package states for a line it hides.
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf(
           thrown("System.TypeException: Invalid id", null),
           method(
@@ -545,8 +461,8 @@ describe("getLogSummary", () => {
       ]);
     });
 
-    it("should clip a message as a fatal's is clipped", async () => {
-      const summary = await summaryOf(
+    it("should clip a message as a fatal's is clipped", () => {
+      const summary = summaryOf(
         logOf(thrown(`System.DmlException: Insert failed. ${"x".repeat(400)}`)),
       );
 
@@ -555,9 +471,9 @@ describe("getLogSummary", () => {
       expect(message.endsWith("…")).toBe(true);
     });
 
-    it("should fold messages that differ only past the clip, so no two rows read the same", async () => {
+    it("should fold messages that differ only past the clip, so no two rows read the same", () => {
       const prefix = `System.DmlException: Insert failed. ${"x".repeat(200)}`;
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf(thrown(`${prefix} record 1`), thrown(`${prefix} record 2`)),
       );
 
@@ -565,10 +481,10 @@ describe("getLogSummary", () => {
       expect(summary.exceptions[0].thrownCount).toBe(2);
     });
 
-    it("should show and fold on the first line, as a fatal does", async () => {
+    it("should show and fold on the first line, as a fatal does", () => {
       const first =
         "System.DmlException: Insert failed. First exception on row 0; first error: CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY, OrderTrigger: execution of AfterInsert";
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf(
           thrown(`${first}\ncaused by: System.NullPointerException: Attempt to de-reference a null object\nTrigger.OrderTrigger: line 12, column 1: []`),
           thrown(`${first}\ncaused by: System.QueryException: List has no rows for assignment to SObject\nTrigger.OrderTrigger: line 20, column 1: []`),
@@ -579,12 +495,12 @@ describe("getLogSummary", () => {
       expect(summary.exceptions[0]).toMatchObject({ message: first, thrownCount: 2 });
     });
 
-    it("should cap the rows and state how many there were", async () => {
+    it("should cap the rows and state how many there were", () => {
       // A loop that puts a record id in each message has no bound.
       const throws = Array.from({ length: 25 }, (_, i) =>
         thrown(`System.DmlException: row ${i}`),
       );
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf(method("Batch.execute()", ...throws)),
       );
 
@@ -592,9 +508,9 @@ describe("getLogSummary", () => {
       expect(summary.exceptionGroupCount).toBe(25);
     });
 
-    it("should leave out the table, and count zero, when nothing was thrown", async () => {
+    it("should leave out the table, and count zero, when nothing was thrown", () => {
       // A fatal alone is not a throw: `fatalErrors` reports it.
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf({
           type: "FATAL_ERROR",
           text: "System.LimitException: Apex CPU time limit exceeded",
@@ -607,9 +523,9 @@ describe("getLogSummary", () => {
   });
 
   describe("flowErrorCount", () => {
-    it("should count the flow element errors at any depth", async () => {
+    it("should count the flow element errors at any depth", () => {
       // A flow can fail with no throw and no fatal, so nothing else reports it.
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf(
           {
             type: "FLOW_START_INTERVIEWS_BEGIN",
@@ -628,10 +544,10 @@ describe("getLogSummary", () => {
       expect(summary.flowErrorCount).toBe(3);
     });
 
-    it("should not count a workflow flow action error twice", async () => {
+    it("should not count a workflow flow action error twice", () => {
       // Every real log with a `WF_FLOW_ACTION_ERROR` also has the
       // `FLOW_ELEMENT_ERROR` of the same failure.
-      const summary = await summaryOf(
+      const summary = summaryOf(
         logOf({
           type: "CODE_UNIT_STARTED",
           children: [
@@ -645,14 +561,14 @@ describe("getLogSummary", () => {
       expect(summary.flowErrorCount).toBe(1);
     });
 
-    it("should report zero when no flow failed", async () => {
-      expect((await summaryOf()).flowErrorCount).toBe(0);
+    it("should report zero when no flow failed", () => {
+      expect(summaryOf().flowErrorCount).toBe(0);
     });
   });
 
   describe("governorLimits", () => {
-    it("should report every limit as a row, including the ones at zero", async () => {
-      const summary = await summaryOf({
+    it("should report every limit as a row, including the ones at zero", () => {
+      const summary = summaryOf({
         governorLimits: governorLimitsOf({
           used: { cpuTime: 8000, soqlQueries: 50 },
         }),
@@ -672,10 +588,10 @@ describe("getLogSummary", () => {
       });
     });
 
-    it("should report the peak a limit reached, not where it ended", async () => {
+    it("should report the peak a limit reached, not where it ended", () => {
       // A counter falls when the frame that spent it exits, so the final figure
       // understates what the platform enforced.
-      const summary = await summaryOf({
+      const summary = summaryOf({
         governorLimits: governorLimitsOf({
           used: { cpuTime: 100 },
           peakUsed: { cpuTime: 8000 },
@@ -691,8 +607,8 @@ describe("getLogSummary", () => {
   });
 
   describe("limitsByNamespace", () => {
-    it("should report what each namespace consumed", async () => {
-      const summary = await summaryOf({
+    it("should report what each namespace consumed", () => {
+      const summary = summaryOf({
         governorLimits: governorLimitsOf({
           used: { soqlQueries: 6, cpuTime: 1500 },
           byNamespace: new Map([
@@ -709,8 +625,8 @@ describe("getLogSummary", () => {
       ]);
     });
 
-    it("should report the peak a namespace reached, not where it ended", async () => {
-      const summary = await summaryOf({
+    it("should report the peak a namespace reached, not where it ended", () => {
+      const summary = summaryOf({
         governorLimits: governorLimitsOf({
           byNamespace: new Map([
             ["srm_pkg", namespaceLimitsOf({ soqlQueries: 1 }, { soqlQueries: 4 })],
@@ -723,8 +639,8 @@ describe("getLogSummary", () => {
       ]);
     });
 
-    it("should report no rows when the log attributed nothing to a namespace", async () => {
-      expect((await summaryOf()).limitsByNamespace).toEqual([]);
+    it("should report no rows when the log attributed nothing to a namespace", () => {
+      expect(summaryOf().limitsByNamespace).toEqual([]);
     });
   });
 
@@ -738,8 +654,8 @@ describe("getLogSummary", () => {
     // what is missing because a category was switched off. Empty where the
     // header declared none, because a level has no zero and a default would
     // state one the log did not.
-    it("should state the level each category was captured at", async () => {
-      const summary = await summaryOf({
+    it("should state the level each category was captured at", () => {
+      const summary = summaryOf({
         debugLevels: { apexCode: "DEBUG", database: "NONE" },
       });
 
@@ -751,8 +667,8 @@ describe("getLogSummary", () => {
     // `database 0` beside `database NONE` means the queries were not logged;
     // the same row beside `database FINEST` means none ran. Neither reads
     // without the row, so every category is reported.
-    it("should report a row for every category, so a zero can be read", async () => {
-      const summary = await summaryOf();
+    it("should report a row for every category, so a zero can be read", () => {
+      const summary = summaryOf();
 
       expect(
         summary.categories.map(
@@ -764,8 +680,8 @@ describe("getLogSummary", () => {
     // A frame is not ranked, but its own time is the transaction's, and the
     // root's own time is the time no event spans. Either left out, the rows
     // would not add up to the log.
-    it("should file a frame's self time under its category, and the root's as unattributed", async () => {
-      const summary = await summaryOf({
+    it("should file a frame's self time under its category, and the root's as unattributed", () => {
+      const summary = summaryOf({
         duration: { total: 10_000_000_000, self: 1_000_000_000 },
         children: [
           logEvent({ type: "USER_INFO", debugCategory: "apexCode" }),
@@ -801,8 +717,8 @@ describe("getLogSummary", () => {
       });
     });
 
-    it("should count the operations of a category and sum their self time", async () => {
-      const summary = await summaryOf({
+    it("should count the operations of a category and sum their self time", () => {
+      const summary = summaryOf({
         children: [
           logEvent({
             type: "METHOD_ENTRY",
@@ -845,8 +761,8 @@ describe("getLogSummary", () => {
 
     // A Visualforce formula carries the timeline category `System`, so reading
     // that would report half a Visualforce transaction as system time.
-    it("should file an operation under the category that gates it", async () => {
-      const summary = await summaryOf({
+    it("should file an operation under the category that gates it", () => {
+      const summary = summaryOf({
         children: [
           logEvent({
             type: "VF_EVALUATE_FORMULA_BEGIN",
@@ -867,8 +783,8 @@ describe("getLogSummary", () => {
       });
     });
 
-    it("should report zeros rather than divide by a log that ran no time", async () => {
-      const summary = await summaryOf({
+    it("should report zeros rather than divide by a log that ran no time", () => {
+      const summary = summaryOf({
         duration: { total: 0, self: 0 },
         children: [],
       });
@@ -880,57 +796,6 @@ describe("getLogSummary", () => {
           expect(row.selfPercentage).toBe(0);
         },
       );
-    });
-  });
-
-  describe("error handling", () => {
-    it("should throw an error when log file does not exist", async () => {
-      mockFs.stat.mockRejectedValue(
-        Object.assign(new Error("ENOENT: no such file or directory"), {
-          code: "ENOENT",
-        }),
-      );
-
-      await expect(
-        getLogSummary({ logFilePath: "/path/to/nonexistent.log" }),
-      ).rejects.toThrow("Log file not found: /path/to/nonexistent.log");
-      expect(mockFs.readFile).not.toHaveBeenCalled();
-      expect(mockParse).not.toHaveBeenCalled();
-    });
-
-    it("names the cause when the file is there but cannot be opened", async () => {
-      mockFs.stat.mockRejectedValue(
-        Object.assign(new Error("EACCES: permission denied"), {
-          code: "EACCES",
-        }),
-      );
-
-      await expect(
-        getLogSummary({ logFilePath: "/path/to/restricted.log" }),
-      ).rejects.toThrow("Cannot read log file /path/to/restricted.log: permission denied (EACCES)");
-    });
-
-    it("should propagate file read errors", async () => {
-      mockFs.stat.mockResolvedValue(mockStats);
-      mockFs.readFile.mockRejectedValue(new Error("Failed to read file"));
-
-      await expect(
-        getLogSummary({ logFilePath: "/path/to/unreadable.log" }),
-      ).rejects.toThrow("Failed to read file");
-      expect(mockParse).not.toHaveBeenCalled();
-    });
-
-    it("should propagate parsing errors", async () => {
-      mockFs.stat.mockResolvedValue(mockStats);
-      mockFs.readFile.mockResolvedValue("invalid log content");
-      mockParse.mockImplementation(() => {
-        throw new Error("Failed to parse log");
-      });
-
-      await expect(
-        getLogSummary({ logFilePath: "/path/to/corrupted.log" }),
-      ).rejects.toThrow("Failed to parse log");
-      expect(mockParse).toHaveBeenCalledWith("invalid log content");
     });
   });
 });

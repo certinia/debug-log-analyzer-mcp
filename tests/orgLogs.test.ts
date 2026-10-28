@@ -26,8 +26,10 @@ import path from "node:path";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { AuthInfo, Org } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
-import { listOrgLogs } from "../src/tools/listOrgLogs";
-import { getOrgLogs } from "../src/tools/getOrgLogs";
+import { listOrgLogs as listOrgLogsHandler } from "../src/tools/listOrgLogs";
+import { getOrgLogs as getOrgLogsHandler } from "../src/tools/getOrgLogs";
+import { wiredOrgTool } from "./support/wiredOrgTool";
+import { getOrgLogsTool, listOrgLogsTool } from "../src/tools/orgLogsDefinition";
 import {
   connectOrg,
   readLocalOrg,
@@ -46,6 +48,8 @@ import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
 import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 import { toLongId } from "../src/salesforce/soql";
 
+const listOrgLogs = wiredOrgTool(listOrgLogsHandler, listOrgLogsTool);
+const getOrgLogs = wiredOrgTool(getOrgLogsHandler, getOrgLogsTool);
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<typeof readLocalOrg>;
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
 const mockClassifyOrg = classifyOrg as jest.MockedFunction<typeof classifyOrg>;
@@ -181,7 +185,8 @@ describe("listOrgLogs", () => {
   });
 
   // A log holds the org's data, so a deny covers reading it.
-  it("should refuse a denied org before connecting", async () => {
+  // Where to deny is orgAccess.test's; the words are this tool's.
+  it("should name its action in a refusal", async () => {
     const result = await listOrgLogs(
       server(),
       {},
@@ -193,8 +198,6 @@ describe("listOrgLogs", () => {
     expect(text(result as never)).toContain(
       "Cannot list debug logs against org 'me@example.com (psa)'",
     );
-    expect(mockConnectOrg).not.toHaveBeenCalled();
-    expect(mockListApexLogs).not.toHaveBeenCalled();
   });
 });
 
@@ -428,7 +431,7 @@ describe("getOrgLogs", () => {
     rmSync(elsewhere, { recursive: true, force: true });
   });
 
-  it("should refuse a denied org before connecting", async () => {
+  it("should name its action in a refusal", async () => {
     const result = await getOrgLogs(
       server(),
       {},
@@ -436,9 +439,9 @@ describe("getOrgLogs", () => {
       policy({ denyList: compileDenyList(["type:production"]) }),
     );
 
+    expect(result).toMatchObject({ isError: true });
     expect(text(result as never)).toContain(
       "Cannot download debug logs against org 'me@example.com (psa)'",
     );
-    expect(mockDownload).not.toHaveBeenCalled();
   });
 });

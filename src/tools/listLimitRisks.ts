@@ -3,9 +3,8 @@
  */
 
 import { z } from "zod";
-import type { DebugCategory, Limits } from "@apexdevtools/apex-log-parser";
-import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
-import { toolInputSchema } from "./inputSchema.js";
+import type { ApexLog, DebugCategory, Limits } from "@apexdevtools/apex-log-parser";
+import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import { capturedAt, type DeclaredLevel } from "../logLevels.js";
 import {
   limitGatingCategory,
@@ -13,14 +12,12 @@ import {
   percentageOf,
   roundPercent,
   toLimitRows,
-  toonResult,
 } from "./responseShaping.js";
 
 /** Where a limit becomes worth reporting, when the caller names no other. */
 export const WARNING_THRESHOLD = 80;
 
 const listLimitRisksInputSchema = {
-  logFilePath: logFilePathSchema,
   threshold: z
     .number()
     .optional()
@@ -29,9 +26,7 @@ const listLimitRisksInputSchema = {
     ),
 };
 
-export type LimitRisksArgs = z.infer<
-  z.ZodObject<typeof listLimitRisksInputSchema>
->;
+export type LimitRisksArgs = AnalysisArgs<typeof listLimitRisksInputSchema>;
 
 export interface LimitRisk {
   limit: string;
@@ -66,21 +61,18 @@ export interface LimitRiskResult {
   atRisk: LimitRisk[];
 }
 
-export const listLimitRisksToolConfig = {
+export const listLimitRisksTool = defineAnalysisTool({
+  name: "apexlog_list_limit_risks",
   title: "List Apex Log Limit Risks",
   description:
     "List the governor limits an Apex log transaction has nearly used up - CPU time, heap, SOQL queries and rows, SOSL queries, DML statements and rows, callouts and every other limit - worst first, with how much of each was used",
-  inputSchema: toolInputSchema(listLimitRisksInputSchema),
-  annotations: {
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-};
+  input: listLimitRisksInputSchema,
+  run: listLimitRisks,
+});
 
-export async function listLimitRisks(args: LimitRisksArgs) {
-  const { logFilePath, threshold = WARNING_THRESHOLD } = args;
+function listLimitRisks(apexLog: ApexLog, args: LimitRisksArgs): LimitRiskResult {
+  const { threshold = WARNING_THRESHOLD } = args;
 
-  const apexLog = await loadApexLog(logFilePath);
   const atRisk = atRiskLimits(apexLog.governorLimits.peak, threshold);
 
   // The categories of the rows returned, so a level appears only where it
@@ -95,7 +87,7 @@ export async function listLimitRisks(args: LimitRisksArgs) {
     atRisk,
   };
 
-  return toonResult(result);
+  return result;
 }
 
 /**

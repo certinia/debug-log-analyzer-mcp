@@ -5,13 +5,7 @@
 import { constants, promises as fs, type BigIntStats } from "fs";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
-import { absolutePathSchema, fileReadError } from "./localFile.js";
-
-/**
- * Two words of describe: the server `instructions` state the absolute `.log`
- * path once, which is where a fact true of every tool belongs.
- */
-export const logFilePathSchema = absolutePathSchema.describe("Absolute path");
+import { fileReadError } from "./localFile.js";
 
 type CachedLog = {
   path: string;

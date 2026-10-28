@@ -68,13 +68,16 @@ export type ListOrgLogsArgs = z.infer<
   z.ZodObject<typeof listOrgLogsInputSchema>
 >;
 
-export const listOrgLogsToolConfig = {
-  title: "List Org Debug Logs",
-  description:
-    "List the debug logs stored in a Salesforce org, with how many match. Pass ids to apexlog_get_org_logs to download them.",
-  inputSchema: toolInputSchema(listOrgLogsInputSchema),
-  annotations: {
-    readOnlyHint: true,
+export const listOrgLogsTool = {
+  name: "apexlog_list_org_logs",
+  config: {
+    title: "List Org Debug Logs",
+    description:
+      "List the debug logs stored in a Salesforce org, with how many match. Pass ids to apexlog_get_org_logs to download them.",
+    inputSchema: toolInputSchema(listOrgLogsInputSchema),
+    annotations: {
+      readOnlyHint: true,
+    },
   },
 };
 
@@ -98,13 +101,16 @@ const getOrgLogsInputSchema = {
 
 export type GetOrgLogsArgs = z.infer<z.ZodObject<typeof getOrgLogsInputSchema>>;
 
-export const getOrgLogsToolConfig = {
-  title: "Get Org Debug Logs",
-  description:
-    "Download debug logs from a Salesforce org, by id or the newest N, and return each saved file's path, which the analysis tools accept.",
-  inputSchema: toolInputSchema(getOrgLogsInputSchema),
-  // Writes local files and nothing in the org; not idempotent, because `latest` names newer logs over time.
-  annotations: {
-    destructiveHint: false,
+export const getOrgLogsTool = {
+  name: "apexlog_get_org_logs",
+  config: {
+    title: "Get Org Debug Logs",
+    description:
+      "Download debug logs from a Salesforce org, by id or the newest N, and return each saved file's path, which the analysis tools accept.",
+    inputSchema: toolInputSchema(getOrgLogsInputSchema),
+    // Writes local files and nothing in the org; not idempotent, because `latest` names newer logs over time.
+    annotations: {
+      destructiveHint: false,
+    },
   },
 };
