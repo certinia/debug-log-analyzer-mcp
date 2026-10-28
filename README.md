@@ -44,7 +44,7 @@ Then ask your assistant to analyze a log. The org tools - `apexlog_execute_anony
 
 <!-- token-cost-summary:start -->
 
-Keeping the server connected costs ~2,445 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~2,471 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
 
 <!-- token-cost-summary:end -->
 
@@ -87,6 +87,8 @@ Watch for `ENTERING_MANAGED_PKG`. It is time a package spent where the log shows
 
 `sortBy: "heapSelfNetBytes"` ranks by retained heap instead of time, adding that column and `returnedHeapPercentage`. Both are absent otherwise. The figure is signed, so a row that released more than it took reads below zero. Heap is logged only at `apexCode` FINER and above, so check the `apexCode` row of `capturedAt` before trusting a zero.
 
+`groupBy: "callSite"` folds the rows as `name` does. It adds `callSiteCount` to each row, and a `callSites` table of `{operationRow, caller, lineNumber, callCount, durationSelfMs}`. The table holds the 5 costliest call sites of each row, in the order of the ranking, or fewer if the page is full: a row with fewer sites than `callSiteCount`, and fewer than 5, was cut by the page. Under `sortBy: "heapSelfNetBytes"` each site also gets that column. `caller` is the method, constructor or code unit that made the call, and `lineNumber` is the line in that caller. `lineNumber` is `EXTERNAL` for managed code, and null when the log gives no line. Both are null when no code made the call, for example a trigger that DML started.
+
 `capturedAt` gives the level each category in the returned rows was logged at.
 
 `queryPlans` is what the query optimizer decided about the queries behind those rows. A `relativeCost` above 1 means it will not treat the query as selective. Plans are absent when the log explained none, because explain lines need `database` FINEST.
@@ -104,7 +106,7 @@ Watch for `ENTERING_MANAGED_PKG`. It is time a package spent where the log shows
 | `minSelfMs`     | number | No       | Drop operations below this self time (default: 0), whichever sortBy is used |
 | `limit`         | number ≥ 0 | No       | Page size (default: 10); fewer if the page would be too large |
 | `offset`        | number ≥ 0 | No       | Ranked rows to skip (default: 0): the last page's nextOffset |
-| `groupBy`       | `name` \| `namespace` \| `callerNamespace` \| `debugCategory` \| `none` | No       | Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. |
+| `groupBy`       | `name` \| `namespace` \| `callerNamespace` \| `debugCategory` \| `callSite` \| `none` | No       | Fold repeats into one row; default name. callSite folds as name and lists each row's 5 costliest call sites, fewer if the page is full. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows. |
 | `sortBy`        | `durationSelfMs` \| `heapSelfNetBytes` | No       | Default durationSelfMs. heapSelfNetBytes adds that column. |
 
 <!-- params-apexlog_list_slow_operations:end -->
@@ -315,7 +317,7 @@ Every request carries every tool definition, whether you call them or not. Each 
 
 | Tool                           | Tokens                                                      |
 | ------------------------------ | ----------------------------------------------------------- |
-| `apexlog_list_slow_operations` | ~524                                                        |
+| `apexlog_list_slow_operations` | ~550                                                        |
 | `apexlog_execute_anonymous`    | ~424                                                        |
 | `apexlog_create_trace_flag`    | ~349                                                        |
 | `apexlog_search_events`        | ~330                                                        |
@@ -323,7 +325,7 @@ Every request carries every tool definition, whether you call them or not. Each 
 | `apexlog_get_org_logs`         | ~200                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~2,445** (1.2% of a 200K context), **+60% vs 1.x ~1,529** |
+| **Total**                      | **~2,471** (1.2% of a 200K context), **+62% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
@@ -331,7 +333,7 @@ No single row compares with 1.x: per tool it would compare different tools, sinc
 
 <!-- token-cost-v1-tools:start -->
 
-The 4 tools that replaced 1.x's now cost ~1,253 tokens.
+The 4 tools that replaced 1.x's now cost ~1,279 tokens.
 
 <!-- token-cost-v1-tools:end -->
 

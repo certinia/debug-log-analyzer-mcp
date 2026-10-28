@@ -1,0 +1,21 @@
+durationTotalMs: 22
+returnedSelfPercentage: 86.4
+matchedCount: 6
+capturedAt[3]{debugCategory,level}:
+  apexCode,FINE
+  apexProfiling,INFO
+  workflow,INFO
+operations[6]{debugCategory,type,name,namespace,callCount,callSiteCount,durationTotalMs,durationSelfMs,durationSelfMaxMs,selfPercentage,soqlCount,dmlCount,soslCount,rowCount,thrownCount}:
+  apexCode,METHOD_ENTRY,SyncService.fetch(Integer),default,3,1,6,6,2,27.3,0,0,0,0,3
+  apexCode,METHOD_ENTRY,SyncService.run(),default,1,1,13,5,5,22.7,0,0,0,0,4
+  apexCode,CODE_UNIT_STARTED,execute_anonymous_apex,default,1,1,19,4,4,18.2,0,0,0,0,4
+  apexCode,METHOD_ENTRY,SyncService.save(),default,1,1,2,2,2,9.1,0,0,0,0,1
+  workflow,FLOW_START_INTERVIEWS_BEGIN,FLOW_START_INTERVIEWS_BEGIN,default,1,1,2,2,2,9.1,0,0,0,0,0
+  apexProfiling,CUMULATIVE_LIMIT_USAGE,CUMULATIVE_LIMIT_USAGE,default,1,1,0,0,0,0,0,0,0,0,0
+callSites[6]{operationRow,caller,lineNumber,callCount,durationSelfMs}:
+  1,SyncService.run(),8,3,6
+  2,execute_anonymous_apex,1,1,5
+  3,null,null,1,4
+  4,SyncService.run(),15,1,2
+  5,execute_anonymous_apex,null,1,2
+  6,execute_anonymous_apex,null,1,0

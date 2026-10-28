@@ -56,6 +56,18 @@ const explainedQuery = (spec: NodeSpec, plan: Partial<PlanSpec>): NodeSpec =>
     ],
   });
 
+/** About what a set of rows costs on the wire, a cell and a separator each. */
+const cost = (rows: object[]): number =>
+  rows.reduce(
+    (total: number, row) =>
+      total +
+      Object.values(row).reduce(
+        (cells: number, cell) => cells + String(cell).length + 1,
+        0,
+      ),
+    0,
+  );
+
 function ranked(
   log: ApexLog,
   args: SlowOperationsArgs = {},
@@ -369,16 +381,6 @@ describe("listSlowOperations", () => {
     );
 
     const result = ranked(log, { groupBy: "namespace", limit: 200 });
-    const cost = (rows: object[]) =>
-      rows.reduce(
-        (total, row) =>
-          total +
-          Object.values(row).reduce(
-            (cells, cell) => cells + String(cell).length + 1,
-            0,
-          ),
-        0,
-      );
 
     expect(result.queryPlans?.length).toBeGreaterThan(0);
     expect(result.queryPlans?.length).toBeLessThan(200);
@@ -774,6 +776,233 @@ describe("listSlowOperations", () => {
         durationSelfMs: 100,
       }),
     ]);
+  });
+
+  describe("call sites", () => {
+    /** A method that runs `children`, and whose own self time ranks below them. */
+    const caller = (text: string, ...children: NodeSpec[]): NodeSpec =>
+      method({ text, totalNs: 1 * MS, selfNs: 0, children });
+
+    const sitesOf = (result: SlowOperationsResult, name: string) => {
+      const row = result.operations.findIndex((operation) => operation.name === name) + 1;
+      return (result.callSites ?? []).filter((site) => site.operationRow === row);
+    };
+
+    // The mistake: a site keyed on the caller alone would fold A's two lines,
+    // and one keyed on the call would list A twice.
+    it("folds calls by name, and lists each caller and line they came from", () => {
+      const log = useLog(
+        1000 * MS,
+        caller(
+          "A.run()",
+          query({ text: "SELECT Id", lineNumber: 10, totalNs: 20 * MS }),
+          query({ text: "SELECT Id", lineNumber: 10, totalNs: 20 * MS }),
+          query({ text: "SELECT Id", lineNumber: 11, totalNs: 5 * MS }),
+        ),
+        caller("B.run()", query({ text: "SELECT Id", lineNumber: 20, totalNs: 50 * MS })),
+      );
+
+      const result = ranked(log, { groupBy: "callSite" });
+
+      expect(result.operations[0]).toMatchObject({
+        name: "SELECT Id",
+        callCount: 4,
+        callSiteCount: 3,
+      });
+      expect(sitesOf(result, "SELECT Id")).toEqual([
+        { operationRow: 1, caller: "B.run()", lineNumber: 20, callCount: 1, durationSelfMs: 50 },
+        { operationRow: 1, caller: "A.run()", lineNumber: 10, callCount: 2, durationSelfMs: 40 },
+        { operationRow: 1, caller: "A.run()", lineNumber: 11, callCount: 1, durationSelfMs: 5 },
+      ]);
+    });
+
+    it("lists the five costliest sites, and counts every one", () => {
+      const log = useLog(
+        1000 * MS,
+        ...[1, 2, 3, 4, 5, 6].map((index) =>
+          caller(`C${index}.run()`, query({ text: "SELECT Id", lineNumber: 1, totalNs: index * MS })),
+        ),
+      );
+
+      const result = ranked(log, { groupBy: "callSite" });
+
+      expect(result.operations[0]?.callSiteCount).toBe(6);
+      expect(sitesOf(result, "SELECT Id").map((site) => site.caller)).toEqual([
+        "C6.run()",
+        "C5.run()",
+        "C4.run()",
+        "C3.run()",
+        "C2.run()",
+      ]);
+    });
+
+    // Managed code hides its line as EXTERNAL; the caller is still known, and
+    // "hidden" must not read as "the log has no line".
+    it("tells a line managed code hid from one the log does not have", () => {
+      const log = useLog(
+        1000 * MS,
+        caller("pkg.Api.run()", query({ text: "SELECT Id", lineNumber: "EXTERNAL", totalNs: 50 * MS })),
+        caller("B.run()", query({ text: "SELECT Id", totalNs: 10 * MS })),
+      );
+
+      expect(
+        sitesOf(ranked(log, { groupBy: "callSite" }), "SELECT Id").map(
+          ({ caller, lineNumber }) => [caller, lineNumber],
+        ),
+      ).toEqual([
+        ["pkg.Api.run()", "EXTERNAL"],
+        ["B.run()", null],
+      ]);
+    });
+
+    // The line counts in the code frame it was read in. Under any other parent
+    // that frame is not in the tree, so a line beside that parent's name would
+    // point into code it does not belong to.
+    it("states neither caller nor line where no code frame made the call", () => {
+      const log = useLog(
+        1000 * MS,
+        query({ text: "SELECT Id", lineNumber: 7, totalNs: 50 * MS }),
+      );
+
+      expect(sitesOf(ranked(log, { groupBy: "callSite" }), "SELECT Id")).toEqual([
+        { operationRow: 1, caller: null, lineNumber: null, callCount: 1, durationSelfMs: 50 },
+      ]);
+    });
+
+    it("orders the sites by heap, and states it, under the heap ranking", () => {
+      const log = useLog(
+        1000 * MS,
+        caller("Slow.run()", method({ text: "Work.do()", lineNumber: 1, totalNs: 50 * MS })),
+        caller(
+          "Holds.run()",
+          method({ text: "Work.do()", lineNumber: 2, totalNs: 5 * MS, heapSelfNetBytes: 900_000 }),
+        ),
+      );
+
+      const sites = sitesOf(
+        ranked(log, { groupBy: "callSite", sortBy: "heapSelfNetBytes" }),
+        "Work.do()",
+      );
+
+      expect(sites.map(({ caller, heapSelfNetBytes }) => [caller, heapSelfNetBytes])).toEqual([
+        ["Holds.run()", 900_000],
+        ["Slow.run()", 0],
+      ]);
+    });
+
+    it("adds neither the table nor the column under any other grouping", () => {
+      const log = useLog(
+        1000 * MS,
+        caller("A.run()", query({ text: "SELECT Id", lineNumber: 1, totalNs: 50 * MS })),
+      );
+
+      const result = ranked(log);
+
+      expect(result).not.toHaveProperty("callSites");
+      expect(result.operations[0]).not.toHaveProperty("callSiteCount");
+    });
+
+    // An absent table would read as "not asked"; empty says nothing matched.
+    it("reports the table even when no row matched", () => {
+      expect(ranked(useLog(1000 * MS), { groupBy: "callSite" }).callSites).toEqual([]);
+    });
+
+    it("spends what the rows and plans left of the page budget on the sites", () => {
+      // 100 explained queries, each called from five callers whose names elide
+      // to 400 characters: 500 sites, far past the 60,000-character budget.
+      const log = useLog(
+        1000 * MS,
+        ...Array.from({ length: 100 }, (_, row) =>
+          Array.from({ length: 5 }, (_, site) =>
+            caller(
+              `C${row}_${site}.`.padEnd(600, "x"),
+              explainedQuery(
+                { text: `SELECT f${row}`, lineNumber: 1, totalNs: (200 - row) * MS },
+                {},
+              ),
+            ),
+          ),
+        ).flat(),
+      );
+
+      const result = ranked(log, {
+        groupBy: "callSite",
+        type: ["SOQL_EXECUTE_BEGIN"],
+        limit: 100,
+      });
+
+      expect(result.operations).toHaveLength(100);
+      expect(result.callSites?.length).toBeGreaterThan(0);
+      expect(result.queryPlans?.length).toBeGreaterThan(0);
+      expect(result.callSites?.length).toBeLessThan(500);
+      expect(
+        cost([
+          ...result.operations,
+          ...(result.queryPlans ?? []),
+          ...(result.callSites ?? []),
+        ]),
+      ).toBeLessThanOrEqual(60_000);
+    });
+
+    // A constructor or a trigger's code unit runs code, and its lines count in it.
+    it.each(["CONSTRUCTOR_ENTRY", "CODE_UNIT_STARTED"])(
+      "names a %s frame as the caller",
+      (type) => {
+        const log = useLog(
+          1000 * MS,
+          method({
+            type,
+            text: "Account.trigger",
+            totalNs: 1 * MS,
+            selfNs: 0,
+            children: [query({ text: "SELECT Id", lineNumber: 4, totalNs: 50 * MS })],
+          }),
+        );
+
+        expect(
+          sitesOf(ranked(log, { groupBy: "callSite" }), "SELECT Id").map(
+            ({ caller, lineNumber }) => [caller, lineNumber],
+          ),
+        ).toEqual([["Account.trigger", 4]]);
+      },
+    );
+
+    it("keeps the head and the tail of an over-long caller", () => {
+      const log = useLog(
+        1000 * MS,
+        caller(
+          "Long.".padEnd(600, "x") + ".run()",
+          query({ text: "SELECT Id", lineNumber: 1, totalNs: 50 * MS }),
+        ),
+      );
+
+      const [site] = sitesOf(ranked(log, { groupBy: "callSite" }), "SELECT Id");
+
+      expect(site?.caller).toHaveLength(400);
+      expect(site?.caller?.startsWith("Long.")).toBe(true);
+      expect(site?.caller?.endsWith(".run()")).toBe(true);
+    });
+
+    // A plan's operationRow counts the rows returned, not the ranking, and a
+    // site must count the same way or it names the wrong row on page two.
+    it("points a site at the row on the page it was returned on", () => {
+      const log = useLog(
+        1000 * MS,
+        caller("A.run()", query({ text: "SELECT a", lineNumber: 1, totalNs: 50 * MS })),
+        caller("B.run()", query({ text: "SELECT b", lineNumber: 2, totalNs: 20 * MS })),
+      );
+
+      const result = ranked(log, {
+        groupBy: "callSite",
+        type: ["SOQL_EXECUTE_BEGIN"],
+        offset: 1,
+      });
+
+      expect(result.operations.map((row) => row.name)).toEqual(["SELECT b"]);
+      expect(result.callSites).toEqual([
+        { operationRow: 1, caller: "B.run()", lineNumber: 2, callCount: 1, durationSelfMs: 20 },
+      ]);
+    });
   });
 
   describe("heap ranking", () => {

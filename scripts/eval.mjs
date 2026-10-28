@@ -174,6 +174,14 @@ const ANSWERABILITY = {
       fields: ["returnedHeapPercentage"],
     },
     {
+      // Pinned to the one case that groups by call site, which is what adds the
+      // table: no other grouping states a caller.
+      fixture: "exceptions",
+      question: "Where is that operation called from?",
+      keys: ["callSites"],
+      columns: ["operationRow", "caller", "lineNumber", "callCount"],
+    },
+    {
       // Only where a query was ranked and the log recorded a plan for it.
       // `minimal.log` runs no query, and an absent table is the honest answer.
       fixture: "governor-heavy",
@@ -290,6 +298,9 @@ const TOKEN_BUDGET = {
   // classification columns every ranked row now states, and again for the
   // `returnedHeapPercentage` scalar beside them.
   "apexlog_list_slow_operations/heap-heavy": 207,
+  // The call-site grouping: each row's `callSiteCount` and the `callSites` table
+  // under the rows, which states the caller and line of each.
+  "apexlog_list_slow_operations/exceptions": 290,
   // Raised for the `unattributed` row, as the summary budgets above.
   "apexlog_get_summary/heap-heavy": 232,
   "apexlog_get_summary/truncated": 227,
@@ -332,7 +343,7 @@ const DEFINITION_BUDGET = {
   // cannot show the case for is `sortBy`: on the 40 logs of a 123-log corpus that
   // record an allocation, a heap ranking's top ten holds a median six rows the
   // self-time top ten never returns.
-  apexlog_list_slow_operations: 550,
+  apexlog_list_slow_operations: 578,
   // Covers the facts the summary gained: per-namespace limit usage, time by
   // category, and the exceptions and flow errors #208 added, which a caller
   // asking what failed would otherwise not look for here.
@@ -388,11 +399,13 @@ const V1_DEFINITION_TOTAL = sum(Object.values(V1_DEFINITION_TOKENS));
  * need that Setup or `sf` meets, at ~143-210 tokens each and ~505 together on
  * every request.
  * Searching a log's events, for what the code printed or what ran under one
- * method, added ~330 inside a budget of 347 (#144). The budgets sum to this
- * cap, so raising any budget means raising the cap, on purpose, with the
- * reason here.
+ * method, added ~330 inside a budget of 347 (#144).
+ * Where a slow operation is called from, `groupBy: "callSite"`, added ~26 to
+ * the ranking, which then had no headroom left, so its budget rose by 28.
+ * The budgets sum to this cap, so raising any budget means raising the cap, on
+ * purpose, with the reason here.
  */
-const DEFINITION_TOTAL_CAP = 2566;
+const DEFINITION_TOTAL_CAP = 2594;
 
 /**
  * The words a client's tool search matches on. Asserted so that a trim which
@@ -449,6 +462,9 @@ const FIXTURES_BY_TOOL = {
     // one body that allocates and keeps it beside one that frees what it took,
     // which is the distinction the ranking exists to make.
     { fixture: "heap-heavy", args: { sortBy: "heapSelfNetBytes" } },
+    // Call sites need a log where one method is called from more than once:
+    // `exceptions` calls `fetch` three times from one line.
+    { fixture: "exceptions", args: { groupBy: "callSite" } },
   ],
   apexlog_list_limit_risks: ["governor-heavy", "minimal"],
   apexlog_search_events: [

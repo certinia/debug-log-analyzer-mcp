@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, DebugCategory, LineNumber } from "@apexdevtools/apex-log-parser";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import {
   GROUP_BY,
@@ -29,6 +29,12 @@ import {
 } from "./queryPlans.js";
 import { elide } from "../elide.js";
 import {
+  CALL_SITE_FOLD,
+  listCallSites,
+  type CallSite,
+  type SiteFigures,
+} from "./callSites.js";
+import {
   fitPage,
   matches,
   NAME_LIMIT,
@@ -50,7 +56,7 @@ const SORT_BY = ["durationSelfMs", "heapSelfNetBytes"] as const;
 
 type SortBy = (typeof SORT_BY)[number];
 
-const bySelfTime = (a: Operation, b: Operation) =>
+const bySelfTime = (a: SiteFigures, b: SiteFigures) =>
   b.durationSelfNs - a.durationSelfNs;
 
 /**
@@ -62,7 +68,7 @@ const bySelfTime = (a: Operation, b: Operation) =>
  * ranks nothing. Calling `bySelfTime` from both entries is what makes "it
  * degrades to the self-time ranking" true rather than merely intended.
  */
-const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
+const COMPARE_BY: Record<SortBy, (a: SiteFigures, b: SiteFigures) => number> = {
   durationSelfMs: bySelfTime,
   heapSelfNetBytes: (a, b) =>
     b.heapSelfNetBytes - a.heapSelfNetBytes || bySelfTime(a, b),
@@ -110,10 +116,10 @@ const listSlowOperationsInputSchema = {
     .optional()
     .describe("Ranked rows to skip (default: 0): the last page's nextOffset"),
   groupBy: z
-    .enum([...GROUP_BY, "none"])
+    .enum([...GROUP_BY, "callSite", "none"])
     .optional()
     .describe(
-      "Fold repeats into one row; default name. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows.",
+      "Fold repeats into one row; default name. callSite folds as name and lists each row's 5 costliest call sites, fewer if the page is full. callerNamespace attributes platform DML to the package that drove it. debugCategory folds a namespace's event types together and so states no type or name. none ranks each call on its own. A grouped durationTotalMs is what the transaction takes back if the group never runs - never sum it across rows.",
     ),
   sortBy: z
     .enum(SORT_BY)
@@ -146,6 +152,11 @@ export interface SlowOperation {
   name?: string;
   namespace: string;
   callCount: number;
+  /**
+   * Under `groupBy: "callSite"` alone: how many places the calls came from,
+   * which says how many `callSites` lists past its cut.
+   */
+  callSiteCount?: number;
   /**
    * On a grouped row, what the transaction takes back if the group never runs.
    * Never additive across rows - one row's callees are another row's calls.
@@ -244,6 +255,12 @@ export interface SlowOperationsResult {
    * query, and by `name` where it is not - see `PlanRow`.
    */
   queryPlans?: PlanRow[];
+  /**
+   * Under `groupBy: "callSite"` alone, and then always, even empty: where the
+   * returned rows' calls came from, up to `CALL_SITES_PER_ROW` per row, under
+   * the row by `operationRow` so the operation is named once.
+   */
+  callSites?: CallSiteRow[];
   /** The `offset` of the next page, while ranked rows remain past this one. */
   nextOffset?: number;
 }
@@ -260,6 +277,18 @@ export interface SlowOperationsResult {
  */
 export interface RankedPlan extends QueryPlanVerdict {
   operationRow: number;
+}
+
+/** A call site as the payload states it, under the ranked row it belongs to. */
+export interface CallSiteRow {
+  /** The 1-based line of `operations` as returned, as a plan's is. */
+  operationRow: number;
+  caller: string | null;
+  lineNumber: LineNumber;
+  callCount: number;
+  durationSelfMs: number;
+  /** Under `sortBy: "heapSelfNetBytes"` alone, as on the rows. */
+  heapSelfNetBytes?: number;
 }
 
 /**
@@ -387,11 +416,13 @@ function listSlowOperations(
       matches(namespace, operation.namespace),
   );
 
-  const grouped = groupBy !== "none";
+  // `callSite` is no fold of its own: it folds as `name` and adds a table.
+  const foldBy = groupBy === "callSite" ? CALL_SITE_FOLD : groupBy;
+  const grouped = foldBy !== "none";
 
   // Grouped before the threshold, so a query that is slow only because it runs
   // four hundred times is kept rather than dropped call by call.
-  const rows = grouped ? groupOperations(selected, groupBy) : selected;
+  const rows = grouped ? groupOperations(selected, foldBy) : selected;
 
   const matched = rows
     // Tested as ">= keep" rather than "< drop": a malformed timestamp parses to
@@ -409,7 +440,13 @@ function listSlowOperations(
   // build if an `Operation` field is added without deciding whether it belongs
   // on the wire, and so the columns arrive in a readable order. It is a fixed
   // set: a zero SOQL count reads as "none" rather than "not measured".
-  const { keysOnType } = groupBy === "none" ? UNGROUPED : GROUPINGS[groupBy];
+  const { keysOnType } = foldBy === "none" ? UNGROUPED : GROUPINGS[foldBy];
+
+  // Before the rows are sized, because each row states how many sites it has.
+  const callSitesOf =
+    groupBy === "callSite"
+      ? listCallSites(page, selected, COMPARE_BY[sortBy])
+      : undefined;
 
   const toRow = (operation: Operation): SlowOperation => ({
     debugCategory: operation.debugCategory,
@@ -419,6 +456,9 @@ function listSlowOperations(
     }),
     namespace: operation.namespace,
     callCount: operation.callCount,
+    ...(callSitesOf && {
+      callSiteCount: callSitesOf.get(operation)?.callSiteCount ?? 0,
+    }),
     durationTotalMs: roundMs(operation.durationTotalNs / NS_TO_MS),
     durationSelfMs: roundMs(operation.durationSelfNs / NS_TO_MS),
     // On an ungrouped row the slowest call is the row itself, and a response
@@ -439,6 +479,23 @@ function listSlowOperations(
     }),
   });
 
+  const toCallSiteRow = ({
+    site,
+    operationRow,
+  }: {
+    site: CallSite;
+    operationRow: number;
+  }): CallSiteRow => ({
+    operationRow,
+    caller: site.caller === null ? null : elide(site.caller, NAME_LIMIT),
+    lineNumber: site.lineNumber,
+    callCount: site.callCount,
+    durationSelfMs: roundMs(site.durationSelfNs / NS_TO_MS),
+    ...(sortBy === "heapSelfNetBytes" && {
+      heapSelfNetBytes: site.heapSelfNetBytes,
+    }),
+  });
+
   // A prefix of `page` by construction, which is what lets a plan's
   // `operationRow` name a row safely.
   const { rows: operations, spent } = fitPage(page, toRow);
@@ -450,9 +507,9 @@ function listSlowOperations(
   // query the plan points at it; where it does not, the plan looks the queries
   // up by group key and carries the text.
   const explained: PlanRow[] =
-    groupBy === "none" || GROUPINGS[groupBy].namesOperation
-      ? plansForRankedRows(ranked, everyOperation, groupBy === "none")
-      : plansForFoldedRows(selected, ranked, groupBy, everyOperation);
+    foldBy === "none" || GROUPINGS[foldBy].namesOperation
+      ? plansForRankedRows(ranked, everyOperation, foldBy === "none")
+      : plansForFoldedRows(selected, ranked, foldBy, everyOperation);
 
   // Out of what the rows left, because the plans are part of the same response.
   // A namespace grouping reports one plan per distinct query text behind the
@@ -460,7 +517,18 @@ function listSlowOperations(
   // it bounded by the row cap - 30 such rows were 90% of a real response. The
   // rows come first: a plan qualifies a row, so a plan without its row says
   // nothing.
-  const queryPlans = fitPage(explained, (plan) => plan, spent).rows;
+  const { rows: queryPlans, spent: spentOnPlans } = fitPage(
+    explained,
+    (plan) => plan,
+    spent,
+  );
+
+  // Last, out of what the rows and plans left: a site qualifies a row, as a plan does.
+  const sitesUnderRows = ranked.flatMap((operation, index) =>
+    (callSitesOf?.get(operation)?.sites ?? []).map((site) => ({ site, operationRow: index + 1 })),
+  );
+  const callSites =
+    callSitesOf && fitPage(sitesUnderRows, toCallSiteRow, spentOnPlans).rows;
 
   const result: SlowOperationsResult = {
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
@@ -486,6 +554,7 @@ function listSlowOperations(
     }),
     operations,
     ...omitEmpty({ queryPlans }),
+    ...(callSites && { callSites }),
     ...nextOffsetField(offset, operations.length, matched.length),
   };
 

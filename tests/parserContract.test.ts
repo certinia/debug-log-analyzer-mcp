@@ -457,6 +457,32 @@ describe("parser contract", () => {
     });
   });
 
+  describe("LogEvent.lineNumber", () => {
+    // `groupBy: "callSite"` states a query's line beside its parent's name, so
+    // the line must count in the parent's code, not be the parent's own line.
+    it("reads a timed event's line in the code frame it ran in", () => {
+      const log = parse(
+        [
+          HEADER,
+          "09:00:00.1 (1000)|EXECUTION_STARTED",
+          "09:00:00.1 (2000)|METHOD_ENTRY|[3]|01p000000000001|Caller.run()",
+          "09:00:00.1 (3000)|SOQL_EXECUTE_BEGIN|[12]|Aggregations:0|SELECT Id FROM Account",
+          "09:00:00.1 (4000)|SOQL_EXECUTE_END|[12]|Rows:0",
+          "09:00:00.1 (5000)|METHOD_EXIT|[3]|01p000000000001|Caller.run()",
+          "09:00:00.1 (6000)|EXECUTION_FINISHED",
+          "",
+        ].join("\n"),
+      );
+      const soql = tree(log).find((event) => event.type === "SOQL_EXECUTE_BEGIN");
+
+      expect([soql?.lineNumber, soql?.parent?.type, soql?.parent?.text]).toEqual([
+        12,
+        "METHOD_ENTRY",
+        "Caller.run()",
+      ]);
+    });
+  });
+
   describe("ApexLog.eventsById", () => {
     // `apexlog_get_summary.flowErrorCount` counts this flat list, not the tree.
     it("holds every event in the tree, flow element errors included", () => {
