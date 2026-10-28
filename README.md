@@ -39,6 +39,7 @@ Then ask your assistant to analyze a log. The org tools - `apexlog_execute_anony
 - "Are we approaching any governor limits in this transaction?"
 - "What did my System.debug calls print?"
 - "Run this Apex against my scratch org and analyze the performance"
+- "Run it again with database logging at FINEST"
 - "Find the latest debug log for integration@acme.com and summarize it"
 - "Why are there no logs for this user?"
 
@@ -50,13 +51,13 @@ Keeping the server connected costs ~2,445 tokens, 1.2% of a 200K context. See [T
 
 ## Tools Reference
 
-The analysis tools take an absolute path to a `.log` file.
-
 The org tools use the default org of the project in your client's first [root](https://modelcontextprotocol.io/specification/latest/client/roots), unless you pass `targetOrg`. A client that declares no roots gets the default org of the server's working directory, or the global default org. When the server cannot read the roots a client declares, each org tool needs `targetOrg`, since the project's default org cannot be found. That happens when the client uses MCP protocol version 2026-07-28, when the roots cannot be read - for example, the client does not answer in 5 seconds - or when no root is on this machine.
 
 Each tool returns its result in [TOON](https://github.com/toon-format/toon), and an error as plain text.
 
 A `0` means none, not "not measured". Only what did not happen is left out: fatal errors, lost log content, query plans. Durations are in milliseconds to 3 decimal places, percentages to 1.
+
+An analysis tool that pages gives `matchedCount`, the rows that matched in all, and, while more remain, `nextOffset`, the `offset` of the next page.
 
 The server runs as a local process started by your client over stdio, with no API keys. The analysis tools make no network calls. The server keeps the last parsed log for 5 minutes after its last use, so follow-up questions on that log are faster.
 
@@ -74,7 +75,7 @@ A default response returns:
 
 <!-- shape-apexlog_list_slow_operations:end -->
 
-Each response also gives `durationTotalMs` for the whole transaction, `returnedSelfPercentage` for the share these rows account for, and `matchedCount` for the rows that matched before paging. `nextOffset`, while more remain, is the `offset` of the next page.
+Each response also gives `durationTotalMs` for the whole transaction, and `returnedSelfPercentage` for the share these rows account for.
 
 `durationSelfMaxMs` is the slowest single call in a grouped row. Read it against `durationSelfMs` to tell one bad call from many small ones. It is absent when the row is already one call.
 
@@ -122,7 +123,7 @@ How long the transaction ran, where the time went, what it consumed, and whether
 
 <!-- shape-apexlog_get_summary:end -->
 
-All thirteen governor limits are listed, zeros included.
+All thirteen governor limits are listed.
 
 `limitsByNamespace` shows what each namespace consumed. This is how you see a managed package spending your CPU time. It has no ceiling column, because a ceiling is per limit for the whole transaction and already sits in `governorLimits`.
 
@@ -138,11 +139,16 @@ A last `unattributed` row holds the time no event spans, such as the time before
 
 `truncated` says whether the log is complete. In a partial log, every figure is a floor. Where the platform cut it, `truncatedBy` says how - `skipped-lines` for a hole, `max-size` for a missing tail - and `skippedBytes` says how much went. Both are absent when a log merely stops mid-frame.
 
-`thrownCount` counts the exceptions thrown, zero included.
+`thrownCount` counts the exceptions thrown.
 
-`exceptions` appears when something was thrown: `{message, thrownIn, lineNumber, thrownCount}`, one row per exception message, most thrown first. A message is the first line of the exception, cut at 200 characters, so two messages that differ only after that share a row. `thrownIn` and `lineNumber` say where the message was first thrown. `thrownIn` is the nearest method, constructor or code unit that the log recorded. Below `APEX_CODE,FINE` the log records no method, so `thrownIn` can be a code unit while `lineNumber` is a line in a method that it called. A managed package states its line as `EXTERNAL`. The table stops at 20 rows. `exceptionGroupCount` counts the messages, zero included, so a cut table says so. The log does not say whether a throw was caught.
+`exceptions` appears when something was thrown: `{message, thrownIn, lineNumber, thrownCount}`, one row per message, most thrown first. The table stops at 20 rows. `exceptionGroupCount` counts the messages, so a cut table says so. The log does not say whether a throw was caught.
 
-`flowErrorCount` counts the flow elements that failed, zero included. A flow can fail with no exception and no fatal error.
+- `message` is the first line of the exception, cut at 200 characters. Two messages that differ only after that share a row.
+- `thrownIn` and `lineNumber` say where the message was first thrown. `thrownIn` is the nearest method, constructor or code unit that the log recorded.
+- Below `APEX_CODE,FINE` the log records no method. Then `thrownIn` can be a code unit while `lineNumber` is a line in a method that it called.
+- A managed package states its line as `EXTERNAL`.
+
+`flowErrorCount` counts the flow elements that failed. A flow can fail with no exception and no fatal error.
 
 `fatalErrors` appears once per failure that ended the transaction, with the innermost three frames and a trailing `…` where there were more. It is the only field that says a transaction did not finish, because a fatal error need not breach any limit.
 
@@ -191,7 +197,14 @@ Searches a log's events in log order, for what the other tools rank or total: wh
 
 A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventIndex` names an event and `parentEventIndex` the one it sits under, so a row found here can be opened up with `parentEventIndex`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
 
-Text past 400 characters is elided; ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches the text a row shows, before elision, and a long row is cut around the match. For plain text, grep the saved `.log` instead: it is cheaper, and this tool earns its tokens on event types, nesting, and clients with no shell. `matchedCount` says how many events matched in all; `nextOffset`, while more remain, is the `offset` of the next page. `capturedAt` comes on the first page, or with one event asked for. When every `type` named matched, or you asked for one event, it gives the levels of the categories the matches came from. Otherwise, or when those name no category the header declared, it gives every level the header declared. A search that finds no `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
+Text past 400 characters is elided. Ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches a row's text before elision, and a long row is cut around the match. For plain text, grep the saved `.log`: it is cheaper. This tool earns its tokens on event types, nesting, and clients with no shell.
+
+`capturedAt` comes on the first page, or with one event asked for:
+
+- When every `type` named matched, or you asked for one event, it gives the levels of the categories the matches came from.
+- Otherwise, or when those name no category the header declared, it gives every level the header declared.
+
+No `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debug output, not that the code printed none.
 
 <!-- params-apexlog_search_events:start -->
 
@@ -239,13 +252,6 @@ An object `debugLevel` looks like this:
 ```
 
 Set a `USER_DEBUG` trace flag on your user - in Setup, for example - and every run you start without `debugLevel` logs at its levels; your flag is never changed. `levelsSource` in the response says where a run's levels came from: `traceFlag`, `default` or `request`. A live `DEVELOPER_LOG` trace flag on your user outranks `debugLevel` and the defaults, so the run takes its levels and `levelsSource` is `traceFlag`. `levelsOverridden` says when the log carries levels other than the ones `levelsSource` names.
-
-**Example prompts:**
-
-- "Execute this Apex and show me the log: `System.debug('Hello');`"
-- "Run a query for all Accounts and analyze the performance"
-- "Execute this Apex with all debug levels set to FINEST"
-- "Run this Apex against my QA org with database logging set to FINEST"
 
 ### apexlog_list_org_logs
 
@@ -335,9 +341,9 @@ The 4 tools that replaced 1.x's now cost ~1,253 tokens.
 
 <!-- token-cost-v1-tools:end -->
 
-A call itself is about 15 tokens - a tool name and a log path - so what a call costs is what it returns.
+A call itself is a tool name and a log path, so what a call costs is what it returns.
 
-Cost does not grow with the log size. The figures below are measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log). On the full 19.7 MB original, `apexlog_get_summary` returns ~394 tokens, and `apexlog_list_limit_risks` the same as on the slice.
+Cost barely grows with the log size. The figures below are measured against a 40 KB slice of [the Apex Log Analyzer sample log](https://github.com/certinia/debug-log-analyzer/blob/main/sample-app/debug-logs/sample-log.log).
 
 <!-- token-cost-answers:start -->
 
@@ -368,8 +374,6 @@ Every org tool reads the org's type, and a `--deny-orgs` `type:` entry can refus
 | `unknown`    | The org could not be queried      | Confirmation required |
 
 For a production org, `--allow-production-orgs` skips the confirmation. Otherwise the server asks you to confirm, naming the org and what the call would do - for Apex, all of it with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one call, and expires 10 minutes after the server asks.
-
-An org that cannot be identified is treated as production, so a network or permissions problem can never quietly downgrade one.
 
 ### Deny lists
 
@@ -403,25 +407,17 @@ Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as
 | `--allow-production-orgs` | Run against production orgs, and orgs whose type cannot be read, with no confirmation. A `--deny-orgs` entry still refuses. Only set this if production targets are intentional. |
 | `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. Every other tool still works, `apexlog_create_trace_flag` too. |
 | `--read-only`             | Refuse every tool that changes an org: `apexlog_execute_anonymous` and `apexlog_create_trace_flag`. This includes `--no-apex-execution`. Both tools stay visible so agents know they exist. The analysis tools and the org log tools still work, and `apexlog_get_org_logs` still saves logs to your disk. |
-| `--deny-orgs`             | Refuse these orgs: org id, username, alias or instance URL, with `*` as a glob, or `type:` and an org type. |
+| `--deny-orgs`             | Refuse these orgs. See [Deny lists](#deny-lists). |
 
-To stop Apex running:
+To stop Apex running, add the flag to the [Quick Start](#quick-start) `args`:
 
 ```json
-{
-  "mcpServers": {
-    "apex-log-mcp": {
-      "command": "npx",
-      "args": ["-y", "@certinia/apex-log-mcp", "--no-apex-execution"]
-    }
-  }
-}
+"args": ["-y", "@certinia/apex-log-mcp", "--no-apex-execution"]
 ```
 
 ## Documentation
 
 - [User Guide & Docs](https://certinia.github.io/debug-log-analyzer/)
-- [Apex Log Analyzer VS Code Extension](https://github.com/certinia/debug-log-analyzer) - the full log analyzer for VS Code
 - [MCP Specification](https://modelcontextprotocol.io/)
 
 ## Contributing
