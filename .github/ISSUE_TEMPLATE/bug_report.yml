@@ -35,7 +35,7 @@ body:
     attributes:
       label: Version & environment
       description: '`@certinia/apex-log-mcp` version, plus your MCP client, Node version (`node -v`) and OS.'
-      placeholder: 'e.g. apex-log-mcp 1.0.0, Claude Desktop, Node v22.14.0, macOS 15.5'
+      placeholder: 'e.g. apex-log-mcp 2.0.2, Claude Desktop, Node v22.14.0, macOS 15.5'
     validations:
       required: true
 

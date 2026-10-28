@@ -26,7 +26,7 @@ Update wherever you name a tool yourself:
 
 | 1.x                             | 2.0                                                        |
 | ------------------------------- | ---------------------------------------------------------- |
-| No flag (tool hidden)           | No flag - the tool works against non-production orgs       |
+| No flag (tool hidden)           | No flag - the tool works; production asks first            |
 | `--allowed-orgs ALLOW_ALL_ORGS` | No flag. Add `--allow-production-orgs` to target production |
 | `--allowed-orgs <org>,<org>`    | No flag. Org type decides, not an org list                 |
 
