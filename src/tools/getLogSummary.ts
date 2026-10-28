@@ -7,11 +7,11 @@ import type {
   DebugCategory,
   LineNumber,
   LogEvent,
-  LogEventType,
   LogIssue,
 } from "@apexdevtools/apex-log-parser";
 import { defineAnalysisTool } from "./analysisTool.js";
 import {
+  CODE_FRAMES,
   frameSelfTimes,
   listOperations,
   operationName,
@@ -153,13 +153,6 @@ function innermostFrames(description: string): string {
 /** A loop with a new message per throw has no bound; 409 real logs peak at 9. */
 const EXCEPTION_ROW_LIMIT = 20;
 
-/** The frames an `EXCEPTION_THROWN` line number can belong to. */
-const THROWING_FRAMES: ReadonlySet<LogEventType | null> = new Set([
-  "METHOD_ENTRY",
-  "CONSTRUCTOR_ENTRY",
-  "CODE_UNIT_STARTED",
-]);
-
 /** One row per exception message, placed where it was first thrown. */
 interface ExceptionRow {
   /** The exception class and message, clipped as a fatal's is. */
@@ -200,7 +193,7 @@ function exceptionRows(exceptions: LogEvent[]): ExceptionRow[] {
 // Named as a ranked operation is, so the caller can join the two.
 function frameName(event: LogEvent): string {
   let frame = event.parent;
-  while (frame && !THROWING_FRAMES.has(frame.type)) {
+  while (frame && !CODE_FRAMES.has(frame.type)) {
     frame = frame.parent;
   }
   return frame ? operationName(frame) : "";

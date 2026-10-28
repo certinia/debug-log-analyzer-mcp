@@ -10,7 +10,7 @@ import {
   GROUPINGS,
   groupOperations,
   listOperations,
-  operationGroupKey,
+  membersByRankedRow,
   UNGROUPED,
   type GroupBy,
   type Operation,
@@ -336,16 +336,11 @@ function plansForFoldedRows(
   groupBy: GroupBy,
   everyOperation: Operation[],
 ): QueryPlan[] {
-  const rankedKeys = new Set(
-    ranked.map((operation) => operationGroupKey(operation, groupBy)),
-  );
   const queryNames = new Set(
-    selected
-      .filter(
-        (operation) =>
-          canCarryPlan(operation) &&
-          rankedKeys.has(operationGroupKey(operation, groupBy)),
-      )
+    [
+      ...membersByRankedRow(selected.filter(canCarryPlan), ranked, groupBy).values(),
+    ]
+      .flat()
       .map((operation) => operation.name),
   );
   if (queryNames.size === 0) {

@@ -167,6 +167,13 @@ export function frameSelfTimes(
     }));
 }
 
+/** The frames whose code a line number counts in: a call's, or a throw's. */
+export const CODE_FRAMES: ReadonlySet<LogEventType | null> = new Set([
+  "METHOD_ENTRY",
+  "CONSTRUCTOR_ENTRY",
+  "CODE_UNIT_STARTED",
+]);
+
 /**
  * What a row calls an operation. Shared, so a query plan names its query with
  * the name the ranked row carries and the caller can join the two.
@@ -312,13 +319,34 @@ export const UNGROUPED = {
 
 /**
  * The row an operation folds into under a grouping. Two operations share a row
- * if and only if they share this key, so a caller that has to say which
- * operations are behind a returned row can ask rather than reproduce the rule.
+ * if and only if they share this key.
  */
-export function operationGroupKey(operation: Operation, by: GroupBy): string {
+function operationGroupKey(operation: Operation, by: GroupBy): string {
   const { identity, keysOnType } = GROUPINGS[by];
   const { namespace, name } = identity(operation);
   return `${keysOnType ? operation.type : ""} ${namespace} ${name}`;
+}
+
+/**
+ * The operations behind each ranked row of a fold, keyed by the row: those that
+ * share its `operationGroupKey`. Every ranked row has an entry, even an empty one.
+ * A caller that has to say which operations are behind a returned row asks this
+ * rather than reproduce the rule.
+ */
+export function membersByRankedRow(
+  operations: Operation[],
+  ranked: Operation[],
+  by: GroupBy,
+): Map<Operation, Operation[]> {
+  const rowByKey = new Map(ranked.map((row) => [operationGroupKey(row, by), row]));
+  const members = new Map(ranked.map((row): [Operation, Operation[]] => [row, []]));
+  for (const operation of operations) {
+    const row = rowByKey.get(operationGroupKey(operation, by));
+    if (row) {
+      members.get(row)?.push(operation);
+    }
+  }
+  return members;
 }
 
 /**

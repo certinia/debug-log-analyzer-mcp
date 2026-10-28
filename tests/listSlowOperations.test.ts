@@ -539,6 +539,20 @@ describe("listSlowOperations", () => {
       ).toEqual(expect.objectContaining({ name: "SELECT Id" }));
     });
 
+    // The mistake: explaining every selected query, not only those behind the
+    // namespace rows returned, so a plan names a query no row stands for.
+    it("explains only the queries behind the namespace rows returned", () => {
+      const log = useLog(
+        1000 * MS,
+        explainedQuery({ text: "SELECT a", namespace: "First", totalNs: 500 * MS }, {}),
+        explainedQuery({ text: "SELECT b", namespace: "Second", totalNs: 100 * MS }, {}),
+      );
+
+      expect(
+        ranked(log, { groupBy: "namespace", limit: 1 }).queryPlans?.map((plan) => plan.name),
+      ).toEqual(["SELECT a"]);
+    });
+
     // Ungrouped, a row is one call, so it must be told that call's own plan.
     // The worst-per-text plan is the figure to act on for a group, but here it
     // would state a cost the optimiser never reached for the row.
