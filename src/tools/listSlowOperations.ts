@@ -7,18 +7,20 @@ import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import {
-  capturedAt,
   GROUP_BY,
   GROUPINGS,
   groupOperations,
   listOperations,
   operationGroupKey,
   UNGROUPED,
-  type DeclaredLevel,
   type GroupBy,
   type Operation,
 } from "./operations.js";
-import { DEBUG_CATEGORIES } from "../salesforce/debugLevels.js";
+import {
+  capturedAt,
+  DEBUG_CATEGORIES,
+  type DeclaredLevel,
+} from "../logLevels.js";
 import {
   canCarryPlan,
   listQueryPlans,

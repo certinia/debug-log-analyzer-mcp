@@ -23,7 +23,7 @@ import {
   DEBUG_CATEGORIES,
   type DebugLevelCategory,
   type LogLevel,
-} from "../salesforce/debugLevels.js";
+} from "../logLevels.js";
 import {
   elide,
   elideEnd,

@@ -5,12 +5,12 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
+import { ensureLevelsDebugLevel } from "../salesforce/debugLevels.js";
 import {
   DEFAULT_TRACE_CONFIG,
-  ensureLevelsDebugLevel,
   levelsClause,
   requestedLevels,
-} from "../salesforce/debugLevels.js";
+} from "../logLevels.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { isoSeconds } from "../salesforce/soql.js";
 import {

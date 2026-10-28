@@ -4,15 +4,14 @@ import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
+import { DEBUG_LEVEL_NAME, ensureDebugLevel } from "../salesforce/debugLevels.js";
 import {
-  DEBUG_LEVEL_NAME,
   DEFAULT_TRACE_CONFIG,
-  ensureDebugLevel,
   levelsClause,
   requestedLevels,
   type DebugLevelInput,
   type TraceConfig,
-} from "../salesforce/debugLevels.js";
+} from "../logLevels.js";
 import {
   executeAnonymousWithLog,
   levelsWereOverridden,

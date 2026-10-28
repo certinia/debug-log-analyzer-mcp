@@ -31,11 +31,8 @@ import { createTraceFlag } from "../src/tools/createTraceFlag";
 import { connectOrg, readLocalOrg, type LocalOrg } from "../src/salesforce/connection";
 import { classifyOrg } from "../src/salesforce/orgClassification";
 import * as flags from "../src/salesforce/traceFlags";
-import {
-  ensureLevelsDebugLevel,
-  levelsClause,
-  requestedLevels,
-} from "../src/salesforce/debugLevels";
+import { ensureLevelsDebugLevel } from "../src/salesforce/debugLevels";
+import { levelsClause, requestedLevels } from "../src/logLevels";
 import { compileDenyList } from "../src/policy/orgDenyList";
 import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
 import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";

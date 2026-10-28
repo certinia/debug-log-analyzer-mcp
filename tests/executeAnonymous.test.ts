@@ -17,8 +17,7 @@ jest.mock("node:fs", () => ({
   constants: { O_RDONLY: 0, O_NONBLOCK: 4, W_OK: 2, X_OK: 1 },
 }));
 
-// Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
-// the tests below assert the levels this tool asks the org for.
+// Only the network call is mocked, so DEBUG_LEVEL_NAME, which the warnings name, is the real one.
 jest.mock("../src/salesforce/debugLevels", () => ({
   ...jest.requireActual("../src/salesforce/debugLevels"),
   ensureDebugLevel: jest.fn(),
@@ -75,12 +74,12 @@ import {
   executeAnonymousInputSchema,
   type ExecuteAnonymousArgs,
 } from "../src/tools/executeAnonymousDefinition";
+import { ensureDebugLevel } from "../src/salesforce/debugLevels";
 import {
-  ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
   levelsClause,
   requestedLevels,
-} from "../src/salesforce/debugLevels";
+} from "../src/logLevels";
 import {
   createTraceFlag,
   destroyTraceFlag,

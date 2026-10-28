@@ -2,10 +2,9 @@ import type { Connection } from "@salesforce/core";
 import {
   DEBUG_LEVEL_FIELDS,
   DEBUG_LEVEL_NAME,
-  levelsClause,
   toTraceConfig,
-  type TraceConfig,
 } from "./debugLevels.js";
+import { levelsClause, type TraceConfig } from "../logLevels.js";
 import { errorText } from "../errorText.js";
 import { errorList, saveErrorText } from "./saveErrors.js";
 import {

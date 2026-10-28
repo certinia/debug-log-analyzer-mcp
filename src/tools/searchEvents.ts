@@ -11,7 +11,7 @@ import type {
 } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema, walkLog } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
-import { capturedAt, declaredLevels, type DeclaredLevel } from "./operations.js";
+import { capturedAt, declaredLevels, type DeclaredLevel } from "../logLevels.js";
 import {
   elide,
   elideAround,

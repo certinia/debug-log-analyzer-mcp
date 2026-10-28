@@ -17,7 +17,7 @@ import {
   DEFAULT_TRACE_CONFIG,
   levelsClause,
   LOG_LEVELS,
-} from "../salesforce/debugLevels.js";
+} from "../logLevels.js";
 import { describeDisabled } from "../policy/orgExecutionPolicy.js";
 import {
   levelsByCategorySchema,
