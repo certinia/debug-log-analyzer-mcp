@@ -23,7 +23,7 @@ import {
   listLimitRisksToolConfig,
 } from "./tools/listLimitRisks.js";
 import { withReloginHint } from "./salesforce/authFailure.js";
-import { limitUnitsClause } from "./tools/responseShaping.js";
+import { limitUnitsClause, toolError } from "./tools/responseShaping.js";
 import { searchEvents, searchEventsToolConfig } from "./tools/searchEvents.js";
 import { executeAnonymousToolConfig } from "./tools/executeAnonymousDefinition.js";
 import { createTraceFlagToolConfig } from "./tools/traceFlagsDefinition.js";
@@ -36,7 +36,6 @@ import {
   CONFIRMATION_TTL_SECONDS,
   createConfirmationLedger,
   READ_ONLY_MESSAGE,
-  toolError,
   type ConfirmationState,
 } from "./policy/orgExecutionPolicy.js";
 import { compileDenyList, type DenyList } from "./policy/orgDenyList.js";

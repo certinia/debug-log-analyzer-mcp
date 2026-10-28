@@ -34,6 +34,14 @@ export function toonResult(value: object): CallToolResult {
   return { content: [{ type: "text", text: encode(value) }] };
 }
 
+/** A tool's refusal or failure: `text` as the one text block, marked as an error. */
+export function toolError(text: string): CallToolResult {
+  return {
+    content: [{ type: "text", text }],
+    isError: true,
+  };
+}
+
 /** The parser works in nanoseconds; every reported duration is milliseconds. */
 export const NS_TO_MS = 1_000_000;
 

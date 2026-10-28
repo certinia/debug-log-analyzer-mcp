@@ -115,13 +115,6 @@ export function describeDisabled(
     : `[DISABLED on this server] ${description} ${refusal}`;
 }
 
-export function toolError(text: string) {
-  return {
-    content: [{ type: "text" as const, text }],
-    isError: true,
-  };
-}
-
 function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}\n... (truncated)`;
 }

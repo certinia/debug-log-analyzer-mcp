@@ -23,9 +23,8 @@ import {
   traceFlagWindow,
   type TraceFlagRow,
 } from "../salesforce/traceFlags.js";
-import { toolError } from "../policy/orgExecutionPolicy.js";
 import { withReloginHint } from "../salesforce/authFailure.js";
-import { toonResult } from "./responseShaping.js";
+import { toolError, toonResult } from "./responseShaping.js";
 import type { CreateTraceFlagArgs } from "./traceFlagsDefinition.js";
 
 const DEFAULT_DURATION_MINUTES = 30;

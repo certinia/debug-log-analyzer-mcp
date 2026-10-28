@@ -17,7 +17,6 @@ import { connectOrg, readLocalOrg, type LocalOrg } from "./connection.js";
 import { classifyOrg, type OrgClassification } from "./orgClassification.js";
 import {
   authorizeOperation,
-  toolError,
   type Confirmable,
   type ConsumeConfirmation,
   type MintConfirmationState,
@@ -27,6 +26,7 @@ import {
   typeRefusal,
   type DenyList,
 } from "../policy/orgDenyList.js";
+import { toolError } from "../tools/responseShaping.js";
 
 const ROOTS_TIMEOUT_MS = 5_000;
 

@@ -13,7 +13,6 @@ import { isLoginFailure, RELOGIN_HINT } from "../salesforce/authFailure.js";
 import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
-import { toolError } from "../policy/orgExecutionPolicy.js";
 import {
   openLogStore,
   saveStoredLog,
@@ -21,7 +20,7 @@ import {
   type StoredLog,
 } from "./logStore.js";
 import { progressReporter } from "./progress.js";
-import { omitEmpty, toonResult, warningField } from "./responseShaping.js";
+import { omitEmpty, toolError, toonResult, warningField } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 
 type Saved = { id: string } & StoredLog;
