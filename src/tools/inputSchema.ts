@@ -3,6 +3,8 @@
  */
 
 import { z } from "zod";
+import { LOG_LEVELS, TRACE_CATEGORIES } from "../salesforce/debugLevels.js";
+import { DEFAULT_OUTPUT_DIR } from "./logStore.js";
 
 /** The org an org tool runs against, worded once so every tool charges the same tokens for it. */
 export const targetOrgSchema = z
@@ -11,6 +13,20 @@ export const targetOrgSchema = z
   .describe(
     "Alias or username of the target Salesforce org. Uses the project default if not specified.",
   );
+
+/** Where an org tool saves a log, worded once like `targetOrgSchema`. */
+export const outputDirSchema = z
+  .string()
+  .optional()
+  .describe(
+    `Log directory (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root, else cwd)`,
+  );
+
+/** Levels for the categories named; each tool's description says what the rest get. */
+export const levelsByCategorySchema = z.partialRecord(
+  z.enum(TRACE_CATEGORIES),
+  z.enum(LOG_LEVELS),
+);
 
 /** What zod states and no client reads, where the value is zod's and not ours. */
 const UNREAD = new Set(["$schema", "minimum", "maximum"]);

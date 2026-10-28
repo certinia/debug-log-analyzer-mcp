@@ -11,9 +11,9 @@
 
 import { z } from "zod";
 import { describeDisabled } from "../policy/orgExecutionPolicy.js";
-import { LOG_LEVELS, TRACE_CATEGORIES } from "../salesforce/debugLevels.js";
+import { LOG_LEVELS } from "../salesforce/debugLevels.js";
 import { MAX_DURATION_MINUTES } from "../salesforce/traceFlags.js";
-import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
+import { levelsByCategorySchema, targetOrgSchema, toolInputSchema } from "./inputSchema.js";
 
 const createTraceFlagInputSchema = {
   targetOrg: targetOrgSchema,
@@ -23,7 +23,7 @@ const createTraceFlagInputSchema = {
   debugLevel: z
     .union([
       z.enum(LOG_LEVELS),
-      z.partialRecord(z.enum(TRACE_CATEGORIES), z.enum(LOG_LEVELS)),
+      levelsByCategorySchema,
     ])
     .optional()
     .describe(
