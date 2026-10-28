@@ -23,7 +23,7 @@ import {
 } from "@modelcontextprotocol/server";
 import type { AuthInfo, Org } from "@salesforce/core";
 import {
-  openOrg,
+  bindOpenOrg,
   type OrgAccess,
   type OrgAccessPolicy,
   type OrgRequest,
@@ -102,7 +102,6 @@ function request<T, V = T>(
   overrides: Partial<OrgRequest<T, V>> = {},
 ): OrgRequest<T, V> {
   return {
-    tool: "apexlog_test_tool",
     action: "delete 1 debug log",
     targetOrg: "psa",
     write: false,
@@ -136,6 +135,17 @@ function classifyAs(classification: OrgClassification): void {
   mockClassifyOrg.mockResolvedValue({ classification });
 }
 
+/** One call's `open`, as the server binds it, for the tool named `tool`. */
+function open<T, V = T>(
+  mcpServer: McpServer,
+  ctx: ServerContext,
+  orgRequest: OrgRequest<T, V>,
+  accessPolicy: OrgAccessPolicy,
+  tool = "apexlog_test_tool",
+): Promise<OrgAccess<V>> {
+  return bindOpenOrg(mcpServer, ctx, tool, accessPolicy)(orgRequest);
+}
+
 describe("openOrg", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -153,7 +163,7 @@ describe("openOrg", () => {
   });
 
   it("should grant a sandbox with the prepared value, the connection and the roots", async () => {
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ prepare: async (rootPaths) => `read in ${rootPaths.join()}` }),
@@ -172,7 +182,7 @@ describe("openOrg", () => {
   });
 
   it("should let a write go ahead on a sandbox without asking", async () => {
-    const access = await openOrg(server(), makeCtx(), request(write), policy());
+    const access = await open(server(), makeCtx(), request(write), policy());
 
     expect(access.granted).toBe(true);
     expect(mintConfirmationState).not.toHaveBeenCalled();
@@ -192,7 +202,7 @@ describe("openOrg", () => {
     );
 
     const result = inputRequired(
-      await openOrg(
+      await open(
         server(),
         makeCtx(),
         request({ prepare: async () => "3 logs", write }),
@@ -210,7 +220,7 @@ describe("openOrg", () => {
 
   // So the write does exactly what it read and confirmed, e.g. the log ids it counted.
   it("should grant the value the write planned", async () => {
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({
@@ -234,7 +244,7 @@ describe("openOrg", () => {
       expect(mockConnectOrg).not.toHaveBeenCalled();
     });
 
-    await openOrg(server(), makeCtx(), request({ report }), policy());
+    await open(server(), makeCtx(), request({ report }), policy());
 
     expect(report).toHaveBeenCalledWith("Connecting to the org");
   });
@@ -243,7 +253,7 @@ describe("openOrg", () => {
   it("should refuse a denied identity before prepare and before connecting", async () => {
     const prepare = jest.fn();
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ prepare }),
@@ -261,7 +271,7 @@ describe("openOrg", () => {
   it("should refuse a denied type before a write can ask", async () => {
     classifyAs("production");
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request(write),
@@ -277,7 +287,7 @@ describe("openOrg", () => {
   it("should grant a read against production without asking", async () => {
     classifyAs("production");
 
-    const access = await openOrg(server(), makeCtx(), request(), policy());
+    const access = await open(server(), makeCtx(), request(), policy());
 
     expect(access.granted).toBe(true);
     expect(mintConfirmationState).not.toHaveBeenCalled();
@@ -286,7 +296,7 @@ describe("openOrg", () => {
   it("should ask before a write against production", async () => {
     classifyAs("production");
     const result = inputRequired(
-      await openOrg(server(), makeCtx(), request(write), policy()),
+      await open(server(), makeCtx(), request(write), policy()),
     );
 
     expect(mintConfirmationState).toHaveBeenCalledWith(
@@ -299,7 +309,7 @@ describe("openOrg", () => {
   it("should not ask about a write that found nothing to change", async () => {
     classifyAs("production");
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ write: async () => ({ value: "nothing", confirm: null }) }),
@@ -313,16 +323,17 @@ describe("openOrg", () => {
   it("should refuse a confirmation given for another tool", async () => {
     classifyAs("production");
     const asked = inputRequired(
-      await openOrg(
+      await open(
         server(),
         makeCtx(),
-        request({ ...write, tool: "apexlog_other_tool" }),
+        request(write),
         policy(),
+        "apexlog_other_tool",
       ),
     );
     const state = await codec.verify(asked.requestState as string, makeCtx());
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(state, {
         confirm: { action: "accept", content: {} },
@@ -342,7 +353,7 @@ describe("openOrg", () => {
     });
 
     it("should refuse a call that names no org, before reading the local org", async () => {
-      const access = await openOrg(
+      const access = await open(
         server(),
         makeCtx(),
         request({ targetOrg: undefined }),
@@ -356,7 +367,7 @@ describe("openOrg", () => {
     });
 
     it("should refuse on an empty refusal rather than fall through", async () => {
-      const access = await openOrg(
+      const access = await open(
         server(),
         makeCtx(),
         request({ targetOrg: undefined, unknownRoots: () => "" }),
@@ -368,7 +379,7 @@ describe("openOrg", () => {
     });
 
     it("should return the tool's own refusal first", async () => {
-      const access = await openOrg(
+      const access = await open(
         server(),
         makeCtx(),
         request({ unknownRoots: (reason) => `No file check: ${reason}` }),
@@ -382,7 +393,7 @@ describe("openOrg", () => {
     });
 
     it("should grant a named org, with the workspace marked unknown", async () => {
-      const access = await openOrg(server(), makeCtx(), request(), policy());
+      const access = await open(server(), makeCtx(), request(), policy());
 
       expect(access).toMatchObject({
         granted: true,
@@ -398,7 +409,7 @@ describe("openOrg", () => {
       new SdkError(SdkErrorCode.CapabilityNotSupported, "no roots"),
     );
 
-    const access = await openOrg(
+    const access = await open(
       server(),
       makeCtx(),
       request({ targetOrg: undefined }),

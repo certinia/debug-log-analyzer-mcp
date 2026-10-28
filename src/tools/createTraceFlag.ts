@@ -4,14 +4,13 @@
 
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
-import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { ensureLevelsDebugLevel } from "../salesforce/debugLevels.js";
 import {
   DEFAULT_TRACE_CONFIG,
   levelsClause,
   requestedLevels,
 } from "../logLevels.js";
-import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
+import type { OpenOrg } from "../salesforce/orgAccess.js";
 import { isoSeconds } from "../salesforce/soql.js";
 import {
   createTraceFlag as writeTraceFlag,
@@ -35,10 +34,8 @@ const DEFAULT_DURATION_MINUTES = 30;
  * it (#207): that one is returned, to delete first.
  */
 export async function createTraceFlag(
-  server: McpServer,
   args: CreateTraceFlagArgs,
-  ctx: ServerContext,
-  policy: OrgAccessPolicy,
+  open: OpenOrg,
 ) {
   const minutes = args.durationMinutes ?? DEFAULT_DURATION_MINUTES;
   const durationMs = minutes * 60_000;
@@ -47,41 +44,35 @@ export async function createTraceFlag(
     : DEFAULT_TRACE_CONFIG;
   const clause = levelsClause(levels);
 
-  const access = await openOrg(
-    server,
-    ctx,
-    {
-      tool: "apexlog_create_trace_flag",
-      action: "create a trace flag",
-      targetOrg: args.targetOrg,
-      write: async ({ connection }) => {
-        const entity = await resolveTracedEntity(connection, args.tracedEntity);
-        const logType = logTypeFor(entity);
-        // Salesforce refuses an overlapping flag of the same type anyway; found first, the refusal can name it.
-        const { live: existing, notBefore } = await findOverlappingTraceFlag(
-          connection,
-          entity,
-          logType,
-          durationMs,
-        );
-        return {
-          value: { entity, logType, existing, notBefore },
-          confirm: existing
-            ? null
-            : {
-                effect: `${entity.id}\0${logType}\0${clause}\0${minutes}`,
-                detail: `Trace ${entity.name} (${entity.type}) as ${logType} for ${minutes} minutes, at ${clause}. ${
-                  logType === "USER_DEBUG"
-                    ? "Every transaction the user runs while the flag lives is stored as a debug log, which can fill the org's log storage."
-                    : "It sets the levels of this code's work in the logs a user's flag stores, and stores no log itself."
-                }`,
-                title: `Trace ${entity.name} for ${minutes} minutes`,
-              },
-        };
-      },
+  const access = await open({
+    action: "create a trace flag",
+    targetOrg: args.targetOrg,
+    write: async ({ connection }) => {
+      const entity = await resolveTracedEntity(connection, args.tracedEntity);
+      const logType = logTypeFor(entity);
+      // Salesforce refuses an overlapping flag of the same type anyway; found first, the refusal can name it.
+      const { live: existing, notBefore } = await findOverlappingTraceFlag(
+        connection,
+        entity,
+        logType,
+        durationMs,
+      );
+      return {
+        value: { entity, logType, existing, notBefore },
+        confirm: existing
+          ? null
+          : {
+              effect: `${entity.id}\0${logType}\0${clause}\0${minutes}`,
+              detail: `Trace ${entity.name} (${entity.type}) as ${logType} for ${minutes} minutes, at ${clause}. ${
+                logType === "USER_DEBUG"
+                  ? "Every transaction the user runs while the flag lives is stored as a debug log, which can fill the org's log storage."
+                  : "It sets the levels of this code's work in the logs a user's flag stores, and stores no log itself."
+              }`,
+              title: `Trace ${entity.name} for ${minutes} minutes`,
+            },
+      };
     },
-    policy,
-  );
+  });
   if (!access.granted) {
     return access.result;
   }

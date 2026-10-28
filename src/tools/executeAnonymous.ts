@@ -2,7 +2,7 @@
 // it - `src/index.ts` covers the `bin` alone.
 import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
-import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
+import type { ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
 import { DEBUG_LEVEL_NAME, ensureDebugLevel } from "../salesforce/debugLevels.js";
 import {
@@ -32,7 +32,7 @@ import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, unwritableLogDir, writeDebugLog } from "./logStore.js";
 import { NS_TO_MS, roundMs, toonResult, warningField } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
-import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
+import type { OpenOrg } from "../salesforce/orgAccess.js";
 import type { Confirmable } from "../policy/orgExecutionPolicy.js";
 import { errorText, toolError } from "../errors.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
@@ -166,10 +166,9 @@ function apexConfirmable(
 }
 
 export async function executeAnonymous(
-  server: McpServer,
   args: ExecuteAnonymousArgs,
+  open: OpenOrg,
   ctx: ServerContext,
-  policy: OrgAccessPolicy,
 ) {
   const { targetOrg, debugLevel } = args;
 
@@ -179,43 +178,37 @@ export async function executeAnonymous(
   }
 
   const report = progressReporter(ctx, PROGRESS_STEPS);
-  const access = await openOrg(
-    server,
-    ctx,
-    {
-      tool: "apexlog_execute_anonymous",
-      action: "execute anonymous Apex",
-      targetOrg,
-      report,
-      unknownRoots: (reason) =>
-        args.apexFilePath !== undefined
-          ? `Cannot check Apex file ${args.apexFilePath}: ${reason}. Pass the Apex inline in apex.`
-          : undefined,
-      // Checked before the confirmation and the run, which commits DML; the directory is made after.
-      prepare: async (rootPaths) => {
-        const unwritable = await unwritableLogDir(args.outputDir, rootPaths);
-        if (unwritable) {
-          throw new Error(`${unwritable} The Apex was not run. Pass a writable outputDir.`);
-        }
-        return readApex(rootPaths);
-      },
-      write: async ({ value: apex, connection, local, orgLabel }) => {
-        const [user] = await findUsersByUsername(connection, local.username);
-        if (!user) {
-          throw new Error(`No user in this org has the username ${local.username}.`);
-        }
-        const userId = user.id;
-        // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
-        const flags = await findActiveTraceFlags(connection, userId);
-        const run = resolveRunLevels(debugLevel, flags);
-        return {
-          value: { apex, userId, storesLogs: flags.storesLogs, run },
-          confirm: apexConfirmable(apex, run, orgLabel),
-        };
-      },
+  const access = await open({
+    action: "execute anonymous Apex",
+    targetOrg,
+    report,
+    unknownRoots: (reason) =>
+      args.apexFilePath !== undefined
+        ? `Cannot check Apex file ${args.apexFilePath}: ${reason}. Pass the Apex inline in apex.`
+        : undefined,
+    // Checked before the confirmation and the run, which commits DML; the directory is made after.
+    prepare: async (rootPaths) => {
+      const unwritable = await unwritableLogDir(args.outputDir, rootPaths);
+      if (unwritable) {
+        throw new Error(`${unwritable} The Apex was not run. Pass a writable outputDir.`);
+      }
+      return readApex(rootPaths);
     },
-    policy,
-  );
+    write: async ({ value: apex, connection, local, orgLabel }) => {
+      const [user] = await findUsersByUsername(connection, local.username);
+      if (!user) {
+        throw new Error(`No user in this org has the username ${local.username}.`);
+      }
+      const userId = user.id;
+      // A live flag may be a concurrent run's, deleted before this one ends: then only the log id is lost.
+      const flags = await findActiveTraceFlags(connection, userId);
+      const run = resolveRunLevels(debugLevel, flags);
+      return {
+        value: { apex, userId, storesLogs: flags.storesLogs, run },
+        confirm: apexConfirmable(apex, run, orgLabel),
+      };
+    },
+  });
   // Before any DebugLevel or TraceFlag is written, so a refused call leaves the org untouched.
   if (!access.granted) {
     return access.result;

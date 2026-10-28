@@ -67,11 +67,13 @@ import {
 import { ConfigAggregator, type AuthInfo } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import {
-  executeAnonymous,
+  executeAnonymous as executeAnonymousHandler,
   MAX_APEX_TO_CONFIRM,
 } from "../src/tools/executeAnonymous";
+import { wiredOrgTool } from "./support/wiredOrgTool";
 import {
   executeAnonymousInputSchema,
+  executeAnonymousTool,
   type ExecuteAnonymousArgs,
 } from "../src/tools/executeAnonymousDefinition";
 import { ensureDebugLevel } from "../src/salesforce/debugLevels";
@@ -101,6 +103,10 @@ import {
   type ConfirmationState,
 } from "../src/policy/orgExecutionPolicy";
 
+const executeAnonymous = wiredOrgTool(
+  executeAnonymousHandler,
+  executeAnonymousTool(),
+);
 const mockMkdir = fs.mkdir as jest.MockedFunction<typeof fs.mkdir>;
 const mockWriteFile = fs.writeFile as jest.MockedFunction<typeof fs.writeFile>;
 const mockLink = fs.link as jest.MockedFunction<typeof fs.link>;

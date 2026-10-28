@@ -26,8 +26,10 @@ import path from "node:path";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { AuthInfo, Org } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
-import { listOrgLogs } from "../src/tools/listOrgLogs";
-import { getOrgLogs } from "../src/tools/getOrgLogs";
+import { listOrgLogs as listOrgLogsHandler } from "../src/tools/listOrgLogs";
+import { getOrgLogs as getOrgLogsHandler } from "../src/tools/getOrgLogs";
+import { wiredOrgTool } from "./support/wiredOrgTool";
+import { getOrgLogsTool, listOrgLogsTool } from "../src/tools/orgLogsDefinition";
 import {
   connectOrg,
   readLocalOrg,
@@ -46,6 +48,8 @@ import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
 import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 import { toLongId } from "../src/salesforce/soql";
 
+const listOrgLogs = wiredOrgTool(listOrgLogsHandler, listOrgLogsTool);
+const getOrgLogs = wiredOrgTool(getOrgLogsHandler, getOrgLogsTool);
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<typeof readLocalOrg>;
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
 const mockClassifyOrg = classifyOrg as jest.MockedFunction<typeof classifyOrg>;

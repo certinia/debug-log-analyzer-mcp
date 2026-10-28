@@ -27,7 +27,9 @@ jest.mock("../src/salesforce/debugLevels", () => ({
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { AuthInfo, Org } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
-import { createTraceFlag } from "../src/tools/createTraceFlag";
+import { createTraceFlag as createTraceFlagHandler } from "../src/tools/createTraceFlag";
+import { wiredOrgTool } from "./support/wiredOrgTool";
+import { createTraceFlagTool } from "../src/tools/traceFlagsDefinition";
 import { connectOrg, readLocalOrg, type LocalOrg } from "../src/salesforce/connection";
 import { classifyOrg } from "../src/salesforce/orgClassification";
 import * as flags from "../src/salesforce/traceFlags";
@@ -37,6 +39,7 @@ import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
 import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
 import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 
+const createTraceFlag = wiredOrgTool(createTraceFlagHandler, createTraceFlagTool());
 const mockReadLocalOrg = readLocalOrg as jest.MockedFunction<typeof readLocalOrg>;
 const mockConnectOrg = connectOrg as jest.MockedFunction<typeof connectOrg>;
 const mockClassifyOrg = classifyOrg as jest.MockedFunction<typeof classifyOrg>;
