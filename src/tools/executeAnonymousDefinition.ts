@@ -13,18 +13,19 @@
  */
 
 import { z } from "zod";
-import { DEFAULT_OUTPUT_DIR } from "./logStore.js";
 import {
   DEFAULT_TRACE_CONFIG,
   levelsClause,
   LOG_LEVELS,
-  TRACE_CATEGORIES,
 } from "../salesforce/debugLevels.js";
 import { describeDisabled } from "../policy/orgExecutionPolicy.js";
-import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
+import {
+  levelsByCategorySchema,
+  outputDirSchema,
+  targetOrgSchema,
+  toolInputSchema,
+} from "./inputSchema.js";
 import { absolutePathSchema } from "./localFile.js";
-
-const logLevelSchema = z.enum(LOG_LEVELS);
 
 export const executeAnonymousInputSchema = {
   apex: z
@@ -35,19 +36,14 @@ export const executeAnonymousInputSchema = {
     .optional()
     .describe("Absolute path to a file of anonymous Apex"),
   targetOrg: targetOrgSchema,
-  outputDir: z
-    .string()
-    .optional()
-    .describe(
-      `Log directory (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root, else cwd)`,
-    ),
-  // The enums already list the levels and the categories, so the description
+  outputDir: outputDirSchema,
+  // The schemas already list the levels and the categories, so the description
   // says only what they cannot: what each form does, and the per-category
   // defaults, read from `DEFAULT_TRACE_CONFIG` so they cannot go stale.
   debugLevel: z
     .union([
       z.enum(["default", ...LOG_LEVELS]),
-      z.partialRecord(z.enum(TRACE_CATEGORIES), logLevelSchema),
+      levelsByCategorySchema,
     ])
     .optional()
     .describe(

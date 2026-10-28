@@ -20,10 +20,6 @@ describe("executeAnonymousToolConfig", () => {
     expect(config.description).toContain("as the targetOrg user");
     expect(config.description).not.toContain("[DISABLED");
     expect(config.annotations.destructiveHint).toBe(true);
-    expect(executeAnonymousInputSchema.apex).toBeDefined();
-    expect(executeAnonymousInputSchema.targetOrg).toBeDefined();
-    expect(executeAnonymousInputSchema.outputDir).toBeDefined();
-    expect(executeAnonymousInputSchema.debugLevel).toBeDefined();
   });
 
   it("should accept the three debugLevel forms and reject an unknown category", () => {

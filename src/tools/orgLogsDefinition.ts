@@ -10,9 +10,8 @@
  */
 
 import { z } from "zod";
-import { DEFAULT_OUTPUT_DIR } from "./logStore.js";
 import { isApexLogId, LOG_SORTS } from "../salesforce/apexLogs.js";
-import { targetOrgSchema, toolInputSchema } from "./inputSchema.js";
+import { outputDirSchema, targetOrgSchema, toolInputSchema } from "./inputSchema.js";
 
 /** Per `apexlog_get_org_logs` call, so one call cannot download for minutes. */
 const MAX_LOGS_PER_GET = 25;
@@ -94,12 +93,7 @@ const getOrgLogsInputSchema = {
     .max(MAX_LOGS_PER_GET)
     .optional()
     .describe("The newest N logs, in place of ids (default: 1)"),
-  outputDir: z
-    .string()
-    .optional()
-    .describe(
-      `Log directory (default: ${DEFAULT_OUTPUT_DIR}/ in the first client root, else cwd)`,
-    ),
+  outputDir: outputDirSchema,
 };
 
 export type GetOrgLogsArgs = z.infer<z.ZodObject<typeof getOrgLogsInputSchema>>;
