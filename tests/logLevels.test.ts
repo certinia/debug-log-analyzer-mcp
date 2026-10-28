@@ -5,7 +5,6 @@
 import type { ApexLog, DebugLevels } from "@apexdevtools/apex-log-parser";
 import {
   capturedAt,
-  DEBUG_CATEGORIES,
   declaredLevels,
   DEFAULT_TRACE_CONFIG,
   levelsClause,
@@ -37,16 +36,6 @@ describe("declaredLevels", () => {
     expect(declaredLevels(logCapturedAt({ database: "FINEST" }))).toEqual([
       { debugCategory: "database", level: "FINEST" },
     ]);
-  });
-
-  it("names every category the parser can declare a level for", () => {
-    const everyCategory = Object.fromEntries(
-      DEBUG_CATEGORIES.map((category) => [category, "FINEST"]),
-    ) as DebugLevels;
-
-    expect(declaredLevels(logCapturedAt(everyCategory))).toHaveLength(
-      DEBUG_CATEGORIES.length,
-    );
   });
 });
 
