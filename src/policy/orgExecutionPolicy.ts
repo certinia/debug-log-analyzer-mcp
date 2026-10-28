@@ -11,7 +11,7 @@ import {
 } from "@modelcontextprotocol/server";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
 import { RELOGIN_HINT } from "../salesforce/authFailure.js";
-import { elideEnd } from "../tools/responseShaping.js";
+import { elideEnd } from "../elide.js";
 
 export type PolicyDecision =
   | { outcome: "allowed" }

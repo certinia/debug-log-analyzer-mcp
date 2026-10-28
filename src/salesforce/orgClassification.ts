@@ -3,7 +3,7 @@
  */
 
 import type { Org } from "@salesforce/core";
-import { errorText } from "../errorText.js";
+import { errorText } from "../errors.js";
 
 /**
  * The subset of the Organization record needed to classify an org.

@@ -4,7 +4,7 @@
 
 import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
-import { errorText } from "../errorText.js";
+import { errorText } from "../errors.js";
 import {
   CLOCK_SKEW_MS,
   containing,

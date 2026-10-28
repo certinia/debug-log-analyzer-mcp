@@ -3,7 +3,7 @@
  */
 
 import type { ServerContext } from "@modelcontextprotocol/server";
-import { errorText } from "../errorText.js";
+import { errorText } from "../errors.js";
 
 /**
  * Report each of `total` steps, but only to a caller that asked for progress.

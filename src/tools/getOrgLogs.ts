@@ -19,9 +19,9 @@ import {
   unwritableLogDir,
   type StoredLog,
 } from "./logStore.js";
-import { errorText } from "../errorText.js";
+import { errorText, toolError } from "../errors.js";
 import { progressReporter } from "./progress.js";
-import { omitEmpty, toolError, toonResult, warningField } from "./responseShaping.js";
+import { omitEmpty, toonResult, warningField } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
 
 type Saved = { id: string } & StoredLog;

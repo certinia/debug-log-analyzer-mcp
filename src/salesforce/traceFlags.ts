@@ -5,7 +5,7 @@ import {
   toTraceConfig,
 } from "./debugLevels.js";
 import { levelsClause, type TraceConfig } from "../logLevels.js";
-import { errorText } from "../errorText.js";
+import { errorText } from "../errors.js";
 import { errorList, saveErrorText } from "./saveErrors.js";
 import {
   CLOCK_SKEW_MS,

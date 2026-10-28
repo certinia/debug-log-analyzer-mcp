@@ -30,11 +30,11 @@ import { loadApexLog } from "./apexLogSource.js";
 import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, unwritableLogDir, writeDebugLog } from "./logStore.js";
-import { NS_TO_MS, roundMs, toolError, toonResult, warningField } from "./responseShaping.js";
+import { NS_TO_MS, roundMs, toonResult, warningField } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import type { Confirmable } from "../policy/orgExecutionPolicy.js";
-import { errorText } from "../errorText.js";
+import { errorText, toolError } from "../errors.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */

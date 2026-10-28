@@ -12,9 +12,8 @@ import type {
 import { loadApexLog, logFilePathSchema, walkLog } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { capturedAt, declaredLevels, type DeclaredLevel } from "../logLevels.js";
+import { elide, elideAround } from "../elide.js";
 import {
-  elide,
-  elideAround,
   fitPage,
   matches,
   NAME_LIMIT,

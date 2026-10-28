@@ -26,8 +26,7 @@ import {
   typeRefusal,
   type DenyList,
 } from "../policy/orgDenyList.js";
-import { toolError } from "../tools/responseShaping.js";
-import { errorText } from "../errorText.js";
+import { errorText, toolError } from "../errors.js";
 
 const ROOTS_TIMEOUT_MS = 5_000;
 

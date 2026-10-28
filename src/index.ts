@@ -10,7 +10,7 @@ import {
   runStdioServer,
   type ServerConfig,
 } from "./server.js";
-import { errorText } from "./errorText.js";
+import { errorText } from "./errors.js";
 
 let config: ServerConfig;
 try {

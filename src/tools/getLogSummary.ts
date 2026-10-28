@@ -24,9 +24,8 @@ import {
   type DebugLevelCategory,
   type LogLevel,
 } from "../logLevels.js";
+import { elide, elideEnd } from "../elide.js";
 import {
-  elide,
-  elideEnd,
   NAME_LIMIT,
   NS_TO_MS,
   omitEmpty,

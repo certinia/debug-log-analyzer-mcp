@@ -28,8 +28,8 @@ import {
   type QueryPlan,
   type QueryPlanVerdict,
 } from "./queryPlans.js";
+import { elide } from "../elide.js";
 import {
-  elide,
   fitPage,
   matches,
   NAME_LIMIT,
