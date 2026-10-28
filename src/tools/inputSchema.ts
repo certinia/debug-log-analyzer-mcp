@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import { LOG_LEVELS, TRACE_CATEGORIES } from "../salesforce/debugLevels.js";
+import { LOG_LEVELS, TRACE_CATEGORIES } from "../logLevels.js";
 import { DEFAULT_OUTPUT_DIR } from "./logStore.js";
 
 /** The org an org tool runs against, worded once so every tool charges the same tokens for it. */

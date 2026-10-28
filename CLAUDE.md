@@ -28,9 +28,12 @@ pnpm start
 
 - **src/index.ts**: the `bin` entry point (`dist/index.js`). Parses flags, calls `runStdioServer`, nothing else. A bad flag exits 1 with one `[apex-log-mcp]` line, checked by `pnpm run eval`.
 - **src/server.ts**: `createApexLogServer`, `runStdioServer` and `parseServerConfig`. Registers the eight tools over stdio, and takes no import side effects, so tests can import it without spawning a server.
-- **src/tools/responseShaping.ts**: the shared response helpers - `toonResult`, `omitEmpty`, `warningField`, `toLimitRows`, `toNamespaceLimitRows`, `limitUnitsClause`, `limitGatingCategory`, `roundMs`, `roundPercent`, `percentageOf`, `NS_TO_MS`, `elide`, `elideAround`, `NAME_LIMIT`, and the page every analysis table stops at - `fitPage`, `rowCost`, `PAGE_CHAR_BUDGET` - with the `matches` filter they share.
+- **src/tools/responseShaping.ts**: the shared response helpers - `toonResult`, `omitEmpty`, `warningField`, `toLimitRows`, `toNamespaceLimitRows`, `limitUnitsClause`, `limitGatingCategory`, `roundMs`, `roundPercent`, `percentageOf`, `NS_TO_MS`, `NAME_LIMIT`, and the page every analysis table stops at - `fitPage`, `PAGE_CHAR_BUDGET`, `nextOffsetField` - with the `matches` filter they share.
 - **src/tools/localFile.ts**: `absolutePathSchema`, `fileReadError`, `fsErrorWords` and `outsideRoots`, shared by every tool that reads or writes a local file - a log or a file of Apex.
 - **src/tools/inputSchema.ts**: `toolInputSchema`, which wraps every tool's parameters so a parameter the tool does not have is refused, and the parameters the org tools share, worded once: `targetOrgSchema`, `outputDirSchema` and `levelsByCategorySchema`.
+- **src/errors.ts**: `errorText`, what a caught value says, and `toolError`, a tool's refusal or failure as a result.
+- **src/elide.ts**: `elide`, `elideAround` and `elideEnd`, which cut over-long text without splitting a character.
+- **src/logLevels.ts**: the debug log's categories and levels - `DEBUG_CATEGORIES`, `TRACE_CATEGORIES`, `LOG_LEVELS`, `DEFAULT_TRACE_CONFIG` - with the levels a call asks for, `requestedLevels`, and their wording, `levelsClause`; and `declaredLevels` and `capturedAt`, which read the levels a log's header declared. It needs no org, so the analysis tools import it; `src/salesforce/debugLevels.ts` writes `DebugLevel` records from it.
 - **src/tools/logStore.ts**: `openLogStore`, `writeDebugLog` and `saveStoredLog` - where every org tool saves a log, and never over a different one - and `unwritableLogDir`, which refuses a directory before a step that cannot be undone, and creates nothing.
 - **src/tools/progress.ts**: `progressReporter`, the progress notifications of a long org call, sent only to a caller that asked.
 - **src/tools/apexLogSource.ts**: `loadApexLog` and `walkLog`, the one way the analysis tools get a log. It caches the last parse against a stat fingerprint, shares one parse between concurrent callers, and drops it five minutes after its last use, because a parsed log holds four to five times the size of the file.
@@ -63,6 +66,7 @@ Users add it to their MCP client by hand (`.vscode/mcp.json`, `claude mcp add`),
 src/
   index.ts          # CLI entry point (bin)
   server.ts         # MCP server implementation
+  *.ts              # Helpers every layer may import, which import no layer: errors, elide, logLevels, compileGuards
   tools/            # One module per MCP tool
   salesforce/       # Org connection, org classification, debug levels, trace flags
   policy/           # Org deny list for every org tool; production gate for the writes

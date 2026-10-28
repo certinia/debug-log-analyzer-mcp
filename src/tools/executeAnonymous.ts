@@ -4,15 +4,14 @@ import "../salesforce/logging.js";
 import { promises as fs, constants as fsConstants } from "node:fs";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { Connection } from "@salesforce/core";
+import { DEBUG_LEVEL_NAME, ensureDebugLevel } from "../salesforce/debugLevels.js";
 import {
-  DEBUG_LEVEL_NAME,
   DEFAULT_TRACE_CONFIG,
-  ensureDebugLevel,
   levelsClause,
   requestedLevels,
   type DebugLevelInput,
   type TraceConfig,
-} from "../salesforce/debugLevels.js";
+} from "../logLevels.js";
 import {
   executeAnonymousWithLog,
   levelsWereOverridden,
@@ -34,7 +33,8 @@ import { openLogStore, unwritableLogDir, writeDebugLog } from "./logStore.js";
 import { NS_TO_MS, roundMs, toonResult, warningField } from "./responseShaping.js";
 import { findStoredLogId } from "../salesforce/apexLogs.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
-import { toolError, type Confirmable } from "../policy/orgExecutionPolicy.js";
+import type { Confirmable } from "../policy/orgExecutionPolicy.js";
+import { errorText, toolError } from "../errors.js";
 import type { ExecuteAnonymousArgs } from "./executeAnonymousDefinition.js";
 
 /** Connect, set the trace flag, execute, write. */
@@ -360,10 +360,6 @@ async function createRunTraceFlag(
     console.error(`[apex-log-mcp] ${warning}`);
     return { warning };
   }
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 // Reported, not thrown: the log is in hand and the flag expires on its own. A flag already gone is removed.

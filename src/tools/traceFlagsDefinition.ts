@@ -11,7 +11,7 @@
 
 import { z } from "zod";
 import { describeDisabled } from "../policy/orgExecutionPolicy.js";
-import { LOG_LEVELS } from "../salesforce/debugLevels.js";
+import { LOG_LEVELS } from "../logLevels.js";
 import { MAX_DURATION_MINUTES } from "../salesforce/traceFlags.js";
 import { levelsByCategorySchema, targetOrgSchema, toolInputSchema } from "./inputSchema.js";
 

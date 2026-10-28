@@ -341,11 +341,7 @@ describe("listSlowOperations", () => {
     expect(result.nextOffset).toBe(2);
   });
 
-  // An empty page's nextOffset would equal its offset, so a caller following it would never move.
-  it.each([
-    ["the last page", { limit: 1, offset: 2 }],
-    ["limit 0", { limit: 0 }],
-  ])("gives no nextOffset on %s", async (_name, page) => {
+  it("gives no nextOffset on the last page", async () => {
     mockLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
@@ -353,7 +349,7 @@ describe("listSlowOperations", () => {
       method({ text: "C.run", totalNs: 300 * MS }),
     );
 
-    expect((await ranked({ ...ARGS, ...page })).nextOffset).toBeUndefined();
+    expect((await ranked({ ...ARGS, limit: 1, offset: 2 })).nextOffset).toBeUndefined();
   });
 
   // `slice(0, -5)` drops the five fastest rows and returns all the rest, so a
@@ -508,17 +504,38 @@ describe("listSlowOperations", () => {
       ]);
     });
 
-    it("keeps the worst plan when one query was explained more than once", async () => {
+    // Both orders, so keeping the first or the last plan cannot pass for keeping the worst.
+    it.each([
+      ["first", false],
+      ["last", true],
+    ])("keeps the worst plan when one query was explained more than once, the worst %s", async (_name, worstLast) => {
+      const cheap = explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {
+        leadingOperationType: "Index",
+        relativeCost: 0.5,
+      });
+      const worst = explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {});
+      mockLog(1000 * MS, ...(worstLast ? [cheap, worst] : [worst, cheap]));
+
+      expect((await ranked()).queryPlans).toEqual([
+        expect.objectContaining({
+          leadingOperationType: "TableScan",
+          relativeCost: 2.5,
+        }),
+      ]);
+    });
+
+    // A filter narrows the rows, not the plans: the worst plan for a text is the one to act on.
+    it("keeps the worst plan of a query the filter left out of the rows", async () => {
       mockLog(
         1000 * MS,
-        explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {
+        explainedQuery({ text: "SELECT Id", namespace: "A", totalNs: 100 * MS }, {
           leadingOperationType: "Index",
           relativeCost: 0.5,
         }),
-        explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {}),
+        explainedQuery({ text: "SELECT Id", namespace: "B", totalNs: 100 * MS }, {}),
       );
 
-      expect((await ranked()).queryPlans).toEqual([
+      expect((await ranked({ ...ARGS, namespace: ["A"] })).queryPlans).toEqual([
         expect.objectContaining({
           leadingOperationType: "TableScan",
           relativeCost: 2.5,

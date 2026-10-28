@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { DebugCategory, Limits } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
-import { capturedAt, type DeclaredLevel } from "./operations.js";
+import { capturedAt, type DeclaredLevel } from "../logLevels.js";
 import {
   limitGatingCategory,
   omitEmpty,

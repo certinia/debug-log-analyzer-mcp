@@ -8,56 +8,8 @@ import type {
   LogEvent,
   LogEventType,
 } from "@apexdevtools/apex-log-parser";
-import {
-  DEBUG_CATEGORIES,
-  type DebugLevelCategory,
-} from "../salesforce/debugLevels.js";
 import type { Assert } from "../compileGuards.js";
 import { walkLog } from "./apexLogSource.js";
-
-/** One level the log's header declared, as a response reports it. */
-export interface DeclaredLevel {
-  debugCategory: DebugLevelCategory;
-  level: string;
-}
-
-/**
- * Every level the log's header declared, in the order the header states them.
- *
- * A category the header left out is left out here: a level has no zero, so an
- * absent row means unstated rather than off.
- */
-export function declaredLevels({ debugLevels }: ApexLog): DeclaredLevel[] {
-  return DEBUG_CATEGORIES.flatMap((debugCategory) => {
-    const level = debugLevels[debugCategory];
-    return level === undefined ? [] : [{ debugCategory, level }];
-  });
-}
-
-/**
- * The level each of the named categories was captured at.
- *
- * A capture level decides what reaches the log at all, so it qualifies the
- * figures beside it: a self time under `apexCode,ERROR` is the work of
- * everything the level hid, pooled at the nearest logged boundary. On one such
- * log no `METHOD_ENTRY` was emitted, and 8,161 ms of self time landed on a
- * Visualforce page that did none of that work. The caller
- * names the categories its own figures came from, so a response states only the
- * levels that could explain them, keyed as its rows are.
- *
- * Rows, not one grouped string such as "apexCode FINE; database FINEST": the
- * string saved 6-20 tokens a response on the eval logs, but a row joins the
- * operation rows on `debugCategory`, and the shape has shipped.
- */
-export function capturedAt(
-  apexLog: ApexLog,
-  categories: Iterable<DebugCategory>,
-): DeclaredLevel[] {
-  const named = new Set(categories);
-  return declaredLevels(apexLog).filter(({ debugCategory }) =>
-    named.has(debugCategory),
-  );
-}
 
 /**
  * One timed thing the transaction did.

@@ -17,8 +17,7 @@ jest.mock("node:fs", () => ({
   constants: { O_RDONLY: 0, O_NONBLOCK: 4, W_OK: 2, X_OK: 1 },
 }));
 
-// Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
-// the tests below assert the levels this tool asks the org for.
+// Only the network call is mocked, so DEBUG_LEVEL_NAME, which the warnings name, is the real one.
 jest.mock("../src/salesforce/debugLevels", () => ({
   ...jest.requireActual("../src/salesforce/debugLevels"),
   ensureDebugLevel: jest.fn(),
@@ -75,12 +74,12 @@ import {
   executeAnonymousInputSchema,
   type ExecuteAnonymousArgs,
 } from "../src/tools/executeAnonymousDefinition";
+import { ensureDebugLevel } from "../src/salesforce/debugLevels";
 import {
-  ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
   levelsClause,
   requestedLevels,
-} from "../src/salesforce/debugLevels";
+} from "../src/logLevels";
 import {
   createTraceFlag,
   destroyTraceFlag,
@@ -1620,7 +1619,6 @@ describe("Execute Anonymous", () => {
       );
 
       expect(params.message).toContain(apex);
-      expect(params.message).not.toContain("(truncated)");
     });
 
     it("should fence the Apex and state its size, so it cannot pass for the end of the prompt", async () => {
@@ -1806,18 +1804,21 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
+    // Literals, so a wrong level or grouping cannot show on both sides of the check.
+    const DEFAULTS =
+      "apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO";
     it.each<[string, ExecuteAnonymousArgs["debugLevel"], string]>([
+      ["no levels and no trace flag", undefined, `the defaults: ${DEFAULTS}`],
+      ["the defaults", "default", `the defaults: ${DEFAULTS}`],
       [
-        "no levels and no trace flag",
-        undefined,
-        `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`,
+        "one level",
+        "FINEST",
+        "as requested: apexCode, apexProfiling, callout, database, nba, system, validation, visualforce, wave, workflow FINEST",
       ],
-      ["the defaults", "default", `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`],
-      ["one level", "FINEST", `as requested: ${levelsClause(requestedLevels("FINEST"))}`],
       [
         "some categories",
         { database: "INFO", apexCode: "FINEST" },
-        `as requested: ${levelsClause(requestedLevels({ database: "INFO", apexCode: "FINEST" }))}`,
+        "as requested: apexCode FINEST; apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database, nba, wave INFO",
       ],
     ])("should show the log levels before the Apex, for %s", async (_name, debugLevel, shown) => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);

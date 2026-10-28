@@ -5,12 +5,12 @@
 // The entry point of a lazy chunk, so the guard travels with it.
 import "../salesforce/logging.js";
 import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
+import { ensureLevelsDebugLevel } from "../salesforce/debugLevels.js";
 import {
   DEFAULT_TRACE_CONFIG,
-  ensureLevelsDebugLevel,
   levelsClause,
   requestedLevels,
-} from "../salesforce/debugLevels.js";
+} from "../logLevels.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { isoSeconds } from "../salesforce/soql.js";
 import {
@@ -23,8 +23,8 @@ import {
   traceFlagWindow,
   type TraceFlagRow,
 } from "../salesforce/traceFlags.js";
-import { toolError } from "../policy/orgExecutionPolicy.js";
 import { withReloginHint } from "../salesforce/authFailure.js";
+import { errorText, toolError } from "../errors.js";
 import { toonResult } from "./responseShaping.js";
 import type { CreateTraceFlagArgs } from "./traceFlagsDefinition.js";
 
@@ -117,7 +117,7 @@ export async function createTraceFlag(
   } catch (caught) {
     // Returned, not thrown, so server.ts's relogin wrapper never sees it.
     const error = withReloginHint(caught);
-    const message = error instanceof Error ? error.message : String(error);
+    const message = errorText(error);
     const next = /already being traced/i.test(message)
       ? // A flag set while the call waited, such as for a confirmation, was not there to name.
         " Another flag was set on it while this call waited: call this tool again to see it."

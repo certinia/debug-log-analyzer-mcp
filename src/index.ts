@@ -10,15 +10,14 @@ import {
   runStdioServer,
   type ServerConfig,
 } from "./server.js";
+import { errorText } from "./errors.js";
 
 let config: ServerConfig;
 try {
   config = parseServerConfig(process.argv.slice(2));
 } catch (error) {
   // The client shows stderr as is, so a bad flag gets one line, not a stack.
-  console.error(
-    `[apex-log-mcp] ${error instanceof Error ? error.message : String(error)}`,
-  );
+  console.error(`[apex-log-mcp] ${errorText(error)}`);
   process.exit(1);
 }
 

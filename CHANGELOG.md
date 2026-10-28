@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: parse a log of 20 MB or more about 28% faster ([#246])
 - apexlog_list_slow_operations: give `nextOffset`, the `offset` of the next page, instead of leaving you to count the rows you got ([#248])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
+- apexlog_execute_anonymous, apexlog_create_trace_flag: end a long reason in a production refusal or confirmation with "…", and never split a character ([#272])
 
 ### Added
 
@@ -161,3 +162,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#260]: https://github.com/certinia/debug-log-analyzer-mcp/pull/260
 [#265]: https://github.com/certinia/debug-log-analyzer-mcp/pull/265
 [#269]: https://github.com/certinia/debug-log-analyzer-mcp/pull/269
+[#272]: https://github.com/certinia/debug-log-analyzer-mcp/pull/272

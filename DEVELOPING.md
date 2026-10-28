@@ -10,6 +10,7 @@ a rule goes.
 - The source code is [TypeScript](https://www.typescriptlang.org/).
 - `src/tools/` holds one module per MCP tool, and the helpers they share.
 - `src/salesforce/` connects to a Salesforce org.
+- The modules at the top of `src/`, apart from `index.ts` and `server.ts`, are helpers every folder may import. They import from no folder.
 
 ## 📚 Table of Contents
 

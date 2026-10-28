@@ -13,13 +13,13 @@ import { isLoginFailure, RELOGIN_HINT } from "../salesforce/authFailure.js";
 import { mapRequests } from "../salesforce/parallelRequests.js";
 import { openOrg, type OrgAccessPolicy } from "../salesforce/orgAccess.js";
 import { toLongId } from "../salesforce/soql.js";
-import { toolError } from "../policy/orgExecutionPolicy.js";
 import {
   openLogStore,
   saveStoredLog,
   unwritableLogDir,
   type StoredLog,
 } from "./logStore.js";
+import { errorText, toolError } from "../errors.js";
 import { progressReporter } from "./progress.js";
 import { omitEmpty, toonResult, warningField } from "./responseShaping.js";
 import type { GetOrgLogsArgs } from "./orgLogsDefinition.js";
@@ -103,7 +103,7 @@ export async function getOrgLogs(
             loginFailed ||= isLoginFailure(error);
             return {
               id,
-              error: error instanceof Error ? error.message : String(error),
+              error: errorText(error),
             };
           } finally {
             done++;

@@ -2,10 +2,10 @@ import type { Connection } from "@salesforce/core";
 import {
   DEBUG_LEVEL_FIELDS,
   DEBUG_LEVEL_NAME,
-  levelsClause,
   toTraceConfig,
-  type TraceConfig,
 } from "./debugLevels.js";
+import { levelsClause, type TraceConfig } from "../logLevels.js";
+import { errorText } from "../errors.js";
 import { errorList, saveErrorText } from "./saveErrors.js";
 import {
   CLOCK_SKEW_MS,
@@ -169,7 +169,7 @@ export async function destroyTraceFlag(
     if (typeof error === "object" && error !== null && isAlreadyGone([error])) {
       return undefined;
     }
-    return error instanceof Error ? error.message : String(error);
+    return errorText(error);
   }
 }
 
