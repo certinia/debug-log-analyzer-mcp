@@ -1131,17 +1131,42 @@ function renderTokenCost(costs, responses) {
   ];
 }
 
-/** How a JSON Schema property reads in the README's Type column. */
+/**
+ * How a JSON Schema property reads in the README's Type column, with its
+ * values when they are a closed set, and its bounds. The README has no other
+ * copy of them, because a `.describe()` repeats none (DEVELOPING.md).
+ */
 function schemaType(property) {
   if (property.anyOf) {
     return [...new Set(property.anyOf.map(schemaType))].join(" \\| ");
   }
+  if (property.enum) {
+    return property.enum.map((value) => `\`${value}\``).join(" \\| ");
+  }
   if (property.type === "array") {
-    return `${schemaType(property.items)}[]`;
+    const items = property.items.enum
+      ? `(${schemaType(property.items)})`
+      : schemaType(property.items);
+    const count = bounds(property.minItems, property.maxItems).trim();
+    return `${items}[]${count && ` (${count} items)`}`;
+  }
+  if (property.propertyNames && property.additionalProperties) {
+    return `object: (${schemaType(property.propertyNames)}) → (${schemaType(property.additionalProperties)})`;
   }
   // `integer` is a JSON Schema refinement of number, and the distinction is
   // not one a caller of these tools acts on.
-  return property.type === "integer" ? "number" : property.type;
+  const type = property.type === "integer" ? "number" : property.type;
+  return `${type}${bounds(property.minimum, property.maximum)}`;
+}
+
+function bounds(min, max) {
+  if (min === undefined && max === undefined) {
+    return "";
+  }
+  if (max === undefined) {
+    return ` ≥ ${min}`;
+  }
+  return min === undefined ? ` ≤ ${max}` : ` ${min}–${max}`;
 }
 
 /**
