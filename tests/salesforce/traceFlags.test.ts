@@ -419,31 +419,38 @@ describe("Trace Flags", () => {
   describe("destroyTraceFlag", () => {
     // Deleted by another call, or expired, since it was found: what the org sends, checked on a real org.
     it.each([
-      ["thrown", Object.assign(new Error("invalid cross reference id"), { errorCode: "INVALID_CROSS_REFERENCE_KEY" })],
-      ["returned", { success: false, errors: [{ statusCode: "ENTITY_IS_DELETED", message: "entity is deleted" }] }],
-    ])("marks a flag already gone, when the org's answer is %s", async (how, answer) => {
+      ["thrown", true, Object.assign(new Error("invalid cross reference id"), { errorCode: "INVALID_CROSS_REFERENCE_KEY" })],
+      // A guard: jsforce's HttpApiError has no statusCode, but one beside the errorCode must not hide it.
+      ["thrown with a numeric statusCode", true, Object.assign(new Error("entity is deleted"), { statusCode: 404, errorCode: "ENTITY_IS_DELETED" })],
+      ["returned", false, { success: false, errors: [{ statusCode: "ENTITY_IS_DELETED", message: "entity is deleted" }] }],
+    ])("treats a flag already gone as deleted, when the org's answer is %s", async (_c, throws, answer) => {
       mockDestroy.mockImplementation(async () => {
-        if (how === "thrown") {
+        if (throws) {
           throw answer;
         }
         return answer;
       });
 
-      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toEqual({ alreadyGone: true });
+      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toBeUndefined();
     });
 
     it("returns another failure, not throws it", async () => {
       mockDestroy.mockRejectedValue(new Error("insufficient access rights"));
 
-      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toEqual({
-        error: "insufficient access rights",
-      });
+      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toBe("insufficient access rights");
+    });
+
+    // A throw here escapes the caller's `finally` and loses the run's log.
+    it("returns an answer it cannot read as a failure, not throws it", async () => {
+      mockDestroy.mockResolvedValue(undefined);
+
+      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toEqual(expect.any(String));
     });
 
     it("returns nothing for a flag deleted", async () => {
       mockDestroy.mockResolvedValue({ success: true, id: "7tf000000000001AAA" });
 
-      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toEqual({});
+      await expect(destroyTraceFlag(mockConnection, "7tf000000000001AAA")).resolves.toBeUndefined();
       expect(mockDestroy).toHaveBeenCalledWith("7tf000000000001AAA");
     });
   });

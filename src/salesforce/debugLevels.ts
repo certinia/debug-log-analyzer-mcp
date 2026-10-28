@@ -3,7 +3,7 @@ import type { Connection } from "@salesforce/core";
 import { LOG_LEVEL } from "@apexdevtools/apex-log-parser";
 import type { DebugLevels } from "@apexdevtools/apex-log-parser";
 import type { Assert } from "../compileGuards.js";
-import { saveErrorText } from "./deleteResults.js";
+import { saveErrorText } from "./saveErrors.js";
 import { quote } from "./soql.js";
 
 const DEBUG_LEVEL_SOBJECT = "DebugLevel";
