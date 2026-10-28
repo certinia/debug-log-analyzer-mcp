@@ -330,6 +330,25 @@ describe("createApexLogServer", () => {
       );
     });
 
+    // Parameters no call can use cost tokens on every request; and a call shaped
+    // from the description must reach the refusal, not fail on a parameter
+    // the empty schema does not have.
+    it("should send a refused tool with no parameters, and accept any a call passes", async () => {
+      createApexLogServer({ readOnly: true });
+
+      for (const name of ["apexlog_create_trace_flag", "apexlog_execute_anonymous"]) {
+        const schema = registeredTools.get(name)!.config.inputSchema;
+        const json = schema["~standard"].jsonSchema.input({ target: "draft-2020-12" });
+
+        expect(json.properties).toEqual({});
+        expect(json.$schema).toBeUndefined();
+        expect(
+          schema.safeParse({ targetOrg: "psa", tracedEntity: "dev@example.com", apex: "x" })
+            .success,
+        ).toBe(true);
+      }
+    });
+
     it("should not mark the tool disabled in its description by default", async () => {
       createApexLogServer();
 

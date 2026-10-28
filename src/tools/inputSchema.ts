@@ -56,7 +56,20 @@ export function toolInputSchema<S extends z.ZodRawShape>(
   shape: S,
 ): z.ZodObject<S, z.core.$strict> {
   // Strict, so a misnamed parameter is refused rather than dropped and the call run unfiltered.
-  const object = z.strictObject(shape);
+  return leanOnTheWire(z.strictObject(shape));
+}
+
+/**
+ * The input schema of a tool this server refuses every call to: no parameters
+ * on the wire, where the full schema costs hundreds of tokens on every request,
+ * and any arguments accepted, so a call the agent shaped from the description
+ * gets the refusal and not a validation error.
+ */
+export function refusedInputSchema(): z.ZodObject<Record<never, never>, z.core.$loose> {
+  return leanOnTheWire(z.looseObject({}));
+}
+
+function leanOnTheWire<O extends z.ZodObject>(object: O): O {
   const standard = object["~standard"];
   // A zod that no longer publishes the converter is one the SDK falls back to
   // `z.toJSONSchema` for, and 14 tokens are not worth trading that for a throw

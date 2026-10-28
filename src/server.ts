@@ -19,6 +19,7 @@ import { analysisTools } from "./tools/analysisTools.js";
 import { withReloginHint } from "./salesforce/authFailure.js";
 import { limitUnitsClause } from "./tools/responseShaping.js";
 import { toolError } from "./errors.js";
+import { refusedInputSchema } from "./tools/inputSchema.js";
 import { executeAnonymousTool } from "./tools/executeAnonymousDefinition.js";
 import { createTraceFlagTool } from "./tools/traceFlagsDefinition.js";
 import { getOrgLogsTool, listOrgLogsTool } from "./tools/orgLogsDefinition.js";
@@ -139,7 +140,8 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   // The org tools load lazily: they reach
   // `@salesforce/core`, which a session that only reads logs must not pay for.
   // A refusal, set for a tool that changes an org, answers every call, and
-  // the tool never loads.
+  // the tool never loads. Its description stays, so the agent can tell the user
+  // what the tool would do; its parameters go, as no call can use them.
   const registerOrgTool = <S extends StandardSchemaWithJSON>(
     {
       name,
@@ -163,13 +165,18 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       ) => Promise<CallToolResult | InputRequiredResult>
     >,
   ): void => {
+    if (refusal !== undefined) {
+      server.registerTool(
+        name,
+        { ...config, inputSchema: refusedInputSchema() },
+        () => toolError(refusal),
+      );
+      return;
+    }
     const handle = async (
       args: StandardSchemaWithJSON.InferOutput<S>,
       ctx: ServerContext,
     ): Promise<CallToolResult | InputRequiredResult> => {
-      if (refusal !== undefined) {
-        return toolError(refusal);
-      }
       const { bindOpenOrg } = await import("./salesforce/orgAccess.js");
       const open = bindOpenOrg(server, ctx, name, orgAccessPolicy);
       // A dead login can fail any org call, not only the connect.
