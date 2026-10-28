@@ -6,8 +6,10 @@ import {
   elide,
   elideAround,
   elideEnd,
+  fitPage,
   limitUnitsClause,
   omitEmpty,
+  PAGE_CHAR_BUDGET,
   roundMs,
   roundPercent,
   toLimitRows,
@@ -235,6 +237,19 @@ describe("elideEnd", () => {
     ["drops a surrogate pair the cut would split, whole", "ab😀cd", 4, "ab…"],
   ])("%s", (_name, text, maxChars, expected) => {
     expect(elideEnd(text, maxChars)).toBe(expected);
+  });
+});
+
+describe("fitPage", () => {
+  // Only the first table may overshoot: a second one that always kept a row
+  // could push the response past the ceiling the budget leaves headroom under.
+  const huge = { cell: "x".repeat(PAGE_CHAR_BUDGET) };
+
+  it.each([
+    ["keeps the one row of a first table past the budget", 0, 1],
+    ["keeps no row of a second table past the budget", 1, 0],
+  ])("%s", (_name, spentBefore, kept) => {
+    expect(fitPage([huge], (row) => row, spentBefore).rows).toHaveLength(kept);
   });
 });
 

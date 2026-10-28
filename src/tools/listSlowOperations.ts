@@ -33,13 +33,12 @@ import {
   fitPage,
   matches,
   NAME_LIMIT,
+  nextOffsetField,
   NS_TO_MS,
   omitEmpty,
-  PAGE_CHAR_BUDGET,
   percentageOf,
   roundMs,
   roundPercent,
-  rowCost,
   toonResult,
 } from "./responseShaping.js";
 
@@ -452,9 +451,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
 
   // A prefix of `page` by construction, which is what lets a plan's
   // `operationRow` name a row safely.
-  const fitted = fitPage(page, toRow);
-  const operations = fitted.rows;
-  let spent = fitted.spent;
+  const { rows: operations, spent } = fitPage(page, toRow);
 
   const ranked = page.slice(0, operations.length);
 
@@ -473,14 +470,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // it bounded by the row cap - 30 such rows were 90% of a real response. The
   // rows come first: a plan qualifies a row, so a plan without its row says
   // nothing.
-  const queryPlans: PlanRow[] = [];
-  for (const plan of explained) {
-    spent += rowCost(plan);
-    if (spent > PAGE_CHAR_BUDGET) {
-      break;
-    }
-    queryPlans.push(plan);
-  }
+  const queryPlans = fitPage(explained, (plan) => plan, spent).rows;
 
   const result: SlowOperationsResult = {
     durationTotalMs: roundMs(durationTotalNs / NS_TO_MS),
@@ -506,11 +496,7 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     }),
     operations,
     ...omitEmpty({ queryPlans }),
-    // Not after an empty page, whose nextOffset would never move.
-    ...(operations.length > 0 &&
-      offset + operations.length < matched.length && {
-        nextOffset: offset + operations.length,
-      }),
+    ...nextOffsetField(offset, operations.length, matched.length),
   };
 
   return toonResult(result);

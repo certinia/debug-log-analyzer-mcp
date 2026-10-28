@@ -291,7 +291,7 @@ export const PAGE_CHAR_BUDGET = 60_000;
  * the budget's own headroom absorbs, since 60,000 characters is well under the
  * 100,000 a 25,000-token ceiling allows.
  */
-export function rowCost(row: object): number {
+function rowCost(row: object): number {
   return Object.values(row).reduce(
     (total, cell) => total + String(cell).length + 1,
     0,
@@ -301,27 +301,43 @@ export function rowCost(row: object): number {
 /**
  * The rows of `items` that fit the page budget, built and costed in one pass:
  * a row the budget turns away is never built, and the rows are a prefix of
- * `items` by construction. At least one row always comes back, so one
- * enormous row is reported rather than the table quietly going empty. Rows
- * returned read against a matched count say the page was cut. `spent` counts
- * the row turned away too, so nothing else fits after a cut.
+ * `items` by construction. The first table of a response keeps at least one
+ * row, so one enormous row is reported rather than the table quietly going
+ * empty. Rows returned read against a matched count say the page was cut.
+ * `spent` counts the row turned away too, so nothing else fits after a cut.
+ *
+ * A later table passes the earlier tables' `spent` as `spentBefore`, and the
+ * `spent` it gets back includes it. It can go empty, since the response
+ * already holds a row: every row costs at least its one separator.
  */
 export function fitPage<T, R extends object>(
   items: T[],
   toRow: (item: T) => R,
+  spentBefore = 0,
 ): { rows: R[]; spent: number } {
   const rows: R[] = [];
-  let spent = 0;
+  let spent = spentBefore;
   for (const item of items) {
     const row = toRow(item);
     const cost = rowCost(row);
     spent += cost;
-    if (spent > PAGE_CHAR_BUDGET && rows.length > 0) {
+    if (spent > PAGE_CHAR_BUDGET && (rows.length > 0 || spentBefore > 0)) {
       break;
     }
     rows.push(row);
   }
   return { rows, spent };
+}
+
+/** The `offset` of the next page, absent on the last page and after an empty one, whose `nextOffset` would never move. */
+export function nextOffsetField(
+  offset: number,
+  returnedCount: number,
+  matchedCount: number,
+): { nextOffset?: number } {
+  return returnedCount > 0 && offset + returnedCount < matchedCount
+    ? { nextOffset: offset + returnedCount }
+    : {};
 }
 
 /** An empty or absent filter selects everything on that axis. */
