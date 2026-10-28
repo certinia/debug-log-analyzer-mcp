@@ -375,11 +375,11 @@ async function removeRunTraceFlag(
   if (traceFlagId === undefined) {
     return undefined;
   }
-  const result = await destroyTraceFlag(connection, traceFlagId);
-  if (result.error === undefined) {
+  const error = await destroyTraceFlag(connection, traceFlagId);
+  if (error === undefined) {
     return undefined;
   }
   const warning = `Could not delete trace flag ${traceFlagId}, created for this run. It expires within ${RUN_TRACE_FLAG_MS / 60_000} minutes; to end it sooner: ${deleteTraceFlagCommand(traceFlagId, username)}`;
-  console.error(`[apex-log-mcp] ${warning} ${result.error}`);
+  console.error(`[apex-log-mcp] ${warning} ${error}`);
   return warning;
 }

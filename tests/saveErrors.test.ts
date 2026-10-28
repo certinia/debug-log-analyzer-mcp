@@ -2,15 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { saveErrorText, thrownOutcome } from "../src/salesforce/deleteResults";
-
-describe("thrownOutcome", () => {
-  it("reads a gone errorCode beside a numeric statusCode", () => {
-    const error = Object.assign(new Error("entity is deleted"), { statusCode: 404, errorCode: "ENTITY_IS_DELETED" });
-
-    expect(thrownOutcome(error)).toEqual({ alreadyGone: true });
-  });
-});
+import { saveErrorText } from "../src/salesforce/saveErrors";
 
 describe("saveErrorText", () => {
   it.each([

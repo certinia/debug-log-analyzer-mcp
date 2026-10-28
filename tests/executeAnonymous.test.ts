@@ -333,7 +333,7 @@ describe("Execute Anonymous", () => {
     mockEnsureDebugLevel.mockResolvedValue(testDebugLevelId);
     mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: false });
     mockCreateTraceFlag.mockResolvedValue(testTraceFlagId);
-    mockDestroyTraceFlag.mockResolvedValue({});
+    mockDestroyTraceFlag.mockResolvedValue(undefined);
     mockLoadApexLog.mockResolvedValue({
       duration: { total: 150_000_000 },
       debugLevels: DEFAULT_TRACE_CONFIG,
@@ -834,7 +834,7 @@ describe("Execute Anonymous", () => {
       });
       mockDestroyTraceFlag.mockImplementation(async () => {
         order.push("delete");
-        return {};
+        return undefined;
       });
 
       const result = await executeAnonymous(
@@ -868,7 +868,7 @@ describe("Execute Anonymous", () => {
 
     // The log is in hand and the flag expires on its own, so a failed delete only warns.
     it("returns the log and warns when the flag it created cannot be deleted", async () => {
-      mockDestroyTraceFlag.mockResolvedValue({ error: "Locked" });
+      mockDestroyTraceFlag.mockResolvedValue("Locked");
 
       const result = await executeAnonymous(
         mockServer,
@@ -885,20 +885,6 @@ describe("Execute Anonymous", () => {
       expect(decoded.warning).toContain(
         `--sobject TraceFlag --record-id ${testTraceFlagId} --target-org test@example.com`,
       );
-    });
-
-    // Expired or deleted by another call before the run ended: nothing is left to warn about.
-    it("does not warn when the flag it created is already gone", async () => {
-      mockDestroyTraceFlag.mockResolvedValue({ alreadyGone: true });
-
-      const result = await executeAnonymous(
-        mockServer,
-        { apex: testApexCode },
-        ctx,
-        policy(),
-      );
-
-      expect(toonDecode(result).warning).toBeUndefined();
     });
 
     // The header returns the log without a flag; only the file's log id depends on one, and the debug level is only for the flag.
