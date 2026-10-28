@@ -2,14 +2,8 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type {
-  ApexLog,
-  LogEvent,
-  LogEventType,
-  SOQLExecuteExplainLine,
-} from "@apexdevtools/apex-log-parser";
-import { walkLog } from "./apexLogSource.js";
-import { operationName } from "./operations.js";
+import type { LogEvent, SOQLExecuteExplainLine } from "@apexdevtools/apex-log-parser";
+import { operationName, type Operation } from "./operations.js";
 
 /**
  * What the query optimiser decided, without saying which query it decided about.
@@ -40,11 +34,7 @@ export interface QueryPlan extends QueryPlanVerdict {
  * `CURSOR_CREATE_BEGIN` can never carry a plan. Exported so the one module that
  * reads explain lines is the one that says which type has them.
  */
-export function canCarryPlan({
-  type,
-}: {
-  type: LogEventType | "Unknown" | null;
-}): boolean {
+export function canCarryPlan({ type }: Pick<Operation, "type">): boolean {
   return type === "SOQL_EXECUTE_BEGIN";
 }
 
@@ -94,23 +84,20 @@ export function planOf(node: LogEvent): QueryPlan | undefined {
  * One query text can be explained more than once, and the worst plan is kept:
  * the caller is looking for the query to fix, and a plan that was selective on
  * one call does not make it selective.
+ *
+ * Read from every operation of the log, not a filtered selection: a query
+ * timed like any other is one of them, so this needs no walk of its own.
  */
-export function listQueryPlans(apexLog: ApexLog): Map<string, QueryPlan> {
+export function listQueryPlans(everyOperation: Operation[]): Map<string, QueryPlan> {
   const plans = new Map<string, QueryPlan>();
 
-  apexLog.children.forEach((child) =>
-    walkLog<void>(child, (node) => {
-      if (!canCarryPlan(node)) {
-        return;
-      }
-
-      const plan = planOf(node);
-      const known = plan && plans.get(plan.name);
-      if (plan && (!known || plan.relativeCost > known.relativeCost)) {
-        plans.set(plan.name, plan);
-      }
-    }),
-  );
+  everyOperation.filter(canCarryPlan).forEach(({ node }) => {
+    const plan = planOf(node);
+    const known = plan && plans.get(plan.name);
+    if (plan && (!known || plan.relativeCost > known.relativeCost)) {
+      plans.set(plan.name, plan);
+    }
+  });
 
   return plans;
 }

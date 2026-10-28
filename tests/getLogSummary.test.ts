@@ -11,7 +11,7 @@ import {
 } from "../src/tools/getLogSummary";
 import { logEvent, type NodeSpec } from "./support/logEvents";
 import { clearApexLogCache, walkLog } from "../src/tools/apexLogSource";
-import { DEBUG_CATEGORIES } from "../src/salesforce/debugLevels";
+import { DEBUG_CATEGORIES } from "../src/logLevels";
 import { ALL_LIMIT_METRICS, parse } from "@apexdevtools/apex-log-parser";
 import type {
   ApexLog,

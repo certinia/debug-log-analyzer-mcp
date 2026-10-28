@@ -11,13 +11,13 @@ import type {
 } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema, walkLog } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
-import { capturedAt, declaredLevels, type DeclaredLevel } from "./operations.js";
+import { capturedAt, declaredLevels, type DeclaredLevel } from "../logLevels.js";
+import { elide, elideAround } from "../elide.js";
 import {
-  elide,
-  elideAround,
   fitPage,
   matches,
   NAME_LIMIT,
+  nextOffsetField,
   omitEmpty,
   PAGE_CHAR_BUDGET,
   toonResult,
@@ -215,7 +215,6 @@ export async function searchEvents(args: SearchEventsArgs) {
   const allTypesSeen =
     !!type?.length && type.every((name) => matchedTypes.has(name));
   const levels = capturedAt(apexLog, one || allTypesSeen ? matchedCategories : []);
-  const next = offset + events.length;
 
   const result: SearchEventsResult = {
     matchedCount,
@@ -224,8 +223,7 @@ export async function searchEvents(args: SearchEventsArgs) {
         capturedAt: levels.length ? levels : declaredLevels(apexLog),
       })),
     events,
-    // Not after an empty page, whose nextOffset would never move.
-    ...(events.length > 0 && next < matchedCount && { nextOffset: next }),
+    ...nextOffsetField(offset, events.length, matchedCount),
   };
 
   return toonResult(result);

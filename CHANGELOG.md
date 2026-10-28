@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: parse a log of 20 MB or more about 28% faster ([#246])
 - apexlog_list_slow_operations: give `nextOffset`, the `offset` of the next page, instead of leaving you to count the rows you got ([#248])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
+- apexlog_execute_anonymous, apexlog_create_trace_flag: end a long reason in a production refusal or confirmation with "…", and never split a character ([#272])
 
 ### Added
 
@@ -30,7 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: show all of the Apex in a production confirmation, and refuse Apex too long to show ([#221])
 - apexlog_execute_anonymous: show the log levels in a production confirmation - a live trace flag's where it outranks `debugLevel` - and refuse a run at levels other than the ones confirmed ([#228], [#230])
 - apexlog_execute_anonymous: stop changing your trace flag's debug level or leaving a 24-hour trace flag on your user ([#207])
-- apexlog_execute_anonymous: run the Apex with a warning when the org refuses a trace flag, instead of failing the call ([#207])
+- apexlog_execute_anonymous: run the Apex with a warning when the org refuses a trace flag or its debug level, instead of failing the call ([#207], [#269])
 - apexlog_execute_anonymous: stop a 60-second stall waiting on roots ([#222])
 - apexlog_execute_anonymous: require `targetOrg` when the client's roots can't be used ([#225])
 - apexlog_get_summary, apexlog_list_slow_operations: time a method that the log never closes up to the end of the log, instead of reporting it too short ([#226])
@@ -160,3 +161,5 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#256]: https://github.com/certinia/debug-log-analyzer-mcp/issues/256
 [#260]: https://github.com/certinia/debug-log-analyzer-mcp/pull/260
 [#265]: https://github.com/certinia/debug-log-analyzer-mcp/pull/265
+[#269]: https://github.com/certinia/debug-log-analyzer-mcp/pull/269
+[#272]: https://github.com/certinia/debug-log-analyzer-mcp/pull/272

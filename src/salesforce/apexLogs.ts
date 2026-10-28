@@ -4,6 +4,7 @@
 
 import { createHash } from "node:crypto";
 import type { Connection } from "@salesforce/core";
+import { errorText } from "../errors.js";
 import {
   CLOCK_SKEW_MS,
   containing,
@@ -318,7 +319,7 @@ export async function findStoredLogId(
     return undefined;
   } catch (error) {
     console.error(
-      `[apex-log-mcp] Could not match the debug log to a stored ApexLog: ${error instanceof Error ? error.message : String(error)}`,
+      `[apex-log-mcp] Could not match the debug log to a stored ApexLog: ${errorText(error)}`,
     );
     return undefined;
   }

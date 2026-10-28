@@ -196,59 +196,6 @@ export function toNamespaceLimitRows(
 export const NAME_LIMIT = 400;
 
 /**
- * Keep the head and the tail of an over-long name, and say so in the middle.
- *
- * The middle goes rather than the end, because a query names its columns first
- * and its object last, and dropping the `FROM` clause would leave a row the
- * caller cannot identify.
- *
- * Measured in UTF-16 units, which is what the name costs to send, and cut by
- * slicing rather than by walking the string: on a name of the length above,
- * that is 0.16 microseconds against 56.
- */
-export function elide(text: string, maxChars: number): string {
-  if (text.length <= maxChars) {
-    return text;
-  }
-  const head = Math.ceil((maxChars - 1) / 2);
-  const tail = maxChars - 1 - head;
-  return `${text.slice(0, offPair(text, head, -1))}…${text.slice(offPair(text, text.length - tail, 1))}`;
-}
-
-/**
- * Cut `text` to `maxChars` as `elide` does, unless that hides the span from
- * `start` for `length` characters: then keep a window around the span, with an
- * ellipsis at each end cut. A span longer than the window keeps its start.
- */
-export function elideAround(
-  text: string,
-  maxChars: number,
-  start: number,
-  length: number,
-): string {
-  const head = Math.ceil((maxChars - 1) / 2);
-  const tail = maxChars - 1 - head;
-  if (text.length <= maxChars || start + length <= head || start >= text.length - tail) {
-    return elide(text, maxChars);
-  }
-  // Two ellipses, so the window is two shorter than the limit.
-  const width = maxChars - 2;
-  const centred = length >= width ? start : start - Math.floor((width - length) / 2);
-  const at = Math.min(Math.max(0, centred), text.length - width);
-  const from = offPair(text, at, 1);
-  const to = offPair(text, at + width, -1);
-  return `${from > 0 ? "…" : ""}${text.slice(from, to)}${to < text.length ? "…" : ""}`;
-}
-
-// A cut inside a surrogate pair would send half a character, so step `step` off it.
-function offPair(text: string, index: number, step: 1 | -1): number {
-  return (text.charCodeAt(index - 1) & 0xfc00) === 0xd800 &&
-    (text.charCodeAt(index) & 0xfc00) === 0xdc00
-    ? index + step
-    : index;
-}
-
-/**
  * The most one page of rows may cost, as characters.
  *
  * About 15,000 tokens at the four-characters-a-token estimate `scripts/eval.mjs`
@@ -268,7 +215,7 @@ export const PAGE_CHAR_BUDGET = 60_000;
  * the budget's own headroom absorbs, since 60,000 characters is well under the
  * 100,000 a 25,000-token ceiling allows.
  */
-export function rowCost(row: object): number {
+function rowCost(row: object): number {
   return Object.values(row).reduce(
     (total, cell) => total + String(cell).length + 1,
     0,
@@ -278,27 +225,43 @@ export function rowCost(row: object): number {
 /**
  * The rows of `items` that fit the page budget, built and costed in one pass:
  * a row the budget turns away is never built, and the rows are a prefix of
- * `items` by construction. At least one row always comes back, so one
- * enormous row is reported rather than the table quietly going empty. Rows
- * returned read against a matched count say the page was cut. `spent` counts
- * the row turned away too, so nothing else fits after a cut.
+ * `items` by construction. The first table of a response keeps at least one
+ * row, so one enormous row is reported rather than the table quietly going
+ * empty. Rows returned read against a matched count say the page was cut.
+ * `spent` counts the row turned away too, so nothing else fits after a cut.
+ *
+ * A later table passes the earlier tables' `spent` as `spentBefore`, and the
+ * `spent` it gets back includes it. It can go empty, since the response
+ * already holds a row: every row costs at least its one separator.
  */
 export function fitPage<T, R extends object>(
   items: T[],
   toRow: (item: T) => R,
+  spentBefore = 0,
 ): { rows: R[]; spent: number } {
   const rows: R[] = [];
-  let spent = 0;
+  let spent = spentBefore;
   for (const item of items) {
     const row = toRow(item);
     const cost = rowCost(row);
     spent += cost;
-    if (spent > PAGE_CHAR_BUDGET && rows.length > 0) {
+    if (spent > PAGE_CHAR_BUDGET && (rows.length > 0 || spentBefore > 0)) {
       break;
     }
     rows.push(row);
   }
   return { rows, spent };
+}
+
+/** The `offset` of the next page, absent on the last page and after an empty one, whose `nextOffset` would never move. */
+export function nextOffsetField(
+  offset: number,
+  returnedCount: number,
+  matchedCount: number,
+): { nextOffset?: number } {
+  return returnedCount > 0 && offset + returnedCount < matchedCount
+    ? { nextOffset: offset + returnedCount }
+    : {};
 }
 
 /** An empty or absent filter selects everything on that axis. */

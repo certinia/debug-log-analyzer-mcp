@@ -3,6 +3,7 @@
  */
 
 import type { ServerContext } from "@modelcontextprotocol/server";
+import { errorText } from "../errors.js";
 
 /**
  * Report each of `total` steps, but only to a caller that asked for progress.
@@ -30,7 +31,7 @@ export function progressReporter(
       });
     } catch (error) {
       console.error(
-        `[apex-log-mcp] Could not report progress: ${error instanceof Error ? error.message : String(error)}`,
+        `[apex-log-mcp] Could not report progress: ${errorText(error)}`,
       );
     }
   };

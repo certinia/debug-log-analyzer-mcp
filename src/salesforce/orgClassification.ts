@@ -3,6 +3,7 @@
  */
 
 import type { Org } from "@salesforce/core";
+import { errorText } from "../errors.js";
 
 /**
  * The subset of the Organization record needed to classify an org.
@@ -96,8 +97,7 @@ export async function classifyOrg(
     cache.set(orgId, classification);
     return { classification };
   } catch (error) {
-    const unverifiedReason =
-      error instanceof Error ? error.message : String(error);
+    const unverifiedReason = errorText(error);
     console.error(
       `[apex-log-mcp] Could not determine the type of org ${orgId}:`,
       unverifiedReason,

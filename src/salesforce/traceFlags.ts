@@ -2,11 +2,11 @@ import type { Connection } from "@salesforce/core";
 import {
   DEBUG_LEVEL_FIELDS,
   DEBUG_LEVEL_NAME,
-  levelsClause,
   toTraceConfig,
-  type TraceConfig,
 } from "./debugLevels.js";
-import { saveErrorText, savedOutcome, thrownOutcome, type DeleteResult } from "./deleteResults.js";
+import { levelsClause, type TraceConfig } from "../logLevels.js";
+import { errorText } from "../errors.js";
+import { errorList, saveErrorText } from "./saveErrors.js";
 import {
   CLOCK_SKEW_MS,
   isIdShaped,
@@ -151,16 +151,40 @@ export function deleteTraceFlagCommand(id: string, username: string): string {
   return `sf data delete record --use-tooling-api --sobject TraceFlag --record-id ${id} --target-org ${username}`;
 }
 
-/** Delete a trace flag; a failure is returned, not thrown. */
+/** Delete a trace flag; returns why it could not, not throws, and undefined once it is gone. */
 export async function destroyTraceFlag(
   connection: Connection,
   id: string,
-): Promise<Omit<DeleteResult, "id">> {
+): Promise<string | undefined> {
   try {
-    return savedOutcome(await connection.tooling.sobject(TRACE_FLAG_SOBJECT).destroy(id));
+    const result = await connection.tooling.sobject(TRACE_FLAG_SOBJECT).destroy(id);
+    if (result.success) {
+      return undefined;
+    }
+    const errors = errorList(result.errors);
+    return isAlreadyGone(errors.filter((error): error is object => typeof error === "object" && error !== null))
+      ? undefined
+      : saveErrorText(errors);
   } catch (error) {
-    return thrownOutcome(error);
+    if (typeof error === "object" && error !== null && isAlreadyGone([error])) {
+      return undefined;
+    }
+    return errorText(error);
   }
+}
+
+// What the org answers for a flag deleted since it was found; a trace flag has no recycle bin.
+const GONE_CODES: ReadonlySet<unknown> = new Set(["INVALID_CROSS_REFERENCE_KEY", "ENTITY_IS_DELETED"]);
+
+// jsforce throws a one-id delete's failure as an HttpApiError, code in `errorCode`; `statusCode` and a returned failure are read as guards.
+function isAlreadyGone(errors: object[]): boolean {
+  return (
+    errors.length > 0 &&
+    errors.every((error) => {
+      const { statusCode, errorCode } = error as { statusCode?: unknown; errorCode?: unknown };
+      return GONE_CODES.has(statusCode) || GONE_CODES.has(errorCode);
+    })
+  );
 }
 
 /** A user is traced as `USER_DEBUG`; a class or a trigger as `CLASS_TRACING`. */

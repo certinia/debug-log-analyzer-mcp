@@ -17,7 +17,6 @@ import { connectOrg, readLocalOrg, type LocalOrg } from "./connection.js";
 import { classifyOrg, type OrgClassification } from "./orgClassification.js";
 import {
   authorizeOperation,
-  toolError,
   type Confirmable,
   type ConsumeConfirmation,
   type MintConfirmationState,
@@ -27,6 +26,7 @@ import {
   typeRefusal,
   type DenyList,
 } from "../policy/orgDenyList.js";
+import { errorText, toolError } from "../errors.js";
 
 const ROOTS_TIMEOUT_MS = 5_000;
 
@@ -232,7 +232,7 @@ async function getWorkspace(
     if (!(error instanceof SdkError)) {
       return {
         kind: "unknown",
-        reason: `the client's roots could not be read: ${error instanceof Error ? error.message : String(error)}`,
+        reason: `the client's roots could not be read: ${errorText(error)}`,
       };
     }
     switch (error.code) {

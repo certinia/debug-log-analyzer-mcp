@@ -17,8 +17,7 @@ jest.mock("node:fs", () => ({
   constants: { O_RDONLY: 0, O_NONBLOCK: 4, W_OK: 2, X_OK: 1 },
 }));
 
-// Only the network call is mocked, so DEFAULT_TRACE_CONFIG is the real one:
-// the tests below assert the levels this tool asks the org for.
+// Only the network call is mocked, so DEBUG_LEVEL_NAME, which the warnings name, is the real one.
 jest.mock("../src/salesforce/debugLevels", () => ({
   ...jest.requireActual("../src/salesforce/debugLevels"),
   ensureDebugLevel: jest.fn(),
@@ -75,12 +74,12 @@ import {
   executeAnonymousInputSchema,
   type ExecuteAnonymousArgs,
 } from "../src/tools/executeAnonymousDefinition";
+import { ensureDebugLevel } from "../src/salesforce/debugLevels";
 import {
-  ensureDebugLevel,
   DEFAULT_TRACE_CONFIG,
   levelsClause,
   requestedLevels,
-} from "../src/salesforce/debugLevels";
+} from "../src/logLevels";
 import {
   createTraceFlag,
   destroyTraceFlag,
@@ -333,7 +332,7 @@ describe("Execute Anonymous", () => {
     mockEnsureDebugLevel.mockResolvedValue(testDebugLevelId);
     mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: false });
     mockCreateTraceFlag.mockResolvedValue(testTraceFlagId);
-    mockDestroyTraceFlag.mockResolvedValue({});
+    mockDestroyTraceFlag.mockResolvedValue(undefined);
     mockLoadApexLog.mockResolvedValue({
       duration: { total: 150_000_000 },
       debugLevels: DEFAULT_TRACE_CONFIG,
@@ -796,21 +795,6 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it("should propagate errors from ensureDebugLevel", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      mockEnsureDebugLevel.mockRejectedValue(
-        new Error("Failed to create debug level"),
-      );
-
-      await expect(
-        executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("Failed to create debug level");
-
-      expect(createTraceFlag).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
     // A live flag already stores the log, and the header sets this run's levels.
     it("runs on the user's live trace flag and leaves it untouched", async () => {
       mockFindActiveTraceFlags.mockResolvedValue({ storesLogs: true });
@@ -849,7 +833,7 @@ describe("Execute Anonymous", () => {
       });
       mockDestroyTraceFlag.mockImplementation(async () => {
         order.push("delete");
-        return {};
+        return undefined;
       });
 
       const result = await executeAnonymous(
@@ -883,7 +867,7 @@ describe("Execute Anonymous", () => {
 
     // The log is in hand and the flag expires on its own, so a failed delete only warns.
     it("returns the log and warns when the flag it created cannot be deleted", async () => {
-      mockDestroyTraceFlag.mockResolvedValue({ error: "Locked" });
+      mockDestroyTraceFlag.mockResolvedValue("Locked");
 
       const result = await executeAnonymous(
         mockServer,
@@ -902,25 +886,21 @@ describe("Execute Anonymous", () => {
       );
     });
 
-    // Expired or deleted by another call before the run ended: nothing is left to warn about.
-    it("does not warn when the flag it created is already gone", async () => {
-      mockDestroyTraceFlag.mockResolvedValue({ alreadyGone: true });
-
-      const result = await executeAnonymous(
-        mockServer,
-        { apex: testApexCode },
-        ctx,
-        policy(),
-      );
-
-      expect(toonDecode(result).warning).toBeUndefined();
-    });
-
-    // The header returns the log without a flag; only the file's log id depends on one.
-    it("runs and warns when Salesforce refuses the run's trace flag", async () => {
-      mockCreateTraceFlag.mockRejectedValue(
-        new Error("FIELD_INTEGRITY_EXCEPTION: overlapping trace flag"),
-      );
+    // The header returns the log without a flag; only the file's log id depends on one, and the debug level is only for the flag.
+    it.each([
+      [
+        "trace flag",
+        () => mockCreateTraceFlag.mockRejectedValue(new Error("FIELD_INTEGRITY_EXCEPTION: overlapping trace flag")),
+        ["overlapping trace flag"],
+      ],
+      [
+        // Salesforce's error does not name the record, so the warning must, or the user looks at their trace flags.
+        "debug level",
+        () => mockEnsureDebugLevel.mockRejectedValue(new Error("INSUFFICIENT_ACCESS_OR_READONLY: insufficient access rights on object id")),
+        ["Apex_Log_MCP_Debug_Level", "insufficient access rights"],
+      ],
+    ])("runs and warns when Salesforce refuses the run's %s", async (_c, refuse, reasons) => {
+      refuse();
 
       const result = await executeAnonymous(
         mockServer,
@@ -937,7 +917,7 @@ describe("Execute Anonymous", () => {
       expect(destroyTraceFlag).not.toHaveBeenCalled();
       expect(decoded.succeeded).toBe(true);
       expect(decoded.warning).toContain("Could not set a trace flag");
-      expect(decoded.warning).toContain("overlapping trace flag");
+      reasons.forEach((reason) => expect(decoded.warning).toContain(reason));
       // Another run's flag may have stored it, or nothing did, so the one match is checked.
       expect(mockRequest).toHaveBeenCalledWith(
         expect.stringMatching(new RegExp(`ApexLog/${testLogId}/Body$`)),
@@ -1639,7 +1619,6 @@ describe("Execute Anonymous", () => {
       );
 
       expect(params.message).toContain(apex);
-      expect(params.message).not.toContain("(truncated)");
     });
 
     it("should fence the Apex and state its size, so it cannot pass for the end of the prompt", async () => {
@@ -1825,18 +1804,21 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
+    // Literals, so a wrong level or grouping cannot show on both sides of the check.
+    const DEFAULTS =
+      "apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO";
     it.each<[string, ExecuteAnonymousArgs["debugLevel"], string]>([
+      ["no levels and no trace flag", undefined, `the defaults: ${DEFAULTS}`],
+      ["the defaults", "default", `the defaults: ${DEFAULTS}`],
       [
-        "no levels and no trace flag",
-        undefined,
-        `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`,
+        "one level",
+        "FINEST",
+        "as requested: apexCode, apexProfiling, callout, database, nba, system, validation, visualforce, wave, workflow FINEST",
       ],
-      ["the defaults", "default", `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`],
-      ["one level", "FINEST", `as requested: ${levelsClause(requestedLevels("FINEST"))}`],
       [
         "some categories",
         { database: "INFO", apexCode: "FINEST" },
-        `as requested: ${levelsClause(requestedLevels({ database: "INFO", apexCode: "FINEST" }))}`,
+        "as requested: apexCode FINEST; apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database, nba, wave INFO",
       ],
     ])("should show the log levels before the Apex, for %s", async (_name, debugLevel, shown) => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);

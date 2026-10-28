@@ -9,14 +9,15 @@ import { Connection } from "@salesforce/core";
 import {
   ensureDebugLevel,
   ensureLevelsDebugLevel,
-  levelsClause,
-  requestedLevels,
   toTraceConfig,
   CATEGORY_LOG_NAMES,
-  DEFAULT_TRACE_CONFIG,
   LOG_CATEGORIES,
-  TRACE_CATEGORIES,
 } from "../../src/salesforce/debugLevels";
+import {
+  DEFAULT_TRACE_CONFIG,
+  requestedLevels,
+  TRACE_CATEGORIES,
+} from "../../src/logLevels";
 
 describe("Debug Levels", () => {
   const testId = "000000000000000000";
@@ -212,22 +213,6 @@ describe("Debug Levels", () => {
         database: "INFO",
       });
       expect(toTraceConfig(null)).toEqual(DEFAULT_TRACE_CONFIG);
-    });
-  });
-
-  describe("requestedLevels", () => {
-    it("should set every category to a bare level", () => {
-      const levels = requestedLevels("FINEST");
-
-      TRACE_CATEGORIES.forEach((category) => expect(levels[category]).toBe("FINEST"));
-    });
-  });
-
-  describe("levelsClause", () => {
-    it("should group the categories by level, in category order", () => {
-      expect(levelsClause(DEFAULT_TRACE_CONFIG)).toBe(
-        "apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO",
-      );
     });
   });
 
