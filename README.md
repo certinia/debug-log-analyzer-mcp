@@ -30,7 +30,7 @@ Requires [Node.js](https://nodejs.org/) 22 or later. Add this to your MCP client
 
 In VS Code `mcp.json`, use `"servers"` in place of `"mcpServers"`.
 
-Then ask your assistant to analyze a log. The org tools also need an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).
+Then ask your assistant to analyze a log. The org tools - `apexlog_execute_anonymous`, `apexlog_list_org_logs`, `apexlog_get_org_logs` and `apexlog_create_trace_flag` - also need an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).
 
 ## Example Prompts
 
@@ -52,13 +52,13 @@ Keeping the server connected costs ~2,445 tokens, 1.2% of a 200K context. See [T
 
 The analysis tools take an absolute path to a `.log` file.
 
-The org tools use the default org of the project your client's first root is in, unless you pass `targetOrg`. When the server cannot use your client's roots, each org tool needs `targetOrg`, since the project's default org cannot be found. That happens on MCP 2026-07-28, when the client does not answer in 5 seconds, or when no root is on this machine.
+The org tools use the default org of the project in your client's first [root](https://modelcontextprotocol.io/specification/latest/client/roots), unless you pass `targetOrg`. A client that declares no roots gets the default org of the server's working directory, or the global default org. When the server cannot read the roots a client declares, each org tool needs `targetOrg`, since the project's default org cannot be found. That happens when the client uses MCP protocol version 2026-07-28, when the roots cannot be read - for example, the client does not answer in 5 seconds - or when no root is on this machine.
 
-Every tool answers in [TOON](https://github.com/toon-format/toon).
+Each tool returns its result in [TOON](https://github.com/toon-format/toon), and an error as plain text.
 
 A `0` means none, not "not measured". Only what did not happen is left out: fatal errors, lost log content, query plans. Durations are in milliseconds to 3 decimal places, percentages to 1.
 
-The server runs as a local process started by your client over stdio, with no API keys. The analysis tools make no network calls. The server keeps the last log it parsed until 5 minutes after its last use, so follow-up questions on that log are faster.
+The server runs as a local process started by your client over stdio, with no API keys. The analysis tools make no network calls. The server keeps the last parsed log for 5 minutes after its last use, so follow-up questions on that log are faster.
 
 ### apexlog_list_slow_operations
 
@@ -212,11 +212,11 @@ Text past 400 characters is elided; ask for one event by `eventIndex` to read up
 
 Runs anonymous Apex against an authenticated org, saves the debug log locally, and returns the path. Pass that path to any analysis tool. The Apex runs as the `targetOrg` user, with that user's permissions. Its DML commits when the run succeeds; a compile failure or an uncaught exception rolls it back.
 
-Give exactly one of `apex` or `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. A file outside the roots your client declares is refused, as is anything but a regular file. When the server cannot use your client's roots, a file is refused. A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
+Give exactly one of `apex` or `apexFilePath`, as `sf apex run --file` takes - for example a script under `scripts/apex/`. A file outside the roots your client declares is refused, as is anything but a regular file. When the server cannot read the roots your client declares, a file is refused: see [Tools Reference](#tools-reference). A path costs a few tokens, where inline Apex is read and then written out again. A production confirmation shows the Apex the file holds, not its path.
 
-The response gives `filePath`, `org` (the username, with its alias if set), `orgType`, `succeeded`, `exceptionMessage` when the run failed, `durationTotalMs`, `levelsSource`, `levelsOverridden`, `outputDirCreated`, and a `warning` when something needs your attention.
+The response gives `filePath`, `fileSizeBytes`, `org` (the username, with its alias if set), `orgType`, `succeeded`, `exceptionMessage` when the Apex threw, `durationTotalMs`, `levelsSource`, `levelsOverridden`, `outputDirCreated`, and a `warning` when something needs your attention.
 
-The run changes the org. With no live `USER_DEBUG` or `DEVELOPER_LOG` trace flag on the user, it adds a trace flag for the run and deletes it after. The debug level that flag uses, `Apex_Log_MCP_Debug_Level`, stays in the org for the next run.
+When the `targetOrg` user has no live `USER_DEBUG` or `DEVELOPER_LOG` trace flag, the run adds one and deletes it after the run. The debug level that flag uses, `Apex_Log_MCP_Debug_Level`, stays in the org for the next run.
 
 Logs go to `.apex-log-mcp/` by default - add it to your `.gitignore`. Production orgs are gated: see [Production safety](#production-safety).
 
@@ -292,7 +292,7 @@ A log already saved under `outputDir` is not downloaded again, since a stored lo
 
 Starts logging a user, so an integration user's requests reach the org's logs, for `apexlog_list_org_logs` to find. A flag on a class or trigger stores no log itself: it sets the levels of that code's work in the logs a user's flag stores. A user is traced as `USER_DEBUG`; a class or trigger as `CLASS_TRACING`.
 
-`durationMinutes` stops a minute short of a day, because Salesforce refuses a flag of a full day. The debug level it uses stays in the org after the flag ends, for the next flag at the same levels.
+The `durationMinutes` maximum is a minute short of a day, because Salesforce refuses a flag of a full day. The debug level the flag uses stays in the org after the flag ends, for the next flag at the same levels. An object `debugLevel` takes the form shown under [apexlog_execute_anonymous](#apexlog_execute_anonymous).
 
 Every transaction a traced user runs while the flag lives is stored, which can fill the org's 1,000 MB of log storage: when it is full, no one can set a flag until logs are deleted in Setup > Debug Logs, or expire after 24 hours. When the entity already has a flag of its type whose time overlaps the new one, the call is refused and names it, with its levels, its expiry and the `sf` command that deletes it - a flag is never changed here. Against a production org, the call asks first, naming the entity, the levels and the minutes.
 
@@ -356,7 +356,7 @@ The [Quick Start](#quick-start) config gives you every tool.
 
 ### Production safety
 
-Every org tool reads the org's type. Only the two tools that change an org - `apexlog_execute_anonymous` and `apexlog_create_trace_flag` - are gated by it:
+Every org tool reads the org's type, and a `--deny-orgs` `type:` entry can refuse any of them. Only the two tools that change an org - `apexlog_execute_anonymous` and `apexlog_create_trace_flag` - use the type to decide whether to ask first:
 
 | Org type     | Identified by                     | Behaviour             |
 | ------------ | --------------------------------- | --------------------- |
@@ -367,7 +367,7 @@ Every org tool reads the org's type. Only the two tools that change an org - `ap
 | `production` | Anything else                     | Confirmation required |
 | `unknown`    | The org could not be queried      | Confirmation required |
 
-For a production org, `--allow-production-orgs` skips the confirmation. Otherwise the server asks you to confirm, naming the org and what the call would do - for Apex, all of it with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one call, and expires after 10 minutes.
+For a production org, `--allow-production-orgs` skips the confirmation. Otherwise the server asks you to confirm, naming the org and what the call would do - for Apex, all of it with its size. Apex over 10,000 characters is refused rather than cut, so it needs the flag. Confirmation needs a client that supports [elicitation](https://modelcontextprotocol.io/specification/latest/client/elicitation); without one the call is refused, and the message names both ways to proceed. Each confirmation authorizes one call, and expires 10 minutes after the server asks.
 
 An org that cannot be identified is treated as production, so a network or permissions problem can never quietly downgrade one.
 
