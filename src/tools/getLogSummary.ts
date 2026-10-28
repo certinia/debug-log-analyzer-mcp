@@ -2,7 +2,6 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { z } from "zod";
 import type {
   ApexLog,
   DebugCategory,
@@ -11,8 +10,7 @@ import type {
   LogEventType,
   LogIssue,
 } from "@apexdevtools/apex-log-parser";
-import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
-import { toolInputSchema } from "./inputSchema.js";
+import { defineAnalysisTool } from "./analysisTool.js";
 import {
   frameSelfTimes,
   listOperations,
@@ -34,29 +32,18 @@ import {
   roundPercent,
   toLimitRows,
   toNamespaceLimitRows,
-  toonResult,
   type LimitRow,
   type NamespaceLimitRow,
 } from "./responseShaping.js";
 
-const getLogSummaryInputSchema = {
-  logFilePath: logFilePathSchema,
-};
-
-export type LogSummaryArgs = z.infer<
-  z.ZodObject<typeof getLogSummaryInputSchema>
->;
-
-export const getLogSummaryToolConfig = {
+export const getLogSummaryTool = defineAnalysisTool({
+  name: "apexlog_get_summary",
   title: "Get Apex Log Summary",
   description:
     "Get a high-level summary of an Apex debug log: how long the transaction ran, where the time went by debug log category and the level each was logged at, every governor limit it and each namespace consumed, whether the log is complete, the exceptions and flow errors it raised, and what ended the transaction if it failed. Best for a quick overview.",
-  inputSchema: toolInputSchema(getLogSummaryInputSchema),
-  annotations: {
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-};
+  input: {},
+  run: getLogSummary,
+});
 
 /**
  * One row per debug log category: the level it was captured at, and where the
@@ -258,10 +245,7 @@ interface LogSummaryResult {
   categories: CategoryRow[];
 }
 
-export async function getLogSummary(args: LogSummaryArgs) {
-  const { logFilePath } = args;
-
-  const apexLog = await loadApexLog(logFilePath);
+function getLogSummary(apexLog: ApexLog): LogSummaryResult {
   const durationTotalNs = apexLog.duration.total;
   // The platform dropping content and the log stopping mid-frame are different
   // shapes and neither implies the other, but the field means the same thing for
@@ -299,7 +283,7 @@ export async function getLogSummary(args: LogSummaryArgs) {
     categories: categories(apexLog),
   };
 
-  return toonResult(summary);
+  return summary;
 }
 
 function categories(apexLog: ApexLog): CategoryRow[] {

@@ -215,7 +215,8 @@ session, and a response only when the tool is called.
 
 The [MCP spec](https://modelcontextprotocol.io/specification/latest/server/tools) says what `title`,
 `description` and each annotation are for. Where it is silent, `pnpm run eval` is the rule. Pin each
-annotation in the tool's definition test: a budget with headroom does not notice one coming back.
+annotation in the tool's definition test - for the analysis tools, `tests/analysisTool.test.ts` -
+because a budget with headroom does not notice one coming back.
 
 ## 🧪 Testing Your Changes
 

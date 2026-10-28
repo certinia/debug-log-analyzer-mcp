@@ -9,8 +9,8 @@ import type {
   LineNumber,
   LogEvent,
 } from "@apexdevtools/apex-log-parser";
-import { loadApexLog, logFilePathSchema, walkLog } from "./apexLogSource.js";
-import { toolInputSchema } from "./inputSchema.js";
+import { walkLog } from "./apexLogSource.js";
+import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import { capturedAt, declaredLevels, type DeclaredLevel } from "../logLevels.js";
 import { elide, elideAround } from "../elide.js";
 import {
@@ -20,11 +20,9 @@ import {
   nextOffsetField,
   omitEmpty,
   PAGE_CHAR_BUDGET,
-  toonResult,
 } from "./responseShaping.js";
 
 const searchEventsInputSchema = {
-  logFilePath: logFilePathSchema,
   // Free strings, as on apexlog_list_slow_operations: an enum of the parser's
   // 290 event types would cost more than every other tool's definition.
   type: z
@@ -65,20 +63,16 @@ const searchEventsInputSchema = {
 // Half the page budget, so a message that escaping doubles still fits on the page.
 const ONE_EVENT_TEXT_LIMIT = PAGE_CHAR_BUDGET / 2;
 
-export type SearchEventsArgs = z.infer<
-  z.ZodObject<typeof searchEventsInputSchema>
->;
+export type SearchEventsArgs = AnalysisArgs<typeof searchEventsInputSchema>;
 
-export const searchEventsToolConfig = {
+export const searchEventsTool = defineAnalysisTool({
+  name: "apexlog_search_events",
   title: "Search Apex Log Events",
   description:
     `Search the events of an Apex debug log in log order: what the code printed (USER_DEBUG), validation rules, statements, or every event under one method. For plain text in the saved .log, grep is cheaper; use this for event types, nesting, or without a shell. Text past ${NAME_LIMIT} characters is elided; ask for one event by eventIndex to read up to ${ONE_EVENT_TEXT_LIMIT.toLocaleString("en-US")}.`,
-  inputSchema: toolInputSchema(searchEventsInputSchema),
-  annotations: {
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-};
+  input: searchEventsInputSchema,
+  run: searchEvents,
+});
 
 /** One event, in log order, as the payload carries it. */
 export interface EventRow {
@@ -145,9 +139,8 @@ function isBelow(event: LogEvent, root: LogEvent): boolean {
   return false;
 }
 
-export async function searchEvents(args: SearchEventsArgs) {
+function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsResult {
   const {
-    logFilePath,
     type,
     namespace,
     contains,
@@ -157,7 +150,6 @@ export async function searchEvents(args: SearchEventsArgs) {
     offset = 0,
   } = args;
 
-  const apexLog = await loadApexLog(logFilePath);
   // Top-level rows name the log itself as their parent, so its index searches the whole log.
   const root: LogEvent =
     parentEventIndex === undefined || parentEventIndex === apexLog.eventIndex
@@ -226,5 +218,5 @@ export async function searchEvents(args: SearchEventsArgs) {
     ...nextOffsetField(offset, events.length, matchedCount),
   };
 
-  return toonResult(result);
+  return result;
 }

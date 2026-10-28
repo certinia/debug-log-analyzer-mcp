@@ -5,11 +5,10 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { decode } from "@toon-format/toon";
 
+import { loadApexLog } from "../src/tools/apexLogSource";
 import {
-  searchEvents,
-  searchEventsToolConfig,
+  searchEventsTool,
   type SearchEventsArgs,
   type SearchEventsResult,
 } from "../src/tools/searchEvents";
@@ -20,28 +19,20 @@ const FIXTURES = join(__dirname, "eval", "fixtures");
 
 async function searchAt(
   logFilePath: string,
-  args: Omit<SearchEventsArgs, "logFilePath"> = {},
+  args: SearchEventsArgs = {},
 ): Promise<SearchEventsResult> {
-  const result = await searchEvents({ logFilePath, ...args });
-  return decode(result.content[0]!.text) as unknown as SearchEventsResult;
+  return searchEventsTool.run(await loadApexLog(logFilePath), args);
 }
 
 function search(
   fixture: string,
-  args: Omit<SearchEventsArgs, "logFilePath"> = {},
+  args: SearchEventsArgs = {},
 ): Promise<SearchEventsResult> {
   return searchAt(join(FIXTURES, `${fixture}.log`), args);
 }
 
 // The default page, a search by type and an empty search are pinned by the eval goldens.
 describe("searchEvents", () => {
-  it("should annotate only the hints that carry meaning for a read-only tool", () => {
-    expect(searchEventsToolConfig.annotations).toEqual({
-      readOnlyHint: true,
-      openWorldHint: false,
-    });
-  });
-
   // The levels come once: a later page reads the same log.
   it("should walk on from nextOffset, with the same matchedCount, and the levels on the first page only", async () => {
     const first = await search("governor-heavy", { limit: 10 });

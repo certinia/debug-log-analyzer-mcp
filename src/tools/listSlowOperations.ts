@@ -3,9 +3,8 @@
  */
 
 import { z } from "zod";
-import type { DebugCategory } from "@apexdevtools/apex-log-parser";
-import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
-import { toolInputSchema } from "./inputSchema.js";
+import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
+import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import {
   GROUP_BY,
   GROUPINGS,
@@ -39,7 +38,6 @@ import {
   percentageOf,
   roundMs,
   roundPercent,
-  toonResult,
 } from "./responseShaping.js";
 
 /**
@@ -70,8 +68,7 @@ const COMPARE_BY: Record<SortBy, (a: Operation, b: Operation) => number> = {
     b.heapSelfNetBytes - a.heapSelfNetBytes || bySelfTime(a, b),
 };
 
-export const listSlowOperationsInputSchema = {
-  logFilePath: logFilePathSchema,
+const listSlowOperationsInputSchema = {
   debugCategory: z
     .array(z.enum(DEBUG_CATEGORIES))
     .optional()
@@ -124,20 +121,16 @@ export const listSlowOperationsInputSchema = {
     .describe("Default durationSelfMs. heapSelfNetBytes adds that column."),
 };
 
-export type SlowOperationsArgs = z.infer<
-  z.ZodObject<typeof listSlowOperationsInputSchema>
->;
+export type SlowOperationsArgs = AnalysisArgs<typeof listSlowOperationsInputSchema>;
 
-export const listSlowOperationsToolConfig = {
+export const listSlowOperationsTool = defineAnalysisTool({
+  name: "apexlog_list_slow_operations",
   title: "List Slow Apex Log Operations",
   description:
     "Rank what an Apex debug log spent its time on by self-execution time, or on the heap it retains - code units, methods, queries, searches, DML, callouts, flows and workflows in one table, each row with its calls, durations, database counts and rows, so the caller can see what to optimize and why, beside the query optimizer's plan for the queries among them.",
-  inputSchema: toolInputSchema(listSlowOperationsInputSchema),
-  annotations: {
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-};
+  input: listSlowOperationsInputSchema,
+  run: listSlowOperations,
+});
 
 /** One ranked row, in the units and the order the payload uses. */
 export interface SlowOperation {
@@ -369,9 +362,11 @@ function plansForFoldedRows(
     .map((plan) => ({ ...plan, name: elide(plan.name, NAME_LIMIT) }));
 }
 
-export async function listSlowOperations(args: SlowOperationsArgs) {
+function listSlowOperations(
+  apexLog: ApexLog,
+  args: SlowOperationsArgs,
+): SlowOperationsResult {
   const {
-    logFilePath,
     debugCategory,
     type,
     namespace,
@@ -382,7 +377,6 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     sortBy = "durationSelfMs",
   } = args;
 
-  const apexLog = await loadApexLog(logFilePath);
   const durationTotalNs = apexLog.duration.total;
   // The log's own net heap, which the operation rows account for in full: they
   // carry 100.0% of it on every one of the 40 logs in a corpus that allocate,
@@ -500,5 +494,5 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
     ...nextOffsetField(offset, operations.length, matched.length),
   };
 
-  return toonResult(result);
+  return result;
 }

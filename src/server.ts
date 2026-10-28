@@ -10,22 +10,10 @@ import {
   type ServerContext,
 } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import {
-  listSlowOperations,
-  listSlowOperationsToolConfig,
-} from "./tools/listSlowOperations.js";
-import {
-  getLogSummary,
-  getLogSummaryToolConfig,
-} from "./tools/getLogSummary.js";
-import {
-  listLimitRisks,
-  listLimitRisksToolConfig,
-} from "./tools/listLimitRisks.js";
+import { analysisTools } from "./tools/analysisTools.js";
 import { withReloginHint } from "./salesforce/authFailure.js";
 import { limitUnitsClause } from "./tools/responseShaping.js";
 import { toolError } from "./errors.js";
-import { searchEvents, searchEventsToolConfig } from "./tools/searchEvents.js";
 import { executeAnonymousToolConfig } from "./tools/executeAnonymousDefinition.js";
 import { createTraceFlagToolConfig } from "./tools/traceFlagsDefinition.js";
 import {
@@ -131,29 +119,9 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
     },
   );
 
-  server.registerTool(
-    "apexlog_list_slow_operations",
-    listSlowOperationsToolConfig,
-    async (args) => listSlowOperations(args),
-  );
-
-  server.registerTool(
-    "apexlog_get_summary",
-    getLogSummaryToolConfig,
-    async (args) => getLogSummary(args),
-  );
-
-  server.registerTool(
-    "apexlog_list_limit_risks",
-    listLimitRisksToolConfig,
-    async (args) => listLimitRisks(args),
-  );
-
-  server.registerTool(
-    "apexlog_search_events",
-    searchEventsToolConfig,
-    async (args) => searchEvents(args),
-  );
+  for (const tool of analysisTools) {
+    server.registerTool(tool.name, tool.config, tool.handle);
+  }
 
   // Every org tool is held to the same deny list and production gate.
   const orgAccessPolicy = {

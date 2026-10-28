@@ -35,45 +35,23 @@ import {
 } from "../src/server";
 
 // Mock the tool modules
-jest.mock("../src/tools/listSlowOperations", () => ({
-  listSlowOperations: jest.fn(),
-  listSlowOperationsToolConfig: {
-    title: "Analyze Apex Log Performance",
-    description:
-      "Analyze an Apex debug log file and identify the slowest running methods",
-    inputSchema: {},
-    annotations: {},
-  },
-}));
+// The name each module states is the name the server registers, so the mock states it too.
+// A declaration, so it is hoisted with the jest.mock calls that use it.
+function mockAnalysisTool(name: string) {
+  return {
+    name,
+    config: { title: name, description: name, inputSchema: {}, annotations: {} },
+    handle: jest.fn(),
+  };
+}
 
-jest.mock("../src/tools/getLogSummary", () => ({
-  getLogSummary: jest.fn(),
-  getLogSummaryToolConfig: {
-    title: "Get Apex Log Summary",
-    description: "Get a high-level summary of an Apex debug log",
-    inputSchema: {},
-    annotations: {},
-  },
-}));
-
-jest.mock("../src/tools/listLimitRisks", () => ({
-  listLimitRisks: jest.fn(),
-  listLimitRisksToolConfig: {
-    title: "Find Performance Bottlenecks",
-    description: "Identify performance bottlenecks in an Apex log",
-    inputSchema: {},
-    annotations: {},
-  },
-}));
-
-jest.mock("../src/tools/searchEvents", () => ({
-  searchEvents: jest.fn(),
-  searchEventsToolConfig: {
-    title: "Search Apex Log Events",
-    description: "Search the events of an Apex debug log",
-    inputSchema: {},
-    annotations: {},
-  },
+jest.mock("../src/tools/analysisTools", () => ({
+  analysisTools: [
+    mockAnalysisTool("apexlog_list_slow_operations"),
+    mockAnalysisTool("apexlog_get_summary"),
+    mockAnalysisTool("apexlog_list_limit_risks"),
+    mockAnalysisTool("apexlog_search_events"),
+  ],
 }));
 
 jest.mock("../src/tools/executeAnonymous", () => ({
@@ -99,10 +77,7 @@ jest.mock("../src/tools/getOrgLogs", () => ({ getOrgLogs: jest.fn() }));
 jest.mock("../src/tools/createTraceFlag", () => ({ createTraceFlag: jest.fn() }));
 
 // Import the tools after mocking
-import { listSlowOperations } from "../src/tools/listSlowOperations";
-import { getLogSummary } from "../src/tools/getLogSummary";
-import { listLimitRisks } from "../src/tools/listLimitRisks";
-import { searchEvents } from "../src/tools/searchEvents";
+import { analysisTools } from "../src/tools/analysisTools";
 import { executeAnonymous } from "../src/tools/executeAnonymous";
 import { listOrgLogs } from "../src/tools/listOrgLogs";
 import { getOrgLogs } from "../src/tools/getOrgLogs";
@@ -190,20 +165,9 @@ describe("createApexLogServer", () => {
     }));
 
     // Setup tool mocks
-    (
-      listSlowOperations as jest.MockedFunction<typeof listSlowOperations>
-    ).mockResolvedValue(mockAnalysisResult);
-    (
-      getLogSummary as jest.MockedFunction<typeof getLogSummary>
-    ).mockResolvedValue(mockAnalysisResult);
-    (
-      listLimitRisks as jest.MockedFunction<
-        typeof listLimitRisks
-      >
-    ).mockResolvedValue(mockAnalysisResult);
-    (
-      searchEvents as jest.MockedFunction<typeof searchEvents>
-    ).mockResolvedValue(mockAnalysisResult);
+    for (const tool of analysisTools) {
+      (tool.handle as jest.Mock).mockResolvedValue(mockAnalysisResult);
+    }
     (
       executeAnonymous as jest.MockedFunction<typeof executeAnonymous>
     ).mockResolvedValue(mockExecuteAnonymousResult);
@@ -369,38 +333,19 @@ describe("createApexLogServer", () => {
   });
 
   describe("Tool Request Handling", () => {
-    // An analysis tool takes its args and nothing else: no ctx, no org policy.
-    it.each([
-      ["apexlog_list_slow_operations", listSlowOperations],
-      ["apexlog_get_summary", getLogSummary],
-      ["apexlog_list_limit_risks", listLimitRisks],
-      ["apexlog_search_events", searchEvents],
-    ])("should pass only the args to %s, and its result back", async (name, handler) => {
-      createApexLogServer();
+    // Each name reaches its own tool: a swapped pair would answer with the other's work.
+    it.each(analysisTools.map((tool) => [tool.name, tool] as const))(
+      "should pass the args to %s, and its result back",
+      async (name, tool) => {
+        createApexLogServer();
 
-      const args = { logFilePath: "/path/to/test.log" };
-      const result = await registeredTools.get(name)!.callback(args, {} as any);
+        const args = { logFilePath: "/path/to/test.log" };
+        const result = await registeredTools.get(name)!.callback(args, {} as any);
 
-      expect(handler).toHaveBeenCalledWith(args);
-      expect(result).toBe(mockAnalysisResult);
-    });
-
-    it("should handle tool execution errors gracefully", async () => {
-      const error = new Error("Tool execution failed");
-      (
-        listSlowOperations as jest.MockedFunction<
-          typeof listSlowOperations
-        >
-      ).mockRejectedValueOnce(error);
-
-      createApexLogServer();
-
-      const tool = registeredTools.get("apexlog_list_slow_operations")!;
-
-      await expect(
-        tool.callback({ logFilePath: "/path/to/test.log" }, {} as any),
-      ).rejects.toThrow("Tool execution failed");
-    });
+        expect((tool.handle as jest.Mock).mock.calls[0]?.[0]).toBe(args);
+        expect(result).toBe(mockAnalysisResult);
+      },
+    );
 
     // Every org tool reaches the deny list and the production gate through this policy.
     // A flag that refuses some tools must leave the others running.

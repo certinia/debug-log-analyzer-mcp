@@ -2,68 +2,25 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { promises as fs, type BigIntStats } from "fs";
-import { decode } from "@toon-format/toon";
-
-import { clearApexLogCache } from "../src/tools/apexLogSource";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import {
-  listSlowOperations,
-  listSlowOperationsInputSchema,
-  listSlowOperationsToolConfig,
+  listSlowOperationsTool,
   type SlowOperationsArgs,
   type SlowOperationsResult,
 } from "../src/tools/listSlowOperations";
 import { rootLog, type NodeSpec, type PlanSpec } from "./support/logEvents";
-import { parse } from "@apexdevtools/apex-log-parser";
 
-jest.mock("fs", () => {
-  const stat = jest.fn();
-  const readFile = jest.fn();
-  // A handle is the file at one path, so its stat and read delegate to the
-  // mocks above with that path filled in. Tests set and assert on those.
-  return {
-    constants: jest.requireActual("fs").constants,
-    promises: {
-      stat,
-      readFile,
-      open: jest.fn(async (path: string) => ({
-        stat: (options: unknown) => stat(path, options),
-        readFile: (encoding: unknown) => readFile(path, encoding),
-        close: jest.fn(),
-      })),
-    },
-  };
-});
-
-jest.mock("@apexdevtools/apex-log-parser", () => ({
-  ...jest.requireActual("@apexdevtools/apex-log-parser"),
-  parse: jest.fn(),
-}));
-
-const mockFs = fs as jest.Mocked<typeof fs>;
-const mockParse = parse as jest.MockedFunction<typeof parse>;
-const mockStats = {
-  ino: 1n,
-  size: 1n,
-  mtimeNs: 1n,
-  ctimeNs: 1n,
-  isFile: () => true,
-} as BigIntStats;
-
-const ARGS: SlowOperationsArgs = { logFilePath: "/test/file.log" };
 const MS = 1_000_000;
 
 /** A log whose root is the transaction frame, and which runs `children`. */
-function mockLog(totalNs: number, ...children: NodeSpec[]): void {
-  mockFs.stat.mockResolvedValue(mockStats);
-  mockFs.readFile.mockResolvedValue("log content");
-  mockParse.mockReturnValue({
+function useLog(totalNs: number, ...children: NodeSpec[]): ApexLog {
+  return {
     ...rootLog(totalNs, ...children),
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the ranking alone. The eval goldens
     // cover the levels, against fixtures that carry a real header.
     debugLevels: {},
-  });
+  };
 }
 
 const method = (spec: NodeSpec): NodeSpec => ({
@@ -99,31 +56,24 @@ const explainedQuery = (spec: NodeSpec, plan: Partial<PlanSpec>): NodeSpec =>
     ],
   });
 
-async function ranked(
-  args: SlowOperationsArgs = ARGS,
-): Promise<SlowOperationsResult> {
-  const result = await listSlowOperations(args);
-  return decode(result.content[0]!.text) as SlowOperationsResult;
+function ranked(
+  log: ApexLog,
+  args: SlowOperationsArgs = {},
+): SlowOperationsResult {
+  return listSlowOperationsTool.run(log, args);
 }
 
 describe("listSlowOperations", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // The suites reuse one path with different content, which the cache would
-    // otherwise hide.
-    clearApexLogCache();
-  });
-
   describe("tool configuration", () => {
     it("says it ranks by self time, so a client can select it", () => {
-      expect(listSlowOperationsToolConfig.description).toContain(
+      expect(listSlowOperationsTool.config.description).toContain(
         "self-execution time",
       );
     });
 
     it("takes every axis a caller narrows the ranking on", () => {
-      expect(Object.keys(listSlowOperationsInputSchema)).toEqual([
-        "logFilePath",
+      // After logFilePath, which every analysis tool has first.
+      expect(Object.keys(listSlowOperationsTool.config.inputSchema.shape).slice(1)).toEqual([
         "debugCategory",
         "type",
         "namespace",
@@ -135,23 +85,17 @@ describe("listSlowOperations", () => {
       ]);
     });
 
-    it("annotates only the hints that carry meaning for a read-only tool", () => {
-      expect(listSlowOperationsToolConfig.annotations).toEqual({
-        readOnlyHint: true,
-        openWorldHint: false,
-      });
-    });
   });
 
-  it("ranks a query alongside a method, slowest self time first", async () => {
-    mockLog(
+  it("ranks a query alongside a method, slowest self time first", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 400 * MS }),
       query({ text: "SELECT Id", totalNs: 500 * MS }),
     );
 
     expect(
-      (await ranked()).operations.map((o) => [
+      ranked(log).operations.map((o) => [
         o.debugCategory,
         o.type,
         o.name,
@@ -162,10 +106,10 @@ describe("listSlowOperations", () => {
     ]);
   });
 
-  it("reports durations in milliseconds and the share of the transaction", async () => {
-    mockLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
+  it("reports durations in milliseconds and the share of the transaction", () => {
+    const log = useLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
 
-    await expect(ranked()).resolves.toEqual({
+    expect(ranked(log)).toEqual({
       durationTotalMs: 1000,
       returnedSelfPercentage: 50,
       matchedCount: 1,
@@ -190,34 +134,34 @@ describe("listSlowOperations", () => {
     });
   });
 
-  it("says what share the returned rows account for, not what is missing", async () => {
-    mockLog(
+  it("says what share the returned rows account for, not what is missing", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "B.run", totalNs: 200 * MS }),
     );
 
-    expect((await ranked({ ...ARGS, limit: 1 })).returnedSelfPercentage).toBe(
+    expect(ranked(log, { limit: 1 }).returnedSelfPercentage).toBe(
       50,
     );
   });
 
-  it("counts what the selection matched, not what the cap returned", async () => {
-    mockLog(
+  it("counts what the selection matched, not what the cap returned", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "B.run", totalNs: 200 * MS }),
       method({ text: "C.run", totalNs: 100 * MS }),
     );
 
-    const result = await ranked({ ...ARGS, limit: 1 });
+    const result = ranked(log, { limit: 1 });
 
     expect(result.matchedCount).toBe(3);
     expect(result.operations).toHaveLength(1);
   });
 
-  it("counts the rows the threshold kept, not the calls behind them", async () => {
-    mockLog(
+  it("counts the rows the threshold kept, not the calls behind them", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "A.run", totalNs: 200 * MS }),
@@ -225,13 +169,13 @@ describe("listSlowOperations", () => {
     );
 
     // Grouped, then filtered: two names, and only one clears the threshold.
-    expect((await ranked({ ...ARGS, minSelfMs: 10 })).matchedCount).toBe(1);
+    expect(ranked(log, { minSelfMs: 10 }).matchedCount).toBe(1);
   });
 
-  it("returns no prose to restate the table", async () => {
-    mockLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
+  it("returns no prose to restate the table", () => {
+    const log = useLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
 
-    expect(Object.keys(await ranked())).toEqual([
+    expect(Object.keys(ranked(log))).toEqual([
       "durationTotalMs",
       "returnedSelfPercentage",
       "matchedCount",
@@ -239,32 +183,32 @@ describe("listSlowOperations", () => {
     ]);
   });
 
-  it("reports zero share when the log recorded no duration", async () => {
-    mockLog(0, method({ text: "A.run" }));
+  it("reports zero share when the log recorded no duration", () => {
+    const log = useLog(0, method({ text: "A.run" }));
 
-    const result = await ranked();
+    const result = ranked(log);
 
     expect(result.returnedSelfPercentage).toBe(0);
     expect(result.operations[0]?.selfPercentage).toBe(0);
   });
 
-  it("ranks only the event types the caller asked for", async () => {
-    mockLog(
+  it("ranks only the event types the caller asked for", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       query({ text: "SELECT Id", totalNs: 400 * MS }),
     );
 
     expect(
-      (await ranked({ ...ARGS, type: ["SOQL_EXECUTE_BEGIN"] })).operations,
+      ranked(log, { type: ["SOQL_EXECUTE_BEGIN"] }).operations,
     ).toEqual([expect.objectContaining({ name: "SELECT Id" })]);
   });
 
   // The category is what the type cannot say and the type is what the category
   // cannot: a `database` filter takes the query and the DML together, where a
   // type filter would have to name both.
-  it("ranks only the categories the caller asked for", async () => {
-    mockLog(
+  it("ranks only the categories the caller asked for", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       query({ text: "SELECT Id", totalNs: 400 * MS }),
@@ -278,61 +222,61 @@ describe("listSlowOperations", () => {
     );
 
     expect(
-      (await ranked({ ...ARGS, debugCategory: ["database"] })).operations.map(
+      ranked(log, { debugCategory: ["database"] }).operations.map(
         (o) => o.name,
       ),
     ).toEqual(["SELECT Id", "DML Insert Account"]);
   });
 
-  it("ranks only the namespaces the caller asked for", async () => {
-    mockLog(
+  it("ranks only the namespaces the caller asked for", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "B.run", namespace: "Custom", totalNs: 400 * MS }),
     );
 
     expect(
-      (await ranked({ ...ARGS, namespace: ["Custom"] })).operations,
+      ranked(log, { namespace: ["Custom"] }).operations,
     ).toEqual([expect.objectContaining({ name: "B.run" })]);
   });
 
-  it("drops an operation below the caller's self time", async () => {
-    mockLog(
+  it("drops an operation below the caller's self time", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "B.run", totalNs: 100 * MS }),
     );
 
     expect(
-      (await ranked({ ...ARGS, minSelfMs: 300 })).operations.map((o) => o.name),
+      ranked(log, { minSelfMs: 300 }).operations.map((o) => o.name),
     ).toEqual(["A.run"]);
   });
 
-  it("drops an operation whose timestamps did not parse to a number", async () => {
-    mockLog(1000 * MS, method({ text: "A.run", totalNs: NaN }));
+  it("drops an operation whose timestamps did not parse to a number", () => {
+    const log = useLog(1000 * MS, method({ text: "A.run", totalNs: NaN }));
 
-    expect((await ranked({ ...ARGS, minSelfMs: 0 })).operations).toEqual([]);
+    expect(ranked(log, { minSelfMs: 0 }).operations).toEqual([]);
   });
 
-  it("returns at most the rows the caller asked for", async () => {
-    mockLog(
+  it("returns at most the rows the caller asked for", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "B.run", totalNs: 400 * MS }),
     );
 
-    expect((await ranked({ ...ARGS, limit: 1 })).operations).toHaveLength(1);
+    expect(ranked(log, { limit: 1 }).operations).toHaveLength(1);
   });
 
-  it("pages the ranking from offset, so a caller can walk past the first page", async () => {
-    mockLog(
+  it("pages the ranking from offset, so a caller can walk past the first page", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "B.run", totalNs: 400 * MS }),
       method({ text: "C.run", totalNs: 300 * MS }),
     );
 
-    const result = await ranked({ ...ARGS, limit: 1, offset: 1 });
+    const result = ranked(log, { limit: 1, offset: 1 });
 
     expect(result.operations.map((row) => row.name)).toEqual(["B.run"]);
     // The rows behind the page are still counted, or a caller cannot tell it
@@ -341,15 +285,15 @@ describe("listSlowOperations", () => {
     expect(result.nextOffset).toBe(2);
   });
 
-  it("gives no nextOffset on the last page", async () => {
-    mockLog(
+  it("gives no nextOffset on the last page", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", totalNs: 500 * MS }),
       method({ text: "B.run", totalNs: 400 * MS }),
       method({ text: "C.run", totalNs: 300 * MS }),
     );
 
-    expect((await ranked({ ...ARGS, limit: 1, offset: 2 })).nextOffset).toBeUndefined();
+    expect(ranked(log, { limit: 1, offset: 2 }).nextOffset).toBeUndefined();
   });
 
   // `slice(0, -5)` drops the five fastest rows and returns all the rest, so a
@@ -360,22 +304,22 @@ describe("listSlowOperations", () => {
     ["negative", -5],
     ["fractional", 3.7],
   ])("refuses a %s limit or offset", (_name, value) => {
-    expect(listSlowOperationsInputSchema.limit.safeParse(value).success).toBe(
+    expect(listSlowOperationsTool.config.inputSchema.shape.limit.safeParse(value).success).toBe(
       false,
     );
-    expect(listSlowOperationsInputSchema.offset.safeParse(value).success).toBe(
+    expect(listSlowOperationsTool.config.inputSchema.shape.offset.safeParse(value).success).toBe(
       false,
     );
   });
 
-  it("keeps the head and the tail of an over-long name", async () => {
+  it("keeps the head and the tail of an over-long name", () => {
     const columns = "SELECT ".concat("a__c, ".repeat(200));
-    mockLog(
+    const log = useLog(
       1000 * MS,
       query({ text: `${columns}FROM Account`, totalNs: 500 * MS }),
     );
 
-    const name = (await ranked()).operations[0]!.name;
+    const name = ranked(log).operations[0]!.name;
 
     // A query names its columns first and its object last, so both ends have to
     // survive or the row cannot be identified.
@@ -384,10 +328,10 @@ describe("listSlowOperations", () => {
     expect(name).toHaveLength(400);
   });
 
-  it("returns fewer rows than asked when the page would be too large", async () => {
+  it("returns fewer rows than asked when the page would be too large", () => {
     // 400 characters of name each after eliding, so the 60,000-character budget
     // runs out well before the 200th row.
-    mockLog(
+    const log = useLog(
       1000 * MS,
       ...Array.from({ length: 200 }, (_, index) =>
         method({
@@ -397,7 +341,7 @@ describe("listSlowOperations", () => {
       ),
     );
 
-    const result = await ranked({ ...ARGS, limit: 200 });
+    const result = ranked(log, { limit: 200 });
 
     expect(result.operations.length).toBeGreaterThan(0);
     expect(result.operations.length).toBeLessThan(200);
@@ -406,11 +350,11 @@ describe("listSlowOperations", () => {
     expect(result.nextOffset).toBe(result.operations.length);
   });
 
-  it("spends the same budget on the plans behind a namespace row", async () => {
+  it("spends the same budget on the plans behind a namespace row", () => {
     // A namespace row names the namespace, so every plan under it carries its
     // own query text. Left outside the budget the table grew without limit: on
     // one real log 30 such plans were 90% of the response.
-    mockLog(
+    const log = useLog(
       1000 * MS,
       ...Array.from({ length: 200 }, (_, index) =>
         explainedQuery(
@@ -424,7 +368,7 @@ describe("listSlowOperations", () => {
       ),
     );
 
-    const result = await ranked({ ...ARGS, groupBy: "namespace", limit: 200 });
+    const result = ranked(log, { groupBy: "namespace", limit: 200 });
     const cost = (rows: object[]) =>
       rows.reduce(
         (total, row) =>
@@ -442,23 +386,23 @@ describe("listSlowOperations", () => {
       toBeLessThanOrEqual(60_000);
   });
 
-  it("returns ten rows when the caller sets no limit", async () => {
-    mockLog(
+  it("returns ten rows when the caller sets no limit", () => {
+    const log = useLog(
       1000 * MS,
       ...Array.from({ length: 12 }, (_, index) =>
         method({ text: `M${index}`, totalNs: (index + 1) * MS }),
       ),
     );
 
-    expect((await ranked()).operations).toHaveLength(10);
+    expect(ranked(log).operations).toHaveLength(10);
   });
 
-  it("folds a repeated query into one row before the self time drops it", async () => {
+  it("folds a repeated query into one row before the self time drops it", () => {
     const repeat = () => query({ text: "SELECT Id", totalNs: 100 * MS });
-    mockLog(1000 * MS, repeat(), repeat(), repeat());
+    const log = useLog(1000 * MS, repeat(), repeat(), repeat());
 
     expect(
-      (await ranked({ ...ARGS, groupBy: "name", minSelfMs: 250 })).operations,
+      ranked(log, { groupBy: "name", minSelfMs: 250 }).operations,
     ).toEqual([
       expect.objectContaining({
         name: "SELECT Id",
@@ -472,14 +416,14 @@ describe("listSlowOperations", () => {
   describe("query plans", () => {
     // The whole point of the key: the plan has to name the row that carries the
     // query, not the first row of the table.
-    it("points at the ranked row the query is on", async () => {
-      mockLog(
+    it("points at the ranked row the query is on", () => {
+      const log = useLog(
         1000 * MS,
         method({ text: "A.run", totalNs: 500 * MS }),
         explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {}),
       );
 
-      const result = await ranked();
+      const result = ranked(log);
 
       expect(result.operations[1]?.name).toBe("SELECT Id");
       expect(result.queryPlans?.[0]).toEqual(
@@ -487,13 +431,13 @@ describe("listSlowOperations", () => {
       );
     });
 
-    it("reports what the optimiser decided about a ranked query", async () => {
-      mockLog(
+    it("reports what the optimiser decided about a ranked query", () => {
+      const log = useLog(
         1000 * MS,
         explainedQuery({ text: "SELECT Id", totalNs: 500 * MS }, {}),
       );
 
-      expect((await ranked()).queryPlans).toEqual([
+      expect(ranked(log).queryPlans).toEqual([
         {
           operationRow: 1,
           leadingOperationType: "TableScan",
@@ -508,15 +452,15 @@ describe("listSlowOperations", () => {
     it.each([
       ["first", false],
       ["last", true],
-    ])("keeps the worst plan when one query was explained more than once, the worst %s", async (_name, worstLast) => {
+    ])("keeps the worst plan when one query was explained more than once, the worst %s", (_name, worstLast) => {
       const cheap = explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {
         leadingOperationType: "Index",
         relativeCost: 0.5,
       });
       const worst = explainedQuery({ text: "SELECT Id", totalNs: 100 * MS }, {});
-      mockLog(1000 * MS, ...(worstLast ? [cheap, worst] : [worst, cheap]));
+      const log = useLog(1000 * MS, ...(worstLast ? [cheap, worst] : [worst, cheap]));
 
-      expect((await ranked()).queryPlans).toEqual([
+      expect(ranked(log).queryPlans).toEqual([
         expect.objectContaining({
           leadingOperationType: "TableScan",
           relativeCost: 2.5,
@@ -525,8 +469,8 @@ describe("listSlowOperations", () => {
     });
 
     // A filter narrows the rows, not the plans: the worst plan for a text is the one to act on.
-    it("keeps the worst plan of a query the filter left out of the rows", async () => {
-      mockLog(
+    it("keeps the worst plan of a query the filter left out of the rows", () => {
+      const log = useLog(
         1000 * MS,
         explainedQuery({ text: "SELECT Id", namespace: "A", totalNs: 100 * MS }, {
           leadingOperationType: "Index",
@@ -535,7 +479,7 @@ describe("listSlowOperations", () => {
         explainedQuery({ text: "SELECT Id", namespace: "B", totalNs: 100 * MS }, {}),
       );
 
-      expect((await ranked({ ...ARGS, namespace: ["A"] })).queryPlans).toEqual([
+      expect(ranked(log, { namespace: ["A"] }).queryPlans).toEqual([
         expect.objectContaining({
           leadingOperationType: "TableScan",
           relativeCost: 2.5,
@@ -543,37 +487,37 @@ describe("listSlowOperations", () => {
       ]);
     });
 
-    it("explains only the queries the row cap returned", async () => {
-      mockLog(
+    it("explains only the queries the row cap returned", () => {
+      const log = useLog(
         1000 * MS,
         explainedQuery({ text: "SELECT Id", totalNs: 500 * MS }, {}),
         explainedQuery({ text: "SELECT Name", totalNs: 100 * MS }, {}),
       );
 
-      const result = await ranked({ ...ARGS, limit: 1 });
+      const result = ranked(log, { limit: 1 });
 
       expect(result.operations.map((row) => row.name)).toEqual(["SELECT Id"]);
       expect(result.queryPlans).toHaveLength(1);
     });
 
-    it("reports no table when the log explained none of those queries", async () => {
-      mockLog(1000 * MS, query({ text: "SELECT Id", totalNs: 500 * MS }));
+    it("reports no table when the log explained none of those queries", () => {
+      const log = useLog(1000 * MS, query({ text: "SELECT Id", totalNs: 500 * MS }));
 
-      expect(await ranked()).not.toHaveProperty("queryPlans");
+      expect(ranked(log)).not.toHaveProperty("queryPlans");
     });
 
     // One plan per ranked row, not per query text. The row is the only thing
     // naming the query now, so stating the verdict once would leave the second
     // call of the same query reading as though nothing was explained about it.
-    it("states a plan against every ranked row that carries the query", async () => {
-      mockLog(
+    it("states a plan against every ranked row that carries the query", () => {
+      const log = useLog(
         1000 * MS,
         explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {}),
         explainedQuery({ text: "SELECT Id", totalNs: 200 * MS }, {}),
       );
 
       expect(
-        (await ranked({ ...ARGS, groupBy: "none" })).queryPlans?.map((plan) =>
+        ranked(log, { groupBy: "none" }).queryPlans?.map((plan) =>
           "operationRow" in plan ? plan.operationRow : plan.name,
         ),
       ).toEqual([1, 2]);
@@ -581,8 +525,8 @@ describe("listSlowOperations", () => {
 
     // Grouping by namespace names the row after the namespace, so the query
     // text is nowhere else in the response and the plan has to carry it.
-    it("explains the queries behind a row grouped by namespace", async () => {
-      mockLog(
+    it("explains the queries behind a row grouped by namespace", () => {
+      const log = useLog(
         1000 * MS,
         explainedQuery(
           { text: "SELECT Id", namespace: "Custom", totalNs: 500 * MS },
@@ -591,15 +535,15 @@ describe("listSlowOperations", () => {
       );
 
       expect(
-        (await ranked({ ...ARGS, groupBy: "namespace" })).queryPlans?.[0],
+        ranked(log, { groupBy: "namespace" }).queryPlans?.[0],
       ).toEqual(expect.objectContaining({ name: "SELECT Id" }));
     });
 
     // Ungrouped, a row is one call, so it must be told that call's own plan.
     // The worst-per-text plan is the figure to act on for a group, but here it
     // would state a cost the optimiser never reached for the row.
-    it("states each call's own plan when every row is one call", async () => {
-      mockLog(
+    it("states each call's own plan when every row is one call", () => {
+      const log = useLog(
         1000 * MS,
         explainedQuery({ text: "SELECT Id", totalNs: 300 * MS }, {
           leadingOperationType: "TableScan",
@@ -612,7 +556,7 @@ describe("listSlowOperations", () => {
       );
 
       expect(
-        (await ranked({ ...ARGS, groupBy: "none" })).queryPlans,
+        ranked(log, { groupBy: "none" }).queryPlans,
       ).toEqual([
         expect.objectContaining({
           operationRow: 1,
@@ -627,46 +571,46 @@ describe("listSlowOperations", () => {
       ]);
     });
 
-    it("drops a plan the log did not record in full", async () => {
-      mockLog(
+    it("drops a plan the log did not record in full", () => {
+      const log = useLog(
         1000 * MS,
         explainedQuery({ text: "SELECT Id", totalNs: 500 * MS }, {
           relativeCost: null,
         }),
       );
 
-      expect(await ranked()).not.toHaveProperty("queryPlans");
+      expect(ranked(log)).not.toHaveProperty("queryPlans");
     });
   });
 
   const cheap = () => method({ text: "A.run", totalNs: 30 * MS });
 
-  it("groups by name unless the caller says otherwise, so volume surfaces", async () => {
-    mockLog(
+  it("groups by name unless the caller says otherwise, so volume surfaces", () => {
+    const log = useLog(
       1000 * MS,
       ...Array.from({ length: 20 }, cheap),
       method({ text: "B.run", totalNs: 100 * MS }),
     );
 
-    expect((await ranked()).operations[0]).toMatchObject({
+    expect(ranked(log).operations[0]).toMatchObject({
       name: "A.run",
       callCount: 20,
       durationSelfMs: 600,
     });
   });
 
-  it("ranks each call on its own when the caller passes none", async () => {
-    mockLog(1000 * MS, cheap(), cheap());
+  it("ranks each call on its own when the caller passes none", () => {
+    const log = useLog(1000 * MS, cheap(), cheap());
 
-    const operations = (await ranked({ ...ARGS, groupBy: "none" })).operations;
+    const operations = ranked(log, { groupBy: "none" }).operations;
 
     expect(operations).toHaveLength(2);
     // The row is one call, so its slowest call is the row itself.
     expect(operations[0]).not.toHaveProperty("durationSelfMaxMs");
   });
 
-  it("separates one bad call from sheer volume in durationSelfMaxMs", async () => {
-    mockLog(
+  it("separates one bad call from sheer volume in durationSelfMaxMs", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "Outlier", totalNs: 490 * MS }),
       method({ text: "Outlier", totalNs: 10 * MS }),
@@ -676,7 +620,7 @@ describe("listSlowOperations", () => {
     );
 
     expect(
-      (await ranked()).operations.map((o) => [
+      ranked(log).operations.map((o) => [
         o.name,
         o.durationSelfMs,
         o.durationSelfMaxMs,
@@ -687,8 +631,8 @@ describe("listSlowOperations", () => {
     ]);
   });
 
-  it("reports what a group costs, counting a nested call once", async () => {
-    mockLog(
+  it("reports what a group costs, counting a nested call once", () => {
+    const log = useLog(
       1000 * MS,
       method({
         text: "Outer",
@@ -699,7 +643,7 @@ describe("listSlowOperations", () => {
     );
 
     expect(
-      (await ranked({ ...ARGS, groupBy: "namespace" })).operations,
+      ranked(log, { groupBy: "namespace" }).operations,
     ).toEqual([
       expect.objectContaining({
         name: "default",
@@ -709,8 +653,8 @@ describe("listSlowOperations", () => {
     ]);
   });
 
-  it("keeps the summed self time of grouped rows within the transaction", async () => {
-    mockLog(
+  it("keeps the summed self time of grouped rows within the transaction", () => {
+    const log = useLog(
       1000 * MS,
       method({
         text: "Outer",
@@ -722,7 +666,7 @@ describe("listSlowOperations", () => {
       }),
     );
 
-    const result = await ranked({ ...ARGS, groupBy: "namespace" });
+    const result = ranked(log, { groupBy: "namespace" });
     const summed = result.operations.reduce(
       (total, operation) => total + operation.durationSelfMs,
       0,
@@ -731,22 +675,22 @@ describe("listSlowOperations", () => {
     expect(summed).toBeLessThanOrEqual(result.durationTotalMs);
   });
 
-  it("groups by namespace, and names each row after it", async () => {
-    mockLog(
+  it("groups by namespace, and names each row after it", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", namespace: "Custom", totalNs: 300 * MS }),
       method({ text: "B.run", namespace: "Custom", totalNs: 200 * MS }),
     );
 
     expect(
-      (await ranked({ ...ARGS, groupBy: "namespace" })).operations,
+      ranked(log, { groupBy: "namespace" }).operations,
     ).toEqual([
       expect.objectContaining({ name: "Custom", callCount: 2 }),
     ]);
   });
 
-  it("attributes platform DML to the package that drove it", async () => {
-    mockLog(
+  it("attributes platform DML to the package that drove it", () => {
+    const log = useLog(
       1000 * MS,
       method({
         text: "Custom.run",
@@ -765,7 +709,7 @@ describe("listSlowOperations", () => {
       }),
     );
 
-    const operations = (await ranked({ ...ARGS, groupBy: "callerNamespace" }))
+    const operations = ranked(log, { groupBy: "callerNamespace" })
       .operations;
 
     expect(operations).toContainEqual(
@@ -778,8 +722,8 @@ describe("listSlowOperations", () => {
     );
   });
 
-  it("folds a namespace's categories into one row each when asked", async () => {
-    mockLog(
+  it("folds a namespace's categories into one row each when asked", () => {
+    const log = useLog(
       1000 * MS,
       method({ text: "A.run", namespace: "Custom", totalNs: 300 * MS }),
       method({
@@ -791,8 +735,7 @@ describe("listSlowOperations", () => {
       query({ text: "SELECT Id", namespace: "Custom", totalNs: 100 * MS }),
     );
 
-    const { operations } = await ranked({
-      ...ARGS,
+    const { operations } = ranked(log, {
       groupBy: "debugCategory",
     });
 
@@ -827,10 +770,10 @@ describe("listSlowOperations", () => {
     const frees = () =>
       method({ text: "Frees", totalNs: 500 * MS, heapSelfNetBytes: 0 });
 
-    it("ranks the code that retained the heap above the code that freed it", async () => {
-      mockLog(1000 * MS, frees(), holds());
+    it("ranks the code that retained the heap above the code that freed it", () => {
+      const log = useLog(1000 * MS, frees(), holds());
 
-      const result = await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" });
+      const result = ranked(log, { sortBy: "heapSelfNetBytes" });
 
       expect(result.operations.map((row) => row.name)).toEqual([
         "Holds",
@@ -839,10 +782,10 @@ describe("listSlowOperations", () => {
       expect(result.operations[0]?.heapSelfNetBytes).toBe(900_000);
     });
 
-    it("leaves the default ranking as it was, column and all", async () => {
-      mockLog(1000 * MS, frees(), holds());
+    it("leaves the default ranking as it was, column and all", () => {
+      const log = useLog(1000 * MS, frees(), holds());
 
-      const rows = (await ranked()).operations;
+      const rows = ranked(log).operations;
 
       expect(rows.map((row) => row.name)).toEqual(["Frees", "Holds"]);
       expect(rows[0]).not.toHaveProperty("heapSelfNetBytes");
@@ -851,16 +794,16 @@ describe("listSlowOperations", () => {
     // Most logs record no allocation, so every row is a flat zero and the sort
     // key decides nothing. Falling back to self time answers the question the
     // caller could have asked, rather than the log's own order.
-    it("falls back to self time when nothing allocated", async () => {
+    it("falls back to self time when nothing allocated", () => {
       // Stated fastest first, so the log's own order is not the answer and a
       // sort with no second key could not produce it.
-      mockLog(
+      const log = useLog(
         1000 * MS,
         method({ text: "Fast", totalNs: 100 * MS }),
         method({ text: "Slow", totalNs: 500 * MS }),
       );
 
-      const result = await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" });
+      const result = ranked(log, { sortBy: "heapSelfNetBytes" });
 
       expect(result.operations.map((row) => row.name)).toEqual([
         "Slow",
@@ -869,11 +812,11 @@ describe("listSlowOperations", () => {
       expect(result.operations[0]?.heapSelfNetBytes).toBe(0);
     });
 
-    it("reports a body that freed more than it allocated below zero", async () => {
-      mockLog(1000 * MS, method({ text: "Frees", heapSelfNetBytes: -400 }));
+    it("reports a body that freed more than it allocated below zero", () => {
+      const log = useLog(1000 * MS, method({ text: "Frees", heapSelfNetBytes: -400 }));
 
       expect(
-        (await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" })).operations[0]
+        ranked(log, { sortBy: "heapSelfNetBytes" }).operations[0]
           ?.heapSelfNetBytes,
       ).toBe(-400);
     });
@@ -881,15 +824,14 @@ describe("listSlowOperations", () => {
     // The one thing the rows cannot say: whether the page holds the heap that
     // matters. A default page misses more than a tenth of it on 17 of the 40
     // real logs that allocate.
-    it("says what share of the transaction's heap the returned rows carry", async () => {
-      mockLog(
+    it("says what share of the transaction's heap the returned rows carry", () => {
+      const log = useLog(
         1000 * MS,
         method({ text: "Holds", heapSelfNetBytes: 750 }),
         method({ text: "Some", heapSelfNetBytes: 250 }),
       );
 
-      const result = await ranked({
-        ...ARGS,
+      const result = ranked(log, {
         sortBy: "heapSelfNetBytes",
         limit: 1,
       });
@@ -899,23 +841,13 @@ describe("listSlowOperations", () => {
       expect(result.matchedCount).toBe(2);
     });
 
-    it("reports a zero share when the log retained no heap", async () => {
-      mockLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
+    it("reports a zero share when the log retained no heap", () => {
+      const log = useLog(1000 * MS, method({ text: "A.run", totalNs: 500 * MS }));
 
       expect(
-        (await ranked({ ...ARGS, sortBy: "heapSelfNetBytes" }))
+        ranked(log, { sortBy: "heapSelfNetBytes" })
           .returnedHeapPercentage,
       ).toBe(0);
     });
-  });
-
-  it("names the real cause when the log cannot be read", async () => {
-    mockFs.stat.mockRejectedValue(
-      Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
-    );
-
-    await expect(
-      listSlowOperations({ logFilePath: "/nonexistent/file.log" }),
-    ).rejects.toThrow("Log file not found: /nonexistent/file.log");
   });
 });
