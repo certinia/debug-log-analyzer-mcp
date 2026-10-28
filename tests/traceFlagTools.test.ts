@@ -32,7 +32,6 @@ import { connectOrg, readLocalOrg, type LocalOrg } from "../src/salesforce/conne
 import { classifyOrg } from "../src/salesforce/orgClassification";
 import * as flags from "../src/salesforce/traceFlags";
 import { ensureLevelsDebugLevel } from "../src/salesforce/debugLevels";
-import { levelsClause, requestedLevels } from "../src/logLevels";
 import { compileDenyList } from "../src/policy/orgDenyList";
 import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
 import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
@@ -133,7 +132,8 @@ describe("createTraceFlag", () => {
     expect(decode(text(result))).toEqual({
       org: "me@example.com (psa)",
       ...FLAG,
-      levels: levelsClause(requestedLevels({ apexCode: "FINEST" })),
+      levels:
+        "apexCode, database FINEST; apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; nba, wave INFO",
       startTime: "2026-10-09T09:00:00Z",
       expirationTime: "2026-10-09T09:15:00Z",
     });

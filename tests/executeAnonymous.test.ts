@@ -1804,18 +1804,21 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
+    // Literals, so a wrong level or grouping cannot show on both sides of the check.
+    const DEFAULTS =
+      "apexCode, apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database FINEST; nba, wave INFO";
     it.each<[string, ExecuteAnonymousArgs["debugLevel"], string]>([
+      ["no levels and no trace flag", undefined, `the defaults: ${DEFAULTS}`],
+      ["the defaults", "default", `the defaults: ${DEFAULTS}`],
       [
-        "no levels and no trace flag",
-        undefined,
-        `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`,
+        "one level",
+        "FINEST",
+        "as requested: apexCode, apexProfiling, callout, database, nba, system, validation, visualforce, wave, workflow FINEST",
       ],
-      ["the defaults", "default", `the defaults: ${levelsClause(DEFAULT_TRACE_CONFIG)}`],
-      ["one level", "FINEST", `as requested: ${levelsClause(requestedLevels("FINEST"))}`],
       [
         "some categories",
         { database: "INFO", apexCode: "FINEST" },
-        `as requested: ${levelsClause(requestedLevels({ database: "INFO", apexCode: "FINEST" }))}`,
+        "as requested: apexCode FINEST; apexProfiling, visualforce, workflow FINE; callout, system, validation DEBUG; database, nba, wave INFO",
       ],
     ])("should show the log levels before the Apex, for %s", async (_name, debugLevel, shown) => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
