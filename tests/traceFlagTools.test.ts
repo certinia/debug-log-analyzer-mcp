@@ -256,7 +256,8 @@ describe("createTraceFlag", () => {
     expect(text(result)).toContain("call this tool again to see it");
   });
 
-  it("should refuse a denied org before connecting", async () => {
+  // Where to deny is orgAccess.test's; the words are this tool's.
+  it("should name its action in a refusal", async () => {
     const result = await createTraceFlag(
       server(),
       { tracedEntity: "jo@example.com" },
@@ -265,6 +266,5 @@ describe("createTraceFlag", () => {
     );
 
     expect(text(result)).toContain("Cannot create a trace flag against org");
-    expect(mockConnectOrg).not.toHaveBeenCalled();
   });
 });

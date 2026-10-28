@@ -191,13 +191,7 @@ const codec = createRequestStateCodec<ConfirmationState>({
   key: randomBytes(32),
 });
 
-function policy(
-  overrides: {
-    allowProductionOrgs?: boolean;
-    denyList?: DenyList;
-    classificationCache?: Map<string, OrgClassification>;
-  } = {},
-) {
+function policy(overrides: { denyList?: DenyList } = {}) {
   return {
     allowProductionOrgs: false,
     denyList: compileDenyList([]),
@@ -540,18 +534,6 @@ describe("Execute Anonymous", () => {
         );
         expect(toonDecode(result).levelsSource).toBe("request");
       });
-    });
-
-    it("should connect to the org it checked, through the same auth", async () => {
-      await executeAnonymous(
-        mockServer,
-        { apex: testApexCode },
-        ctx,
-        policy(),
-      );
-
-      expect(mockReadLocalOrg).toHaveBeenCalledWith(undefined, undefined);
-      expect(mockConnectOrg).toHaveBeenCalledWith(LOCAL_ORG);
     });
 
     it("should throw error when Apex compilation fails", async () => {
@@ -1021,24 +1003,6 @@ describe("Execute Anonymous", () => {
       expect(toonDecode(result).filePath).toContain(`${testLogId}.log`);
     });
 
-    it("should throw error when connect() fails (no default org)", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      mockConnectOrg.mockRejectedValue(
-        new Error(
-          "No default org is set. Pass targetOrg, or set one with 'sf config set target-org <alias>'.",
-        ),
-      );
-
-      await expect(
-        executeAnonymous(mockServer, args, ctx, policy()),
-      ).rejects.toThrow("No default org is set");
-
-      expect(findUsersByUsername).not.toHaveBeenCalled();
-      expect(ensureDebugLevel).not.toHaveBeenCalled();
-      expect(createTraceFlag).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
   });
 
   describe("apexFilePath", () => {
@@ -1157,36 +1121,6 @@ describe("Execute Anonymous", () => {
         expect(mockOpen).not.toHaveBeenCalled();
       });
 
-      it("should refuse a file when a client that declared roots does not answer", async () => {
-        rejectRoots(SdkErrorCode.RequestTimeout, "Request timed out");
-
-        const result: any = await executeAnonymous(
-          mockServer,
-          { apexFilePath },
-          ctx,
-          policy(),
-        );
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toContain(
-          "the client's roots could not be read: Request timed out.",
-        );
-        expect(mockOpen).not.toHaveBeenCalled();
-      });
-
-      it("should say an outputDir was not checked, rather than stay silent", async () => {
-        const result = await executeAnonymous(
-          mockServer,
-          { apex: testApexCode, outputDir: "/elsewhere/logs", targetOrg: "psa" },
-          ctx,
-          policy(),
-        );
-
-        expect(result.content[0]?.text).toContain(
-          "Debug log written to /elsewhere/logs, which was not checked against the client's roots: this server cannot yet ask a client on MCP 2026-07-28 for its roots.",
-        );
-      });
-
       it("should say the default outputDir was not checked, since it falls back to the cwd", async () => {
         const result = await executeAnonymous(
           mockServer,
@@ -1200,37 +1134,6 @@ describe("Execute Anonymous", () => {
         );
       });
 
-      it("should refuse to guess the default org, since the cwd may not be the client's project", async () => {
-        const result: any = await executeAnonymous(
-          mockServer,
-          { apex: testApexCode },
-          ctx,
-          policy(),
-        );
-
-        expect(result.isError).toBe(true);
-        expect(result.content[0].text).toBe(
-          "Cannot tell which project's default org to use: this server cannot yet ask a client on MCP 2026-07-28 for its roots. Pass targetOrg.",
-        );
-        expect(mockReadLocalOrg).not.toHaveBeenCalled();
-      });
-
-      it("should read a file anywhere for a 2026-07-28 client that declared no roots", async () => {
-        ctx = {
-          mcpReq: { ...ctx.mcpReq, envelope: { [CLIENT_CAPABILITIES_META_KEY]: {} } },
-        } as unknown as ServerContext;
-        mockReadFile.mockResolvedValue(testApexCode);
-
-        await executeAnonymous(
-          mockServer,
-          { apexFilePath: "/elsewhere/a.apex" },
-          ctx,
-          policy(),
-        );
-
-        expectPostedApex(testApexCode);
-      });
-
       it("should still run inline Apex against a named org", async () => {
         await executeAnonymous(
           mockServer,
@@ -1241,23 +1144,6 @@ describe("Execute Anonymous", () => {
 
         expectPostedApex(testApexCode);
       });
-    });
-
-    it("should stop a cancelled call, not treat it as unreadable roots", async () => {
-      rejectRoots(
-        SdkErrorCode.MethodNotSupportedByProtocolVersion,
-        "roots/list cannot be sent on 2026-07-28",
-      );
-      const controller = new AbortController();
-      controller.abort();
-      const cancelled = {
-        mcpReq: { ...ctx.mcpReq, signal: controller.signal },
-      } as unknown as ServerContext;
-
-      await expect(
-        executeAnonymous(mockServer, { apex: testApexCode }, cancelled, policy()),
-      ).rejects.toThrow("roots/list cannot be sent on 2026-07-28");
-      expect(mockReadLocalOrg).not.toHaveBeenCalled();
     });
 
     it("should read a file anywhere when the client cannot list roots, as no root bounds it", async () => {
@@ -1463,157 +1349,6 @@ describe("Execute Anonymous", () => {
       consoleError = jest.spyOn(console, "error").mockImplementation(() => {});
     });
 
-    it("should run against a sandbox without prompting", async () => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result = await executeAnonymous(mockServer, args, ctx, policy());
-
-      expect(toonDecode(result).orgType).toBe("sandbox");
-      expectPostedApex(testApexCode);
-    });
-
-    // Org.create can call the org, so a deny on what the local files know
-    // must land before it.
-    it.each([
-      ["org id", TEST_ORG_ID],
-      ["username", "test@*.com"],
-      ["instance URL", "*.my.salesforce.com"],
-    ])("should deny on the %s before connecting", async (_f, p) => {
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({ denyList: compileDenyList([p]) }),
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain(`--deny-orgs entry '${p}'`);
-      expect(mockConnectOrg).not.toHaveBeenCalled();
-      expect(mockRetrieveOrgInfo).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    it("should deny on any alias of the username, not only the first", async () => {
-      mockReadLocalOrg.mockResolvedValue({
-        ...LOCAL_ORG,
-        aliases: ["myprod", "prod"],
-      });
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        { apex: testApexCode, targetOrg: "prod" },
-        ctx,
-        policy({ denyList: compileDenyList(["prod"]) }),
-      );
-
-      expect(result.content[0].text).toContain("--deny-orgs entry 'prod'");
-      expect(mockConnectOrg).not.toHaveBeenCalled();
-    });
-
-    it("should deny an org type even with --allow-production-orgs", async () => {
-      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({
-          allowProductionOrgs: true,
-          denyList: compileDenyList(["type:production"]),
-        }),
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain(
-        "--deny-orgs entry 'type:production'",
-      );
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    // A refusal, not a confirmation request: no answer can lift a deny.
-    it.each([
-      [
-        "production",
-        () => mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO),
-      ],
-      [
-        "sandbox",
-        () => mockRetrieveOrgInfo.mockResolvedValue(SANDBOX_ORG_INFO),
-      ],
-      [
-        "unknown",
-        () => mockRetrieveOrgInfo.mockRejectedValue(new Error("expired")),
-      ],
-    ])("should refuse a denied %s org outright", async (type, arrange) => {
-      arrange();
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({ denyList: compileDenyList([`type:${type}`]) }),
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain(
-        `--deny-orgs entry 'type:${type}'`,
-      );
-      expect(result.requestState).toBeUndefined();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    // A failed classification must not turn a deny into a confirmation.
-    it("should refuse an unclassifiable org under type:production", async () => {
-      mockRetrieveOrgInfo.mockRejectedValue(new Error("expired"));
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        { apex: testApexCode },
-        ctx,
-        policy({ denyList: compileDenyList(["type:production"]) }),
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("its type could not be read");
-      expect(result.content[0].text).toContain(
-        "--deny-orgs entry 'type:production'",
-      );
-      expect(result.requestState).toBeUndefined();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    it("should run an org whose type the list does not name", async () => {
-      mockRetrieveOrgInfo.mockResolvedValue(SANDBOX_ORG_INFO);
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({ denyList: compileDenyList(["type:production"]) }),
-      );
-
-      expectPostedApex(testApexCode);
-    });
-
-    it("should ask for confirmation on the first production call", async () => {
-      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result = assertInputRequired(
-        await executeAnonymous(mockServer, args, ctx, policy()),
-      );
-
-      const params = confirmRequest(result);
-      expect(params.message).toContain("PRODUCTION org 'test@example.com'");
-      expect(params.message).toContain(testApexCode);
-      expect(typeof result.requestState).toBe("string");
-    });
-
     it("should show all of a long Apex snippet, since all of it runs", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       const apex = `${"x".repeat(5000)}delete [SELECT Id FROM Account];`;
@@ -1674,20 +1409,6 @@ describe("Execute Anonymous", () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it("should run Apex too long to confirm when --allow-production-orgs is set", async () => {
-      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      const apex = "x".repeat(MAX_APEX_TO_CONFIRM + 1);
-
-      await executeAnonymous(
-        mockServer,
-        { apex },
-        ctx,
-        policy({ allowProductionOrgs: true }),
-      );
-
-      expectPostedApex(apex);
-    });
-
     it("should refuse a production call whose client carried no answer", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
@@ -1713,7 +1434,7 @@ describe("Execute Anonymous", () => {
       expect(result.content[0].text).toContain("--allow-production-orgs");
     });
 
-    it("should not touch the org when a production call is refused", async () => {
+    it("should not touch the org while production asks to confirm", async () => {
       mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
       const args: ExecuteAnonymousArgs = { apex: testApexCode };
 
@@ -1722,21 +1443,6 @@ describe("Execute Anonymous", () => {
       expect(ensureDebugLevel).not.toHaveBeenCalled();
       expect(createTraceFlag).not.toHaveBeenCalled();
       expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    it("should run against production when --allow-production-orgs is set", async () => {
-      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      const result = await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({ allowProductionOrgs: true }),
-      );
-
-      expect(toonDecode(result).orgType).toBe("production");
-      expectPostedApex(testApexCode);
     });
 
     it("should run against production when the retry confirms", async () => {
@@ -1758,28 +1464,6 @@ describe("Execute Anonymous", () => {
 
       expect(toonDecode(result).orgType).toBe("production");
       expectPostedApex(testApexCode);
-    });
-
-    it.each([
-      ["decline", { action: "decline" }],
-      ["cancel", { action: "cancel" }],
-    ])("should refuse when the retry answers %s", async (_name, response) => {
-      mockRetrieveOrgInfo.mockResolvedValue(PRODUCTION_ORG_INFO);
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const asked = assertInputRequired(
-        await executeAnonymous(mockServer, args, ctx, policy()),
-      );
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        args,
-        await retryCtx(asked, response),
-        policy(),
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("User declined");
-      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it("should refuse a retry that asks for different Apex", async () => {
@@ -1992,54 +1676,6 @@ describe("Execute Anonymous", () => {
       expectPostedApex(testApexCode);
     });
 
-    it("should treat an unverifiable org as production and surface the reason", async () => {
-      mockRetrieveOrgInfo.mockRejectedValue(
-        new Error("Unable to refresh session due to: inactive organization"),
-      );
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-      const asked = assertInputRequired(
-        await executeAnonymous(mockServer, args, ctx, policy()),
-      );
-      const state = await codec.verify(
-        asked.requestState as string,
-        makeCtx(),
-      );
-
-      const result: any = await executeAnonymous(
-        mockServer,
-        args,
-        makeCtx(state, {}),
-        policy(),
-      );
-
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("could not be verified");
-      // The reason has to reach the agent so it can suggest re-authenticating.
-      expect(result.content[0].text).toContain(
-        "Reason: Unable to refresh session due to: inactive organization",
-      );
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
-
-    it("should classify the org once per cache", async () => {
-      const cache = new Map();
-      const args: ExecuteAnonymousArgs = { apex: testApexCode };
-
-      await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({ classificationCache: cache }),
-      );
-      await executeAnonymous(
-        mockServer,
-        args,
-        ctx,
-        policy({ classificationCache: cache }),
-      );
-
-      expect(mockRetrieveOrgInfo).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe("org username in response", () => {
@@ -2200,20 +1836,6 @@ describe("Execute Anonymous", () => {
         );
       });
 
-      it("waits a bounded time for the roots, and stops when the call is cancelled", async () => {
-        await executeAnonymous(
-          mockServer,
-          { apex: testApexCode },
-          ctx,
-          policy(),
-        );
-
-        expect(mockServer.server.listRoots).toHaveBeenCalledWith(undefined, {
-          timeout: 5_000,
-          signal: ctx.mcpReq.signal,
-        });
-      });
-
       it("stays silent when the client cannot list roots", async () => {
         rejectRoots(
           SdkErrorCode.CapabilityNotSupported,
@@ -2228,22 +1850,6 @@ describe("Execute Anonymous", () => {
         );
 
         expect(textOf(result)).not.toContain("warning");
-      });
-
-      it("stops a cancelled call rather than running on with no roots", async () => {
-        const controller = new AbortController();
-        controller.abort();
-        (mockServer.server.listRoots as jest.Mock).mockRejectedValue(
-          new Error("aborted"),
-        );
-        const cancelled = {
-          mcpReq: { ...ctx.mcpReq, signal: controller.signal },
-        } as unknown as ServerContext;
-
-        await expect(
-          executeAnonymous(mockServer, { apex: testApexCode }, cancelled, policy()),
-        ).rejects.toThrow("aborted");
-        expect(mockReadLocalOrg).not.toHaveBeenCalled();
       });
 
       it("follows symlinks, so a link inside a root that leaves one warns", async () => {

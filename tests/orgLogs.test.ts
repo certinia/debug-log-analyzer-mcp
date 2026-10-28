@@ -185,7 +185,8 @@ describe("listOrgLogs", () => {
   });
 
   // A log holds the org's data, so a deny covers reading it.
-  it("should refuse a denied org before connecting", async () => {
+  // Where to deny is orgAccess.test's; the words are this tool's.
+  it("should name its action in a refusal", async () => {
     const result = await listOrgLogs(
       server(),
       {},
@@ -197,8 +198,6 @@ describe("listOrgLogs", () => {
     expect(text(result as never)).toContain(
       "Cannot list debug logs against org 'me@example.com (psa)'",
     );
-    expect(mockConnectOrg).not.toHaveBeenCalled();
-    expect(mockListApexLogs).not.toHaveBeenCalled();
   });
 });
 
@@ -432,7 +431,7 @@ describe("getOrgLogs", () => {
     rmSync(elsewhere, { recursive: true, force: true });
   });
 
-  it("should refuse a denied org before connecting", async () => {
+  it("should name its action in a refusal", async () => {
     const result = await getOrgLogs(
       server(),
       {},
@@ -440,9 +439,9 @@ describe("getOrgLogs", () => {
       policy({ denyList: compileDenyList(["type:production"]) }),
     );
 
+    expect(result).toMatchObject({ isError: true });
     expect(text(result as never)).toContain(
       "Cannot download debug logs against org 'me@example.com (psa)'",
     );
-    expect(mockDownload).not.toHaveBeenCalled();
   });
 });
