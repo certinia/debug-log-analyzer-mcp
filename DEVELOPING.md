@@ -8,7 +8,7 @@ across tools. The [`repo-docs`](.claude/skills/repo-docs/SKILL.md) skill says wh
 a rule goes.
 
 - The source code is [TypeScript](https://www.typescriptlang.org/).
-- `src/tools/` holds one module per MCP tool, and the helpers they share.
+- `src/tools/` holds the MCP tools and the helpers they share. An analysis tool is one module, listed in `analysisTools.ts`. An org tool's handler is one module, and what `tools/list` sends for it is in a `*Definition.ts`.
 - `src/salesforce/` connects to a Salesforce org.
 - The modules at the top of `src/`, apart from `index.ts` and `server.ts`, are helpers every folder may import. They import from no folder.
 
