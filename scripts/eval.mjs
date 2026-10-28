@@ -1133,8 +1133,8 @@ function renderTokenCost(costs, responses) {
 
 /**
  * How a JSON Schema property reads in the README's Type column, with its
- * values when they are a closed set and its bounds: a `.describe()` must not
- * repeat what the schema says, so nothing else puts them in the README.
+ * values when they are a closed set, and its bounds. The README has no other
+ * copy of them, because a `.describe()` repeats none (DEVELOPING.md).
  */
 function schemaType(property) {
   if (property.anyOf) {
@@ -1144,8 +1144,11 @@ function schemaType(property) {
     return property.enum.map((value) => `\`${value}\``).join(" \\| ");
   }
   if (property.type === "array") {
-    const items = schemaType(property.items);
-    return `${property.items.enum ? `(${items})` : items}[]${bounds(property.minItems, property.maxItems)}`;
+    const items = property.items.enum
+      ? `(${schemaType(property.items)})`
+      : schemaType(property.items);
+    const count = bounds(property.minItems, property.maxItems).trim();
+    return `${items}[]${count && ` (${count} items)`}`;
   }
   if (property.propertyNames && property.additionalProperties) {
     return `object: (${schemaType(property.propertyNames)}) → (${schemaType(property.additionalProperties)})`;

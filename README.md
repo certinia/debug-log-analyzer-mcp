@@ -279,12 +279,12 @@ A log already saved under `outputDir` is not downloaded again, since a stored lo
 
 <!-- params-apexlog_get_org_logs:start -->
 
-| Parameter   | Type          | Required | Description |
-| ----------- | ------------- | -------- | --- |
-| `targetOrg` | string        | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
-| `ids`       | string[] 1–25 | No       | Log ids, from apexlog_list_org_logs |
-| `latest`    | number 1–25   | No       | The newest N logs, in place of ids (default: 1) |
-| `outputDir` | string        | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
+| Parameter   | Type                  | Required | Description |
+| ----------- | --------------------- | -------- | --- |
+| `targetOrg` | string                | No       | Alias or username of the target Salesforce org. Uses the project default if not specified. |
+| `ids`       | string[] (1–25 items) | No       | Log ids, from apexlog_list_org_logs |
+| `latest`    | number 1–25           | No       | The newest N logs, in place of ids (default: 1) |
+| `outputDir` | string                | No       | Log directory (default: .apex-log-mcp/ in the first client root, else cwd) |
 
 <!-- params-apexlog_get_org_logs:end -->
 
