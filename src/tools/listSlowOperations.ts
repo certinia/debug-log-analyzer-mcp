@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
+import type { DebugCategory } from "@apexdevtools/apex-log-parser";
 import { loadApexLog, logFilePathSchema } from "./apexLogSource.js";
 import { toolInputSchema } from "./inputSchema.js";
 import {
@@ -295,7 +295,7 @@ function verdictOf(plan: QueryPlan): QueryPlanVerdict {
  * leave every other row of the same query reading as unexplained. It repeats
  * only the four small figures, never the text.
  *
- * A page with no query among its rows pays nothing for the second walk.
+ * A page with no query among its rows looks up no plan.
  *
  * Where a row is one call - `groupBy: "none"` - the plan comes from that call's
  * own event, not from the worst plan for its text. The row makes a claim about
@@ -306,14 +306,14 @@ function verdictOf(plan: QueryPlan): QueryPlanVerdict {
  */
 function plansForRankedRows(
   ranked: Operation[],
-  apexLog: ApexLog,
+  everyOperation: Operation[],
   perCall: boolean,
 ): RankedPlan[] {
   if (!ranked.some(canCarryPlan)) {
     return [];
   }
 
-  const explained = perCall ? undefined : listQueryPlans(apexLog);
+  const explained = perCall ? undefined : listQueryPlans(everyOperation);
   const plans: RankedPlan[] = [];
   ranked.forEach((operation, index) => {
     if (!canCarryPlan(operation)) {
@@ -341,7 +341,7 @@ function plansForFoldedRows(
   selected: Operation[],
   ranked: Operation[],
   groupBy: GroupBy,
-  apexLog: ApexLog,
+  everyOperation: Operation[],
 ): QueryPlan[] {
   const rankedKeys = new Set(
     ranked.map((operation) => operationGroupKey(operation, groupBy)),
@@ -359,7 +359,7 @@ function plansForFoldedRows(
     return [];
   }
 
-  const explained = listQueryPlans(apexLog);
+  const explained = listQueryPlans(everyOperation);
   return [...queryNames]
     .map((name) => explained.get(name))
     .filter((plan): plan is QueryPlan => plan !== undefined)
@@ -390,7 +390,8 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   const heapTotalBytes = apexLog.heapAllocated.total;
   const minSelfNs = minSelfMs * NS_TO_MS;
 
-  const selected = listOperations(apexLog).filter(
+  const everyOperation = listOperations(apexLog);
+  const selected = everyOperation.filter(
     (operation) =>
       matches(debugCategory, operation.debugCategory) &&
       matches(type, operation.type) &&
@@ -461,8 +462,8 @@ export async function listSlowOperations(args: SlowOperationsArgs) {
   // up by group key and carries the text.
   const explained: PlanRow[] =
     groupBy === "none" || GROUPINGS[groupBy].namesOperation
-      ? plansForRankedRows(ranked, apexLog, groupBy === "none")
-      : plansForFoldedRows(selected, ranked, groupBy, apexLog);
+      ? plansForRankedRows(ranked, everyOperation, groupBy === "none")
+      : plansForFoldedRows(selected, ranked, groupBy, everyOperation);
 
   // Out of what the rows left, because the plans are part of the same response.
   // A namespace grouping reports one plan per distinct query text behind the
