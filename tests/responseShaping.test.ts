@@ -5,6 +5,7 @@
 import {
   elide,
   elideAround,
+  elideEnd,
   limitUnitsClause,
   omitEmpty,
   roundMs,
@@ -223,6 +224,17 @@ describe("elideAround", () => {
 
     expect(cut).toContain("MATCH");
     expect(cut).not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/);
+  });
+});
+
+describe("elideEnd", () => {
+  // A cut through 😀 would send a lone surrogate, which no client can render.
+  it.each([
+    ["keeps text that fits", "abc", 3, "abc"],
+    ["cuts the end, and counts the ellipsis", "abcdef", 4, "abc…"],
+    ["drops a surrogate pair the cut would split, whole", "ab😀cd", 4, "ab…"],
+  ])("%s", (_name, text, maxChars, expected) => {
+    expect(elideEnd(text, maxChars)).toBe(expected);
   });
 });
 

@@ -248,6 +248,21 @@ export function elideAround(
   return `${from > 0 ? "…" : ""}${text.slice(from, to)}${to < text.length ? "…" : ""}`;
 }
 
+/**
+ * Keep the start of over-long text, and end it with an ellipsis: at most
+ * `maxChars` UTF-16 units, the ellipsis one of them, as `elide` counts.
+ *
+ * Sliced text is a view on its parent, so the join is what stops a short cut
+ * pinning the long text it was cut from: a summary's fatal message keeps 200
+ * characters of up to 52 KB.
+ */
+export function elideEnd(text: string, maxChars: number): string {
+  if (text.length <= maxChars) {
+    return text;
+  }
+  return [text.slice(0, offPair(text, maxChars - 1, -1)), "…"].join("");
+}
+
 // A cut inside a surrogate pair would send half a character, so step `step` off it.
 function offPair(text: string, index: number, step: 1 | -1): number {
   return (text.charCodeAt(index - 1) & 0xfc00) === 0xd800 &&

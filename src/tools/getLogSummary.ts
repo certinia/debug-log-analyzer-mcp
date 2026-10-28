@@ -26,6 +26,7 @@ import {
 } from "../salesforce/debugLevels.js";
 import {
   elide,
+  elideEnd,
   NAME_LIMIT,
   NS_TO_MS,
   omitEmpty,
@@ -93,28 +94,17 @@ const FATAL_FRAME_LIMIT = 3;
  *
  * A DML failure embeds the whole validation message a user would see: 53
  * characters on the median of 124 real logs, 1,070 at the worst. The first 200
- * keep the exception class, the offending row and the error code.
+ * keep the exception class, the offending row and the error code; the limit
+ * counts the ellipsis after them.
  */
-const FATAL_MESSAGE_LIMIT = 200;
+const FATAL_MESSAGE_LIMIT = 201;
 
 /**
  * The whole frame cell, not one frame: a single frame runs to 1,081 characters
  * on a 124-log corpus, so capping the count alone leaves the cell unbounded.
+ * 400 characters and the ellipsis.
  */
-const FATAL_FRAMES_LIMIT = 400;
-
-/**
- * Sliced text is a view on its parent, so the join is what stops 201 characters
- * pinning the 52 KB they were cut from. The cut backs off a code unit where it
- * would split a surrogate pair, because a message carries text a user typed.
- */
-function clip(text: string, limit: number): string {
-  if (text.length <= limit) {
-    return text;
-  }
-  const splitsPair = text.codePointAt(limit - 1)! > 0xffff;
-  return [text.slice(0, splitsPair ? limit - 1 : limit), "…"].join("");
-}
+const FATAL_FRAMES_LIMIT = 401;
 
 interface FatalError {
   /** The exception message the log states, clipped where it runs into prose. */
@@ -143,7 +133,7 @@ function fatalErrors(logIssues: LogIssue[]): FatalError[] {
   return logIssues
     .filter((issue) => issue.type === "fatal")
     .map(({ summary, description }) => ({
-      message: clip(summary, FATAL_MESSAGE_LIMIT),
+      message: elideEnd(summary, FATAL_MESSAGE_LIMIT),
       frames: innermostFrames(description),
     }));
 }
@@ -171,7 +161,7 @@ function innermostFrames(description: string): string {
 
   const shown = dropped ? [...frames, "…"].join(" | ") : frames.join(" | ");
 
-  return clip(shown, FATAL_FRAMES_LIMIT);
+  return elideEnd(shown, FATAL_FRAMES_LIMIT);
 }
 
 /** A loop with a new message per throw has no bound; 409 real logs peak at 9. */
@@ -203,7 +193,7 @@ function exceptionRows(exceptions: LogEvent[]): ExceptionRow[] {
     .filter((event) => event.type === "EXCEPTION_THROWN")
     .forEach((event) => {
       // The parser appends the "caused by" and stack lines; a fatal shows the first alone.
-      const message = clip(event.text.split("\n", 1)[0] ?? "", FATAL_MESSAGE_LIMIT);
+      const message = elideEnd(event.text.split("\n", 1)[0] ?? "", FATAL_MESSAGE_LIMIT);
       const row = rows.get(message);
       if (row) {
         row.thrownCount += 1;

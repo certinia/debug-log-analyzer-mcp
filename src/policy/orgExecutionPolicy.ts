@@ -11,6 +11,7 @@ import {
 } from "@modelcontextprotocol/server";
 import type { OrgClassification } from "../salesforce/orgClassification.js";
 import { RELOGIN_HINT } from "../salesforce/authFailure.js";
+import { elideEnd } from "../tools/responseShaping.js";
 
 export type PolicyDecision =
   | { outcome: "allowed" }
@@ -91,7 +92,7 @@ export function createConfirmationLedger(
 /** The key this server assigns its one embedded request, and reads back. */
 const CONFIRM_KEY = "confirm";
 
-/** Underlying API errors can be verbose; keep the actionable part. */
+/** Underlying API errors can be verbose; the most of one shown, in characters from its start, the ellipsis one of them. */
 const MAX_REASON = 300;
 
 export const APEX_EXECUTION_DISABLED_MESSAGE =
@@ -115,10 +116,6 @@ export function describeDisabled(
     : `[DISABLED on this server] ${description} ${refusal}`;
 }
 
-function truncate(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max)}\n... (truncated)`;
-}
-
 function digestOf(effect: string): string {
   return createHash("sha256").update(effect, "utf8").digest("hex");
 }
@@ -138,7 +135,7 @@ function refusal(
     return (
       `Cannot ${action} against org '${orgLabel}': its type could not be verified, ` +
       "so it is treated as production to prevent accidental data loss.\n" +
-      `Reason: ${truncate(unverifiedReason, MAX_REASON)}\n` +
+      `Reason: ${elideEnd(unverifiedReason, MAX_REASON)}\n` +
       `If the org's login has expired: ${RELOGIN_HINT}\n` +
       ENABLE_HINT
     );
@@ -159,7 +156,7 @@ function confirmationRequest(
 ) {
   const preamble = unverifiedReason
     ? `About to ${action} against org '${orgLabel}', whose type could not be ` +
-      `verified (treated as production).\nReason: ${truncate(unverifiedReason, MAX_REASON)}`
+      `verified (treated as production).\nReason: ${elideEnd(unverifiedReason, MAX_REASON)}`
     : `About to ${action} against PRODUCTION org '${orgLabel}'.`;
 
   return inputRequired.elicit({

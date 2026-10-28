@@ -1620,7 +1620,6 @@ describe("Execute Anonymous", () => {
       );
 
       expect(params.message).toContain(apex);
-      expect(params.message).not.toContain("(truncated)");
     });
 
     it("should fence the Apex and state its size, so it cannot pass for the end of the prompt", async () => {

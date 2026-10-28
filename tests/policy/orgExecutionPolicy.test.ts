@@ -220,14 +220,28 @@ describe("authorizeOperation", () => {
       ).resolves.toEqual({ outcome: "allowed" });
     });
 
-    it("should truncate an excessively long reason", async () => {
-      const params = confirmRequest(
-        assertConfirmationRequired(
-          await authorizeUnknown({ reason: "x".repeat(1000) }),
-        ),
-      );
-
-      expect(params.message).toContain("(truncated)");
+    // Both say the reason, so a cut dropped from either would ship 1,000 characters.
+    it.each([
+      [
+        "the confirmation",
+        async (reason: string) =>
+          confirmRequest(assertConfirmationRequired(await authorizeUnknown({ reason })))
+            .message,
+      ],
+      [
+        "the refusal",
+        async (reason: string) => {
+          const result = assertConfirmationRequired(await authorizeUnknown({ reason }));
+          const decision = await authorizeUnknown({
+            ctx: makeCtx(await verifiedState(result), {}),
+            reason,
+          });
+          return decision.outcome === "refused" ? decision.reason : "";
+        },
+      ],
+    ])("should cut a long reason to 300 characters in %s", async (_name, shown) => {
+      // 300 characters, the ellipsis one of them.
+      expect(await shown("x".repeat(1000))).toContain(`Reason: ${"x".repeat(299)}…\n`);
     });
   });
 
