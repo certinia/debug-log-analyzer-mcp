@@ -219,6 +219,33 @@ describe("searchEvents", () => {
     expect(outside.events).toEqual([]);
   });
 
+  // In governor-heavy, event 10 holds 11 to 13 and event 14 follows it: an off-by-one
+  // in the subtree's bounds would take in 14 or drop 13.
+  it.each([
+    [13, [13]],
+    [14, []],
+  ])("should take event %i below parentEventId 10 only if it is in the subtree", async (eventId, expected) => {
+    const { events } = await search("governor-heavy", { eventId, parentEventId: 10 });
+
+    expect(events.map((row) => row.eventId)).toEqual(expected);
+  });
+
+  it("should return every event below parentEventId and none past it", async () => {
+    const below10 = await search("governor-heavy", { parentEventId: 10 });
+    // Event 9 is a frame with nothing under it.
+    const below9 = await search("governor-heavy", { parentEventId: 9 });
+
+    expect(below10.events.map((row) => row.eventId)).toEqual([11, 12, 13]);
+    expect(below9).toMatchObject({ matchedCount: 0, events: [] });
+  });
+
+  // governor-heavy holds 158 events, so the last id is the one a ">=" bound would refuse.
+  it("should find the log's last event by its id", async () => {
+    const { events } = await search("governor-heavy", { eventId: 158 });
+
+    expect(events.map((row) => row.eventId)).toEqual([158]);
+  });
+
   // Top-level rows report the log itself, index 0, as their parent.
   it("should search the whole log below parentEventId 0", async () => {
     const all = await search("governor-heavy");
