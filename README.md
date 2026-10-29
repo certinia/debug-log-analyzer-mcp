@@ -195,7 +195,7 @@ Searches a log's events in log order, for what the other tools rank or total: wh
 
 <!-- shape-apexlog_search_events:end -->
 
-A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventId` names an event and `parentEventId` the one it sits under, so a row found here can be opened up with `parentEventId`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
+A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventId` names an event and `parentEventId` the one it sits under, so a row found here can be opened up with `parentEventId`.
 
 Text past 400 characters is elided. Ask for one event by `eventId` to read up to 30,000 characters of it. `contains` searches a row's text before elision, and a long row is cut around the match. For plain text, grep the saved `.log`: it is cheaper. This tool earns its tokens on event types, nesting, and clients with no shell.
 

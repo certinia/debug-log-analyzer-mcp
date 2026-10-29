@@ -245,6 +245,14 @@ hand.
 The unit tests cannot replace the eval: jest maps `@toon-format/toon` to a JSON stand-in, so it never
 sees the real encoding.
 
+If you changed how a log is read or parsed, or upgraded the parser, run the bench on the same
+directory of real logs before and after, and put both tables in the pull request:
+
+```zsh
+pnpm run build && pnpm run bench <dir>
+pnpm run bench <dir> --dist <path to a build of main>
+```
+
 Make sure all tests pass before you open a pull request.
 
 ## 🚢 Releasing
