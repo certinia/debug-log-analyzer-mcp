@@ -4,7 +4,7 @@
 
 import { constants, promises as fs, type BigIntStats } from "fs";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexEvent, ApexLog } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 import { fileReadError } from "../tools/localFile.js";
 
 type CachedLog = {
@@ -129,19 +129,4 @@ export function clearApexLogCache(): void {
   clearTimeout(evictionTimer);
   evictionTimer = undefined;
   cached = undefined;
-}
-
-/**
- * Visit the node and every node below it, parents first.
- *
- * What `visit` returns is passed to that node's children, so a visitor can carry
- * what encloses a node down to it without a second pass.
- */
-export function walkLog<T>(
-  node: ApexEvent,
-  visit: (node: ApexEvent, inherited: T | undefined) => T,
-  inherited?: T,
-): void {
-  const next = visit(node, inherited);
-  node.children.forEach((child) => walkLog(child, visit, next));
 }
