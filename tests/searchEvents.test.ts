@@ -42,8 +42,8 @@ describe("searchEvents", () => {
     expect(first.capturedAt).toBeDefined();
     expect(next.capturedAt).toBeUndefined();
     expect(next.matchedCount).toBe(first.matchedCount);
-    expect(next.events[0]!.eventIndex).toBeGreaterThan(
-      first.events[9]!.eventIndex,
+    expect(next.events[0]!.eventId).toBeGreaterThan(
+      first.events[9]!.eventId,
     );
   });
 
@@ -109,19 +109,19 @@ describe("searchEvents", () => {
     ]);
   });
 
-  it("should return only the events below parentEventIndex", async () => {
+  it("should return only the events below parentEventId", async () => {
     const all = await search("governor-heavy", { limit: 1000 });
     const method = all.events.find((row) => row.type === "METHOD_ENTRY")!;
 
     const { events } = await search("governor-heavy", {
-      parentEventIndex: method.eventIndex,
+      parentEventId: method.eventId,
       limit: 1000,
     });
 
-    const below = new Set([method.eventIndex]);
+    const below = new Set([method.eventId]);
     for (const row of events) {
-      expect(below.has(row.parentEventIndex)).toBe(true);
-      below.add(row.eventIndex);
+      expect(below.has(row.parentEventId)).toBe(true);
+      below.add(row.eventId);
     }
     expect(events.length).toBeGreaterThan(0);
   });
@@ -133,7 +133,7 @@ describe("searchEvents", () => {
     });
     const row = listed.events[0]!;
 
-    const asked = await search("governor-heavy", { eventIndex: row.eventIndex });
+    const asked = await search("governor-heavy", { eventId: row.eventId });
 
     expect(row.text).toHaveLength(400);
     expect(row.text).toContain("…");
@@ -152,7 +152,7 @@ describe("searchEvents", () => {
     try {
       const listed = await searchAt(logFilePath, { type: ["USER_DEBUG"] });
       const asked = await searchAt(logFilePath, {
-        eventIndex: listed.events[0]!.eventIndex,
+        eventId: listed.events[0]!.eventId,
       });
 
       expect(listed.events[0]!.text).toHaveLength(400);
@@ -196,27 +196,27 @@ describe("searchEvents", () => {
 
   // The log itself (0) or an index past the log reads as an error, not as nothing below it.
   it.each([
-    { eventIndex: 10_000 },
-    { eventIndex: 0 },
-    { parentEventIndex: 10_000 },
+    { eventId: 10_000 },
+    { eventId: 0 },
+    { parentEventId: 10_000 },
   ])("should refuse an index no search reaches: %o", async (args) => {
     await expect(search("governor-heavy", args)).rejects.toThrow(
-      `No event in this log has eventIndex ${Object.values(args)[0]}. Pass as ${Object.keys(args)[0]} an eventIndex from a row this tool returned.`,
+      `No event in this log has eventId ${Object.values(args)[0]}. Pass as ${Object.keys(args)[0]} an eventId from a row this tool returned.`,
     );
   });
 
-  it("should return an event asked for by id only if it is below parentEventIndex", async () => {
-    const inside = await search("governor-heavy", { eventIndex: 11, parentEventIndex: 10 });
-    const outside = await search("governor-heavy", { eventIndex: 11, parentEventIndex: 9 });
+  it("should return an event asked for by id only if it is below parentEventId", async () => {
+    const inside = await search("governor-heavy", { eventId: 11, parentEventId: 10 });
+    const outside = await search("governor-heavy", { eventId: 11, parentEventId: 9 });
 
-    expect(inside.events.map((row) => row.eventIndex)).toEqual([11]);
+    expect(inside.events.map((row) => row.eventId)).toEqual([11]);
     expect(outside.events).toEqual([]);
   });
 
   // Top-level rows report the log itself, index 0, as their parent.
-  it("should search the whole log below parentEventIndex 0", async () => {
+  it("should search the whole log below parentEventId 0", async () => {
     const all = await search("governor-heavy");
-    const below = await search("governor-heavy", { parentEventIndex: 0 });
+    const below = await search("governor-heavy", { parentEventId: 0 });
 
     expect(below).toEqual(all);
   });
@@ -245,6 +245,6 @@ describe("searchEvents", () => {
       contains: "newInstance(Integer",
     });
 
-    expect(events.map((row) => row.eventIndex)).toEqual([6]);
+    expect(events.map((row) => row.eventId)).toEqual([6]);
   });
 });

@@ -457,7 +457,7 @@ describe("parser contract", () => {
       expect(tree(log).filter((event) => event.type === "FLOW_ELEMENT_ERROR")).toHaveLength(1);
     });
 
-    // `apexlog_search_events` resolves `eventIndex` with `event` and pages in
+    // `apexlog_search_events` resolves `eventId` with `event` and pages in
     // tree order, so the tree must read in id order from 1, and an id must
     // name its own event.
     it.each(TIMED_FIXTURES)(

@@ -212,7 +212,7 @@ const ANSWERABILITY = {
       fixture: "governor-heavy",
       question: "Where in the log is each event, and what is it under?",
       keys: ["events"],
-      columns: ["eventIndex", "parentEventIndex", "lineNumber"],
+      columns: ["eventId", "parentEventId", "lineNumber"],
     },
     {
       question: "Did the page hide events the search matched?",

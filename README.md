@@ -45,7 +45,7 @@ Then ask your assistant to analyze a log. The org tools - `apexlog_execute_anony
 
 <!-- token-cost-summary:start -->
 
-Keeping the server connected costs ~2,445 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
+Keeping the server connected costs ~2,442 tokens, 1.2% of a 200K context. See [Token Cost](#token-cost).
 
 <!-- token-cost-summary:end -->
 
@@ -191,13 +191,13 @@ Searches a log's events in log order, for what the other tools rank or total: wh
 <!-- shape-apexlog_search_events:start -->
 
 - `capturedAt` - `{debugCategory, level}`
-- `events` - `{eventIndex, parentEventIndex, type, namespace, lineNumber, text}`
+- `events` - `{eventId, parentEventId, type, namespace, lineNumber, text}`
 
 <!-- shape-apexlog_search_events:end -->
 
-A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventIndex` names an event and `parentEventIndex` the one it sits under, so a row found here can be opened up with `parentEventIndex`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
+A row says what an event is and where it sits, not what it cost: rank the time with `apexlog_list_slow_operations`. `eventId` names an event and `parentEventId` the one it sits under, so a row found here can be opened up with `parentEventId`. An exit line is a row only where the log lost its entry, and then it is the one record that the method ran.
 
-Text past 400 characters is elided. Ask for one event by `eventIndex` to read up to 30,000 characters of it. `contains` searches a row's text before elision, and a long row is cut around the match. For plain text, grep the saved `.log`: it is cheaper. This tool earns its tokens on event types, nesting, and clients with no shell.
+Text past 400 characters is elided. Ask for one event by `eventId` to read up to 30,000 characters of it. `contains` searches a row's text before elision, and a long row is cut around the match. For plain text, grep the saved `.log`: it is cheaper. This tool earns its tokens on event types, nesting, and clients with no shell.
 
 `capturedAt` comes on the first page, or with one event asked for:
 
@@ -208,16 +208,16 @@ No `USER_DEBUG` on a log at `apexCode` `NONE` means the log did not capture debu
 
 <!-- params-apexlog_search_events:start -->
 
-| Parameter          | Type       | Required | Description                                                  |
-| ------------------ | ---------- | -------- | ------------------------------------------------------------ |
-| `logFilePath`      | string     | Yes      | Absolute path                                                |
-| `type`             | string[]   | No       | Only these log event types, e.g. USER_DEBUG, VALIDATION_RULE |
-| `namespace`        | string[]   | No       | Only these namespaces                                        |
-| `contains`         | string     | No       | Only events whose text holds this, ignoring case             |
-| `eventIndex`       | number ≥ 0 | No       | Only this event, with more of its text                       |
-| `parentEventIndex` | number ≥ 0 | No       | Only events below this one                                   |
-| `limit`            | number ≥ 0 | No       | Page size (default: 50)                                      |
-| `offset`           | number ≥ 0 | No       | Rows to skip (default: 0): the last page's nextOffset        |
+| Parameter       | Type       | Required | Description                                                  |
+| --------------- | ---------- | -------- | ------------------------------------------------------------ |
+| `logFilePath`   | string     | Yes      | Absolute path                                                |
+| `type`          | string[]   | No       | Only these log event types, e.g. USER_DEBUG, VALIDATION_RULE |
+| `namespace`     | string[]   | No       | Only these namespaces                                        |
+| `contains`      | string     | No       | Only events whose text holds this, ignoring case             |
+| `eventId`       | number ≥ 0 | No       | Only this event, with more of its text                       |
+| `parentEventId` | number ≥ 0 | No       | Only events below this one                                   |
+| `limit`         | number ≥ 0 | No       | Page size (default: 50)                                      |
+| `offset`        | number ≥ 0 | No       | Rows to skip (default: 0): the last page's nextOffset        |
 
 <!-- params-apexlog_search_events:end -->
 
@@ -324,12 +324,12 @@ Every request carries every tool definition, whether you call them or not. Each 
 | `apexlog_list_slow_operations` | ~524                                                        |
 | `apexlog_execute_anonymous`    | ~424                                                        |
 | `apexlog_create_trace_flag`    | ~349                                                        |
-| `apexlog_search_events`        | ~330                                                        |
+| `apexlog_search_events`        | ~327                                                        |
 | `apexlog_list_org_logs`        | ~313                                                        |
 | `apexlog_get_org_logs`         | ~200                                                        |
 | `apexlog_get_summary`          | ~155                                                        |
 | `apexlog_list_limit_risks`     | ~150                                                        |
-| **Total**                      | **~2,445** (1.2% of a 200K context), **+60% vs 1.x ~1,529** |
+| **Total**                      | **~2,442** (1.2% of a 200K context), **+60% vs 1.x ~1,529** |
 
 <!-- token-cost-definitions:end -->
 
@@ -352,7 +352,7 @@ Cost barely grows with the log size. The figures below are measured against a 40
 | `apexlog_get_summary`          | ~342     | ~293 | +17%   |
 | `apexlog_list_slow_operations` | ~400     | ~408 | -2%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
-| `apexlog_search_events`        | ~883     | -    | -      |
+| `apexlog_search_events`        | ~881     | -    | -      |
 
 <!-- token-cost-answers:end -->
 

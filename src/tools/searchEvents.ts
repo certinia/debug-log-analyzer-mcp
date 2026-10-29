@@ -36,13 +36,13 @@ const searchEventsInputSchema = {
     .string()
     .optional()
     .describe("Only events whose text holds this, ignoring case"),
-  eventIndex: z
+  eventId: z
     .number()
     .int()
     .min(0)
     .optional()
     .describe("Only this event, with more of its text"),
-  parentEventIndex: z
+  parentEventId: z
     .number()
     .int()
     .min(0)
@@ -71,17 +71,17 @@ export const searchEventsTool = defineAnalysisTool({
   name: "apexlog_search_events",
   title: "Search Apex Log Events",
   description:
-    `Search the events of an Apex debug log in log order: what the code printed (USER_DEBUG), validation rules, statements, or every event under one method. For plain text in the saved .log, grep is cheaper; use this for event types, nesting, or without a shell. Text past ${NAME_LIMIT} characters is elided; ask for one event by eventIndex to read up to ${ONE_EVENT_TEXT_LIMIT.toLocaleString("en-US")}.`,
+    `Search the events of an Apex debug log in log order: what the code printed (USER_DEBUG), validation rules, statements, or every event under one method. For plain text in the saved .log, grep is cheaper; use this for event types, nesting, or without a shell. Text past ${NAME_LIMIT} characters is elided; ask for one event by eventId to read up to ${ONE_EVENT_TEXT_LIMIT.toLocaleString("en-US")}.`,
   input: searchEventsInputSchema,
   run: searchEvents,
 });
 
 /** One event, in log order, as the payload carries it. */
 export interface EventRow {
-  /** The parser's stable id for the event, which `eventIndex` resolves. */
-  eventIndex: number;
-  /** The event it sits under, which `parentEventIndex` searches below. */
-  parentEventIndex: number;
+  /** The parser's stable id for the event, which `eventId` resolves. */
+  eventId: number;
+  /** The event it sits under, which `parentEventId` searches below. */
+  parentEventId: number;
   type: string;
   /** On every row, though most rows share one: hoisting a shared namespace to one field saved 0-12 tokens a response on the eval logs, and none where namespaces mix. */
   namespace: string;
@@ -133,10 +133,10 @@ function cut(text: string, maxChars: number, pattern: RegExp | undefined): strin
 }
 
 // An index that names no event - past the log, or the log itself - must not read as no match.
-function resolve(apexLog: ApexLog, eventIndex: number, parameter: string): ApexEvent {
-  const event = apexLog.event(eventIndex);
+function resolve(apexLog: ApexLog, eventId: number, parameter: string): ApexEvent {
+  const event = apexLog.event(eventId);
   if (!event) {
-    throw new Error(`No event in this log has eventIndex ${eventIndex}. Pass as ${parameter} an eventIndex from a row this tool returned.`);
+    throw new Error(`No event in this log has eventId ${eventId}. Pass as ${parameter} an eventId from a row this tool returned.`);
   }
   return event;
 }
@@ -159,19 +159,19 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     type,
     namespace,
     contains,
-    eventIndex,
-    parentEventIndex,
+    eventId,
+    parentEventId,
     limit = 50,
     offset = 0,
   } = args;
 
   // Top-level rows name the log itself as their parent, so its index searches the whole log.
   const root: ApexLog | ApexEvent =
-    parentEventIndex === undefined || parentEventIndex === LOG_ID
+    parentEventId === undefined || parentEventId === LOG_ID
       ? apexLog
-      : resolve(apexLog, parentEventIndex, "parentEventIndex");
-  const rootId = parentEventIndex ?? LOG_ID;
-  const one = eventIndex === undefined ? undefined : resolve(apexLog, eventIndex, "eventIndex");
+      : resolve(apexLog, parentEventId, "parentEventId");
+  const rootId = parentEventId ?? LOG_ID;
+  const one = eventId === undefined ? undefined : resolve(apexLog, eventId, "eventId");
 
   // One pattern per call, so no event's text is copied to compare it.
   const pattern =
@@ -206,10 +206,10 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   }
 
   // One event asked for by id is the way to read a long message, up to what a page may hold.
-  const textLimit = eventIndex === undefined ? NAME_LIMIT : ONE_EVENT_TEXT_LIMIT;
+  const textLimit = eventId === undefined ? NAME_LIMIT : ONE_EVENT_TEXT_LIMIT;
   const toRow = (event: ApexEvent): EventRow => ({
-    eventIndex: event.id,
-    parentEventIndex: event.parent?.id ?? LOG_ID,
+    eventId: event.id,
+    parentEventId: event.parent?.id ?? LOG_ID,
     type: event.type,
     namespace: namespaceOf(event),
     lineNumber: event.lineNumber,

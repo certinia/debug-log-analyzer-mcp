@@ -11,7 +11,7 @@ capturedAt[11]{debugCategory,level}:
   visualforce,INFO
   wave,INFO
   workflow,INFO
-events[5]{eventIndex,parentEventIndex,type,namespace,lineNumber,text}:
+events[5]{eventId,parentEventId,type,namespace,lineNumber,text}:
   6,5,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
   8,7,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
   10,9,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
