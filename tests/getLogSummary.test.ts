@@ -75,10 +75,10 @@ describe("getLogSummary", () => {
   ): ReturnType<typeof getLogSummaryTool.run> =>
     getLogSummaryTool.run(createMockApexLog(overrides), {});
 
-  // The lists the parser fills beside the tree: every event, and every throw and fatal.
+  // The lists the parser fills beside the tree: every event, every throw and fatal, and the columns.
   const logOf = (...frames: NodeSpec[]): Partial<ApexLog> => {
-    const { children, events, exceptions } = rootLog(0, ...frames);
-    return { children, events, exceptions };
+    const { children, events, exceptions, columns } = rootLog(0, ...frames);
+    return { children, events, exceptions, columns };
   };
 
   describe("the transaction", () => {
@@ -673,9 +673,9 @@ describe("getLogSummary", () => {
     it("should file a frame's self time under its category, and the root's as unattributed", () => {
       const summary = summaryOf({
         duration: { total: 10_000_000_000, self: 1_000_000_000 },
-        children: [
-          logEvent({ type: "USER_INFO", debugCategory: "apexCode" }),
-          logEvent({
+        ...logOf(
+          { type: "USER_INFO", debugCategory: "apexCode" },
+          {
             type: "EXECUTION_STARTED",
             isFrame: true,
             debugCategory: "apexCode",
@@ -689,8 +689,8 @@ describe("getLogSummary", () => {
                 totalNs: 7_000_000_000,
               },
             ],
-          }),
-        ],
+          },
+        ),
       });
 
       expect(rowOf(summary, "apexCode")).toMatchObject({
@@ -708,9 +708,9 @@ describe("getLogSummary", () => {
     });
 
     it("should count the operations of a category and sum their self time", () => {
-      const summary = summaryOf({
-        children: [
-          logEvent({
+      const summary = summaryOf(
+        logOf(
+          {
             type: "METHOD_ENTRY",
             isFrame: true,
             debugCategory: "apexCode",
@@ -723,15 +723,15 @@ describe("getLogSummary", () => {
                 totalNs: 1_000_000_000,
               },
             ],
-          }),
-          logEvent({
+          },
+          {
             type: "METHOD_ENTRY",
             isFrame: true,
             debugCategory: "apexCode",
             totalNs: 500_000_000,
-          }),
-        ],
-      });
+          },
+        ),
+      );
 
       expect(rowOf(summary, "apexCode")).toEqual({
         debugCategory: "apexCode",
@@ -752,16 +752,14 @@ describe("getLogSummary", () => {
     // A Visualforce formula carries the timeline category `System`, so reading
     // that would report half a Visualforce transaction as system time.
     it("should file an operation under the category that gates it", () => {
-      const summary = summaryOf({
-        children: [
-          logEvent({
-            type: "VF_EVALUATE_FORMULA_BEGIN",
-            isFrame: true,
-            debugCategory: "visualforce",
-            selfNs: 6_000_000_000,
-          }),
-        ],
-      });
+      const summary = summaryOf(
+        logOf({
+          type: "VF_EVALUATE_FORMULA_BEGIN",
+          isFrame: true,
+          debugCategory: "visualforce",
+          selfNs: 6_000_000_000,
+        }),
+      );
 
       expect(rowOf(summary, "visualforce")).toMatchObject({
         operationCount: 1,

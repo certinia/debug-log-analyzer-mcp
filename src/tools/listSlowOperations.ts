@@ -297,6 +297,7 @@ function verdictOf(plan: QueryPlan): QueryPlanVerdict {
  * text, where the worst is the figure to act on.
  */
 function plansForRankedRows(
+  apexLog: ApexLog,
   ranked: Operation[],
   everyOperation: Operation[],
   perCall: boolean,
@@ -305,7 +306,7 @@ function plansForRankedRows(
     return [];
   }
 
-  const explained = perCall ? undefined : listQueryPlans(everyOperation);
+  const explained = perCall ? undefined : listQueryPlans(apexLog, everyOperation);
   const plans: RankedPlan[] = [];
   ranked.forEach((operation, index) => {
     if (!canCarryPlan(operation)) {
@@ -313,7 +314,7 @@ function plansForRankedRows(
     }
     const plan = explained
       ? explained.get(operation.name)
-      : planOf(operation.node);
+      : planOf(apexLog, operation.id);
     if (plan) {
       plans.push({ operationRow: index + 1, ...verdictOf(plan) });
     }
@@ -330,6 +331,7 @@ function plansForRankedRows(
  * fold of operations the page does not list.
  */
 function plansForFoldedRows(
+  apexLog: ApexLog,
   selected: Operation[],
   ranked: Operation[],
   groupBy: GroupBy,
@@ -351,7 +353,7 @@ function plansForFoldedRows(
     return [];
   }
 
-  const explained = listQueryPlans(everyOperation);
+  const explained = listQueryPlans(apexLog, everyOperation);
   return [...queryNames]
     .map((name) => explained.get(name))
     .filter((plan): plan is QueryPlan => plan !== undefined)
@@ -455,8 +457,8 @@ function listSlowOperations(
   // up by group key and carries the text.
   const explained: PlanRow[] =
     groupBy === "none" || GROUPINGS[groupBy].namesOperation
-      ? plansForRankedRows(ranked, everyOperation, groupBy === "none")
-      : plansForFoldedRows(selected, ranked, groupBy, everyOperation);
+      ? plansForRankedRows(apexLog, ranked, everyOperation, groupBy === "none")
+      : plansForFoldedRows(apexLog, selected, ranked, groupBy, everyOperation);
 
   // Out of what the rows left, because the plans are part of the same response.
   // A namespace grouping reports one plan per distinct query text behind the

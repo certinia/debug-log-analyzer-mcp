@@ -14,6 +14,7 @@
 import type {
   ApexEvent,
   ApexLog,
+  CountColumn,
   EventOf,
   EventType,
   LimitValue,
@@ -23,6 +24,8 @@ import type {
 export type {
   ApexEvent,
   ApexLog,
+  Columns,
+  CountColumn,
   DebugCategory,
   EventType,
   GovernorLimits,
@@ -32,7 +35,7 @@ export type {
   LogIssue,
   NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-export { ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+export { ENDED_BY, eventType, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
 
 /** The log's own id: an event at the top of the log has it as its parent's. */
 export const LOG_EVENT_ID = 0;
@@ -76,6 +79,11 @@ export function countOf(rollup: SelfTotal | null): SelfTotal {
   return rollup ?? NONE;
 }
 
+/** `countOf(...).total` for event `id`, read from its column, which is null where `countOf` gives zero. */
+export function totalAt(column: CountColumn | null, id: number): number {
+  return column?.total[id] ?? 0;
+}
+
 /** A limit's ceiling, with 0 where the log stated none, which every response has always reported. */
 export function ceilingOf({ limit }: LimitValue): number {
   return limit ?? 0;
@@ -96,6 +104,15 @@ export function textOf(event: ApexEvent): string {
   return text;
 }
 
+/** `textOf` for event `id`, read from the columns, so a pass over every event makes no event object. */
+export function textAt(log: ApexLog, id: number, type: EventType): string {
+  // A flow error's element is in `details`, which only its event reads.
+  const event = type === "FLOW_ELEMENT_ERROR" ? log.event(id) : null;
+  return event ? textOf(event) : (log.columns.text.at(id) ?? "");
+}
+
+const NO_NAMESPACE = "default";
+
 /**
  * The namespace an event ran in, with `default` for none, or for no event.
  *
@@ -105,7 +122,12 @@ export function textOf(event: ApexEvent): string {
  * `tests/parserContract.test.ts`.
  */
 export function namespaceOf(event?: Pick<ApexEvent, "namespace">): string {
-  return event?.namespace ?? "default";
+  return event?.namespace ?? NO_NAMESPACE;
+}
+
+/** `namespaceOf` for event `id`, read from the columns. */
+export function namespaceAt(log: ApexLog, id: number): string {
+  return log.columns.namespace.at(id) ?? NO_NAMESPACE;
 }
 
 /**

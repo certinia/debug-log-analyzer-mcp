@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { isEventOf, type ApexEvent } from "../apexLog/index.js";
+import { isEventOf, type ApexLog } from "../apexLog/index.js";
 import { operationName, type Operation } from "./operations.js";
 
 /**
@@ -45,9 +45,10 @@ export function canCarryPlan({ type }: Pick<Operation, "type">): boolean {
  * two are correlated structurally rather than by line number. One unparsed
  * field means no readable plan.
  */
-export function planOf(node: ApexEvent): QueryPlan | undefined {
-  const explain = isEventOf(node, "SOQL_EXECUTE_BEGIN") ? node.details.explain : null;
-  if (!explain) {
+export function planOf(apexLog: ApexLog, id: number): QueryPlan | undefined {
+  const node = apexLog.event(id);
+  const explain = node && isEventOf(node, "SOQL_EXECUTE_BEGIN") ? node.details.explain : null;
+  if (!node || !explain) {
     return undefined;
   }
 
@@ -85,11 +86,11 @@ export function planOf(node: ApexEvent): QueryPlan | undefined {
  * Read from every operation of the log, not a filtered selection: a query
  * timed like any other is one of them, so this needs no walk of its own.
  */
-export function listQueryPlans(everyOperation: Operation[]): Map<string, QueryPlan> {
+export function listQueryPlans(apexLog: ApexLog, everyOperation: Operation[]): Map<string, QueryPlan> {
   const plans = new Map<string, QueryPlan>();
 
-  everyOperation.filter(canCarryPlan).forEach(({ node }) => {
-    const plan = planOf(node);
+  everyOperation.filter(canCarryPlan).forEach(({ id }) => {
+    const plan = planOf(apexLog, id);
     const known = plan && plans.get(plan.name);
     if (plan && (!known || plan.relativeCost > known.relativeCost)) {
       plans.set(plan.name, plan);

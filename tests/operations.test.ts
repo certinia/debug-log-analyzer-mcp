@@ -53,11 +53,11 @@ describe("listOperations", () => {
 
   // Every timed event is ranked, whatever its type, and reports the category
   // the parser stamped. Which category goes with which type is pinned against a
-  // real parse in `tests/parserContract.test.ts`.
-  it("ranks a timed event of a type it does not know", () => {
+  // real parse in `tests/parserContract.test.ts`. No code here names this type.
+  it("ranks a timed event of a type it names nowhere", () => {
     const operations = listOperations(
       logOf({
-        type: "SOME_UNKNOWN_EVENT",
+        type: "NBA_NODE_BEGIN",
         isFrame: true,
         debugCategory: "nba",
         totalNs: 5_000_000,
@@ -65,7 +65,7 @@ describe("listOperations", () => {
     );
 
     expect(operations).toMatchObject([
-      { type: "SOME_UNKNOWN_EVENT", debugCategory: "nba" },
+      { type: "NBA_NODE_BEGIN", debugCategory: "nba" },
     ]);
   });
 

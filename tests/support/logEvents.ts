@@ -15,7 +15,14 @@
  * edit here rather than one in each suite.
  */
 
-import type { ApexEvent, ApexLog } from "../../src/apexLog";
+import {
+  eventType,
+  type ApexEvent,
+  type ApexLog,
+  type Columns,
+  type CountColumn,
+  type EventType,
+} from "../../src/apexLog";
 
 /** What a `SOQL_EXECUTE_EXPLAIN` line carries, as the parser leaves it. */
 export type PlanSpec = {
@@ -118,12 +125,66 @@ function inLogOrder(events: readonly Built[]): Built[] {
   return events.flatMap((event) => [event, ...inLogOrder(event.children)]);
 }
 
+type CountKey = "soqlCount" | "dmlCount" | "soslCount" | "soqlRowCount" | "dmlRowCount" | "soslRowCount" | "thrownCount";
+
+/**
+ * The columns of `events`, which are in id order from 1, as the parser fills
+ * them: a count column is null only where no event states that count.
+ */
+function columnsOf(events: readonly Built[]): Columns {
+  const size = events.length + 1;
+  const byId = <A extends Uint8Array | Uint16Array | Int32Array | Float64Array>(
+    array: A,
+    value: (event: Built) => number,
+  ): A => {
+    events.forEach((event) => (array[event.id] = value(event)));
+    return array;
+  };
+  const count = (key: CountKey): CountColumn | null =>
+    events.every((event) => event[key] === null)
+      ? null
+      : {
+          self: byId(new Int32Array(size), (event) => event[key]?.self ?? 0),
+          total: byId(new Int32Array(size), (event) => event[key]?.total ?? 0),
+        };
+  const text = (read: (event: Built) => string | null) => ({
+    at: (id: number) => {
+      const event = events[id - 1];
+      return event ? read(event) : null;
+    },
+  });
+  const parent = byId(new Int32Array(size), (event) => event.parent?.id ?? 0);
+  parent[0] = -1;
+
+  return {
+    count: events.length,
+    type: byId(new Uint16Array(size), (event) => eventType(event.type as EventType).typeId),
+    parent,
+    isFrame: byId(new Uint8Array(size), (event) => (event.isFrame ? 1 : 0)),
+    durationSelf: byId(new Float64Array(size), (event) => event.duration.self),
+    durationTotal: byId(new Float64Array(size), (event) => event.duration.total),
+    namespace: text((event) => event.namespace),
+    text: text((event) => event.text),
+    soqlCount: count("soqlCount"),
+    dmlCount: count("dmlCount"),
+    soslCount: count("soslCount"),
+    soqlRowCount: count("soqlRowCount"),
+    dmlRowCount: count("dmlRowCount"),
+    soslRowCount: count("soslRowCount"),
+    thrownCount: count("thrownCount"),
+    heapAllocated: {
+      self: byId(new Float64Array(size), (event) => event.heapAllocated.self),
+      total: byId(new Float64Array(size), (event) => event.heapAllocated.total),
+    },
+  } as unknown as Columns;
+}
+
 /** An event built as the `ApexEvent` a tool receives, at the top of its log. */
 export const logEvent = (spec: NodeSpec): ApexEvent => build(spec, { next: 1 });
 
 /**
  * A log of `children`, with the lists the parser fills beside the tree: every
- * event by id and by type, and every throw and fatal.
+ * event by id and by type, every throw and fatal, and the columns.
  */
 export function rootLog(totalNs: number, ...children: NodeSpec[]): ApexLog {
   const ids = { next: 1 };
@@ -133,6 +194,7 @@ export function rootLog(totalNs: number, ...children: NodeSpec[]): ApexLog {
   return {
     children: top,
     events,
+    columns: columnsOf(events),
     eventCount: events.length,
     event: (id: number) => events.find((event) => event.id === id) ?? null,
     ofType: (...types: string[]) => events.filter(({ type }) => types.includes(type)),

@@ -3,10 +3,12 @@
  */
 
 import {
-  countOf,
+  eventType,
+  namespaceAt,
   namespaceOf,
+  textAt,
   textOf,
-  walkLog,
+  totalAt,
   type ApexEvent,
   type ApexLog,
   type DebugCategory,
@@ -118,14 +120,14 @@ export interface Operation {
    */
   parent: Operation | null;
   /**
-   * The event this operation was read from, so a caller can reach what the
-   * operation's own columns do not carry - the query plan under this one call,
-   * rather than the worst plan for its text.
+   * The id of the event this operation was read from, so a caller can reach
+   * what the operation's own columns do not carry with `apexLog.event(id)` -
+   * the query plan under this one call, rather than the worst plan for its text.
    *
    * Internal, and only meaningful on an ungrouped operation: `groupOperations`
-   * folds many events into one row and keeps the first member's node.
+   * folds many events into one row and keeps the first member's id.
    */
-  node: ApexEvent;
+  id: number;
 }
 
 /**
@@ -137,17 +139,6 @@ const FRAME_TYPES = new Set<EventType>(["EXECUTION_STARTED"]);
 
 function isTransactionFrame({ type }: ApexEvent): boolean {
   return FRAME_TYPES.has(type);
-}
-
-/**
- * Whether the event is a thing the transaction spent time on.
- *
- * A frame is what the parser times: every event with a duration is one, pinned
- * in `tests/parserContract.test.ts`. A leaf is most of a log, so this is both
- * the cheap test and the first one.
- */
-function isRankable(event: ApexEvent): boolean {
-  return event.isFrame && !isTransactionFrame(event);
 }
 
 /**
@@ -182,50 +173,54 @@ export function operationName(node: ApexEvent): string {
  * the time would be reported nowhere.
  */
 export function listOperations(apexLog: ApexLog): Operation[] {
+  const { columns } = apexLog;
+  const { count, type, parent, isFrame, durationSelf, durationTotal } = columns;
   const operations: Operation[] = [];
 
-  // The children, not the log: the log is no event, and it holds the whole
-  // transaction as its own time.
+  // From the columns, not the events: the parser makes an event object on each
+  // read, and on a 95 MB log a walk of them took 100 ms where this takes 65.
   //
-  // The visitor hands its children the operation they ran inside, which is the
-  // one it just made, or its own when the node itself is untimed.
-  const visit = (node: ApexEvent, parent: Operation | undefined) => {
-    if (!isRankable(node)) {
-      return parent;
+  // By id, the index of the operation each event is or ran inside, or -1 for
+  // none. A parent's id is below its child's, so one pass in id order fills it.
+  // Row 0 is the log, which is no operation.
+  const enclosing = new Int32Array(count + 1).fill(-1);
+  for (let id = 1; id <= count; id++) {
+    const callerIndex = enclosing[parent[id] ?? 0] ?? -1;
+    const info = eventType(type[id] ?? -1);
+    // A frame is what the parser times: every event with a duration is one,
+    // pinned in `tests/parserContract.test.ts`.
+    if (!info || !isFrame[id] || FRAME_TYPES.has(info.type)) {
+      enclosing[id] = callerIndex;
+      continue;
     }
 
-    // Once: the parser builds a new rollup on each read.
-    const { total, self } = node.duration;
-    const operation: Operation = {
-      debugCategory: node.debugCategory,
-      type: node.type,
-      name: operationName(node),
-      namespace: namespaceOf(node),
-      callerNamespace: namespaceOf(parent?.node),
+    const caller = operations[callerIndex];
+    const durationSelfNs = durationSelf[id] ?? 0;
+    enclosing[id] = operations.length;
+    operations.push({
+      debugCategory: info.debugCategory,
+      type: info.type,
+      // As `operationName`, which an event reads.
+      name: textAt(apexLog, id, info.type) || info.type,
+      namespace: namespaceAt(apexLog, id),
+      callerNamespace: namespaceOf(caller),
       callCount: 1,
-      durationTotalNs: total,
-      durationSelfNs: self,
-      durationSelfMaxNs: self,
-      soqlCount: countOf(node.soqlCount).total,
-      dmlCount: countOf(node.dmlCount).total,
-      soslCount: countOf(node.soslCount).total,
+      durationTotalNs: durationTotal[id] ?? 0,
+      durationSelfNs,
+      durationSelfMaxNs: durationSelfNs,
+      soqlCount: totalAt(columns.soqlCount, id),
+      dmlCount: totalAt(columns.dmlCount, id),
+      soslCount: totalAt(columns.soslCount, id),
       rowCount:
-        countOf(node.soqlRowCount).total +
-        countOf(node.dmlRowCount).total +
-        countOf(node.soslRowCount).total,
-      thrownCount: countOf(node.thrownCount).total,
-      heapSelfNetBytes: countOf(node.heapAllocated).self,
-      parent: parent ?? null,
-      node,
-    };
-    operations.push(operation);
-
-    return operation;
-  };
-
-  apexLog.children.forEach((child) =>
-    walkLog<Operation | undefined>(child, visit),
-  );
+        totalAt(columns.soqlRowCount, id) +
+        totalAt(columns.dmlRowCount, id) +
+        totalAt(columns.soslRowCount, id),
+      thrownCount: totalAt(columns.thrownCount, id),
+      heapSelfNetBytes: columns.heapAllocated?.self[id] ?? 0,
+      parent: caller ?? null,
+      id,
+    });
+  }
 
   return operations;
 }
@@ -366,6 +361,9 @@ const PLAIN_SUMMED = ["durationSelfNs", "heapSelfNetBytes"] as const;
  */
 type FoldedByHand = "callCount" | "durationSelfMaxNs";
 
+/** An event, not a figure: a group keeps its first member's, as `Operation.id` says. */
+type NotFolded = "id";
+
 /**
  * Compile guard: every number on an `Operation` has to appear in one of the
  * three groups above.
@@ -380,6 +378,7 @@ export type EveryNumberFolded = Assert<
     | (typeof SUBTREE_SUMMED)[number]
     | (typeof PLAIN_SUMMED)[number]
     | FoldedByHand
+    | NotFolded
     ? true
     : false
 >;
