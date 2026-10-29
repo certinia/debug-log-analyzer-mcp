@@ -4,13 +4,9 @@
 
 import { promises as fs, type BigIntStats } from "fs";
 
-import {
-  clearApexLogCache,
-  loadApexLog,
-  walkLog,
-} from "../../src/apexLog";
+import { clearApexLogCache, loadApexLog } from "../../src/apexLog";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexEvent, ApexLog } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 
 // On the handle alone, so a stat or read of the path itself fails: the loader
 // must read the file it fingerprinted. Each delegates with the handle's path.
@@ -220,23 +216,6 @@ describe("apexLog source", () => {
         "Log file not found: /path/to/missing.log",
       );
       expect(mockReadFile).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("walkLog", () => {
-    it("visits the node and every node below it, parents first", () => {
-      const tree = {
-        type: "root",
-        children: [
-          { type: "a", children: [{ type: "a1", children: [] }] },
-          { type: "b", children: [] },
-        ],
-      } as unknown as ApexEvent;
-
-      const seen: string[] = [];
-      walkLog(tree, (node) => seen.push(node.type as string));
-
-      expect(seen).toEqual(["root", "a", "a1", "b"]);
     });
   });
 });
