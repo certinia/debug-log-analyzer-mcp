@@ -401,45 +401,38 @@ export function groupOperations(
   const groups = new Map<string, Operation>();
   const identityOf = GROUPINGS[by].identity;
 
-  // `parent` is the log's chain, not this call's. When a caller narrows the
-  // operations by category, type or namespace, an ancestor outside the selection
-  // can share a group's key without being in the group, and suppressing on it
-  // would report a total below the row's own self time.
-  const members = new Set(operations);
-
-  // Memoized: the nesting test walks the ancestors of every member, and a deep
-  // Apex stack would otherwise rebuild the same key at every level of it.
-  const keys = new Map<Operation, string>();
-  const keyOf = (operation: Operation): string => {
-    const known = keys.get(operation);
-    if (known !== undefined) {
-      return known;
+  // The group of each member, by event id. `parent` is the log's chain, not
+  // this call's. When a caller narrows the operations by category, type or
+  // namespace, an ancestor outside the selection can share a group's key
+  // without being in the group, and suppressing on it would report a total
+  // below the row's own self time - so only a member has an entry.
+  //
+  // An array, not a map per ancestor: the nesting test walks every member's
+  // ancestors, 22 deep on average in a 95 MB log, and a lookup at each level
+  // took 350 ms over its 431,300 operations where this takes 140.
+  const groupById: Operation[] = [];
+  const nestedInGroup = (operation: Operation, group: Operation): boolean => {
+    for (let above = operation.parent; above; above = above.parent) {
+      if (groupById[above.id] === group) {
+        return true;
+      }
     }
-
-    const key = operationGroupKey(operation, by);
-    keys.set(operation, key);
-    return key;
+    return false;
   };
 
-  const nestedInGroup = (operation: Operation, key: string): boolean =>
-    operation.parent !== null &&
-    ((members.has(operation.parent) && keyOf(operation.parent) === key) ||
-      nestedInGroup(operation.parent, key));
-
   operations.forEach((operation) => {
-    const key = keyOf(operation);
+    const key = operationGroupKey(operation, by);
     const group = groups.get(key);
 
     if (!group) {
       // The first member of a group cannot be nested in it: `listOperations`
       // emits an operation before the ones it called.
-      groups.set(key, {
-        ...operation,
-        ...identityOf(operation),
-        parent: null,
-      });
+      const first = { ...operation, ...identityOf(operation), parent: null };
+      groups.set(key, first);
+      groupById[operation.id] = first;
       return;
     }
+    groupById[operation.id] = group;
 
     group.callCount += 1;
 
@@ -448,7 +441,7 @@ export function groupOperations(
     // real logs, folded twice each - because a keyed read is not a named
     // one. It is paid against a parse of tens to hundreds of milliseconds, and
     // `nestedInGroup` dominates both figures.
-    if (!nestedInGroup(operation, key)) {
+    if (!nestedInGroup(operation, group)) {
       for (const field of SUBTREE_SUMMED) {
         group[field] += operation[field];
       }
