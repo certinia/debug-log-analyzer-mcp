@@ -22,6 +22,7 @@
     "test:coverage": "jest --coverage",
     "eval": "node scripts/eval.mjs",
     "eval:update": "node scripts/eval.mjs --update",
+    "bench": "node scripts/bench.mjs",
     "lint": "eslint ./src ./tests"
   },
   "keywords": [

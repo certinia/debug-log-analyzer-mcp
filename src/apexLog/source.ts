@@ -34,8 +34,7 @@ function fingerprintOf(stats: BigIntStats): string {
 /**
  * The last parse, kept so that the usual "summary, then go deeper" flow parses
  * a large log once instead of once per tool. One slot only: the flow works
- * through a single log at a time, and a parsed 19 MB log is too big to hold
- * several of.
+ * through a single log at a time.
  *
  * This is not protocol state, so it holds under a stateless MCP revision. It is
  * a memo of a pure function of a file on disk, re-checked against `fs.stat` on
@@ -46,8 +45,9 @@ function fingerprintOf(stats: BigIntStats): string {
 let cached: CachedLog | undefined;
 
 /**
- * How long the slot survives after its last use. A parsed log holds four to
- * five times the size of the file, so a 200 MB log holds about a gigabyte.
+ * How long the slot survives after its last use. A parsed log of 1 MB or more
+ * holds one to two times the size of the file - a median 1.6 times on real
+ * logs of 10-50 MB, by `pnpm run bench` - so a 200 MB log holds some 300 MB.
  * That is worth holding while an agent works through one log, and not worth
  * holding until the process exits.
  */
