@@ -166,7 +166,7 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   // text is read unless `contains` asks for it. Counted in one pass, keeping
   // only the page, so a 200,000-event log costs no array of its matches.
   const { columns } = apexLog;
-  const types = columns.type;
+  const { type: types, namespace: namespaces } = columns;
   let matchedCount = 0;
   const page: number[] = [];
   const matchedTypes = new Set<string>();
@@ -178,9 +178,9 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   // log where reading each event's text through its event took 101 ms for the
   // whole log - so the column only for a scan of most of it.
   const textFromColumn = eventId === undefined && (end - root - 1) * 2 > columns.count;
-  const textOfId = (id: number, eventType: EventType): string => {
+  const textOfId = (id: number): string => {
     const event = textFromColumn ? null : apexLog.event(id);
-    return event ? textOf(event) : textAt(apexLog, id, eventType);
+    return event ? textOf(event) : textAt(apexLog, id);
   };
   const consider = (id: number): void => {
     const info = typeAt(types, id);
@@ -188,8 +188,8 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
       !info ||
       !matches(type, info.type) ||
       // Read only when asked for: most searches name no namespace.
-      (namespace !== undefined && !matches(namespace, namespaceAt(apexLog, id))) ||
-      (pattern !== undefined && !pattern.test(shownText(textOfId(id, info.type), info.type)))
+      (namespace !== undefined && !matches(namespace, namespaceAt(namespaces, id))) ||
+      (pattern !== undefined && !pattern.test(shownText(textOfId(id), info.type)))
     ) {
       return;
     }

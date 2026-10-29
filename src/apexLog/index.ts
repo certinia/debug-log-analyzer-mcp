@@ -46,9 +46,26 @@ export const LOG_EVENT_ID = 0;
 
 export { clearApexLogCache, loadApexLog } from "./source.js";
 
-/** The type of event `id`, read from the type column, which a loop reads once; null for no event. */
+// The `*At` helpers read event `id` from a column, not from an event object,
+// which the parser makes on each read. Each takes the column it reads, so a
+// loop takes it from `log.columns` once: a getter per event cost
+// `apexlog_get_summary` half again its time on logs of 10-50 MB.
+
+/** The type of event `id`; null for no event. */
 export function typeAt(types: Columns["type"], id: number): EventTypeInfo | null {
   return eventType(types[id] ?? -1);
+}
+
+/**
+ * The type of event `id` when it is a frame, else null. A frame is what the
+ * parser times: every event with a duration is one, pinned in
+ * `tests/parserContract.test.ts`. A leaf is most of a log, so it is the first test.
+ */
+export function frameTypeAt(
+  { isFrame, type }: Pick<Columns, "isFrame" | "type">,
+  id: number,
+): EventTypeInfo | null {
+  return isFrame[id] ? typeAt(type, id) : null;
 }
 
 /** Whether `event` is of `type`, so its `details` read as that type's. */
@@ -73,7 +90,7 @@ export function countOf(rollup: SelfTotal | null): SelfTotal {
   return rollup ?? NONE;
 }
 
-/** `countOf(...).total` for event `id`, read from its column, which is null where `countOf` gives zero. */
+/** `countOf(...).total` for event `id`; the column is null where `countOf` gives zero. */
 export function totalAt(column: CountColumn | null, id: number): number {
   return column?.total[id] ?? 0;
 }
@@ -98,11 +115,16 @@ export function textOf(event: ApexEvent): string {
   return text;
 }
 
-/** `textOf` for event `id`, read from the columns, so a pass over every event makes no event object. */
-export function textAt(log: ApexLog, id: number, type: EventType): string {
-  // A flow error's element is in `details`, which only its event reads.
-  const event = type === "FLOW_ELEMENT_ERROR" ? log.event(id) : null;
-  return event ? textOf(event) : (log.columns.text.at(id) ?? "");
+const FLOW_ELEMENT_ERROR = eventType("FLOW_ELEMENT_ERROR").typeId;
+
+/**
+ * `textOf` for event `id`, read from the text column. The one `*At` helper that
+ * takes the log: a flow error's element is in `details`, which only its event reads.
+ */
+export function textAt(log: ApexLog, id: number): string {
+  const { type, text } = log.columns;
+  const event = type[id] === FLOW_ELEMENT_ERROR ? log.event(id) : null;
+  return event ? textOf(event) : (text.at(id) ?? "");
 }
 
 const NO_NAMESPACE = "default";
@@ -119,9 +141,9 @@ export function namespaceOf(event?: Pick<ApexEvent, "namespace">): string {
   return event?.namespace ?? NO_NAMESPACE;
 }
 
-/** `namespaceOf` for event `id`, read from the columns. */
-export function namespaceAt(log: ApexLog, id: number): string {
-  return log.columns.namespace.at(id) ?? NO_NAMESPACE;
+/** `namespaceOf` for event `id`. */
+export function namespaceAt(namespaces: Columns["namespace"], id: number): string {
+  return namespaces.at(id) ?? NO_NAMESPACE;
 }
 
 /**
@@ -137,8 +159,9 @@ export function namespacesOf(log: ApexLog): string[] {
   // A loop, to stop at the first `default`, the one name the parser does not
   // list: on most logs that is within the first few events. The parser lists
   // the rest in the order they first appear, so they follow in its order.
-  for (let id = 1; id <= log.columns.count; id++) {
-    const namespace = namespaceAt(log, id);
+  const { count, namespace: namespaces } = log.columns;
+  for (let id = 1; id <= count; id++) {
+    const namespace = namespaceAt(namespaces, id);
     named.add(namespace);
     if (namespace === NO_NAMESPACE) {
       break;

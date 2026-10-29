@@ -4,16 +4,14 @@
 
 import {
   LOG_EVENT_ID,
+  frameTypeAt,
   namespaceAt,
   namespaceOf,
   textAt,
   totalAt,
-  typeAt,
   type ApexLog,
-  type Columns,
   type DebugCategory,
   type EventType,
-  type EventTypeInfo,
 } from "../apexLog/index.js";
 import type { Assert } from "../compileGuards.js";
 
@@ -142,16 +140,6 @@ function isTransactionFrame({ type }: { type: EventType }): boolean {
   return FRAME_TYPES.has(type);
 }
 
-type FrameColumns = Pick<Columns, "isFrame" | "type">;
-
-/**
- * The type of event `id` when it is a frame, else null. A frame is what the
- * parser times: every event with a duration is one, pinned in
- * `tests/parserContract.test.ts`. A leaf is most of a log, so it is the first test.
- */
-function frameTypeAt({ isFrame, type }: FrameColumns, id: number): EventTypeInfo | null {
-  return isFrame[id] ? typeAt(type, id) : null;
-}
 
 /** What one category's events took, of their own time. */
 export interface CategorySelfTime {
@@ -224,6 +212,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
     soslRowCount,
     thrownCount,
     heapAllocated,
+    namespace: namespaces,
   } = apexLog.columns;
   const operations: Operation[] = [];
 
@@ -252,8 +241,8 @@ export function listOperations(apexLog: ApexLog): Operation[] {
     operations.push({
       debugCategory: info.debugCategory,
       type: info.type,
-      name: operationName(textAt(apexLog, id, info.type), info.type),
-      namespace: namespaceAt(apexLog, id),
+      name: operationName(textAt(apexLog, id), info.type),
+      namespace: namespaceAt(namespaces, id),
       callerNamespace: namespaceOf(caller),
       callCount: 1,
       durationTotalNs: durationTotal[id] ?? 0,
