@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 import {
-  LOG_ID,
+  LOG_EVENT_ID,
   namespaceOf,
   textOf,
   walkLog,
@@ -160,12 +160,12 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
 
   // Top-level rows name the log itself as their parent, so its id searches the whole log.
   const root =
-    parentEventId === undefined || parentEventId === LOG_ID
+    parentEventId === undefined || parentEventId === LOG_EVENT_ID
       ? undefined
       : resolve(apexLog, parentEventId, "parentEventId");
   // Rows name 0 as a parent, so an agent will pass it back as an event.
-  if (eventId === LOG_ID) {
-    throw new Error(`eventId ${LOG_ID} is the log itself, not an event. Pass it as parentEventId, or leave both out, to search the whole log.`);
+  if (eventId === LOG_EVENT_ID) {
+    throw new Error(`eventId ${LOG_EVENT_ID} is the log itself, not an event. Pass it as parentEventId, or leave both out, to search the whole log.`);
   }
   const one = eventId === undefined ? undefined : resolve(apexLog, eventId, "eventId");
 
@@ -212,7 +212,7 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   const textLimit = eventId === undefined ? NAME_LIMIT : ONE_EVENT_TEXT_LIMIT;
   const toRow = (event: ApexEvent): EventRow => ({
     eventId: event.id,
-    parentEventId: event.parent?.id ?? LOG_ID,
+    parentEventId: event.parent?.id ?? LOG_EVENT_ID,
     type: event.type,
     namespace: namespaceOf(event),
     lineNumber: event.lineNumber,

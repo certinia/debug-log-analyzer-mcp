@@ -35,7 +35,7 @@ export type {
 export { ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
 
 /** The log's own id: an event at the top of the log has it as its parent's. */
-export const LOG_ID = 0;
+export const LOG_EVENT_ID = 0;
 
 export { clearApexLogCache, loadApexLog, walkLog } from "./source.js";
 
