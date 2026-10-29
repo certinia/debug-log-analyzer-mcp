@@ -171,6 +171,17 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   const page: number[] = [];
   const matchedTypes = new Set<string>();
   const matchedCategories = new Set<DebugCategory>();
+  // Every event below the root, in log order: the ids from the root's own to
+  // its subtree's end. The log is row 0, whose subtree is every event.
+  const end = columns.subtreeEnd[root] ?? 0;
+  // The text column's first read indexes every event's text, 75 ms on a 95 MB
+  // log where reading each event's text through its event took 101 ms for the
+  // whole log - so the column only for a scan of most of it.
+  const textFromColumn = eventId === undefined && (end - root - 1) * 2 > columns.count;
+  const textOfId = (id: number, eventType: EventType): string => {
+    const event = textFromColumn ? null : apexLog.event(id);
+    return event ? textOf(event) : textAt(apexLog, id, eventType);
+  };
   const consider = (id: number): void => {
     const info = typeAt(types, id);
     if (
@@ -178,7 +189,7 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
       !matches(type, info.type) ||
       // Read only when asked for: most searches name no namespace.
       (namespace !== undefined && !matches(namespace, namespaceAt(apexLog, id))) ||
-      (pattern !== undefined && !pattern.test(shownText(textAt(apexLog, id, info.type), info.type)))
+      (pattern !== undefined && !pattern.test(shownText(textOfId(id, info.type), info.type)))
     ) {
       return;
     }
@@ -189,9 +200,6 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     matchedTypes.add(info.type);
     matchedCategories.add(info.debugCategory);
   };
-  // Every event below the root, in log order: the ids from the root's own to
-  // its subtree's end. The log is row 0, whose subtree is every event.
-  const end = columns.subtreeEnd[root] ?? 0;
   if (eventId !== undefined) {
     if (eventId > root && eventId < end) {
       consider(eventId);
