@@ -405,8 +405,8 @@ Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as
 | Flag                      | Description                                                                                                              |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `--allow-production-orgs` | Run against production orgs, and orgs whose type cannot be read, with no confirmation. A `--deny-orgs` entry still refuses. Only set this if production targets are intentional. |
-| `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible so agents know it exists. Every other tool still works, `apexlog_create_trace_flag` too. |
-| `--read-only`             | Refuse every tool that changes an org: `apexlog_execute_anonymous` and `apexlog_create_trace_flag`. This includes `--no-apex-execution`. Both tools stay visible so agents know they exist. The analysis tools and the org log tools still work, and `apexlog_get_org_logs` still saves logs to your disk. |
+| `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible, without its parameters, so agents know it exists. Every other tool still works, `apexlog_create_trace_flag` too. |
+| `--read-only`             | Refuse every tool that changes an org: `apexlog_execute_anonymous` and `apexlog_create_trace_flag`. This includes `--no-apex-execution`. Both tools stay visible, without their parameters, so agents know they exist. The analysis tools and the org log tools still work, and `apexlog_get_org_logs` still saves logs to your disk. |
 | `--deny-orgs`             | Refuse these orgs. See [Deny lists](#deny-lists). |
 
 To stop Apex running, add the flag to the [Quick Start](#quick-start) `args`:
