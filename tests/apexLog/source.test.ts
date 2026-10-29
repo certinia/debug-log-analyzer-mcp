@@ -197,6 +197,17 @@ describe("apexLog source", () => {
       expect(mockReadFile).not.toHaveBeenCalled();
     });
 
+    // The stat passed, so only the read can say why; Node's own error names no path.
+    it("names the log and the cause when the read fails", async () => {
+      mockReadFile.mockRejectedValueOnce(
+        Object.assign(new Error("File size is greater than 2 GiB"), { code: "ERR_FS_FILE_TOO_LARGE" }),
+      );
+
+      await expect(loadApexLog(logPath)).rejects.toThrow(
+        `Cannot read log file ${logPath}: larger than 2 GiB (ERR_FS_FILE_TOO_LARGE)`,
+      );
+    });
+
     it("hands a parse failure to the caller, and parses again next time", async () => {
       mockParse.mockRejectedValueOnce(new Error("Failed to parse log"));
 

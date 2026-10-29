@@ -107,7 +107,12 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
     // the log is ever held. One read, not a stream: the parser holds the whole
     // input anyway, and joining a stream's chunks cost 161 MB more peak RSS and
     // 32 ms more on a 100 MB log, by `pnpm run bench`.
-    const pending = handle.readFile().then(parse);
+    const pending = handle
+      .readFile()
+      .catch((error: unknown) => {
+        throw fileReadError("log file", logFilePath, error);
+      })
+      .then(parse);
     cached = { path: logFilePath, fingerprint, log: pending };
     scheduleEviction();
 
