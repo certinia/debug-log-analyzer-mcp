@@ -11,7 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Breaking:** apexlog_execute_anonymous: rename `durationMs` to `durationTotalMs`, the name apexlog_get_summary gives the same figure ([#240])
 - apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, else at the defaults, and set the categories an object `debugLevel` names over the defaults - never over the levels a previous run left ([#230])
 - apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `unattributed` row holds the time no event spans ([#226])
-- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: parse a log of 1 MB or more 4 to 7 times faster, and hold 7 to 11 times less memory for it ([#246])
+- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: answer the first call on a log of 1 MB or more 2.5 to 8.5 times faster with 3 to 8 times less memory, on a log parser 4 to 8.5 times faster ([#246])
+  - apexlog_list_limit_risks: 4 to 8.5 times faster
+  - apexlog_search_events, apexlog_get_summary: 2.5 to 7.5 times faster
+  - apexlog_list_slow_operations: 2.5 to 4.5 times faster
 - apexlog_list_slow_operations: give `nextOffset`, the `offset` of the next page, instead of leaving you to count the rows you got ([#248])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
 - apexlog_execute_anonymous, apexlog_create_trace_flag: end a long reason in a production refusal or confirmation with "…", and never split a character ([#272])
