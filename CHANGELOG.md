@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_list_slow_operations: give `nextOffset`, the `offset` of the next page, instead of leaving you to count the rows you got ([#248])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
 - apexlog_execute_anonymous, apexlog_create_trace_flag: end a long reason in a production refusal or confirmation with "…", and never split a character ([#272])
+- --no-apex-execution: list apexlog_execute_anonymous without its parameters, which no call can use, ~257 tokens less on every request ([#276])
 
 ### Added
 
@@ -24,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - --deny-orgs: refuse named orgs, or an org type with `type:production`, to every org tool - running Apex and reading logs alike. Nothing lifts a deny, and a named org is refused before the server connects to it ([#186], [#209])
 - apexlog_execute_anonymous: run from a file with `apexFilePath`, reuse saved scripts and save tokens ([#212])
 - apexlog_get_summary: report the exceptions a transaction threw, with where and how often, and how many flow elements failed ([#208])
-- --read-only: refuse every tool that changes an org - running Apex and creating trace flags - while the tools that read logs keep working ([#265])
+- --read-only: refuse every tool that changes an org - running Apex and creating trace flags - while the tools that read logs keep working, and list the refused tools without their parameters, ~447 tokens less on every request ([#265], [#276])
 
 ### Fixed
 
@@ -163,3 +164,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#265]: https://github.com/certinia/debug-log-analyzer-mcp/pull/265
 [#269]: https://github.com/certinia/debug-log-analyzer-mcp/pull/269
 [#272]: https://github.com/certinia/debug-log-analyzer-mcp/pull/272
+[#276]: https://github.com/certinia/debug-log-analyzer-mcp/pull/276
