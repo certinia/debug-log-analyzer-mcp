@@ -13,6 +13,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+  eventType,
   LEVEL,
   LIMIT_METRICS,
   parse,
@@ -469,6 +470,61 @@ describe("parser contract", () => {
         expect(ids).toEqual(ids.map((_, index) => index + 1));
         expect(ids.every((id) => log.event(id)?.id === id)).toBe(true);
         expect(log.event(0)).toBeNull();
+      },
+    );
+  });
+
+  // `apexlog_list_slow_operations`, `apexlog_get_summary` and
+  // `apexlog_search_events` read the columns, not the events, so a column that
+  // drifted from its event would change a response with no error.
+  describe("ApexLog.columns", () => {
+    const COUNTS = [
+      "soqlCount",
+      "dmlCount",
+      "soslCount",
+      "soqlRowCount",
+      "dmlRowCount",
+      "soslRowCount",
+      "thrownCount",
+    ] as const;
+
+    it.each([...TIMED_FIXTURES, "exceptions"])(
+      "states what each event states, in %s",
+      async (name) => {
+        const log = await parse(fixture(name));
+        const { columns } = log;
+        const events = tree(log);
+
+        expect(columns.count).toBe(events.length);
+        for (const event of events) {
+          const { id } = event;
+          const info = eventType(columns.type[id] ?? -1);
+          expect({
+            type: info?.type,
+            debugCategory: info?.debugCategory,
+            parent: columns.parent[id],
+            below: (columns.subtreeEnd[id] ?? 0) - id - 1,
+            isFrame: columns.isFrame[id] === 1,
+            durationSelf: columns.durationSelf[id],
+            durationTotal: columns.durationTotal[id],
+            namespace: columns.namespace.at(id),
+            text: columns.text.at(id),
+            heapSelf: columns.heapAllocated?.self[id] ?? 0,
+            counts: COUNTS.map((count) => columns[count]?.total[id] ?? 0),
+          }).toEqual({
+            type: event.type,
+            debugCategory: event.debugCategory,
+            parent: event.parent?.id ?? 0,
+            below: tree(event).length,
+            isFrame: event.isFrame,
+            durationSelf: event.duration.self,
+            durationTotal: event.duration.total,
+            namespace: event.namespace,
+            text: event.text,
+            heapSelf: event.heapAllocated?.self ?? 0,
+            counts: COUNTS.map((count) => event[count]?.total ?? 0),
+          });
+        }
       },
     );
   });
