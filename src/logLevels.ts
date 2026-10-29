@@ -8,8 +8,8 @@
  * org layer, and `salesforce/debugLevels.ts` writes `DebugLevel` records with it.
  */
 
-import { LOG_LEVEL } from "@apexdevtools/apex-log-parser";
-import type { ApexLog, DebugCategory, DebugLevels } from "@apexdevtools/apex-log-parser";
+import { LOG_LEVEL } from "./apexLog/index.js";
+import type { ApexLog, DebugCategory, DebugLevels } from "./apexLog/index.js";
 import type { Assert } from "./compileGuards.js";
 
 /** The parser also admits `""`, for an event that states no level; a request cannot ask for it. */

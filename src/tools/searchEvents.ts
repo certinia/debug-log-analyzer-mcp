@@ -8,8 +8,8 @@ import type {
   DebugCategory,
   LineNumber,
   LogEvent,
-} from "@apexdevtools/apex-log-parser";
-import { walkLog } from "./apexLogSource.js";
+} from "../apexLog/index.js";
+import { walkLog } from "../apexLog/index.js";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import { capturedAt, declaredLevels, type DeclaredLevel } from "../logLevels.js";
 import { elide, elideAround } from "../elide.js";

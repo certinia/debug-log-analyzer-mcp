@@ -5,7 +5,7 @@
 import { join } from "path";
 import { z } from "zod";
 import { decode } from "@toon-format/toon";
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "../src/apexLog";
 
 import { defineAnalysisTool } from "../src/tools/analysisTool";
 import { analysisTools } from "../src/tools/analysisTools";
@@ -58,7 +58,7 @@ describe("defineAnalysisTool", () => {
     });
   });
 
-  // A throw, not a result: the SDK turns it into the tool error. The wording is apexLogSource's.
+  // A throw, not a result: the SDK turns it into the tool error. The wording is src/apexLog/source.ts's.
   it("throws, naming the path, when the log cannot be read", async () => {
     await expect(
       echoTool.handle({ logFilePath: "/nonexistent/file.log" }),

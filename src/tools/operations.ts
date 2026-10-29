@@ -7,9 +7,9 @@ import type {
   DebugCategory,
   LogEvent,
   LogEventType,
-} from "@apexdevtools/apex-log-parser";
+} from "../apexLog/index.js";
 import type { Assert } from "../compileGuards.js";
-import { walkLog } from "./apexLogSource.js";
+import { walkLog } from "../apexLog/index.js";
 
 /**
  * One timed thing the transaction did.

@@ -4,9 +4,9 @@
 
 import { getLogSummaryTool } from "../src/tools/getLogSummary";
 import { logEvent, type NodeSpec } from "./support/logEvents";
-import { walkLog } from "../src/tools/apexLogSource";
+import { walkLog } from "../src/apexLog";
 import { DEBUG_CATEGORIES } from "../src/logLevels";
-import { ALL_LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+import { ALL_LIMIT_METRICS } from "../src/apexLog";
 import type {
   ApexLog,
   ApexLogParser,
@@ -15,7 +15,7 @@ import type {
   LogEvent,
   LogIssue,
   NamespaceLimits,
-} from "@apexdevtools/apex-log-parser";
+} from "../src/apexLog";
 
 const counts = { total: 0, self: 0 };
 

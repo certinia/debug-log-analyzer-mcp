@@ -8,7 +8,7 @@ import {
   clearApexLogCache,
   loadApexLog,
   walkLog,
-} from "../src/tools/apexLogSource";
+} from "../../src/apexLog";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
 
@@ -71,7 +71,7 @@ const withFakeTimers = async (body: () => Promise<void>): Promise<void> => {
   }
 };
 
-describe("apexLogSource", () => {
+describe("apexLog source", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearApexLogCache();

@@ -15,7 +15,7 @@
  * edit here rather than one in each suite.
  */
 
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, LogEvent } from "../../src/apexLog";
 
 /** What a `SOQL_EXECUTE_EXPLAIN` line carries, as the parser leaves it. */
 export type PlanSpec = {

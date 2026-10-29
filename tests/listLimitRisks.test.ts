@@ -8,12 +8,12 @@ import {
   type LimitRisksArgs,
   type LimitRiskResult,
 } from "../src/tools/listLimitRisks";
-import { ALL_LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+import { ALL_LIMIT_METRICS } from "../src/apexLog";
 import type {
   ApexLog,
   GovernorLimits,
   Limits,
-} from "@apexdevtools/apex-log-parser";
+} from "../src/apexLog";
 
 type LimitUsage = { used: number; limit: number };
 type LimitOverrides = Partial<Record<keyof Limits, LimitUsage>>;

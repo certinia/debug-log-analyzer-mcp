@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "../src/apexLog";
 import {
   listSlowOperationsTool,
   type SlowOperationsArgs,

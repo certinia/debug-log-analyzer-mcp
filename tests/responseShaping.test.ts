@@ -17,7 +17,7 @@ import {
   ALL_LIMIT_METRICS,
   type Limits,
   type NamespaceLimits,
-} from "@apexdevtools/apex-log-parser";
+} from "../src/apexLog";
 
 describe("responseShaping", () => {
   describe("roundMs", () => {

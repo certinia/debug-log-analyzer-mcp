@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { LogEvent, SOQLExecuteExplainLine } from "@apexdevtools/apex-log-parser";
+import type { LogEvent, SOQLExecuteExplainLine } from "../apexLog/index.js";
 import { operationName, type Operation } from "./operations.js";
 
 /**

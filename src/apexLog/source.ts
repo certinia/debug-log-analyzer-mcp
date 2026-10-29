@@ -5,7 +5,7 @@
 import { constants, promises as fs, type BigIntStats } from "fs";
 import { parse } from "@apexdevtools/apex-log-parser";
 import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
-import { fileReadError } from "./localFile.js";
+import { fileReadError } from "../tools/localFile.js";
 
 type CachedLog = {
   path: string;

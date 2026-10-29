@@ -9,7 +9,7 @@ import type {
   LogEvent,
   LogEventType,
   LogIssue,
-} from "@apexdevtools/apex-log-parser";
+} from "../apexLog/index.js";
 import { defineAnalysisTool } from "./analysisTool.js";
 import {
   frameSelfTimes,

@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ApexLog, DebugCategory, Limits } from "@apexdevtools/apex-log-parser";
+import type { ApexLog, DebugCategory, Limits } from "../apexLog/index.js";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import { capturedAt, type DeclaredLevel } from "../logLevels.js";
 import {

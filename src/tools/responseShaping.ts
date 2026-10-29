@@ -18,7 +18,7 @@ import {
   type LimitMetricUnit,
   type Limits,
   type NamespaceLimits,
-} from "@apexdevtools/apex-log-parser";
+} from "../apexLog/index.js";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { encode } from "@toon-format/toon";
 

@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { loadApexLog } from "../src/tools/apexLogSource";
+import { loadApexLog } from "../src/apexLog";
 import {
   searchEventsTool,
   type SearchEventsArgs,

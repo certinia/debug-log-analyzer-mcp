@@ -2,10 +2,10 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "../apexLog/index.js";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { z } from "zod";
-import { loadApexLog } from "./apexLogSource.js";
+import { loadApexLog } from "../apexLog/index.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { absolutePathSchema } from "./localFile.js";
 import { toonResult } from "./responseShaping.js";

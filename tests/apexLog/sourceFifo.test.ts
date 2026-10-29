@@ -7,9 +7,9 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 
-import { loadApexLog } from "../src/tools/apexLogSource";
+import { loadApexLog } from "../../src/apexLog";
 
-// A real FIFO, since only the real open(2) blocks on one; apexLogSource.test.ts mocks fs.
+// A real FIFO, since only the real open(2) blocks on one; source.test.ts mocks fs.
 const onPosix = process.platform === "win32" ? describe.skip : describe;
 
 onPosix("loadApexLog on a FIFO", () => {
