@@ -21,7 +21,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -47,11 +47,15 @@ const heldBytes = () => {
   return heapUsed + arrayBuffers;
 };
 
+// A build from before `src/apexLog/` kept the loader in `tools/apexLogSource.js`.
+const loaderIn = (dist) =>
+  ["apexLog/index.js", "tools/apexLogSource.js"]
+    .map((module) => path.join(dist, module))
+    .find((file) => existsSync(file));
+
 /** One log, in this process: prints one JSON line of its medians. */
 async function measureOne(file, dist) {
-  const { clearApexLogCache, loadApexLog } = await import(
-    pathToFileURL(path.join(dist, "apexLog", "index.js")).href
-  );
+  const { clearApexLogCache, loadApexLog } = await import(pathToFileURL(loaderIn(dist)).href);
   const { analysisTools } = await import(
     pathToFileURL(path.join(dist, "tools", "analysisTools.js")).href
   );
@@ -109,11 +113,14 @@ function measureAll(dir, dist) {
       const out = execFileSync(
         process.execPath,
         ["--expose-gc", "--max-old-space-size=8192", script, "--one", file, "--dist", dist],
-        { encoding: "utf-8", maxBuffer: 1 * MB },
+        { encoding: "utf-8", maxBuffer: 1 * MB, stdio: ["ignore", "pipe", "pipe"] },
       );
       return [JSON.parse(out)];
-    } catch {
+    } catch (error) {
       failed++;
+      // Piped, not inherited, so the log's path is cut from the reason: the logs may be a customer's.
+      const reason = (error.stderr?.trim() || error.message).replaceAll(file, "<log>");
+      process.stderr.write(`\nlog ${index + 1} failed: ${reason}\n`);
       return [];
     }
   });
@@ -144,6 +151,9 @@ function measureAll(dir, dist) {
   const line = (cells) => `| ${cells.join(" | ")} |`;
   console.log([line(header), line(header.map(() => "---")), ...rows.map(line)].join("\n"));
   console.log(`\nMedians of each log's median of ${RUNS} runs. ${failed} log(s) failed to load and are left out.`);
+  if (results.length === 0) {
+    process.exitCode = 1;
+  }
 }
 
 const args = process.argv.slice(2);
@@ -152,6 +162,11 @@ const flag = (name) => {
   return at === -1 ? undefined : args[at + 1];
 };
 const dist = path.resolve(flag("--dist") ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "dist"));
+
+if (!loaderIn(dist)) {
+  console.error(`No log loader in ${dist}: build first`);
+  process.exit(1);
+}
 
 if (flag("--one")) {
   await measureOne(flag("--one"), dist);
