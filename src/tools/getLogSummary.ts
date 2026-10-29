@@ -15,12 +15,7 @@ import {
   type LogIssue,
 } from "../apexLog/index.js";
 import { defineAnalysisTool } from "./analysisTool.js";
-import {
-  frameSelfTimes,
-  listOperations,
-  operationName,
-  type Operation,
-} from "./operations.js";
+import { categorySelfTimes, operationName } from "./operations.js";
 import {
   DEBUG_CATEGORIES,
   type LogLevel,
@@ -295,32 +290,13 @@ function categories(apexLog: ApexLog): CategoryRow[] {
   // still reported, at zero. The row set is the parser's `DebugCategory` values
   // rather than a shorter list of our own, so a category it starts timing needs
   // no change here.
+  // Drops no category: `DEBUG_CATEGORIES` names every one, by a compile guard.
+  const selfTimes = categorySelfTimes(apexLog);
   const totals = DEBUG_CATEGORIES.map((debugCategory) => ({
     debugCategory,
-    operationCount: 0,
-    selfNs: 0,
+    operationCount: selfTimes.get(debugCategory)?.operationCount ?? 0,
+    selfNs: selfTimes.get(debugCategory)?.durationSelfNs ?? 0,
   }));
-  const byCategory = new Map<DebugCategory, (typeof totals)[number]>(
-    totals.map((total) => [total.debugCategory, total]),
-  );
-
-  const add = (
-    {
-      debugCategory,
-      durationSelfNs,
-    }: Pick<Operation, "debugCategory" | "durationSelfNs">,
-    operationCount: number,
-  ) => {
-    // Never misses: `DEBUG_CATEGORIES` names every category, by a compile guard.
-    const total = byCategory.get(debugCategory);
-    if (total) {
-      total.operationCount += operationCount;
-      total.selfNs += durationSelfNs;
-    }
-  };
-  listOperations(apexLog).forEach((operation) => add(operation, 1));
-  // A frame is time, not an operation, so it adds to no count.
-  frameSelfTimes(apexLog).forEach((frame) => add(frame, 0));
 
   const attributedNs = totals.reduce((sum, { selfNs }) => sum + selfNs, 0);
 

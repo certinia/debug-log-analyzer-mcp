@@ -137,24 +137,42 @@ export interface Operation {
  */
 const FRAME_TYPES = new Set<EventType>(["EXECUTION_STARTED"]);
 
-function isTransactionFrame({ type }: ApexEvent): boolean {
-  return FRAME_TYPES.has(type);
+/** What one category's events took, of their own time. */
+export interface CategorySelfTime {
+  operationCount: number;
+  durationSelfNs: number;
 }
 
 /**
- * The self time of each transaction frame, under the frame's own category. No
- * operation holds it, because a frame is not ranked, but it is still time the
- * transaction spent. The parser puts every frame directly on the root.
+ * Each category's operations, counted, and their self time - what
+ * `listOperations` would sum to - with each transaction frame's self time
+ * under the frame's own category. No operation holds a frame's time, because a
+ * frame is not ranked, but it is still time the transaction spent. The parser
+ * puts every frame directly on the root.
+ *
+ * Without building the operations: naming them makes the parser index every
+ * frame's text, which on a 95 MB log is half of `apexlog_get_summary`, and the
+ * summary names none.
  */
-export function frameSelfTimes(
-  apexLog: ApexLog,
-): Pick<Operation, "debugCategory" | "durationSelfNs">[] {
-  return apexLog.children
-    .filter(isTransactionFrame)
-    .map(({ debugCategory, duration }) => ({
-      debugCategory,
-      durationSelfNs: duration.self,
-    }));
+export function categorySelfTimes(apexLog: ApexLog): Map<DebugCategory, CategorySelfTime> {
+  const { count, type, parent, isFrame, durationSelf } = apexLog.columns;
+  const totals = new Map<DebugCategory, CategorySelfTime>();
+  for (let id = 1; id <= count; id++) {
+    const info = isFrame[id] ? eventType(type[id] ?? -1) : null;
+    if (!info) {
+      continue;
+    }
+    const isTransaction = FRAME_TYPES.has(info.type);
+    if (isTransaction && parent[id] !== 0) {
+      continue;
+    }
+    const total = totals.get(info.debugCategory) ?? { operationCount: 0, durationSelfNs: 0 };
+    // A frame is time, not an operation, so it adds to no count.
+    total.operationCount += isTransaction ? 0 : 1;
+    total.durationSelfNs += durationSelf[id] ?? 0;
+    totals.set(info.debugCategory, total);
+  }
+  return totals;
 }
 
 /**
