@@ -7,7 +7,6 @@ import { logEvent, rootLog, type NodeSpec } from "./support/logEvents";
 import { DEBUG_CATEGORIES } from "../src/logLevels";
 import { LIMIT_METRICS } from "../src/apexLog";
 import type {
-  ApexEvent,
   ApexLog,
   GovernorLimits,
   Limits,
@@ -53,25 +52,19 @@ describe("getLogSummary", () => {
     byNamespace,
   });
 
+  // An empty log of the builder's, with what these cases read beside the tree.
   const createMockApexLog = (overrides: Partial<ApexLog> = {}): ApexLog => {
     const log = {
+      ...rootLog(12_500_000_000),
       size: 15000,
-      debugLevels: {},
       namespaces: ["default", "MyNamespace"],
-      issues: [] as LogIssue[],
-      exceptions: [] as ApexEvent[],
-      events: [] as ApexEvent[],
-      isTruncated: false,
-      truncation: { regions: [], totalSkippedBytes: 0 },
-      unclosedFrames: [] as ApexEvent[],
       thrownCount: counts,
       limits: governorLimitsOf({
         used: { soqlQueries: 5, dmlStatements: 3, cpuTime: 1500 },
       }),
-      children: [] as ApexEvent[],
-      duration: { total: 12_500_000_000, self: 12_500_000_000 },
       ...overrides,
     };
+    // Over the events the case gave, as the parser's index is over the log's.
     const ofType = (...types: string[]) =>
       [...log.events].filter(({ type }) => types.includes(type));
     return { ...log, ofType } as unknown as ApexLog;

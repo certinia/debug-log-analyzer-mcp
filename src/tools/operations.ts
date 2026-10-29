@@ -5,6 +5,7 @@
 import {
   countOf,
   namespaceOf,
+  textOf,
   walkLog,
   type ApexEvent,
   type ApexLog,
@@ -55,11 +56,10 @@ export interface Operation {
    * on 4 of 5 rows, carrying 934 of its 944 ms, and `codeUnit` on 17% of rows,
    * carrying 10,600 of its 10,904 ms.
    *
-   * The direct parent, not the nearest ancestor that ranks as an operation: on
-   * 1,178,604 operations of real logs the two agree on every row, as the parser
-   * copies a namespace down to a child that has none, so the simpler reading
-   * holds even if the ranking skips more frames. They could differ only on the
-   * 289 rows whose parent is the `EXECUTION_STARTED` frame, which is `default`.
+   * Read off the operation this one ran inside, which is the direct parent: a
+   * parent is always a frame, and every frame ranks but the `EXECUTION_STARTED`
+   * one, which is in `default`. On 1,178,604 operations of real logs the direct
+   * parent and the nearest ranked ancestor agreed on every row.
    */
   callerNamespace: string;
   /** One, until `groupOperations` folds repeats together. */
@@ -171,7 +171,7 @@ export function frameSelfTimes(
  * the name the ranked row carries and the caller can join the two.
  */
 export function operationName(node: ApexEvent): string {
-  return node.text || node.type;
+  return textOf(node) || node.type;
 }
 
 /**
@@ -194,16 +194,18 @@ export function listOperations(apexLog: ApexLog): Operation[] {
       return parent;
     }
 
+    // Once: the parser builds a new rollup on each read.
+    const { total, self } = node.duration;
     const operation: Operation = {
       debugCategory: node.debugCategory,
       type: node.type,
       name: operationName(node),
       namespace: namespaceOf(node),
-      callerNamespace: namespaceOf(node.parent),
+      callerNamespace: parent?.namespace ?? namespaceOf(null),
       callCount: 1,
-      durationTotalNs: node.duration.total,
-      durationSelfNs: node.duration.self,
-      durationSelfMaxNs: node.duration.self,
+      durationTotalNs: total,
+      durationSelfNs: self,
+      durationSelfMaxNs: self,
       soqlCount: countOf(node.soqlCount).total,
       dmlCount: countOf(node.dmlCount).total,
       soslCount: countOf(node.soslCount).total,

@@ -57,7 +57,11 @@ export type NodeSpec = {
   plan?: PlanSpec;
 };
 
-type Built = ApexEvent & { parent: Built | null; children: Built[] };
+type Built = ApexEvent & {
+  parent: Built | null;
+  children: Built[];
+  heapAllocated: { self: number; total: number };
+};
 
 const countOf = (total: number | null | undefined) =>
   total === null ? null : { total: total ?? 0, self: 0 };
@@ -65,12 +69,17 @@ const countOf = (total: number | null | undefined) =>
 const explainOf = (plan: PlanSpec) => ({ ...plan, sObjectType: null, fields: null });
 
 /** Ids in log order from 1, as the parser numbers them: id 0 is the log. */
-function build(spec: NodeSpec, parent: Built | null, ids: { next: number }): Built {
+function build(spec: NodeSpec, ids: { next: number }): Built {
+  const id = ids.next++;
+  const children = (spec.children ?? []).map((child) => build(child, ids));
+  const type = spec.type ?? "METHOD_ENTRY";
   const total = spec.totalNs ?? 0;
+  // The parser gives a query the plan of its `SOQL_EXECUTE_EXPLAIN` child.
+  const childPlan = spec.children?.find((child) => child.type === "SOQL_EXECUTE_EXPLAIN")?.plan;
   const built = {
-    id: ids.next++,
-    type: spec.type ?? "METHOD_ENTRY",
-    isFrame: spec.isFrame ?? (spec.children?.length ?? 0) > 0,
+    id,
+    type,
+    isFrame: spec.isFrame ?? children.length > 0,
     debugCategory: spec.debugCategory ?? "apexCode",
     text: spec.text ?? null,
     namespace: spec.namespace ?? null,
@@ -83,31 +92,24 @@ function build(spec: NodeSpec, parent: Built | null, ids: { next: number }): Bui
     dmlRowCount: countOf(spec.dmlRowCount),
     soslRowCount: countOf(spec.soslRowCount),
     thrownCount: countOf(spec.thrownCount),
-    details: spec.plan ? explainOf(spec.plan) : null,
-    parent,
-    children: [] as Built[],
-  } as unknown as Built;
-
-  built.children = (spec.children ?? []).map((child) => build(child, built, ids));
-
-  // The parser gives a query the plan of its `SOQL_EXECUTE_EXPLAIN` child.
-  const plan = spec.children?.find(({ type }) => type === "SOQL_EXECUTE_EXPLAIN")?.plan;
-  if (built.type === "SOQL_EXECUTE_BEGIN") {
-    Object.assign(built, { details: { aggregations: null, explain: plan ? explainOf(plan) : null } });
-  }
-
-  // `self` is the event's own allocations and `total` adds its subtree's, as
-  // the parser aggregates them - so the log's total is the transaction's net
-  // heap without a case having to state it twice.
-  Object.assign(built, {
+    // `self` is the event's own allocations and `total` adds its subtree's, as
+    // the parser aggregates them - so the log's total is the transaction's net
+    // heap without a case having to state it twice.
     heapAllocated: {
       self: spec.heapSelfNetBytes ?? 0,
-      total: built.children.reduce(
-        (bytes, child) => bytes + (child.heapAllocated?.total ?? 0),
-        spec.heapSelfNetBytes ?? 0,
-      ),
+      total: children.reduce((bytes, child) => bytes + child.heapAllocated.total, spec.heapSelfNetBytes ?? 0),
     },
-  });
+    details:
+      type === "SOQL_EXECUTE_BEGIN"
+        ? { aggregations: null, explain: childPlan ? explainOf(childPlan) : null }
+        : spec.plan
+          ? explainOf(spec.plan)
+          : null,
+    parent: null,
+    children,
+  } as unknown as Built;
+
+  children.forEach((child) => (child.parent = built));
   return built;
 }
 
@@ -117,7 +119,7 @@ function inLogOrder(events: readonly Built[]): Built[] {
 }
 
 /** An event built as the `ApexEvent` a tool receives, at the top of its log. */
-export const logEvent = (spec: NodeSpec): ApexEvent => build(spec, null, { next: 1 });
+export const logEvent = (spec: NodeSpec): ApexEvent => build(spec, { next: 1 });
 
 /**
  * A log of `children`, with the lists the parser fills beside the tree: every
@@ -125,9 +127,9 @@ export const logEvent = (spec: NodeSpec): ApexEvent => build(spec, null, { next:
  */
 export function rootLog(totalNs: number, ...children: NodeSpec[]): ApexLog {
   const ids = { next: 1 };
-  const top = children.map((child) => build(child, null, ids));
+  const top = children.map((child) => build(child, ids));
   const events = inLogOrder(top);
-  const heapTotal = top.reduce((bytes, event) => bytes + (event.heapAllocated?.total ?? 0), 0);
+  const heapTotal = top.reduce((bytes, event) => bytes + event.heapAllocated.total, 0);
   return {
     children: top,
     events,

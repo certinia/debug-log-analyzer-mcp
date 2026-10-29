@@ -4,8 +4,9 @@
 
 import { z } from "zod";
 import {
-  isEventOf,
+  LOG_ID,
   namespaceOf,
+  textOf,
   walkLog,
   type ApexEvent,
   type ApexLog,
@@ -110,17 +111,9 @@ export interface SearchEventsResult {
   nextOffset?: number;
 }
 
-/** The log's own id: every top-level event names it as its parent. */
-const LOG_ID = 0;
-
 // What a row shows as text: none where the event states none, or only its type.
-// A flow error's text is its message alone; the element that failed is in `details`.
 function shownText(event: ApexEvent): string {
-  const text = event.text ?? "";
-  if (isEventOf(event, "FLOW_ELEMENT_ERROR")) {
-    const { elementType, elementName } = event.details;
-    return [text, elementType, elementName].filter(Boolean).join(" ");
-  }
+  const text = textOf(event);
   return text === event.type ? "" : text;
 }
 
@@ -141,13 +134,13 @@ function resolve(apexLog: ApexLog, eventId: number, parameter: string): ApexEven
   return event;
 }
 
-// By id: the parser makes a new object on each read, so two reads of one event are not `===`.
-function isBelow(event: ApexEvent, rootId: number): boolean {
-  if (rootId === LOG_ID) {
+// No root is the log, which holds every event. By id: the parser makes a new object on each read.
+function isBelow(event: ApexEvent, root: ApexEvent | undefined): boolean {
+  if (!root) {
     return true;
   }
   for (let above = event.parent; above; above = above.parent) {
-    if (above.id === rootId) {
+    if (above.id === root.id) {
       return true;
     }
   }
@@ -165,12 +158,11 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     offset = 0,
   } = args;
 
-  // Top-level rows name the log itself as their parent, so its index searches the whole log.
-  const root: ApexLog | ApexEvent =
+  // Top-level rows name the log itself as their parent, so its id searches the whole log.
+  const root =
     parentEventId === undefined || parentEventId === LOG_ID
-      ? apexLog
+      ? undefined
       : resolve(apexLog, parentEventId, "parentEventId");
-  const rootId = parentEventId ?? LOG_ID;
   const one = eventId === undefined ? undefined : resolve(apexLog, eventId, "eventId");
 
   // One pattern per call, so no event's text is copied to compare it.
@@ -199,10 +191,17 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     matchedTypes.add(event.type);
     matchedCategories.add(event.debugCategory);
   };
-  if (one === undefined) {
+  if (one !== undefined) {
+    if (isBelow(one, root)) {
+      consider(one);
+    }
+  } else if (root) {
     root.children.forEach((child) => walkLog(child, consider));
-  } else if (isBelow(one, rootId)) {
-    consider(one);
+  } else {
+    // In log order, as the walk is, without an array of children per frame.
+    for (const event of apexLog.events) {
+      consider(event);
+    }
   }
 
   // One event asked for by id is the way to read a long message, up to what a page may hold.

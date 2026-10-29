@@ -4,7 +4,9 @@
 
 import {
   countOf,
+  ENDED_BY,
   namespacesOf,
+  textOf,
   type ApexEvent,
   type ApexLog,
   type DebugCategory,
@@ -21,7 +23,6 @@ import {
 } from "./operations.js";
 import {
   DEBUG_CATEGORIES,
-  type DebugLevelCategory,
   type LogLevel,
 } from "../logLevels.js";
 import { elide, elideEnd } from "../elide.js";
@@ -65,7 +66,7 @@ export const getLogSummaryTool = defineAnalysisTool({
  * its level is empty. With it, the rows add up to the whole log.
  */
 interface CategoryRow {
-  debugCategory: DebugLevelCategory | typeof UNATTRIBUTED_CATEGORY;
+  debugCategory: DebugCategory | typeof UNATTRIBUTED_CATEGORY;
   level: LogLevel | "";
   operationCount: number;
   durationSelfMs: number;
@@ -156,7 +157,7 @@ function innermostFrames(description: string): string {
 const EXCEPTION_ROW_LIMIT = 20;
 
 /** The frames an `EXCEPTION_THROWN` line number can belong to. */
-const THROWING_FRAMES: ReadonlySet<EventType> = new Set<EventType>([
+const THROWING_FRAMES: ReadonlySet<EventType> = new Set([
   "METHOD_ENTRY",
   "CONSTRUCTOR_ENTRY",
   "CODE_UNIT_STARTED",
@@ -181,7 +182,7 @@ function exceptionRows(exceptions: readonly ApexEvent[]): ExceptionRow[] {
     .filter((event) => event.type === "EXCEPTION_THROWN")
     .forEach((event) => {
       // The parser appends the "caused by" and stack lines; a fatal shows the first alone.
-      const message = elideEnd((event.text ?? "").split("\n", 1)[0] ?? "", FATAL_MESSAGE_LIMIT);
+      const message = elideEnd(textOf(event).split("\n", 1)[0] ?? "", FATAL_MESSAGE_LIMIT);
       const row = rows.get(message);
       if (row) {
         row.thrownCount += 1;
@@ -254,7 +255,7 @@ function getLogSummary(apexLog: ApexLog): LogSummaryResult {
   // an exception, and nothing after it is missing.
   const truncated =
     apexLog.isTruncated ||
-    apexLog.unclosedFrames.some(({ endedBy }) => endedBy === "log-end");
+    apexLog.unclosedFrames.some(({ endedBy }) => endedBy === ENDED_BY.LogEnd);
   const exceptions = exceptionRows(apexLog.exceptions);
 
   // Every limit and every category is reported, zeros included: the caller has

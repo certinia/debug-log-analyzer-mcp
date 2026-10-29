@@ -16,6 +16,7 @@ import type {
   ApexLog,
   EventOf,
   EventType,
+  LimitValue,
   SelfTotal,
 } from "@apexdevtools/apex-log-parser";
 
@@ -31,7 +32,10 @@ export type {
   LogIssue,
   NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-export { LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+export { ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+
+/** The log's own id: an event at the top of the log has it as its parent's. */
+export const LOG_ID = 0;
 
 export { clearApexLogCache, loadApexLog, walkLog } from "./source.js";
 
@@ -57,6 +61,26 @@ export function countOf(rollup: SelfTotal | null): SelfTotal {
   return rollup ?? NONE;
 }
 
+/** A limit's ceiling, with 0 where the log stated none, which every response has always reported. */
+export function ceilingOf({ limit }: LimitValue): number {
+  return limit ?? 0;
+}
+
+/**
+ * What an event says, with "" where it says nothing.
+ *
+ * A flow error's text is its message alone; the element that failed is in
+ * `details`, and follows the message here, as it did in the log line.
+ */
+export function textOf(event: ApexEvent): string {
+  const text = event.text ?? "";
+  if (isEventOf(event, "FLOW_ELEMENT_ERROR")) {
+    const { elementType, elementName } = event.details;
+    return [text, elementType, elementName].filter(Boolean).join(" ");
+  }
+  return text;
+}
+
 /**
  * The namespace an event ran in, with `default` for none, or for no event.
  *
@@ -79,14 +103,16 @@ export function namespaceOf(event: Pick<ApexEvent, "namespace"> | null): string 
  */
 export function namespacesOf(log: ApexLog): string[] {
   const named = new Set<string>();
-  // A loop, to stop once every namespace is placed: on most logs that is within the first few events.
+  // A loop, to stop at the first `default`, the one name the parser does not
+  // list: on most logs that is within the first few events. The parser lists
+  // the rest in the order they first appear, so they follow in its order.
   for (const event of log.events) {
-    named.add(namespaceOf(event));
-    if (named.size > log.namespaces.length) {
+    const namespace = namespaceOf(event);
+    named.add(namespace);
+    if (namespace === "default") {
       break;
     }
   }
-  // A namespace no event is in, as one only a limit block names, follows in the parser's order.
   log.namespaces.forEach((namespace) => named.add(namespace));
   return [...named];
 }

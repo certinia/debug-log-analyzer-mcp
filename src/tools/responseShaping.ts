@@ -13,6 +13,7 @@
  */
 
 import {
+  ceilingOf,
   LIMIT_METRICS,
   type DebugCategory,
   type LimitUnit,
@@ -111,8 +112,8 @@ export interface LimitRow {
  */
 export function toLimitRows(limits: Limits): LimitRow[] {
   return Object.entries(limits).map(([name, value]) => {
-    const { used, limit } = value as Limits[keyof Limits];
-    return { limit: name, used, max: limit ?? 0 };
+    const limit = value as Limits[keyof Limits];
+    return { limit: name, used: limit.used, max: ceilingOf(limit) };
   });
 }
 

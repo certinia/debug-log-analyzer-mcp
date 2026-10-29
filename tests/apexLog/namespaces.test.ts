@@ -27,9 +27,9 @@ describe("namespacesOf", () => {
   });
 
   // A namespace only a limit block names is still one the log states.
-  it("keeps a namespace no event is in, after the ones events are in", () => {
-    const log = logWith(["fferpcore", "pse"], { namespace: null }, { namespace: "pse" });
+  it("keeps a namespace no event is in, in the parser's order", () => {
+    const log = logWith(["pse", "fferpcore"], { namespace: "pse" }, { namespace: null });
 
-    expect(namespacesOf(log)).toEqual(["default", "pse", "fferpcore"]);
+    expect(namespacesOf(log)).toEqual(["pse", "default", "fferpcore"]);
   });
 });
