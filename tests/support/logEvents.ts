@@ -62,6 +62,8 @@ export type NodeSpec = {
   heapSelfNetBytes?: number;
   children?: NodeSpec[];
   plan?: PlanSpec;
+  /** What the parser reads off the line beyond its text, for a type the builder does not fill. */
+  details?: Record<string, unknown>;
 };
 
 type Built = ApexEvent & {
@@ -107,11 +109,12 @@ function build(spec: NodeSpec, ids: { next: number }): Built {
       total: children.reduce((bytes, child) => bytes + child.heapAllocated.total, spec.heapSelfNetBytes ?? 0),
     },
     details:
-      type === "SOQL_EXECUTE_BEGIN"
+      spec.details ??
+      (type === "SOQL_EXECUTE_BEGIN"
         ? { aggregations: null, explain: childPlan ? explainOf(childPlan) : null }
         : spec.plan
           ? explainOf(spec.plan)
-          : null,
+          : null),
     parent: null,
     children,
   } as unknown as Built;
