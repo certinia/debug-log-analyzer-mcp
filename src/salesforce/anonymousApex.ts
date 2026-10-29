@@ -1,5 +1,5 @@
 import type { Connection } from "@salesforce/core";
-import type { DebugLevels } from "../apexLog/index.js";
+import type { ApexLog } from "../apexLog/index.js";
 
 import { RELOGIN_HINT } from "./authFailure.js";
 import { CATEGORY_LOG_NAMES } from "./debugLevels.js";
@@ -62,7 +62,7 @@ export async function executeAnonymousWithLog(
  */
 export function levelsWereOverridden(
   requested: Required<TraceConfig>,
-  logged: DebugLevels | undefined,
+  logged: ApexLog["debugLevels"] | undefined,
 ): boolean {
   return TRACE_CATEGORIES.some((category) => {
     const actual = logged?.[category];

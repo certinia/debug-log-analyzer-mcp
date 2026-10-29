@@ -8,25 +8,20 @@
  * org layer, and `salesforce/debugLevels.ts` writes `DebugLevel` records with it.
  */
 
-import { LOG_LEVEL } from "./apexLog/index.js";
-import type { ApexLog, DebugCategory, DebugLevels } from "./apexLog/index.js";
+import { LEVEL } from "./apexLog/index.js";
+import type { ApexLog, DebugCategory } from "./apexLog/index.js";
 import type { Assert } from "./compileGuards.js";
 
-/** The parser also admits `""`, for an event that states no level; a request cannot ask for it. */
-export type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
+export type LogLevel = (typeof LEVEL)[keyof typeof LEVEL];
 
-export const LOG_LEVELS = Object.values(LOG_LEVEL);
+export const LOG_LEVELS = Object.values(LEVEL);
 
-/**
- * One Salesforce debug log category, as the `DebugLevels` key the parser reads
- * a log header into. The parser's own `DebugCategory` is this plus `""`, which
- * it uses for an event that states no category.
- */
-export type DebugLevelCategory = keyof DebugLevels;
+/** One Salesforce debug log category, as the parser keys a log header's levels. */
+export type DebugLevelCategory = DebugCategory;
 
 /**
  * Every debug log category, in the order a log header states them, which is
- * also the order the parser declares `DebugLevels` in.
+ * also the order the parser declares `DEBUG_CATEGORY` in.
  *
  * This is the spelling every response uses, because it is the one the parser
  * stamps on each event and the one `apexlog_execute_anonymous.debugLevel` takes

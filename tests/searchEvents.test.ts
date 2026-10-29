@@ -97,6 +97,18 @@ describe("searchEvents", () => {
     expect(events.every((row) => row.type === "EXCEPTION_THROWN")).toBe(true);
   });
 
+  // The parser keeps the failed element out of the message; without it a row cannot say which element failed.
+  it("should name the flow element that failed, and find the error by it", async () => {
+    const { events } = await search("exceptions", { contains: "Update_Opportunity" });
+
+    expect(events.map((row) => [row.type, row.text])).toEqual([
+      [
+        "FLOW_ELEMENT_ERROR",
+        "This error occurred: FIELD_CUSTOM_VALIDATION_EXCEPTION: Amount is required. FlowRecordUpdate Update_Opportunity",
+      ],
+    ]);
+  });
+
   it("should return only the events below parentEventIndex", async () => {
     const all = await search("governor-heavy", { limit: 1000 });
     const method = all.events.find((row) => row.type === "METHOD_ENTRY")!;
@@ -182,17 +194,10 @@ describe("searchEvents", () => {
     expect(events[0]!.text).toBe("");
   });
 
-  // Event 287 is an exit line the log lost the entry of: the one record the method ran.
-  it("should return an exit line whose entry the log lost", async () => {
-    const { events } = await search("governor-heavy", { eventIndex: 287 });
-
-    expect(events.map((row) => row.type)).toEqual(["METHOD_EXIT"]);
-  });
-
-  // A folded line (233) or an index past the log reads as an error, not as nothing below it.
+  // The log itself (0) or an index past the log reads as an error, not as nothing below it.
   it.each([
     { eventIndex: 10_000 },
-    { eventIndex: 233 },
+    { eventIndex: 0 },
     { parentEventIndex: 10_000 },
   ])("should refuse an index no search reaches: %o", async (args) => {
     await expect(search("governor-heavy", args)).rejects.toThrow(
@@ -201,10 +206,10 @@ describe("searchEvents", () => {
   });
 
   it("should return an event asked for by id only if it is below parentEventIndex", async () => {
-    const inside = await search("governor-heavy", { eventIndex: 10, parentEventIndex: 9 });
-    const outside = await search("governor-heavy", { eventIndex: 10, parentEventIndex: 5 });
+    const inside = await search("governor-heavy", { eventIndex: 11, parentEventIndex: 10 });
+    const outside = await search("governor-heavy", { eventIndex: 11, parentEventIndex: 9 });
 
-    expect(inside.events.map((row) => row.eventIndex)).toEqual([10]);
+    expect(inside.events.map((row) => row.eventIndex)).toEqual([11]);
     expect(outside.events).toEqual([]);
   });
 
@@ -216,9 +221,8 @@ describe("searchEvents", () => {
     expect(below).toEqual(all);
   });
 
-  // Rows that state no category; a type that matched nothing; text, which can sit in any category.
+  // A type that matched nothing; text, which can sit in any category.
   it.each([
-    { type: ["FLOW_CREATE_INTERVIEW_END"] },
     { type: ["SOQL_EXECUTE_BEGIN", "NO_SUCH_TYPE"] },
     { contains: "newInstance(Integer" },
   ])("should give every declared level when the search fixes no category: %o", async (args) => {

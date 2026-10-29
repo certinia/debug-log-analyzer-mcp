@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { LogEvent, SOQLExecuteExplainLine } from "../apexLog/index.js";
+import { isEventOf, type ApexEvent } from "../apexLog/index.js";
 import { operationName, type Operation } from "./operations.js";
 
 /**
@@ -41,15 +41,12 @@ export function canCarryPlan({ type }: Pick<Operation, "type">): boolean {
 /**
  * The plan the optimiser explained for a query, if it explained one.
  *
- * The explain line is a direct child of the query it explains, so the two are
- * correlated structurally rather than by line number. Its fields are parsed
- * together or not at all, so one unparsed field means no readable plan.
+ * The parser reads it off the query's own `SOQL_EXECUTE_EXPLAIN` child, so the
+ * two are correlated structurally rather than by line number. One unparsed
+ * field means no readable plan.
  */
-export function planOf(node: LogEvent): QueryPlan | undefined {
-  const explain = node.children?.find(
-    (child): child is SOQLExecuteExplainLine =>
-      child.type === "SOQL_EXECUTE_EXPLAIN",
-  );
+export function planOf(node: ApexEvent): QueryPlan | undefined {
+  const explain = isEventOf(node, "SOQL_EXECUTE_BEGIN") ? node.details.explain : null;
   if (!explain) {
     return undefined;
   }

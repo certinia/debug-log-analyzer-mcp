@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ApexLog, DebugCategory } from "../apexLog/index.js";
+import { countOf, type ApexLog, type DebugCategory } from "../apexLog/index.js";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import {
   GROUP_BY,
@@ -73,10 +73,9 @@ const listSlowOperationsInputSchema = {
     .array(z.enum(DEBUG_CATEGORIES))
     .optional()
     .describe("Rank only these debug log categories"),
-  // Free strings and three examples rather than an enum: the parser publishes
-  // `LogEventType` as a type alone, and its 290 names would cost some 1,450
-  // tokens in every `tools/list` - more than the four tools together are
-  // allowed. Tightening this to an enum fails the definition budget.
+  // Free strings and three examples rather than an enum: the parser's 299
+  // event type names would cost some 1,500 tokens in every `tools/list` (1,450
+  // measured at 290) - more than the four tools together are allowed. Tightening this to an enum fails the definition budget.
   type: z
     .array(z.string())
     .optional()
@@ -381,7 +380,7 @@ function listSlowOperations(
   // The log's own net heap, which the operation rows account for in full: they
   // carry 100.0% of it on every real log that allocates,
   // min to max, because an allocation lands in the `self` of exactly one node.
-  const heapTotalBytes = apexLog.heapAllocated.total;
+  const heapTotalBytes = countOf(apexLog.heapAllocated).total;
   const minSelfNs = minSelfMs * NS_TO_MS;
 
   const everyOperation = listOperations(apexLog);

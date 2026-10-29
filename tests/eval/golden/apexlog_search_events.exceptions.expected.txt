@@ -13,7 +13,7 @@ capturedAt[11]{debugCategory,level}:
   workflow,INFO
 events[5]{eventIndex,parentEventIndex,type,namespace,lineNumber,text}:
   6,5,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
-  9,8,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
-  12,11,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
-  15,14,EXCEPTION_THROWN,default,44,"System.NullPointerException: Attempt to de-reference a null object"
-  19,18,FLOW_ELEMENT_ERROR,default,null,"This error occurred: FIELD_CUSTOM_VALIDATION_EXCEPTION: Amount is required. FlowRecordUpdate Update_Opportunity"
+  8,7,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
+  10,9,EXCEPTION_THROWN,default,31,"System.CalloutException: Read timed out"
+  12,11,EXCEPTION_THROWN,default,44,"System.NullPointerException: Attempt to de-reference a null object"
+  14,13,FLOW_ELEMENT_ERROR,default,null,"This error occurred: FIELD_CUSTOM_VALIDATION_EXCEPTION: Amount is required. FlowRecordUpdate Update_Opportunity"

@@ -25,14 +25,14 @@ function useLog(totalNs: number, ...children: NodeSpec[]): ApexLog {
 
 const method = (spec: NodeSpec): NodeSpec => ({
   type: "METHOD_ENTRY",
-  category: "Apex",
+  isFrame: true,
   debugCategory: "apexCode",
   ...spec,
 });
 
 const query = (spec: NodeSpec): NodeSpec => ({
   type: "SOQL_EXECUTE_BEGIN",
-  category: "SOQL",
+  isFrame: true,
   debugCategory: "database",
   soqlCount: 1,
   ...spec,
@@ -214,7 +214,7 @@ describe("listSlowOperations", () => {
       query({ text: "SELECT Id", totalNs: 400 * MS }),
       {
         type: "DML_BEGIN",
-        category: "DML",
+        isFrame: true,
         debugCategory: "database",
         text: "DML Insert Account",
         totalNs: 300 * MS,
@@ -700,7 +700,7 @@ describe("listSlowOperations", () => {
         children: [
           {
             type: "DML_BEGIN",
-            category: "DML",
+            isFrame: true,
             text: "DML Insert Account",
             namespace: "default",
             totalNs: 400 * MS,

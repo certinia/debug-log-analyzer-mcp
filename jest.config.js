@@ -27,7 +27,7 @@ export default {
     "^(\\.{1,2}/.*)\\.js$": "$1",
     "^@toon-format/toon$": "<rootDir>/tests/__mocks__/@toon-format/toon.ts",
     "^@apexdevtools/apex-log-parser$":
-      "<rootDir>/node_modules/@apexdevtools/apex-log-parser/dist/index.js",
+      "<rootDir>/node_modules/@apexdevtools/apex-log-parser/dist/node.js",
   },
   collectCoverageFrom: [
     "src/**/*.ts",

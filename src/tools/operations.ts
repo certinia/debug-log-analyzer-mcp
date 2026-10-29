@@ -2,14 +2,16 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type {
-  ApexLog,
-  DebugCategory,
-  LogEvent,
-  LogEventType,
+import {
+  countOf,
+  namespaceOf,
+  walkLog,
+  type ApexEvent,
+  type ApexLog,
+  type DebugCategory,
+  type EventType,
 } from "../apexLog/index.js";
 import type { Assert } from "../compileGuards.js";
-import { walkLog } from "../apexLog/index.js";
 
 /**
  * One timed thing the transaction did.
@@ -35,10 +37,9 @@ export interface Operation {
    * managed package entry under `apexCode` beside the methods it hides.
    *
    * The parser's own union, so a misspelt literal anywhere downstream fails the
-   * build instead of matching nothing. `"Unknown"` covers the events the parser
-   * leaves untyped.
+   * build instead of matching nothing.
    */
-  type: LogEventType | "Unknown";
+  type: EventType;
   name: string;
   namespace: string;
   /**
@@ -124,7 +125,7 @@ export interface Operation {
    * Internal, and only meaningful on an ungrouped operation: `groupOperations`
    * folds many events into one row and keeps the first member's node.
    */
-  node: LogEvent;
+  node: ApexEvent;
 }
 
 /**
@@ -132,23 +133,21 @@ export interface Operation {
  * transaction took as long as it took. It is timed and carries `apexCode`, so
  * nothing else holds it out.
  */
-const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
+const FRAME_TYPES = new Set<EventType>(["EXECUTION_STARTED"]);
 
-function isFrame({ type }: LogEvent): boolean {
-  return !!type && FRAME_TYPES.has(type);
+function isTransactionFrame({ type }: ApexEvent): boolean {
+  return FRAME_TYPES.has(type);
 }
 
 /**
  * Whether the event is a thing the transaction spent time on.
  *
- * The timeline `category` is read as nothing but "this event has a duration" -
- * the parser assigns one in the `DurationLogEvent` constructor alone, and
- * publishes no other flag for it. What the event *is* comes from
- * `debugCategory` and `type`. Untimed events are most of a log, so this is both
+ * A frame is what the parser times: every event with a duration is one, pinned
+ * in `tests/parserContract.test.ts`. A leaf is most of a log, so this is both
  * the cheap test and the first one.
  */
-function isRankable(event: LogEvent): boolean {
-  return event.category !== "" && !isFrame(event);
+function isRankable(event: ApexEvent): boolean {
+  return event.isFrame && !isTransactionFrame(event);
 }
 
 /**
@@ -160,7 +159,7 @@ export function frameSelfTimes(
   apexLog: ApexLog,
 ): Pick<Operation, "debugCategory" | "durationSelfNs">[] {
   return apexLog.children
-    .filter(isFrame)
+    .filter(isTransactionFrame)
     .map(({ debugCategory, duration }) => ({
       debugCategory,
       durationSelfNs: duration.self,
@@ -171,8 +170,8 @@ export function frameSelfTimes(
  * What a row calls an operation. Shared, so a query plan names its query with
  * the name the ranked row carries and the caller can join the two.
  */
-export function operationName(node: LogEvent): string {
-  return node.text || node.type || "Unknown";
+export function operationName(node: ApexEvent): string {
+  return node.text || node.type;
 }
 
 /**
@@ -185,35 +184,35 @@ export function operationName(node: LogEvent): string {
 export function listOperations(apexLog: ApexLog): Operation[] {
   const operations: Operation[] = [];
 
-  // The children, not the log: the root is a pseudo node the parser adds, and
-  // it holds the whole transaction as its own time.
+  // The children, not the log: the log is no event, and it holds the whole
+  // transaction as its own time.
   //
   // The visitor hands its children the operation they ran inside, which is the
   // one it just made, or its own when the node itself is untimed.
-  const visit = (node: LogEvent, parent: Operation | undefined) => {
+  const visit = (node: ApexEvent, parent: Operation | undefined) => {
     if (!isRankable(node)) {
       return parent;
     }
 
     const operation: Operation = {
       debugCategory: node.debugCategory,
-      type: node.type ?? "Unknown",
+      type: node.type,
       name: operationName(node),
-      namespace: node.namespace || "default",
-      callerNamespace: node.parent?.namespace || "default",
+      namespace: namespaceOf(node),
+      callerNamespace: namespaceOf(node.parent),
       callCount: 1,
       durationTotalNs: node.duration.total,
       durationSelfNs: node.duration.self,
       durationSelfMaxNs: node.duration.self,
-      soqlCount: node.soqlCount.total,
-      dmlCount: node.dmlCount.total,
-      soslCount: node.soslCount.total,
+      soqlCount: countOf(node.soqlCount).total,
+      dmlCount: countOf(node.dmlCount).total,
+      soslCount: countOf(node.soslCount).total,
       rowCount:
-        node.soqlRowCount.total +
-        node.dmlRowCount.total +
-        node.soslRowCount.total,
-      thrownCount: node.thrownCount.total,
-      heapSelfNetBytes: node.heapAllocated.self,
+        countOf(node.soqlRowCount).total +
+        countOf(node.dmlRowCount).total +
+        countOf(node.soslRowCount).total,
+      thrownCount: countOf(node.thrownCount).total,
+      heapSelfNetBytes: countOf(node.heapAllocated).self,
       parent: parent ?? null,
       node,
     };
@@ -253,7 +252,7 @@ interface Grouping {
    * state only what its key holds true of every member.
    *
    * `type` decides `debugCategory` - the parser stamps one category per event
-   * class - so keying on the type keeps both columns true of every member. A
+   * type - so keying on the type keeps both columns true of every member. A
    * category fold keys on the category alone, and states neither: one type
    * named would be the first member's alone, and the name would restate the
    * category.

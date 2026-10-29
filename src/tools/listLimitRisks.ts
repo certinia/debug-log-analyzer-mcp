@@ -73,7 +73,7 @@ export const listLimitRisksTool = defineAnalysisTool({
 function listLimitRisks(apexLog: ApexLog, args: LimitRisksArgs): LimitRiskResult {
   const { threshold = WARNING_THRESHOLD } = args;
 
-  const atRisk = atRiskLimits(apexLog.governorLimits.peak, threshold);
+  const atRisk = atRiskLimits(apexLog.limits.peak, threshold);
 
   // The categories of the rows returned, so a level appears only where it
   // explains one of them - the same rule the ranking tool follows.

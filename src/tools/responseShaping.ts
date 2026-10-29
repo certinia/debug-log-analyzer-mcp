@@ -13,9 +13,9 @@
  */
 
 import {
-  ALL_LIMIT_METRICS,
+  LIMIT_METRICS,
   type DebugCategory,
-  type LimitMetricUnit,
+  type LimitUnit,
   type Limits,
   type NamespaceLimits,
 } from "../apexLog/index.js";
@@ -112,12 +112,12 @@ export interface LimitRow {
 export function toLimitRows(limits: Limits): LimitRow[] {
   return Object.entries(limits).map(([name, value]) => {
     const { used, limit } = value as Limits[keyof Limits];
-    return { limit: name, used, max: limit };
+    return { limit: name, used, max: limit ?? 0 };
   });
 }
 
 /** English plurals for the units the parser publishes. */
-const UNIT_PLURALS: Record<LimitMetricUnit, string> = {
+const UNIT_PLURALS: Record<LimitUnit, string> = {
   count: "counts",
   millisecond: "milliseconds",
   byte: "bytes",
@@ -131,13 +131,13 @@ const UNIT_PLURALS: Record<LimitMetricUnit, string> = {
  * once per session rather than as a `unit` column, which measured 22 to 37
  * tokens on *every* response carrying a limit table against 21 tokens once.
  *
- * Read from `ALL_LIMIT_METRICS`, so a metric the parser adds in another unit
+ * Read from `LIMIT_METRICS`, so a metric the parser adds in another unit
  * cannot go unstated.
  */
 export function limitUnitsClause(): string {
-  const exceptions = ALL_LIMIT_METRICS.filter(
-    ({ unit }) => unit !== "count",
-  ).map(({ key, unit }) => `${key} in ${UNIT_PLURALS[unit]}`);
+  const exceptions = Object.entries(LIMIT_METRICS)
+    .filter(([, unit]) => unit !== "count")
+    .map(([key, unit]) => `${key} in ${UNIT_PLURALS[unit]}`);
 
   return `every governor limit is a count except ${exceptions.join(" and ")}`;
 }
@@ -175,7 +175,7 @@ export interface NamespaceLimitRow {
  * table.
  */
 export function toNamespaceLimitRows(
-  byNamespace: Map<string, NamespaceLimits>,
+  byNamespace: ReadonlyMap<string, NamespaceLimits>,
 ): NamespaceLimitRow[] {
   return [...byNamespace].flatMap(([namespace, limits]) =>
     toLimitRows(limits.peak)

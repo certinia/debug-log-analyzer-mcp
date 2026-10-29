@@ -352,7 +352,7 @@ Cost barely grows with the log size. The figures below are measured against a 40
 | `apexlog_get_summary`          | ~342     | ~293 | +17%   |
 | `apexlog_list_slow_operations` | ~400     | ~408 | -2%    |
 | `apexlog_list_limit_risks`     | ~35      | ~84  | -58%   |
-| `apexlog_search_events`        | ~881     | -    | -      |
+| `apexlog_search_events`        | ~883     | -    | -      |
 
 <!-- token-cost-answers:end -->
 

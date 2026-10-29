@@ -10,21 +10,21 @@ import {
   walkLog,
 } from "../../src/apexLog";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+import type { ApexEvent, ApexLog } from "@apexdevtools/apex-log-parser";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
-  const readFile = jest.fn();
+  const createReadStream = jest.fn();
   // A handle is the file at one path, so its stat and read delegate to the
   // mocks above with that path filled in. Tests set and assert on those.
   return {
     constants: jest.requireActual("fs").constants,
     promises: {
       stat,
-      readFile,
+      createReadStream,
       open: jest.fn(async (path: string) => ({
         stat: (options: unknown) => stat(path, options),
-        readFile: (encoding: unknown) => readFile(path, encoding),
+        createReadStream: (options: unknown) => createReadStream(path, options),
         close: jest.fn(),
       })),
     },
@@ -38,6 +38,9 @@ jest.mock("@apexdevtools/apex-log-parser", () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockParse = parse as jest.MockedFunction<typeof parse>;
+// Not on `fs.promises` itself: the mock puts it there to reach each handle's.
+const mockReadStream = (fs as unknown as { createReadStream: jest.Mock }).createReadStream;
+const STREAM = { bytesOf: "/path/to/test.log" };
 
 const statsOf = (
   mtimeNs: number,
@@ -82,17 +85,17 @@ describe("apexLog source", () => {
 
     beforeEach(() => {
       mockFs.stat.mockResolvedValue(statsOf(1, 10));
-      mockFs.readFile.mockResolvedValue("log content");
-      mockParse.mockReturnValue({} as ApexLog);
+      mockReadStream.mockReturnValue(STREAM);
+      mockParse.mockImplementation(async () => ({}) as ApexLog);
     });
 
-    it("parses the file on the first call", async () => {
+    // The handle's own stream, so the parse reads the bytes the stat fingerprinted.
+    it("parses the bytes of the file it opened on the first call", async () => {
       const log = await loadApexLog(logPath);
 
       expect(mockFs.open).toHaveBeenCalledWith(logPath, expect.any(Number));
-      expect(mockFs.readFile).toHaveBeenCalledWith(logPath, "utf-8");
-      expect(mockParse).toHaveBeenCalledWith("log content");
-      expect(log).toBe(mockParse.mock.results[0]?.value);
+      expect(mockParse).toHaveBeenCalledWith(STREAM);
+      expect(log).toBe(await mockParse.mock.results[0]?.value);
     });
 
     it("closes every file it opens", async () => {
@@ -113,7 +116,7 @@ describe("apexLog source", () => {
 
       expect(second).toBe(first);
       expect(mockParse).toHaveBeenCalledTimes(1);
-      expect(mockFs.readFile).toHaveBeenCalledTimes(1);
+      expect(mockReadStream).toHaveBeenCalledTimes(1);
     });
 
     it("parses again when the file was modified", async () => {
@@ -180,19 +183,19 @@ describe("apexLog source", () => {
     });
 
     it("shares one parse between callers that arrive while it runs", async () => {
-      let release: (content: string) => void = () => {};
-      mockFs.readFile.mockReturnValue(
-        new Promise<string>((resolve) => {
+      let release: (log: ApexLog) => void = () => {};
+      mockParse.mockReturnValueOnce(
+        new Promise<ApexLog>((resolve) => {
           release = resolve;
-        }) as ReturnType<typeof fs.readFile>,
+        }),
       );
 
       const both = Promise.all([loadApexLog(logPath), loadApexLog(logPath)]);
-      release("log content");
+      release({} as ApexLog);
       const [first, second] = await both;
 
       expect(second).toBe(first);
-      expect(mockFs.readFile).toHaveBeenCalledTimes(1);
+      expect(mockReadStream).toHaveBeenCalledTimes(1);
       expect(mockParse).toHaveBeenCalledTimes(1);
     });
 
@@ -210,28 +213,29 @@ describe("apexLog source", () => {
       await expect(loadApexLog(logPath)).rejects.toThrow(
         `Cannot read log file ${logPath}: ${cause}`,
       );
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(mockReadStream).not.toHaveBeenCalled();
     });
 
-    it("does not serve a failed read to the next caller", async () => {
-      mockFs.readFile.mockRejectedValueOnce(new Error("EACCES"));
-
-      await expect(loadApexLog(logPath)).rejects.toThrow("EACCES");
-      const retried = await loadApexLog(logPath);
-
-      expect(retried).toBe(mockParse.mock.results[0]?.value);
-      expect(mockFs.readFile).toHaveBeenCalledTimes(2);
-    });
-
-    it("hands a parse failure to the caller, and parses again next time", async () => {
-      mockParse.mockImplementationOnce(() => {
-        throw new Error("Failed to parse log");
+    it("does not cache a stream that could not open, and opens it again next time", async () => {
+      mockReadStream.mockImplementationOnce(() => {
+        throw new Error("EMFILE");
       });
+
+      await expect(loadApexLog(logPath)).rejects.toThrow("EMFILE");
+      await loadApexLog(logPath);
+
+      expect(mockReadStream).toHaveBeenCalledTimes(2);
+      expect(mockParse).toHaveBeenCalledTimes(1);
+    });
+
+    // A read error reaches the caller through the parse, which reads the stream.
+    it("hands a read or parse failure to the caller, and parses again next time", async () => {
+      mockParse.mockRejectedValueOnce(new Error("Failed to parse log"));
 
       await expect(loadApexLog(logPath)).rejects.toThrow("Failed to parse log");
       const retried = await loadApexLog(logPath);
 
-      expect(retried).toBe(mockParse.mock.results[1]?.value);
+      expect(retried).toBe(await mockParse.mock.results[1]?.value);
       expect(mockParse).toHaveBeenCalledTimes(2);
     });
 
@@ -243,7 +247,7 @@ describe("apexLog source", () => {
       await expect(loadApexLog("/path/to/missing.log")).rejects.toThrow(
         "Log file not found: /path/to/missing.log",
       );
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(mockReadStream).not.toHaveBeenCalled();
     });
   });
 
@@ -251,8 +255,11 @@ describe("apexLog source", () => {
     it("visits the node and every node below it, parents first", () => {
       const tree = {
         type: "root",
-        children: [{ type: "a", children: [{ type: "a1" }] }, { type: "b" }],
-      } as unknown as LogEvent;
+        children: [
+          { type: "a", children: [{ type: "a1", children: [] }] },
+          { type: "b", children: [] },
+        ],
+      } as unknown as ApexEvent;
 
       const seen: string[] = [];
       walkLog(tree, (node) => seen.push(node.type as string));

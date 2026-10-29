@@ -4,7 +4,7 @@
 
 import { constants, promises as fs, type BigIntStats } from "fs";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+import type { ApexEvent, ApexLog } from "@apexdevtools/apex-log-parser";
 import { fileReadError } from "../tools/localFile.js";
 
 type CachedLog = {
@@ -102,7 +102,11 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
     // arrives while a large log is still being read shares that read instead of
     // starting its own. The slot is filled in the same microtask as the miss
     // above, so a second caller cannot slip between the two.
-    const pending = handle.readFile("utf-8").then(parse);
+    //
+    // Bytes, not a string: the parser reads UTF-8 itself, so no UTF-16 copy of
+    // the log is ever held. `autoClose: false`, because the `finally` below
+    // closes the handle, on a cache hit as well.
+    const pending = parse(handle.createReadStream({ autoClose: false }));
     cached = { path: logFilePath, fingerprint, log: pending };
     scheduleEviction();
 
@@ -133,10 +137,10 @@ export function clearApexLogCache(): void {
  * what encloses a node down to it without a second pass.
  */
 export function walkLog<T>(
-  node: LogEvent,
-  visit: (node: LogEvent, inherited: T | undefined) => T,
+  node: ApexEvent,
+  visit: (node: ApexEvent, inherited: T | undefined) => T,
   inherited?: T,
 ): void {
   const next = visit(node, inherited);
-  node.children?.forEach((child) => walkLog(child, visit, next));
+  node.children.forEach((child) => walkLog(child, visit, next));
 }

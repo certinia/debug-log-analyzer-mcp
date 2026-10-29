@@ -3,7 +3,7 @@
  */
 
 /**
- * One hand-built parser node, for the suites that need a tree rather than a log.
+ * One hand-built parser event, for the suites that need a tree rather than a log.
  *
  * `tests/parserContract.test.ts` is the one that parses real log text, because
  * it exists to pin what the parser does. Everything else is testing this
@@ -15,7 +15,7 @@
  * edit here rather than one in each suite.
  */
 
-import type { ApexLog, LogEvent } from "../../src/apexLog";
+import type { ApexEvent, ApexLog } from "../../src/apexLog";
 
 /** What a `SOQL_EXECUTE_EXPLAIN` line carries, as the parser leaves it. */
 export type PlanSpec = {
@@ -26,98 +26,123 @@ export type PlanSpec = {
 };
 
 /**
- * A node to build. Every field is optional and zero by default, so a case sets
- * only what it asserts on.
+ * An event to build. Every field is optional and zero by default, so a case
+ * sets only what it asserts on.
  *
  * `selfNs` defaults to `totalNs`, which is what a leaf looks like. The builder
  * does not subtract a child's time from its parent - the parser does that while
  * reading, and a case that cares states both.
+ *
+ * `isFrame` defaults to whether the event has children: a leaf is what most of
+ * a log is, and an event with children is always a frame.
  */
 export type NodeSpec = {
-  type?: string | null;
-  category?: string;
+  type?: string;
+  isFrame?: boolean;
   debugCategory?: string;
   text?: string | null;
   namespace?: string | null;
   lineNumber?: number | "EXTERNAL" | null;
   totalNs?: number;
   selfNs?: number;
-  soqlCount?: number;
-  dmlCount?: number;
-  soslCount?: number;
-  soqlRowCount?: number;
-  dmlRowCount?: number;
-  soslRowCount?: number;
-  thrownCount?: number;
+  soqlCount?: number | null;
+  dmlCount?: number | null;
+  soslCount?: number | null;
+  soqlRowCount?: number | null;
+  dmlRowCount?: number | null;
+  soslRowCount?: number | null;
+  thrownCount?: number | null;
   heapSelfNetBytes?: number;
   children?: NodeSpec[];
   plan?: PlanSpec;
 };
 
-/**
- * Build a node and its subtree.
- *
- * Returned as `unknown` for the caller to cast: a real `LogEvent` carries the
- * parser's whole class, and a spec that had to satisfy it would state dozens of
- * fields no case reads.
- */
-export function node(spec: NodeSpec): unknown {
+type Built = ApexEvent & { parent: Built | null; children: Built[] };
+
+const countOf = (total: number | null | undefined) =>
+  total === null ? null : { total: total ?? 0, self: 0 };
+
+const explainOf = (plan: PlanSpec) => ({ ...plan, sObjectType: null, fields: null });
+
+/** Ids in log order from 1, as the parser numbers them: id 0 is the log. */
+function build(spec: NodeSpec, parent: Built | null, ids: { next: number }): Built {
   const total = spec.totalNs ?? 0;
-  const children = (spec.children ?? []).map(node) as {
-    parent?: unknown;
-    heapAllocated: { total: number };
-  }[];
   const built = {
-    ...spec.plan,
-    type: spec.type ?? null,
-    // Both default to the empty string the parser leaves on an untimed event,
-    // because that is what says the event has no duration.
-    category: spec.category ?? "",
-    debugCategory: spec.debugCategory ?? "",
+    id: ids.next++,
+    type: spec.type ?? "METHOD_ENTRY",
+    isFrame: spec.isFrame ?? (spec.children?.length ?? 0) > 0,
+    debugCategory: spec.debugCategory ?? "apexCode",
     text: spec.text ?? null,
-    namespace: spec.namespace ?? "default",
+    namespace: spec.namespace ?? null,
     lineNumber: spec.lineNumber ?? null,
     duration: { total, self: spec.selfNs ?? total },
-    soqlCount: { total: spec.soqlCount ?? 0, self: 0 },
-    dmlCount: { total: spec.dmlCount ?? 0, self: 0 },
-    soslCount: { total: spec.soslCount ?? 0, self: 0 },
-    soqlRowCount: { total: spec.soqlRowCount ?? 0, self: 0 },
-    dmlRowCount: { total: spec.dmlRowCount ?? 0, self: 0 },
-    soslRowCount: { total: spec.soslRowCount ?? 0, self: 0 },
-    thrownCount: { total: spec.thrownCount ?? 0, self: 0 },
-    // `self` is the node's own allocations and `total` adds its subtree's, as
-    // the parser aggregates them - so the root's total is the transaction's net
-    // heap without a case having to state it twice.
+    soqlCount: countOf(spec.soqlCount),
+    dmlCount: countOf(spec.dmlCount),
+    soslCount: countOf(spec.soslCount),
+    soqlRowCount: countOf(spec.soqlRowCount),
+    dmlRowCount: countOf(spec.dmlRowCount),
+    soslRowCount: countOf(spec.soslRowCount),
+    thrownCount: countOf(spec.thrownCount),
+    details: spec.plan ? explainOf(spec.plan) : null,
+    parent,
+    children: [] as Built[],
+  } as unknown as Built;
+
+  built.children = (spec.children ?? []).map((child) => build(child, built, ids));
+
+  // The parser gives a query the plan of its `SOQL_EXECUTE_EXPLAIN` child.
+  const plan = spec.children?.find(({ type }) => type === "SOQL_EXECUTE_EXPLAIN")?.plan;
+  if (built.type === "SOQL_EXECUTE_BEGIN") {
+    Object.assign(built, { details: { aggregations: null, explain: plan ? explainOf(plan) : null } });
+  }
+
+  // `self` is the event's own allocations and `total` adds its subtree's, as
+  // the parser aggregates them - so the log's total is the transaction's net
+  // heap without a case having to state it twice.
+  Object.assign(built, {
     heapAllocated: {
       self: spec.heapSelfNetBytes ?? 0,
-      total: children.reduce(
-        (bytes, child) => bytes + child.heapAllocated.total,
+      total: built.children.reduce(
+        (bytes, child) => bytes + (child.heapAllocated?.total ?? 0),
         spec.heapSelfNetBytes ?? 0,
       ),
     },
-    children,
-  };
-
-  // The parser links every child to its parent, and `callerNamespace` reads it.
-  children.forEach((child) => (child.parent = built));
-
+  });
   return built;
 }
 
-/** A node built as the `LogEvent` a tool receives. */
-export const logEvent = (spec: NodeSpec): LogEvent => node(spec) as LogEvent;
+/** Every event under `events`, parents first, which is log order. */
+function inLogOrder(events: readonly Built[]): Built[] {
+  return events.flatMap((event) => [event, ...inLogOrder(event.children)]);
+}
+
+/** An event built as the `ApexEvent` a tool receives, at the top of its log. */
+export const logEvent = (spec: NodeSpec): ApexEvent => build(spec, null, { next: 1 });
 
 /**
- * A log whose root is the transaction frame the parser always emits, running
- * `children`. The frame is what `listOperations` skips, so a case's own nodes
- * are its children and never the root.
+ * A log of `children`, with the lists the parser fills beside the tree: every
+ * event by id and by type, and every throw and fatal.
  */
-export const rootLog = (totalNs: number, ...children: NodeSpec[]): ApexLog =>
-  node({
-    type: "EXECUTION_STARTED",
-    category: "Apex",
-    debugCategory: "apexCode",
-    text: "Root",
-    totalNs,
-    children,
-  }) as ApexLog;
+export function rootLog(totalNs: number, ...children: NodeSpec[]): ApexLog {
+  const ids = { next: 1 };
+  const top = children.map((child) => build(child, null, ids));
+  const events = inLogOrder(top);
+  const heapTotal = top.reduce((bytes, event) => bytes + (event.heapAllocated?.total ?? 0), 0);
+  return {
+    children: top,
+    events,
+    eventCount: events.length,
+    event: (id: number) => events.find((event) => event.id === id) ?? null,
+    ofType: (...types: string[]) => events.filter(({ type }) => types.includes(type)),
+    exceptions: events.filter(({ type }) => type === "EXCEPTION_THROWN" || type === "FATAL_ERROR"),
+    duration: { total: totalNs, self: totalNs },
+    thrownCount: { total: 0, self: 0 },
+    heapAllocated: { self: 0, total: heapTotal },
+    namespaces: [],
+    debugLevels: {},
+    issues: [],
+    unclosedFrames: [],
+    isTruncated: false,
+    truncation: { regions: [], totalSkippedBytes: 0 },
+  } as unknown as ApexLog;
+}

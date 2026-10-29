@@ -8,14 +8,15 @@ import {
   type LimitRisksArgs,
   type LimitRiskResult,
 } from "../src/tools/listLimitRisks";
-import { ALL_LIMIT_METRICS } from "../src/apexLog";
+import { LIMIT_METRICS } from "../src/apexLog";
 import type {
   ApexLog,
   GovernorLimits,
+  LimitMetric,
   Limits,
 } from "../src/apexLog";
 
-type LimitUsage = { used: number; limit: number };
+type LimitUsage = { used: number; limit: number | null };
 type LimitOverrides = Partial<Record<keyof Limits, LimitUsage>>;
 
 /** The real org ceilings, so a percentage in a case is one a caller would see. */
@@ -39,7 +40,7 @@ const CEILINGS: Record<keyof Limits, number> = {
 // let a case prove a scale nothing uses.
 const limitsOf = (used: LimitOverrides): Limits =>
   Object.fromEntries(
-    ALL_LIMIT_METRICS.map(({ key }) => [
+    (Object.keys(LIMIT_METRICS) as LimitMetric[]).map((key) => [
       key,
       { used: 0, limit: CEILINGS[key], ...used[key], percentUsed: null },
     ]),
@@ -62,7 +63,7 @@ function logWith(
   peakOverrides?: LimitOverrides,
 ): ApexLog {
   return {
-    governorLimits: governorLimits(overrides, peakOverrides),
+    limits: governorLimits(overrides, peakOverrides),
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the selection alone. The eval goldens
     // cover the levels, against fixtures that carry a real header.
@@ -140,7 +141,8 @@ describe("listLimitRisks", () => {
     });
   });
 
-  it("skips a limit the log gave no ceiling for", () => {
-    expect(risks(logWith({ cpuTime: { used: 9000, limit: 0 } })).atRisk).toEqual([]);
+  // The parser states no ceiling as null; a zero ceiling is no ceiling either.
+  it.each([null, 0])("skips a limit the log gave no ceiling for (%s)", (limit) => {
+    expect(risks(logWith({ cpuTime: { used: 9000, limit } })).atRisk).toEqual([]);
   });
 });

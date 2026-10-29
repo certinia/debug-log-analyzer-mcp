@@ -9,7 +9,7 @@ import {
   listOperations,
   type Operation,
 } from "../src/tools/operations";
-import { node, rootLog, type NodeSpec } from "./support/logEvents";
+import { rootLog, type NodeSpec } from "./support/logEvents";
 
 /** These cases are about which operations come back, not their share of a log. */
 const logOf = (...children: NodeSpec[]): ApexLog =>
@@ -23,19 +23,19 @@ describe("listOperations", () => {
       logOf(
         {
           type: "METHOD_ENTRY",
-          category: "Apex",
+          isFrame: true,
           debugCategory: "apexCode",
           text: "A.run",
         },
         {
           type: "SOQL_EXECUTE_BEGIN",
-          category: "SOQL",
+          isFrame: true,
           debugCategory: "database",
           text: "SELECT Id",
         },
         {
           type: "DML_BEGIN",
-          category: "DML",
+          isFrame: true,
           debugCategory: "database",
           text: "DML Insert Account",
         },
@@ -58,7 +58,7 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "SOME_UNKNOWN_EVENT",
-        category: "Automation",
+        isFrame: true,
         debugCategory: "nba",
         totalNs: 5_000_000,
       }),
@@ -76,7 +76,7 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "CODE_UNIT_STARTED",
-        category: "Code Unit",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "Svc.run()",
         totalNs: 904_000_000,
@@ -84,7 +84,7 @@ describe("listOperations", () => {
         children: [
           {
             type: "METHOD_ENTRY",
-            category: "Apex",
+            isFrame: true,
             debugCategory: "apexCode",
             text: "Svc.fetch()",
             totalNs: 902_000_000,
@@ -92,7 +92,7 @@ describe("listOperations", () => {
             children: [
               {
                 type: "CALLOUT_REQUEST",
-                category: "Callout",
+                isFrame: true,
                 debugCategory: "callout",
                 text: "HttpRequest",
                 totalNs: 900_000_000,
@@ -114,7 +114,7 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "EXECUTION_STARTED",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "Root",
       }),
@@ -123,19 +123,21 @@ describe("listOperations", () => {
     expect(operations).toEqual([]);
   });
 
-  it("drops the root, which the parser adds and which holds the whole log", () => {
-    const root = node({
-      type: null,
-      category: "Apex",
-      debugCategory: "apexCode",
-      text: "LOG_ROOT",
-      totalNs: 1_000_000_000,
-    }) as ApexLog;
-
-    expect(listOperations(root)).toEqual([]);
+  // The log holds the whole transaction as its own time; ranking it would say only that.
+  it("ranks nothing for a log with no events, whatever its duration", () => {
+    expect(listOperations(rootLog(1_000_000_000))).toEqual([]);
   });
 
-  it("drops an untimed node, which the parser leaves with no category", () => {
+  // The parser gives null where the header's level hid a count's lines; every response states a number.
+  it("reports a count the log did not record as zero", () => {
+    const [operation] = listOperations(
+      logOf({ isFrame: true, soqlCount: null, dmlRowCount: null, thrownCount: null }),
+    );
+
+    expect(operation).toMatchObject({ soqlCount: 0, rowCount: 0, thrownCount: 0 });
+  });
+
+  it("drops a leaf, which spans no time", () => {
     expect(listOperations(logOf({ type: "USER_INFO" }))).toEqual([]);
   });
 
@@ -143,13 +145,13 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "A.run",
         children: [
           {
             type: "SOQL_EXECUTE_BEGIN",
-            category: "SOQL",
+            isFrame: true,
             debugCategory: "database",
             text: "SELECT Id",
           },
@@ -164,7 +166,7 @@ describe("listOperations", () => {
     const [operation] = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         soqlRowCount: 100,
         dmlRowCount: 20,
@@ -179,7 +181,7 @@ describe("listOperations", () => {
     const [operation] = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: null,
       }),
@@ -195,7 +197,7 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "Custom.run",
         namespace: "Custom",
@@ -211,7 +213,7 @@ describe("listOperations", () => {
             children: [
               {
                 type: "DML_BEGIN",
-                category: "DML",
+                isFrame: true,
                 debugCategory: "database",
                 text: "DML Insert Account",
                 namespace: "default",
@@ -232,7 +234,7 @@ describe("listOperations", () => {
 describe("groupOperations", () => {
   const repeatedQuery = (namespace: string) => ({
     type: "SOQL_EXECUTE_BEGIN",
-    category: "SOQL",
+    isFrame: true,
     debugCategory: "database",
     text: "SELECT Id FROM Account",
     namespace,
@@ -243,7 +245,7 @@ describe("groupOperations", () => {
 
   const method = (spec: Partial<NodeSpec> = {}): NodeSpec => ({
     type: "METHOD_ENTRY",
-    category: "Apex",
+    isFrame: true,
     debugCategory: "apexCode",
     text: "A.run",
     ...spec,
@@ -336,7 +338,7 @@ describe("groupOperations", () => {
   it("sums each body's own heap, where a subtree total counts a nesting once", () => {
     const call = (children: NodeSpec[] = []): NodeSpec => ({
       type: "METHOD_ENTRY",
-      category: "Apex",
+      isFrame: true,
       text: "A.run",
       totalNs: 100_000_000,
       selfNs: 40_000_000,
@@ -384,7 +386,7 @@ describe("groupOperations", () => {
     listOperations(
       logOf({
         type: "DML_BEGIN",
-        category: "DML",
+        isFrame: true,
         debugCategory: "database",
         text: "DML Insert Account",
         namespace: "Custom",
@@ -393,7 +395,7 @@ describe("groupOperations", () => {
         children: [
           {
             type: "CODE_UNIT_STARTED",
-            category: "Code Unit",
+            isFrame: true,
             debugCategory: "apexCode",
             text: "Outer",
             namespace: "default",
@@ -402,7 +404,7 @@ describe("groupOperations", () => {
             children: [
               {
                 type: "DML_BEGIN",
-                category: "DML",
+                isFrame: true,
                 debugCategory: "database",
                 text: "DML Update Account",
                 namespace: "Custom",
@@ -411,7 +413,7 @@ describe("groupOperations", () => {
                 children: [
                   {
                     type: "CODE_UNIT_STARTED",
-                    category: "Code Unit",
+                    isFrame: true,
                     debugCategory: "apexCode",
                     text: "Inner",
                     namespace: "Custom",
@@ -419,7 +421,7 @@ describe("groupOperations", () => {
                   },
                   {
                     type: "CODE_UNIT_STARTED",
-                    category: "Code Unit",
+                    isFrame: true,
                     debugCategory: "apexCode",
                     text: "Inner",
                     namespace: "Custom",
@@ -488,7 +490,7 @@ describe("groupOperations", () => {
           children: [
             {
               type: "DML_BEGIN",
-              category: "DML",
+              isFrame: true,
               debugCategory: "database",
               text: "DML Insert Account",
               namespace: "default",

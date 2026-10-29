@@ -3,13 +3,15 @@
  */
 
 import { z } from "zod";
-import type {
-  ApexLog,
-  DebugCategory,
-  LineNumber,
-  LogEvent,
+import {
+  isEventOf,
+  namespaceOf,
+  walkLog,
+  type ApexEvent,
+  type ApexLog,
+  type DebugCategory,
+  type LineNumber,
 } from "../apexLog/index.js";
-import { walkLog } from "../apexLog/index.js";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import { capturedAt, declaredLevels, type DeclaredLevel } from "../logLevels.js";
 import { elide, elideAround } from "../elide.js";
@@ -24,7 +26,7 @@ import {
 
 const searchEventsInputSchema = {
   // Free strings, as on apexlog_list_slow_operations: an enum of the parser's
-  // 290 event types would cost more than every other tool's definition.
+  // 299 event types would cost more than every other tool's definition.
   type: z
     .array(z.string())
     .optional()
@@ -108,9 +110,18 @@ export interface SearchEventsResult {
   nextOffset?: number;
 }
 
-// What a row shows as text: none where the parser named the event after its type.
-function shownText(event: LogEvent): string {
-  return event.text === event.type ? "" : event.text;
+/** The log's own id: every top-level event names it as its parent. */
+const LOG_ID = 0;
+
+// What a row shows as text: none where the event states none, or only its type.
+// A flow error's text is its message alone; the element that failed is in `details`.
+function shownText(event: ApexEvent): string {
+  const text = event.text ?? "";
+  if (isEventOf(event, "FLOW_ELEMENT_ERROR")) {
+    const { elementType, elementName } = event.details;
+    return [text, elementType, elementName].filter(Boolean).join(" ");
+  }
+  return text === event.type ? "" : text;
 }
 
 // Kept around the `contains` match, so a cut cannot hide why the row matched.
@@ -121,18 +132,22 @@ function cut(text: string, maxChars: number, pattern: RegExp | undefined): strin
     : elide(text, maxChars);
 }
 
-// An index that names nothing in the tree - past the log, or a line the parser folded - must not read as no match.
-function resolve(apexLog: ApexLog, eventIndex: number, parameter: string): LogEvent {
-  const event = apexLog.eventsById[eventIndex];
-  if (!event?.parent?.children.includes(event)) {
+// An index that names no event - past the log, or the log itself - must not read as no match.
+function resolve(apexLog: ApexLog, eventIndex: number, parameter: string): ApexEvent {
+  const event = apexLog.event(eventIndex);
+  if (!event) {
     throw new Error(`No event in this log has eventIndex ${eventIndex}. Pass as ${parameter} an eventIndex from a row this tool returned.`);
   }
   return event;
 }
 
-function isBelow(event: LogEvent, root: LogEvent): boolean {
+// By id: the parser makes a new object on each read, so two reads of one event are not `===`.
+function isBelow(event: ApexEvent, rootId: number): boolean {
+  if (rootId === LOG_ID) {
+    return true;
+  }
   for (let above = event.parent; above; above = above.parent) {
-    if (above === root) {
+    if (above.id === rootId) {
       return true;
     }
   }
@@ -151,10 +166,11 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   } = args;
 
   // Top-level rows name the log itself as their parent, so its index searches the whole log.
-  const root: LogEvent =
-    parentEventIndex === undefined || parentEventIndex === apexLog.eventIndex
+  const root: ApexLog | ApexEvent =
+    parentEventIndex === undefined || parentEventIndex === LOG_ID
       ? apexLog
       : resolve(apexLog, parentEventIndex, "parentEventIndex");
+  const rootId = parentEventIndex ?? LOG_ID;
   const one = eventIndex === undefined ? undefined : resolve(apexLog, eventIndex, "eventIndex");
 
   // One pattern per call, so no event's text is copied to compare it.
@@ -165,13 +181,13 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
 
   // Counted in one pass, keeping only the page, so a 200,000-event log costs no array of its matches.
   let matchedCount = 0;
-  const page: LogEvent[] = [];
+  const page: ApexEvent[] = [];
   const matchedTypes = new Set<string>();
   const matchedCategories = new Set<DebugCategory>();
-  const consider = (event: LogEvent): void => {
+  const consider = (event: ApexEvent): void => {
     const kept =
-      matches(type, event.type ?? "") &&
-      matches(namespace, event.namespace) &&
+      matches(type, event.type) &&
+      matches(namespace, namespaceOf(event)) &&
       (pattern === undefined || pattern.test(shownText(event)));
     if (!kept) {
       return;
@@ -180,24 +196,22 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
       page.push(event);
     }
     matchedCount++;
-    matchedTypes.add(event.type ?? "");
+    matchedTypes.add(event.type);
     matchedCategories.add(event.debugCategory);
   };
   if (one === undefined) {
-    // An exit line is in the tree only where the log lost its entry, so each one visited is kept.
     root.children.forEach((child) => walkLog(child, consider));
-  } else if (isBelow(one, root)) {
+  } else if (isBelow(one, rootId)) {
     consider(one);
   }
 
   // One event asked for by id is the way to read a long message, up to what a page may hold.
   const textLimit = eventIndex === undefined ? NAME_LIMIT : ONE_EVENT_TEXT_LIMIT;
-  const toRow = (event: LogEvent): EventRow => ({
-    eventIndex: event.eventIndex,
-    // In range: every event in the tree has a parent.
-    parentEventIndex: event.parent!.eventIndex,
-    type: event.type ?? "",
-    namespace: event.namespace,
+  const toRow = (event: ApexEvent): EventRow => ({
+    eventIndex: event.id,
+    parentEventIndex: event.parent?.id ?? LOG_ID,
+    type: event.type,
+    namespace: namespaceOf(event),
     lineNumber: event.lineNumber,
     text: cut(shownText(event), textLimit, pattern),
   });
