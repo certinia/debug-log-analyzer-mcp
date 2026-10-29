@@ -14,17 +14,17 @@ import type { ApexEvent, ApexLog } from "@apexdevtools/apex-log-parser";
 
 jest.mock("fs", () => {
   const stat = jest.fn();
-  const createReadStream = jest.fn();
+  const readFile = jest.fn();
   // A handle is the file at one path, so its stat and read delegate to the
   // mocks above with that path filled in. Tests set and assert on those.
   return {
     constants: jest.requireActual("fs").constants,
     promises: {
       stat,
-      createReadStream,
+      readFile,
       open: jest.fn(async (path: string) => ({
         stat: (options: unknown) => stat(path, options),
-        createReadStream: (options: unknown) => createReadStream(path, options),
+        readFile: (options: unknown) => readFile(path, options),
         close: jest.fn(),
       })),
     },
@@ -38,9 +38,7 @@ jest.mock("@apexdevtools/apex-log-parser", () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockParse = parse as jest.MockedFunction<typeof parse>;
-// Not on `fs.promises` itself: the mock puts it there to reach each handle's.
-const mockReadStream = (fs as unknown as { createReadStream: jest.Mock }).createReadStream;
-const STREAM = { bytesOf: "/path/to/test.log" };
+const BYTES = Buffer.from("log content");
 
 const statsOf = (
   mtimeNs: number,
@@ -85,16 +83,17 @@ describe("apexLog source", () => {
 
     beforeEach(() => {
       mockFs.stat.mockResolvedValue(statsOf(1, 10));
-      mockReadStream.mockReturnValue(STREAM);
+      mockFs.readFile.mockResolvedValue(BYTES);
       mockParse.mockImplementation(async () => ({}) as ApexLog);
     });
 
-    // The handle's own stream, so the parse reads the bytes the stat fingerprinted.
+    // Through the handle, so the parse reads the bytes the stat fingerprinted.
     it("parses the bytes of the file it opened on the first call", async () => {
       const log = await loadApexLog(logPath);
 
       expect(mockFs.open).toHaveBeenCalledWith(logPath, expect.any(Number));
-      expect(mockParse).toHaveBeenCalledWith(STREAM);
+      expect(mockFs.readFile).toHaveBeenCalledWith(logPath, undefined);
+      expect(mockParse).toHaveBeenCalledWith(BYTES);
       expect(log).toBe(await mockParse.mock.results[0]?.value);
     });
 
@@ -116,7 +115,7 @@ describe("apexLog source", () => {
 
       expect(second).toBe(first);
       expect(mockParse).toHaveBeenCalledTimes(1);
-      expect(mockReadStream).toHaveBeenCalledTimes(1);
+      expect(mockFs.readFile).toHaveBeenCalledTimes(1);
     });
 
     it("parses again when the file was modified", async () => {
@@ -195,7 +194,7 @@ describe("apexLog source", () => {
       const [first, second] = await both;
 
       expect(second).toBe(first);
-      expect(mockReadStream).toHaveBeenCalledTimes(1);
+      expect(mockFs.readFile).toHaveBeenCalledTimes(1);
       expect(mockParse).toHaveBeenCalledTimes(1);
     });
 
@@ -213,23 +212,20 @@ describe("apexLog source", () => {
       await expect(loadApexLog(logPath)).rejects.toThrow(
         `Cannot read log file ${logPath}: ${cause}`,
       );
-      expect(mockReadStream).not.toHaveBeenCalled();
+      expect(mockFs.readFile).not.toHaveBeenCalled();
     });
 
-    it("does not cache a stream that could not open, and opens it again next time", async () => {
-      mockReadStream.mockImplementationOnce(() => {
-        throw new Error("EMFILE");
-      });
+    it("does not serve a failed read to the next caller", async () => {
+      mockFs.readFile.mockRejectedValueOnce(new Error("EACCES"));
 
-      await expect(loadApexLog(logPath)).rejects.toThrow("EMFILE");
+      await expect(loadApexLog(logPath)).rejects.toThrow("EACCES");
       await loadApexLog(logPath);
 
-      expect(mockReadStream).toHaveBeenCalledTimes(2);
+      expect(mockFs.readFile).toHaveBeenCalledTimes(2);
       expect(mockParse).toHaveBeenCalledTimes(1);
     });
 
-    // A read error reaches the caller through the parse, which reads the stream.
-    it("hands a read or parse failure to the caller, and parses again next time", async () => {
+    it("hands a parse failure to the caller, and parses again next time", async () => {
       mockParse.mockRejectedValueOnce(new Error("Failed to parse log"));
 
       await expect(loadApexLog(logPath)).rejects.toThrow("Failed to parse log");
@@ -247,7 +243,7 @@ describe("apexLog source", () => {
       await expect(loadApexLog("/path/to/missing.log")).rejects.toThrow(
         "Log file not found: /path/to/missing.log",
       );
-      expect(mockReadStream).not.toHaveBeenCalled();
+      expect(mockFs.readFile).not.toHaveBeenCalled();
     });
   });
 
