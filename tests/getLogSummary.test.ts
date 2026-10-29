@@ -161,7 +161,7 @@ describe("getLogSummary", () => {
     });
 
     it("should name both losses when a log suffered both", () => {
-      // Two of 124 real logs carry both, and a reader of `skippedBytes` alone
+      // Two real logs carry both, and a reader of `skippedBytes` alone
       // would take a hole's byte count for the whole extent of the loss.
       const summary = summaryOf({
         isTruncated: true,
@@ -178,7 +178,7 @@ describe("getLogSummary", () => {
     });
 
     it("should clip a frames cell one long frame would otherwise fill", () => {
-      // A single frame runs to 1,081 characters on a 124-log corpus, so capping
+      // A single frame runs to 1,081 characters in real logs, so capping
       // the frame count alone leaves the cell unbounded.
       const summary = summaryOf({
         logIssues: [
@@ -221,7 +221,7 @@ describe("getLogSummary", () => {
     it("should state the innermost frames and say that it dropped the rest", () => {
       // A real log states 52,009 characters of stack. Three frames name the
       // failing call and its callers; the rest costs more than it says. Half of
-      // a 124-log corpus has a fourth, so the drop has to be visible or a deep
+      // real logs have a fourth, so the drop has to be visible or a deep
       // stack reads like a shallow one.
       const summary = summaryOf({
         logIssues: [
@@ -272,7 +272,7 @@ describe("getLogSummary", () => {
 
     it("should clip a message where it runs into prose", () => {
       // A DmlException embeds the whole validation message a user would see -
-      // 1,070 characters at the worst of 124 real logs. The kept part carries
+      // 1,070 characters at the worst of real logs. The kept part carries
       // the exception class, the offending row and the error code.
       const prose = "x".repeat(400);
       const summary = summaryOf({

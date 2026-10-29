@@ -24,8 +24,8 @@ its comment for why.
 
 `governor-heavy.log` is deliberately fragmentary - the whole sample log is 19 MB, and the slices keep
 the fixture at ~40 KB while retaining every fact the tools report. One consequence of the slicing is
-that it raises an `Unexpected-Exit` while reading `truncated: false`, which no unsliced log in a
-124-log corpus does; the tools report neither, so nothing rests on it.
+that it raises an `Unexpected-Exit` while reading `truncated: false`, which no unsliced real
+log does; the tools report neither, so nothing rests on it.
 
 `FIXTURES_BY_TOOL` names the logs each tool is measured against, and it is not a cross product. Every
 case is a server round trip and a golden file a reviewer has to read, so add a fixture to a tool only

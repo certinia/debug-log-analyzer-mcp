@@ -79,7 +79,7 @@ const FATAL_FRAME_LIMIT = 3;
  * Where an exception message stops being the failure and starts being prose.
  *
  * A DML failure embeds the whole validation message a user would see: 53
- * characters on the median of 124 real logs, 1,070 at the worst. The first 200
+ * characters on the median real log, 1,070 at the worst. The first 200
  * keep the exception class, the offending row and the error code; the limit
  * counts the ellipsis after them.
  */
@@ -87,7 +87,7 @@ const FATAL_MESSAGE_LIMIT = 201;
 
 /**
  * The whole frame cell, not one frame: a single frame runs to 1,081 characters
- * on a 124-log corpus, so capping the count alone leaves the cell unbounded.
+ * in real logs, so capping the count alone leaves the cell unbounded.
  * 400 characters and the ellipsis.
  */
 const FATAL_FRAMES_LIMIT = 401;
@@ -97,7 +97,7 @@ interface FatalError {
   message: string;
   /**
    * The innermost frames of the stack, and empty when the log stated none. A
-   * trailing `…` says frames were dropped, which half of a 124-log corpus has.
+   * trailing `…` says frames were dropped, which half of real logs have.
    * Always present, so every row shares one key set and TOON holds the table to
    * one header and one line per row.
    */
@@ -113,7 +113,7 @@ interface FatalError {
  *
  * The only field that says the transaction did not finish, which decides what
  * every other figure means. It cannot be derived from the limits beside it -
- * across 124 real logs, 18 of 42 fatals breach no governor limit at all.
+ * in real logs, 18 of 42 fatals breach no governor limit at all.
  */
 function fatalErrors(logIssues: LogIssue[]): FatalError[] {
   return logIssues
@@ -150,7 +150,7 @@ function innermostFrames(description: string): string {
   return elideEnd(shown, FATAL_FRAMES_LIMIT);
 }
 
-/** A loop with a new message per throw has no bound; 409 real logs peak at 9. */
+/** A loop with a new message per throw has no bound; real logs peak at 9. */
 const EXCEPTION_ROW_LIMIT = 20;
 
 /** The frames an `EXCEPTION_THROWN` line number can belong to. */

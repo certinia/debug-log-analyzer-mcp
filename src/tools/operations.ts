@@ -55,7 +55,7 @@ export interface Operation {
    * carrying 10,600 of its 10,904 ms.
    *
    * The direct parent, not the nearest ancestor that ranks as an operation: on
-   * 298 logs and 1,178,604 operations the two agree on every row, as the parser
+   * 1,178,604 operations of real logs the two agree on every row, as the parser
    * copies a namespace down to a child that has none, so the simpler reading
    * holds even if the ranking skips more frames. They could differ only on the
    * 289 rows whose parent is the `EXECUTION_STARTED` frame, which is `default`.
@@ -98,11 +98,11 @@ export interface Operation {
    * A managed package is the exception to "not what it called". The parser
    * gives `ENTERING_MANAGED_PKG` no children, so an allocation logged inside
    * the package window lands in the calling method's own body instead of the
-   * package's row - 3 of the 40 logs that allocate put a heap line there.
+   * package's row - 3 of 40 real logs that allocate put a heap line there.
    *
    * Self and not the subtree, because a subtree net is not an attribution: it
-   * puts the outermost code unit at the top of 39 of the 40 logs in a 123-log
-   * corpus that record an allocation, and there it equals the transaction peak
+   * puts the outermost code unit at the top of 39 of 40 real logs that record
+   * an allocation, and there it equals the transaction peak
    * `apexlog_get_summary` already reports on 36 of them. A self net names a
    * method on 27 of the 40 and matches that peak on 3.
    *
@@ -445,7 +445,7 @@ export function groupOperations(
 
     // Walked rather than named field by field, so the rule above and the code
     // cannot drift. That costs 41% here - 44 to 63 ms over 74,960 operations of
-    // six real logs, folded twice each - because a keyed read is not a named
+    // real logs, folded twice each - because a keyed read is not a named
     // one. It is paid against a parse of tens to hundreds of milliseconds, and
     // `nestedInGroup` dominates both figures.
     if (!nestedInGroup(operation, key)) {
