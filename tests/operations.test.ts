@@ -2,8 +2,11 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog } from "../src/apexLog";
+import { join } from "path";
+
+import { loadApexLog, type ApexLog } from "../src/apexLog";
 import {
+  categoryTotals,
   GROUP_BY,
   groupOperations,
   listOperations,
@@ -556,4 +559,32 @@ describe("groupOperations", () => {
       }),
     ]);
   });
+});
+
+describe("categoryTotals", () => {
+  // A second pass under the same rank rule as listOperations: a filter added to
+  // one and not the other would move apexlog_get_summary's categories off the
+  // operations apexlog_list_slow_operations ranks, with no error.
+  it.each(["governor-heavy", "minimal", "heap-heavy"])(
+    "sums what listOperations returns, and each transaction frame's own time, in %s",
+    async (fixture) => {
+      const log = await loadApexLog(join(__dirname, "eval", "fixtures", `${fixture}.log`));
+      const expected = new Map<string, { operationCount: number; selfNs: number }>();
+      const add = (category: string, operationCount: number, selfNs: number) => {
+        const total = expected.get(category) ?? { operationCount: 0, selfNs: 0 };
+        expected.set(category, {
+          operationCount: total.operationCount + operationCount,
+          selfNs: total.selfNs + selfNs,
+        });
+      };
+      listOperations(log).forEach((operation) =>
+        add(operation.debugCategory, 1, operation.durationSelfNs),
+      );
+      log.children
+        .filter((event) => event.type === "EXECUTION_STARTED")
+        .forEach((event) => add(event.debugCategory, 0, event.duration.self));
+
+      expect(categoryTotals(log)).toEqual(expected);
+    },
+  );
 });
