@@ -128,10 +128,10 @@ export function namespacesOf(log: ApexLog): string[] {
   // A loop, to stop at the first `default`, the one name the parser does not
   // list: on most logs that is within the first few events. The parser lists
   // the rest in the order they first appear, so they follow in its order.
-  for (const event of log.events) {
-    const namespace = namespaceOf(event);
+  for (let id = 1; id <= log.columns.count; id++) {
+    const namespace = namespaceAt(log, id);
     named.add(namespace);
-    if (namespace === "default") {
+    if (namespace === NO_NAMESPACE) {
       break;
     }
   }
