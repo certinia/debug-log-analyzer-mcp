@@ -63,7 +63,7 @@ type Built = ApexEvent & {
   heapAllocated: { self: number; total: number };
 };
 
-const countOf = (total: number | null | undefined) =>
+const rollupOf = (total: number | null | undefined) =>
   total === null ? null : { total: total ?? 0, self: 0 };
 
 const explainOf = (plan: PlanSpec) => ({ ...plan, sObjectType: null, fields: null });
@@ -85,13 +85,13 @@ function build(spec: NodeSpec, ids: { next: number }): Built {
     namespace: spec.namespace ?? null,
     lineNumber: spec.lineNumber ?? null,
     duration: { total, self: spec.selfNs ?? total },
-    soqlCount: countOf(spec.soqlCount),
-    dmlCount: countOf(spec.dmlCount),
-    soslCount: countOf(spec.soslCount),
-    soqlRowCount: countOf(spec.soqlRowCount),
-    dmlRowCount: countOf(spec.dmlRowCount),
-    soslRowCount: countOf(spec.soslRowCount),
-    thrownCount: countOf(spec.thrownCount),
+    soqlCount: rollupOf(spec.soqlCount),
+    dmlCount: rollupOf(spec.dmlCount),
+    soslCount: rollupOf(spec.soslCount),
+    soqlRowCount: rollupOf(spec.soqlRowCount),
+    dmlRowCount: rollupOf(spec.dmlRowCount),
+    soslRowCount: rollupOf(spec.soslRowCount),
+    thrownCount: rollupOf(spec.thrownCount),
     // `self` is the event's own allocations and `total` adds its subtree's, as
     // the parser aggregates them - so the log's total is the transaction's net
     // heap without a case having to state it twice.

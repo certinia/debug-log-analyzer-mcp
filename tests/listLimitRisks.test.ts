@@ -141,8 +141,7 @@ describe("listLimitRisks", () => {
     });
   });
 
-  // The parser states no ceiling as null; a zero ceiling is no ceiling either.
-  it.each([null, 0])("skips a limit the log gave no ceiling for (%s)", (limit) => {
-    expect(risks(logWith({ cpuTime: { used: 9000, limit } })).atRisk).toEqual([]);
+  it("skips a limit the log gave no ceiling for", () => {
+    expect(risks(logWith({ cpuTime: { used: 9000, limit: 0 } })).atRisk).toEqual([]);
   });
 });

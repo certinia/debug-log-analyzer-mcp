@@ -193,7 +193,7 @@ describe("listOperations", () => {
     });
   });
 
-  it("reads the calling namespace off the direct parent, not the nearest ranked one", () => {
+  it("reads the calling namespace off the operation it ran inside", () => {
     const operations = listOperations(
       logOf({
         type: "METHOD_ENTRY",
@@ -204,9 +204,8 @@ describe("listOperations", () => {
         totalNs: 50_000_000,
         children: [
           {
-            // Synthetic: the parser copies a namespace down, so no real log puts
-            // a namespace of its own on an untimed frame. It pins the reading to
-            // the direct parent even so.
+            // Synthetic: the parser copies a namespace down, so a real child has its
+            // parent's. One of its own tells this caller from the method above it.
             type: "VARIABLE_ASSIGNMENT",
             text: "row",
             namespace: "Other",
