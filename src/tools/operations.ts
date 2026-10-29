@@ -201,7 +201,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
       type: node.type,
       name: operationName(node),
       namespace: namespaceOf(node),
-      callerNamespace: parent?.namespace ?? namespaceOf(null),
+      callerNamespace: namespaceOf(parent?.node),
       callCount: 1,
       durationTotalNs: total,
       durationSelfNs: self,

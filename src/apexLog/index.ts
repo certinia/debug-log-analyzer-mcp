@@ -104,7 +104,7 @@ export function textOf(event: ApexEvent): string {
  * states none, so this never looks at the parent - pinned in
  * `tests/parserContract.test.ts`.
  */
-export function namespaceOf(event: Pick<ApexEvent, "namespace"> | null): string {
+export function namespaceOf(event?: Pick<ApexEvent, "namespace">): string {
   return event?.namespace ?? "default";
 }
 
