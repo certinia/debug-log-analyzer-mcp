@@ -125,7 +125,7 @@ function cut(text: string, maxChars: number, pattern: RegExp | undefined): strin
     : elide(text, maxChars);
 }
 
-// An index that names no event - past the log, or the log itself - must not read as no match.
+// An index past the log names no event, and must not read as no match.
 function resolve(apexLog: ApexLog, eventId: number, parameter: string): ApexEvent {
   const event = apexLog.event(eventId);
   if (!event) {
@@ -163,6 +163,10 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     parentEventId === undefined || parentEventId === LOG_ID
       ? undefined
       : resolve(apexLog, parentEventId, "parentEventId");
+  // Rows name 0 as a parent, so an agent will pass it back as an event.
+  if (eventId === LOG_ID) {
+    throw new Error(`eventId ${LOG_ID} is the log itself, not an event. Pass it as parentEventId, or leave both out, to search the whole log.`);
+  }
   const one = eventId === undefined ? undefined : resolve(apexLog, eventId, "eventId");
 
   // One pattern per call, so no event's text is copied to compare it.

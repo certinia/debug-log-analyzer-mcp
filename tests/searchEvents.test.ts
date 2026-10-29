@@ -194,14 +194,20 @@ describe("searchEvents", () => {
     expect(events[0]!.text).toBe("");
   });
 
-  // The log itself (0) or an index past the log reads as an error, not as nothing below it.
+  // An index past the log reads as an error, not as nothing below it.
   it.each([
     { eventId: 10_000 },
-    { eventId: 0 },
     { parentEventId: 10_000 },
   ])("should refuse an index no search reaches: %o", async (args) => {
     await expect(search("governor-heavy", args)).rejects.toThrow(
       `No event in this log has eventId ${Object.values(args)[0]}. Pass as ${Object.keys(args)[0]} an eventId from a row this tool returned.`,
+    );
+  });
+
+  // Every top-level row has parentEventId 0, so an agent will pass 0 back as eventId.
+  it("should say eventId 0 is the log and how to search it", async () => {
+    await expect(search("governor-heavy", { eventId: 0 })).rejects.toThrow(
+      "eventId 0 is the log itself, not an event. Pass it as parentEventId, or leave both out, to search the whole log.",
     );
   });
 
