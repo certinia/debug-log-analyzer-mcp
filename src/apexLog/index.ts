@@ -27,11 +27,8 @@ import type {
 export type {
   ApexEvent,
   ApexLog,
-  Columns,
-  CountColumn,
   DebugCategory,
   EventType,
-  EventTypeInfo,
   GovernorLimits,
   LimitMetric,
   LimitUnit,
@@ -39,7 +36,10 @@ export type {
   LogIssue,
   NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-export { ENDED_BY, eventType, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+export { ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+// For the test builder, which the lint rule keeps from the parser.
+export type { Columns, CountColumn } from "@apexdevtools/apex-log-parser";
+export { eventType } from "@apexdevtools/apex-log-parser";
 
 /** The log's own id: an event at the top of the log has it as its parent's. */
 export const LOG_EVENT_ID = 0;

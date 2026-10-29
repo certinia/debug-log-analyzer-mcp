@@ -141,10 +141,10 @@ function isTransactionFrame({ type }: { type: EventType }): boolean {
 }
 
 
-/** What one category's events took, of their own time. */
-export interface CategorySelfTime {
+/** One category's operations, and the time they and its transaction frames took of their own. */
+interface CategoryTotal {
   operationCount: number;
-  durationSelfNs: number;
+  selfNs: number;
 }
 
 /**
@@ -158,10 +158,10 @@ export interface CategorySelfTime {
  * frame's text, which on a 95 MB log is half of `apexlog_get_summary`, and the
  * summary names none.
  */
-export function categorySelfTimes(apexLog: ApexLog): Map<DebugCategory, CategorySelfTime> {
+export function categoryTotals(apexLog: ApexLog): Map<DebugCategory, CategoryTotal> {
   const { count, isFrame, type, parent, durationSelf } = apexLog.columns;
   const frames = { isFrame, type };
-  const totals = new Map<DebugCategory, CategorySelfTime>();
+  const totals = new Map<DebugCategory, CategoryTotal>();
   for (let id = 1; id <= count; id++) {
     const info = frameTypeAt(frames, id);
     const isTransaction = info !== null && isTransactionFrame(info);
@@ -170,12 +170,12 @@ export function categorySelfTimes(apexLog: ApexLog): Map<DebugCategory, Category
     }
     let total = totals.get(info.debugCategory);
     if (!total) {
-      total = { operationCount: 0, durationSelfNs: 0 };
+      total = { operationCount: 0, selfNs: 0 };
       totals.set(info.debugCategory, total);
     }
     // A frame is time, not an operation, so it adds to no count.
     total.operationCount += isTransaction ? 0 : 1;
-    total.durationSelfNs += durationSelf[id] ?? 0;
+    total.selfNs += durationSelf[id] ?? 0;
   }
   return totals;
 }

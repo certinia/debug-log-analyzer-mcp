@@ -15,7 +15,7 @@ import {
   type LogIssue,
 } from "../apexLog/index.js";
 import { defineAnalysisTool } from "./analysisTool.js";
-import { categorySelfTimes, operationName } from "./operations.js";
+import { categoryTotals, operationName } from "./operations.js";
 import {
   DEBUG_CATEGORIES,
   type LogLevel,
@@ -291,10 +291,10 @@ function categories(apexLog: ApexLog): CategoryRow[] {
   // rather than a shorter list of our own, so a category it starts timing needs
   // no change here.
   // Drops no category: `DEBUG_CATEGORIES` names every one, by a compile guard.
-  const selfTimes = categorySelfTimes(apexLog);
+  const byCategory = categoryTotals(apexLog);
   const totals = DEBUG_CATEGORIES.map((debugCategory) => {
-    const { operationCount = 0, durationSelfNs = 0 } = selfTimes.get(debugCategory) ?? {};
-    return { debugCategory, operationCount, selfNs: durationSelfNs };
+    const { operationCount = 0, selfNs = 0 } = byCategory.get(debugCategory) ?? {};
+    return { debugCategory, operationCount, selfNs };
   });
 
   const attributedNs = totals.reduce((sum, { selfNs }) => sum + selfNs, 0);

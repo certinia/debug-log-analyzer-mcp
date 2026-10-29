@@ -127,7 +127,8 @@ function cut(text: string, maxChars: number, pattern: RegExp | undefined): strin
     : elide(text, maxChars);
 }
 
-// An index past the log names no event, and must not read as no match.
+// An index past the log names no event, and must not read as no match. The
+// schema refuses a negative one, so only the upper bound is tested here.
 function assertEvent(apexLog: ApexLog, eventId: number, parameter: string): void {
   if (eventId > apexLog.columns.count) {
     throw new Error(`No event in this log has eventId ${eventId}. Pass as ${parameter} an eventId from a row this tool returned.`);
