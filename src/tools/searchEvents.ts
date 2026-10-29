@@ -4,13 +4,16 @@
 
 import { z } from "zod";
 import {
+  eventType,
   LOG_EVENT_ID,
+  namespaceAt,
   namespaceOf,
+  textAt,
   textOf,
-  walkLog,
   type ApexEvent,
   type ApexLog,
   type DebugCategory,
+  type EventType,
   type LineNumber,
 } from "../apexLog/index.js";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
@@ -117,6 +120,12 @@ function shownText(event: ApexEvent): string {
   return text === event.type ? "" : text;
 }
 
+// `shownText` for event `id`, read from the columns.
+function shownTextAt(apexLog: ApexLog, id: number, type: EventType): string {
+  const text = textAt(apexLog, id, type);
+  return text === type ? "" : text;
+}
+
 // Kept around the `contains` match, so a cut cannot hide why the row matched.
 function cut(text: string, maxChars: number, pattern: RegExp | undefined): string {
   const found = text.length > maxChars ? pattern?.exec(text) : undefined;
@@ -126,25 +135,11 @@ function cut(text: string, maxChars: number, pattern: RegExp | undefined): strin
 }
 
 // An index past the log names no event, and must not read as no match.
-function resolve(apexLog: ApexLog, eventId: number, parameter: string): ApexEvent {
-  const event = apexLog.event(eventId);
-  if (!event) {
+function resolve(apexLog: ApexLog, eventId: number, parameter: string): number {
+  if (eventId > apexLog.columns.count) {
     throw new Error(`No event in this log has eventId ${eventId}. Pass as ${parameter} an eventId from a row this tool returned.`);
   }
-  return event;
-}
-
-// No root is the log, which holds every event. By id: the parser makes a new object on each read.
-function isBelow(event: ApexEvent, root: ApexEvent | undefined): boolean {
-  if (!root) {
-    return true;
-  }
-  for (let above = event.parent; above; above = above.parent) {
-    if (above.id === root.id) {
-      return true;
-    }
-  }
-  return false;
+  return eventId;
 }
 
 function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsResult {
@@ -161,7 +156,7 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   // Top-level rows name the log itself as their parent, so its id searches the whole log.
   const root =
     parentEventId === undefined || parentEventId === LOG_EVENT_ID
-      ? undefined
+      ? LOG_EVENT_ID
       : resolve(apexLog, parentEventId, "parentEventId");
   // Rows name 0 as a parent, so an agent will pass it back as an event.
   if (eventId === LOG_EVENT_ID) {
@@ -175,36 +170,41 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
       ? undefined
       : new RegExp(contains.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 
-  // Counted in one pass, keeping only the page, so a 200,000-event log costs no array of its matches.
+  // From the columns, so no event object is made but for the page, and no
+  // text is read unless `contains` asks for it. Counted in one pass, keeping
+  // only the page, so a 200,000-event log costs no array of its matches.
+  const { columns } = apexLog;
   let matchedCount = 0;
-  const page: ApexEvent[] = [];
+  const page: number[] = [];
   const matchedTypes = new Set<string>();
   const matchedCategories = new Set<DebugCategory>();
-  const consider = (event: ApexEvent): void => {
-    const kept =
-      matches(type, event.type) &&
-      matches(namespace, namespaceOf(event)) &&
-      (pattern === undefined || pattern.test(shownText(event)));
-    if (!kept) {
+  const consider = (id: number): void => {
+    const info = eventType(columns.type[id] ?? -1);
+    if (
+      !info ||
+      !matches(type, info.type) ||
+      !matches(namespace, namespaceAt(apexLog, id)) ||
+      (pattern !== undefined && !pattern.test(shownTextAt(apexLog, id, info.type)))
+    ) {
       return;
     }
     if (matchedCount >= offset && matchedCount < offset + limit) {
-      page.push(event);
+      page.push(id);
     }
     matchedCount++;
-    matchedTypes.add(event.type);
-    matchedCategories.add(event.debugCategory);
+    matchedTypes.add(info.type);
+    matchedCategories.add(info.debugCategory);
   };
+  // Every event below the root, in log order: the ids from the root's own to
+  // its subtree's end. The log is row 0, whose subtree is every event.
+  const end = columns.subtreeEnd[root] ?? 0;
   if (one !== undefined) {
-    if (isBelow(one, root)) {
+    if (one > root && one < end) {
       consider(one);
     }
-  } else if (root) {
-    root.children.forEach((child) => walkLog(child, consider));
   } else {
-    // In log order, as the walk is, without an array of children per frame.
-    for (const event of apexLog.events) {
-      consider(event);
+    for (let id = root + 1; id < end; id++) {
+      consider(id);
     }
   }
 
@@ -219,7 +219,9 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     text: cut(shownText(event), textLimit, pattern),
   });
 
-  const events = fitPage(page, toRow).rows;
+  // Every id on the page is one `consider` read from the columns.
+  const pageEvents = page.flatMap((id) => apexLog.event(id) ?? []);
+  const events = fitPage(pageEvents, toRow).rows;
   // Only these fix the categories searched; a type that matched nothing names no category.
   const allTypesSeen =
     !!type?.length && type.every((name) => matchedTypes.has(name));

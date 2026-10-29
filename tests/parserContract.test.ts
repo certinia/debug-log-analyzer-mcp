@@ -30,7 +30,7 @@ const HEADER =
 /** The fixtures with a transaction in them, so a per-event sweep has events. */
 const TIMED_FIXTURES = ["governor-heavy", "minimal", "heap-heavy"];
 
-/** Every event the tree holds, which is what `walkLog` reaches. */
+/** Every event the tree holds. */
 function tree(node: { children: readonly ApexEvent[] }, into: ApexEvent[] = []): ApexEvent[] {
   for (const child of node.children) {
     into.push(child);

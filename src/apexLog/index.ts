@@ -42,21 +42,6 @@ export const LOG_EVENT_ID = 0;
 
 export { clearApexLogCache, loadApexLog } from "./source.js";
 
-/**
- * Visit the node and every node below it, parents first.
- *
- * What `visit` returns is passed to that node's children, so a visitor can carry
- * what encloses a node down to it without a second pass.
- */
-export function walkLog<T>(
-  node: ApexEvent,
-  visit: (node: ApexEvent, inherited: T | undefined) => T,
-  inherited?: T,
-): void {
-  const next = visit(node, inherited);
-  node.children.forEach((child) => walkLog(child, visit, next));
-}
-
 /** Whether `event` is of `type`, so its `details` read as that type's. */
 export function isEventOf<T extends EventType>(event: ApexEvent, type: T): event is EventOf<T> & ApexEvent {
   return event.type === type;
