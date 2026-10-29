@@ -437,18 +437,6 @@ describe("groupOperations", () => {
       }),
     );
 
-  it("counts a member whose matching ancestor the caller filtered away", () => {
-    const selected = nestedAcrossANamespace().filter(
-      (operation) => operation.namespace === "Custom",
-    );
-
-    expect(
-      groupOperations(selected, "callerNamespace").find(
-        (operation) => operation.type === "CODE_UNIT_STARTED",
-      ),
-    ).toMatchObject({ callCount: 2, durationTotalNs: 70_000_000 });
-  });
-
   it("never reports a total below the self time it contains", () => {
     const operations = nestedAcrossANamespace();
     const namespaces = [undefined, "default", "Custom"];

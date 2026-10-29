@@ -2,8 +2,8 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { textAt, textOf } from "../../src/apexLog";
-import { logEvent, rootLog } from "../support/logEvents";
+import { textOf } from "../../src/apexLog";
+import { logEvent } from "../support/logEvents";
 
 const flowError = (
   text: string | null,
@@ -25,20 +25,5 @@ describe("textOf", () => {
 
   it("gives an empty string for an event that says nothing", () => {
     expect(textOf(logEvent({ type: "METHOD_ENTRY", text: null }))).toBe("");
-  });
-});
-
-describe("textAt", () => {
-  // The column holds the message alone, so reading it for a flow error would drop the element.
-  it("reads a flow error's element, as textOf does", () => {
-    const log = rootLog(0, flowError("Field is required", "Decision", "Check_Status"));
-
-    expect(textAt(log, 1, "FLOW_ELEMENT_ERROR")).toBe("Field is required Decision Check_Status");
-  });
-
-  it("reads any other event's text from the column", () => {
-    const log = rootLog(0, { type: "METHOD_ENTRY", text: "Account.save()" }, { type: "USER_DEBUG", text: null });
-
-    expect([textAt(log, 1, "METHOD_ENTRY"), textAt(log, 2, "USER_DEBUG")]).toEqual(["Account.save()", ""]);
   });
 });
