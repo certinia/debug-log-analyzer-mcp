@@ -4,12 +4,12 @@
 
 import { z } from "zod";
 import {
-  eventType,
   LOG_EVENT_ID,
   namespaceAt,
   namespaceOf,
   textAt,
   textOf,
+  typeAt,
   type ApexEvent,
   type ApexLog,
   type DebugCategory,
@@ -115,14 +115,7 @@ export interface SearchEventsResult {
 }
 
 // What a row shows as text: none where the event states none, or only its type.
-function shownText(event: ApexEvent): string {
-  const text = textOf(event);
-  return text === event.type ? "" : text;
-}
-
-// `shownText` for event `id`, read from the columns.
-function shownTextAt(apexLog: ApexLog, id: number, type: EventType): string {
-  const text = textAt(apexLog, id, type);
+function shownText(text: string, type: EventType): string {
   return text === type ? "" : text;
 }
 
@@ -135,11 +128,10 @@ function cut(text: string, maxChars: number, pattern: RegExp | undefined): strin
 }
 
 // An index past the log names no event, and must not read as no match.
-function resolve(apexLog: ApexLog, eventId: number, parameter: string): number {
+function assertEvent(apexLog: ApexLog, eventId: number, parameter: string): void {
   if (eventId > apexLog.columns.count) {
     throw new Error(`No event in this log has eventId ${eventId}. Pass as ${parameter} an eventId from a row this tool returned.`);
   }
-  return eventId;
 }
 
 function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsResult {
@@ -154,15 +146,15 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   } = args;
 
   // Top-level rows name the log itself as their parent, so its id searches the whole log.
-  const root =
-    parentEventId === undefined || parentEventId === LOG_EVENT_ID
-      ? LOG_EVENT_ID
-      : resolve(apexLog, parentEventId, "parentEventId");
+  const root = parentEventId ?? LOG_EVENT_ID;
+  assertEvent(apexLog, root, "parentEventId");
   // Rows name 0 as a parent, so an agent will pass it back as an event.
   if (eventId === LOG_EVENT_ID) {
     throw new Error(`eventId ${LOG_EVENT_ID} is the log itself, not an event. Pass it as parentEventId, or leave both out, to search the whole log.`);
   }
-  const one = eventId === undefined ? undefined : resolve(apexLog, eventId, "eventId");
+  if (eventId !== undefined) {
+    assertEvent(apexLog, eventId, "eventId");
+  }
 
   // One pattern per call, so no event's text is copied to compare it.
   const pattern =
@@ -174,17 +166,19 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   // text is read unless `contains` asks for it. Counted in one pass, keeping
   // only the page, so a 200,000-event log costs no array of its matches.
   const { columns } = apexLog;
+  const types = columns.type;
   let matchedCount = 0;
   const page: number[] = [];
   const matchedTypes = new Set<string>();
   const matchedCategories = new Set<DebugCategory>();
   const consider = (id: number): void => {
-    const info = eventType(columns.type[id] ?? -1);
+    const info = typeAt(types, id);
     if (
       !info ||
       !matches(type, info.type) ||
-      !matches(namespace, namespaceAt(apexLog, id)) ||
-      (pattern !== undefined && !pattern.test(shownTextAt(apexLog, id, info.type)))
+      // Read only when asked for: most searches name no namespace.
+      (namespace !== undefined && !matches(namespace, namespaceAt(apexLog, id))) ||
+      (pattern !== undefined && !pattern.test(shownText(textAt(apexLog, id, info.type), info.type)))
     ) {
       return;
     }
@@ -198,9 +192,9 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   // Every event below the root, in log order: the ids from the root's own to
   // its subtree's end. The log is row 0, whose subtree is every event.
   const end = columns.subtreeEnd[root] ?? 0;
-  if (one !== undefined) {
-    if (one > root && one < end) {
-      consider(one);
+  if (eventId !== undefined) {
+    if (eventId > root && eventId < end) {
+      consider(eventId);
     }
   } else {
     for (let id = root + 1; id < end; id++) {
@@ -216,7 +210,7 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     type: event.type,
     namespace: namespaceOf(event),
     lineNumber: event.lineNumber,
-    text: cut(shownText(event), textLimit, pattern),
+    text: cut(shownText(textOf(event), event.type), textLimit, pattern),
   });
 
   // Every id on the page is one `consider` read from the columns.
@@ -225,11 +219,11 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   // Only these fix the categories searched; a type that matched nothing names no category.
   const allTypesSeen =
     !!type?.length && type.every((name) => matchedTypes.has(name));
-  const levels = capturedAt(apexLog, one || allTypesSeen ? matchedCategories : []);
+  const levels = capturedAt(apexLog, eventId !== undefined || allTypesSeen ? matchedCategories : []);
 
   const result: SearchEventsResult = {
     matchedCount,
-    ...((offset === 0 || one) &&
+    ...((offset === 0 || eventId !== undefined) &&
       omitEmpty({
         capturedAt: levels.length ? levels : declaredLevels(apexLog),
       })),

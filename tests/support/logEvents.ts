@@ -158,9 +158,10 @@ function columnsOf(events: readonly Built[]): Columns {
   });
   const parent = byId(new Int32Array(size), (event) => event.parent?.id ?? 0);
   parent[0] = -1;
-  const below = (event: Built): number =>
-    event.children.reduce((sum, child) => sum + 1 + below(child), 0);
-  const subtreeEnd = byId(new Int32Array(size), (event) => event.id + 1 + below(event));
+  const subtreeEnd = byId(
+    new Int32Array(size),
+    (event) => event.id + 1 + inLogOrder(event.children).length,
+  );
   subtreeEnd[0] = size;
 
   return {

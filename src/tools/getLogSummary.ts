@@ -201,7 +201,7 @@ function frameName(event: ApexEvent): string {
   while (frame && !THROWING_FRAMES.has(frame.type)) {
     frame = frame.parent;
   }
-  return frame ? operationName(frame) : "";
+  return frame ? operationName(textOf(frame), frame.type) : "";
 }
 
 // The parser indexes events by type, so this needs no walk of the tree.
@@ -292,11 +292,10 @@ function categories(apexLog: ApexLog): CategoryRow[] {
   // no change here.
   // Drops no category: `DEBUG_CATEGORIES` names every one, by a compile guard.
   const selfTimes = categorySelfTimes(apexLog);
-  const totals = DEBUG_CATEGORIES.map((debugCategory) => ({
-    debugCategory,
-    operationCount: selfTimes.get(debugCategory)?.operationCount ?? 0,
-    selfNs: selfTimes.get(debugCategory)?.durationSelfNs ?? 0,
-  }));
+  const totals = DEBUG_CATEGORIES.map((debugCategory) => {
+    const { operationCount = 0, durationSelfNs = 0 } = selfTimes.get(debugCategory) ?? {};
+    return { debugCategory, operationCount, selfNs: durationSelfNs };
+  });
 
   const attributedNs = totals.reduce((sum, { selfNs }) => sum + selfNs, 0);
 

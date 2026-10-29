@@ -2,7 +2,7 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import { isEventOf, type ApexLog } from "../apexLog/index.js";
+import { isEventOf, textOf, type ApexLog } from "../apexLog/index.js";
 import { operationName, type Operation } from "./operations.js";
 
 /**
@@ -64,7 +64,7 @@ export function planOf(apexLog: ApexLog, id: number): QueryPlan | undefined {
   }
 
   return {
-    name: operationName(node),
+    name: operationName(textOf(node), node.type),
     leadingOperationType,
     relativeCost,
     cardinality,

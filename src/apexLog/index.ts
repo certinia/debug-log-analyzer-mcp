@@ -11,12 +11,15 @@
  * names: a copy into types of our own would cost a pass over every event.
  */
 
+import { eventType } from "@apexdevtools/apex-log-parser";
 import type {
   ApexEvent,
   ApexLog,
+  Columns,
   CountColumn,
   EventOf,
   EventType,
+  EventTypeInfo,
   LimitValue,
   SelfTotal,
 } from "@apexdevtools/apex-log-parser";
@@ -28,6 +31,7 @@ export type {
   CountColumn,
   DebugCategory,
   EventType,
+  EventTypeInfo,
   GovernorLimits,
   LimitMetric,
   LimitUnit,
@@ -41,6 +45,11 @@ export { ENDED_BY, eventType, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-lo
 export const LOG_EVENT_ID = 0;
 
 export { clearApexLogCache, loadApexLog } from "./source.js";
+
+/** The type of event `id`, read from the type column, which a loop reads once; null for no event. */
+export function typeAt(types: Columns["type"], id: number): EventTypeInfo | null {
+  return eventType(types[id] ?? -1);
+}
 
 /** Whether `event` is of `type`, so its `details` read as that type's. */
 export function isEventOf<T extends EventType>(event: ApexEvent, type: T): event is EventOf<T> & ApexEvent {

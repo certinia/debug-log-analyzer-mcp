@@ -3,16 +3,17 @@
  */
 
 import {
-  eventType,
+  LOG_EVENT_ID,
   namespaceAt,
   namespaceOf,
   textAt,
-  textOf,
   totalAt,
-  type ApexEvent,
+  typeAt,
   type ApexLog,
+  type Columns,
   type DebugCategory,
   type EventType,
+  type EventTypeInfo,
 } from "../apexLog/index.js";
 import type { Assert } from "../compileGuards.js";
 
@@ -137,6 +138,21 @@ export interface Operation {
  */
 const FRAME_TYPES = new Set<EventType>(["EXECUTION_STARTED"]);
 
+function isTransactionFrame({ type }: { type: EventType }): boolean {
+  return FRAME_TYPES.has(type);
+}
+
+type FrameColumns = Pick<Columns, "isFrame" | "type">;
+
+/**
+ * The type of event `id` when it is a frame, else null. A frame is what the
+ * parser times: every event with a duration is one, pinned in
+ * `tests/parserContract.test.ts`. A leaf is most of a log, so it is the first test.
+ */
+function frameTypeAt({ isFrame, type }: FrameColumns, id: number): EventTypeInfo | null {
+  return isFrame[id] ? typeAt(type, id) : null;
+}
+
 /** What one category's events took, of their own time. */
 export interface CategorySelfTime {
   operationCount: number;
@@ -155,32 +171,34 @@ export interface CategorySelfTime {
  * summary names none.
  */
 export function categorySelfTimes(apexLog: ApexLog): Map<DebugCategory, CategorySelfTime> {
-  const { count, type, parent, isFrame, durationSelf } = apexLog.columns;
+  const { count, isFrame, type, parent, durationSelf } = apexLog.columns;
+  const frames = { isFrame, type };
   const totals = new Map<DebugCategory, CategorySelfTime>();
   for (let id = 1; id <= count; id++) {
-    const info = isFrame[id] ? eventType(type[id] ?? -1) : null;
-    if (!info) {
+    const info = frameTypeAt(frames, id);
+    const isTransaction = info !== null && isTransactionFrame(info);
+    if (!info || (isTransaction && parent[id] !== LOG_EVENT_ID)) {
       continue;
     }
-    const isTransaction = FRAME_TYPES.has(info.type);
-    if (isTransaction && parent[id] !== 0) {
-      continue;
+    let total = totals.get(info.debugCategory);
+    if (!total) {
+      total = { operationCount: 0, durationSelfNs: 0 };
+      totals.set(info.debugCategory, total);
     }
-    const total = totals.get(info.debugCategory) ?? { operationCount: 0, durationSelfNs: 0 };
     // A frame is time, not an operation, so it adds to no count.
     total.operationCount += isTransaction ? 0 : 1;
     total.durationSelfNs += durationSelf[id] ?? 0;
-    totals.set(info.debugCategory, total);
   }
   return totals;
 }
 
 /**
- * What a row calls an operation. Shared, so a query plan names its query with
- * the name the ranked row carries and the caller can join the two.
+ * What a row calls an operation, from what the event says. Shared, so a query
+ * plan names its query with the name the ranked row carries and the caller can
+ * join the two.
  */
-export function operationName(node: ApexEvent): string {
-  return textOf(node) || node.type;
+export function operationName(text: string, type: EventType): string {
+  return text || type;
 }
 
 /**
@@ -191,23 +209,39 @@ export function operationName(node: ApexEvent): string {
  * the time would be reported nowhere.
  */
 export function listOperations(apexLog: ApexLog): Operation[] {
-  const { columns } = apexLog;
-  const { count, type, parent, isFrame, durationSelf, durationTotal } = columns;
+  const {
+    count,
+    isFrame,
+    type,
+    parent,
+    durationSelf,
+    durationTotal,
+    soqlCount,
+    dmlCount,
+    soslCount,
+    soqlRowCount,
+    dmlRowCount,
+    soslRowCount,
+    thrownCount,
+    heapAllocated,
+  } = apexLog.columns;
   const operations: Operation[] = [];
 
   // From the columns, not the events: the parser makes an event object on each
   // read, and on a 95 MB log a walk of them took 100 ms where this takes 65.
   //
-  // By id, the index of the operation each event is or ran inside, or -1 for
+  // By frame id, the index of the operation it is or ran inside, or -1 for
   // none. A parent's id is below its child's, so one pass in id order fills it.
-  // Row 0 is the log, which is no operation.
+  // Row 0 is the log, which is no operation, and a leaf is no event's parent.
   const enclosing = new Int32Array(count + 1).fill(-1);
+  const frames = { isFrame, type };
   for (let id = 1; id <= count; id++) {
-    const callerIndex = enclosing[parent[id] ?? 0] ?? -1;
-    const info = eventType(type[id] ?? -1);
-    // A frame is what the parser times: every event with a duration is one,
-    // pinned in `tests/parserContract.test.ts`.
-    if (!info || !isFrame[id] || FRAME_TYPES.has(info.type)) {
+    const info = frameTypeAt(frames, id);
+    if (!info) {
+      continue;
+    }
+    const callerIndex = enclosing[parent[id] ?? LOG_EVENT_ID] ?? -1;
+    if (isTransactionFrame(info)) {
       enclosing[id] = callerIndex;
       continue;
     }
@@ -218,23 +252,22 @@ export function listOperations(apexLog: ApexLog): Operation[] {
     operations.push({
       debugCategory: info.debugCategory,
       type: info.type,
-      // As `operationName`, which an event reads.
-      name: textAt(apexLog, id, info.type) || info.type,
+      name: operationName(textAt(apexLog, id, info.type), info.type),
       namespace: namespaceAt(apexLog, id),
       callerNamespace: namespaceOf(caller),
       callCount: 1,
       durationTotalNs: durationTotal[id] ?? 0,
       durationSelfNs,
       durationSelfMaxNs: durationSelfNs,
-      soqlCount: totalAt(columns.soqlCount, id),
-      dmlCount: totalAt(columns.dmlCount, id),
-      soslCount: totalAt(columns.soslCount, id),
+      soqlCount: totalAt(soqlCount, id),
+      dmlCount: totalAt(dmlCount, id),
+      soslCount: totalAt(soslCount, id),
       rowCount:
-        totalAt(columns.soqlRowCount, id) +
-        totalAt(columns.dmlRowCount, id) +
-        totalAt(columns.soslRowCount, id),
-      thrownCount: totalAt(columns.thrownCount, id),
-      heapSelfNetBytes: columns.heapAllocated?.self[id] ?? 0,
+        totalAt(soqlRowCount, id) +
+        totalAt(dmlRowCount, id) +
+        totalAt(soslRowCount, id),
+      thrownCount: totalAt(thrownCount, id),
+      heapSelfNetBytes: heapAllocated?.self[id] ?? 0,
       parent: caller ?? null,
       id,
     });
@@ -428,7 +461,8 @@ export function groupOperations(
   // An array, not a map per ancestor: the nesting test walks every member's
   // ancestors, 22 deep on average in a 95 MB log, and a lookup at each level
   // took 350 ms over its 431,300 operations where this takes 140.
-  const groupById: Operation[] = [];
+  // Sized to the last member's id, which is the highest: members are in log order.
+  const groupById = new Array<Operation | undefined>((operations.at(-1)?.id ?? 0) + 1);
   const nestedInGroup = (operation: Operation, group: Operation): boolean => {
     for (let above = operation.parent; above; above = above.parent) {
       if (groupById[above.id] === group) {
