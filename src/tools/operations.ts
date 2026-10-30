@@ -217,7 +217,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
   const operations: Operation[] = [];
 
   // From the columns, not the events: the parser makes an event object on each
-  // read, and on a 95 MB log a walk of them took 100 ms where this takes 65.
+  // read, and on a 95 MB log a walk of them took 74 ms where this takes 56 (parser 0.5).
   //
   // By frame id, the index of the operation it is or ran inside, or -1 for
   // none. A parent's id is below its child's, so one pass in id order fills it.
