@@ -17,7 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   - apexlog_list_slow_operations: answer a further call on the same log 1.5 to 2.5 times faster
 - apexlog_list_slow_operations: give `nextOffset`, the `offset` of the next page, instead of leaving you to count the rows you got ([#248])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
-- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: read only the first log of a file that holds several, and say in `warning` how many it holds, instead of reading them all as one
+- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: read only the first log of a file that holds several, and say in `warning` how many it holds, instead of reading them all as one ([#278])
 - apexlog_execute_anonymous, apexlog_create_trace_flag: end a long reason in a production refusal or confirmation with "…", and never split a character ([#272])
 - --no-apex-execution: list apexlog_execute_anonymous without its parameters, which no call can use, ~257 tokens less on every request ([#276])
 
@@ -171,3 +171,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#272]: https://github.com/certinia/debug-log-analyzer-mcp/pull/272
 [#276]: https://github.com/certinia/debug-log-analyzer-mcp/pull/276
 [#277]: https://github.com/certinia/debug-log-analyzer-mcp/pull/277
+[#278]: https://github.com/certinia/debug-log-analyzer-mcp/pull/278
