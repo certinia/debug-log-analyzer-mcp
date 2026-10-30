@@ -6,7 +6,6 @@ import { z } from "zod";
 import {
   LOG_EVENT_ID,
   namespaceAt,
-  namespaceOf,
   textAt,
   textOf,
   typeAt,
@@ -217,7 +216,7 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     eventId: event.id,
     parentEventId: event.parent?.id ?? LOG_EVENT_ID,
     type: event.type,
-    namespace: namespaceOf(event),
+    namespace: event.namespace,
     lineNumber: event.lineNumber,
     text: cut(shownText(textOf(event), event.type), textLimit, pattern),
   });

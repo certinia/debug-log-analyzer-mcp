@@ -3,10 +3,10 @@
  */
 
 import {
+  DEFAULT_NAMESPACE,
   LOG_EVENT_ID,
   frameTypeAt,
   namespaceAt,
-  namespaceOf,
   textAt,
   totalAt,
   type ApexLog,
@@ -243,7 +243,7 @@ export function listOperations(apexLog: ApexLog): Operation[] {
       type: info.type,
       name: operationName(textAt(apexLog, id), info.type),
       namespace: namespaceAt(namespaces, id),
-      callerNamespace: namespaceOf(caller),
+      callerNamespace: caller?.namespace ?? DEFAULT_NAMESPACE,
       callCount: 1,
       durationTotalNs: durationTotal[id] ?? 0,
       durationSelfNs,

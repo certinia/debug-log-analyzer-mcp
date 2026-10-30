@@ -48,7 +48,7 @@ export type NodeSpec = {
   isFrame?: boolean;
   debugCategory?: string;
   text?: string | null;
-  namespace?: string | null;
+  namespace?: string;
   lineNumber?: number | "EXTERNAL" | null;
   totalNs?: number;
   selfNs?: number;
@@ -91,7 +91,7 @@ function build(spec: NodeSpec, ids: { next: number }): Built {
     isFrame: spec.isFrame ?? children.length > 0,
     debugCategory: spec.debugCategory ?? "apexCode",
     text: spec.text ?? null,
-    namespace: spec.namespace ?? null,
+    namespace: spec.namespace ?? "default",
     lineNumber: spec.lineNumber ?? null,
     duration: { total, self: spec.selfNs ?? total },
     soqlCount: rollupOf(spec.soqlCount),
