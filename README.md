@@ -59,6 +59,8 @@ A `0` means none, not "not measured". Only what did not happen is left out: fata
 
 An analysis tool that pages gives `matchedCount`, the rows that matched in all, and, while more remain, `nextOffset`, the `offset` of the next page.
 
+A file can hold more than one debug log. Each analysis tool then reads only the first, and every figure, `truncated` included, is that log's. A `warning`, first in the response, says how many logs the file holds. Analyze each log as its own file.
+
 The server runs as a local process started by your client over stdio, with no API keys. The analysis tools make no network calls. The server keeps the last parsed log for 5 minutes after its last use, so follow-up questions on that log are faster.
 
 ### apexlog_list_slow_operations

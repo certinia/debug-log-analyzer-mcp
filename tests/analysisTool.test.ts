@@ -2,6 +2,8 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import { z } from "zod";
 import { decode } from "@toon-format/toon";
@@ -56,6 +58,33 @@ describe("defineAnalysisTool", () => {
       args: { limit: 3 },
       parsed: true,
     });
+  });
+
+  // Catches answering for the first log alone, as if it were the whole file.
+  it("warns first, with the count, when the file holds more than one log", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "two-logs-"));
+    // The parser opens a new log at a header whose next event has an earlier timestamp.
+    const log = [
+      readFileSync(MINIMAL_LOG, "utf-8").split("\n")[0],
+      "09:00:00.1 (1000)|EXECUTION_STARTED",
+      "09:00:01.0 (10000)|EXECUTION_FINISHED",
+    ].join("\n");
+    const logFilePath = join(dir, "two.log");
+    writeFileSync(logFilePath, `${log}\n${log}\n`);
+
+    try {
+      const result = await echoTool.handle({ logFilePath });
+      const answer = decode((result.content[0] as { text: string }).text) as object;
+
+      // Entries, since `toEqual` on the object would not see the order.
+      expect(Object.entries(answer)).toEqual([
+        ["warning", expect.stringContaining("holds 2 debug logs")],
+        ["args", {}],
+        ["parsed", true],
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 
   // A throw, not a result: the SDK turns it into the tool error. The wording is src/apexLog/source.ts's.

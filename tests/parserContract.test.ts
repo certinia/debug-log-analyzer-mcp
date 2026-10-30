@@ -436,6 +436,15 @@ describe("parser contract", () => {
       ]);
     });
 
+    // `multipleLogsWarning` finds this by its summary and reads the count from its description.
+    it("raises Multiple-Logs, with the count, for a file that holds more than one log", async () => {
+      const { issues } = await parse(transaction() + transaction() + transaction());
+
+      expect(issues).toMatchObject([
+        { summary: "Multiple-Logs", description: expect.stringContaining("3 logs") },
+      ]);
+    });
+
     // A managed package states a hidden line as `EXTERNAL`, which the summary passes on.
     it("reads a hidden line as EXTERNAL", async () => {
       const log = await parse(
