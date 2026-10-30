@@ -1,5 +1,5 @@
 matchedCount: 1
 capturedAt[1]{debugCategory,level}:
   apexCode,FINE
-events[1]{eventIndex,parentEventIndex,type,namespace,lineNumber,text}:
+events[1]{eventId,parentEventId,type,namespace,lineNumber,text}:
   4,3,USER_DEBUG,default,1,"DEBUG | "

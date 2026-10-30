@@ -8,25 +8,17 @@
  * org layer, and `salesforce/debugLevels.ts` writes `DebugLevel` records with it.
  */
 
-import { LOG_LEVEL } from "@apexdevtools/apex-log-parser";
-import type { ApexLog, DebugCategory, DebugLevels } from "@apexdevtools/apex-log-parser";
+import { LEVEL } from "./apexLog/index.js";
+import type { ApexLog, DebugCategory } from "./apexLog/index.js";
 import type { Assert } from "./compileGuards.js";
 
-/** The parser also admits `""`, for an event that states no level; a request cannot ask for it. */
-export type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
+export type LogLevel = (typeof LEVEL)[keyof typeof LEVEL];
 
-export const LOG_LEVELS = Object.values(LOG_LEVEL);
-
-/**
- * One Salesforce debug log category, as the `DebugLevels` key the parser reads
- * a log header into. The parser's own `DebugCategory` is this plus `""`, which
- * it uses for an event that states no category.
- */
-export type DebugLevelCategory = keyof DebugLevels;
+export const LOG_LEVELS = Object.values(LEVEL);
 
 /**
  * Every debug log category, in the order a log header states them, which is
- * also the order the parser declares `DebugLevels` in.
+ * also the order the parser declares `DEBUG_CATEGORY` in.
  *
  * This is the spelling every response uses, because it is the one the parser
  * stamps on each event and the one `apexlog_execute_anonymous.debugLevel` takes
@@ -50,13 +42,13 @@ export const DEBUG_CATEGORIES = [
   "visualforce",
   "wave",
   "workflow",
-] as const satisfies readonly DebugLevelCategory[];
+] as const satisfies readonly DebugCategory[];
 
 /**
  * The categories a `DebugLevel` record can set, lower-camel as its fields are
  * named. `salesforce/debugLevels.ts` capitalises them.
  *
- * A literal and not a filter over `DebugLevelCategory`, because the tool schema
+ * A literal and not a filter over `DebugCategory`, because the tool schema
  * needs the tuple: a filtered array would type as every category and let a
  * caller ask for `dataAccess`, which no field sets.
  */
@@ -71,7 +63,7 @@ export const TRACE_CATEGORIES = [
   "visualforce",
   "wave",
   "workflow",
-] as const satisfies readonly DebugLevelCategory[];
+] as const satisfies readonly DebugCategory[];
 
 export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
 
@@ -85,7 +77,7 @@ export type TraceConfig = Partial<Record<TraceCategory, LogLevel>>;
  * notices.
  */
 export type EveryDebugLevelCategoryNamed = Assert<
-  DebugLevelCategory extends (typeof DEBUG_CATEGORIES)[number] ? true : false
+  DebugCategory extends (typeof DEBUG_CATEGORIES)[number] ? true : false
 >;
 
 /**
@@ -94,7 +86,7 @@ export type EveryDebugLevelCategoryNamed = Assert<
  * reads the same as `dataAccess` being absent because no field sets it.
  */
 export type EverySettableCategoryOffered = Assert<
-  Exclude<DebugLevelCategory, "dataAccess"> extends TraceCategory
+  Exclude<DebugCategory, "dataAccess"> extends TraceCategory
     ? true
     : false
 >;
@@ -143,7 +135,7 @@ export function requestedLevels(
 
 /** One level the log's header declared, as a response reports it. */
 export interface DeclaredLevel {
-  debugCategory: DebugLevelCategory;
+  debugCategory: DebugCategory;
   level: string;
 }
 

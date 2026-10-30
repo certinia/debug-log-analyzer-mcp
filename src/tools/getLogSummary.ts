@@ -2,24 +2,22 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type {
-  ApexLog,
-  DebugCategory,
-  LineNumber,
-  LogEvent,
-  LogEventType,
-  LogIssue,
-} from "@apexdevtools/apex-log-parser";
-import { defineAnalysisTool } from "./analysisTool.js";
 import {
-  frameSelfTimes,
-  listOperations,
-  operationName,
-  type Operation,
-} from "./operations.js";
+  countOf,
+  ENDED_BY,
+  namespacesOf,
+  textOf,
+  type ApexEvent,
+  type ApexLog,
+  type DebugCategory,
+  type EventType,
+  type LineNumber,
+  type LogIssue,
+} from "../apexLog/index.js";
+import { defineAnalysisTool } from "./analysisTool.js";
+import { categoryTotals, operationName } from "./operations.js";
 import {
   DEBUG_CATEGORIES,
-  type DebugLevelCategory,
   type LogLevel,
 } from "../logLevels.js";
 import { elide, elideEnd } from "../elide.js";
@@ -63,7 +61,7 @@ export const getLogSummaryTool = defineAnalysisTool({
  * its level is empty. With it, the rows add up to the whole log.
  */
 interface CategoryRow {
-  debugCategory: DebugLevelCategory | typeof UNATTRIBUTED_CATEGORY;
+  debugCategory: DebugCategory | typeof UNATTRIBUTED_CATEGORY;
   level: LogLevel | "";
   operationCount: number;
   durationSelfMs: number;
@@ -79,7 +77,7 @@ const FATAL_FRAME_LIMIT = 3;
  * Where an exception message stops being the failure and starts being prose.
  *
  * A DML failure embeds the whole validation message a user would see: 53
- * characters on the median of 124 real logs, 1,070 at the worst. The first 200
+ * characters on the median real log, 1,070 at the worst. The first 200
  * keep the exception class, the offending row and the error code; the limit
  * counts the ellipsis after them.
  */
@@ -87,7 +85,7 @@ const FATAL_MESSAGE_LIMIT = 201;
 
 /**
  * The whole frame cell, not one frame: a single frame runs to 1,081 characters
- * on a 124-log corpus, so capping the count alone leaves the cell unbounded.
+ * in real logs, so capping the count alone leaves the cell unbounded.
  * 400 characters and the ellipsis.
  */
 const FATAL_FRAMES_LIMIT = 401;
@@ -97,7 +95,7 @@ interface FatalError {
   message: string;
   /**
    * The innermost frames of the stack, and empty when the log stated none. A
-   * trailing `…` says frames were dropped, which half of a 124-log corpus has.
+   * trailing `…` says frames were dropped, which half of real logs have.
    * Always present, so every row shares one key set and TOON holds the table to
    * one header and one line per row.
    */
@@ -107,16 +105,16 @@ interface FatalError {
 /**
  * The failures that ended a transaction.
  *
- * Read from `logIssues` rather than `exceptions`, because the parser dedupes an
+ * Read from `issues` rather than `exceptions`, because the parser dedupes an
  * issue on its type and message: 4,501 throws in one real log are three
  * messages, where `exceptions` holds every occurrence.
  *
  * The only field that says the transaction did not finish, which decides what
  * every other figure means. It cannot be derived from the limits beside it -
- * across 124 real logs, 18 of 42 fatals breach no governor limit at all.
+ * in real logs, 18 of 42 fatals breach no governor limit at all.
  */
-function fatalErrors(logIssues: LogIssue[]): FatalError[] {
-  return logIssues
+function fatalErrors(issues: readonly LogIssue[]): FatalError[] {
+  return issues
     .filter((issue) => issue.type === "fatal")
     .map(({ summary, description }) => ({
       message: elideEnd(summary, FATAL_MESSAGE_LIMIT),
@@ -150,11 +148,11 @@ function innermostFrames(description: string): string {
   return elideEnd(shown, FATAL_FRAMES_LIMIT);
 }
 
-/** A loop with a new message per throw has no bound; 409 real logs peak at 9. */
+/** A loop with a new message per throw has no bound; real logs peak at 9. */
 const EXCEPTION_ROW_LIMIT = 20;
 
 /** The frames an `EXCEPTION_THROWN` line number can belong to. */
-const THROWING_FRAMES: ReadonlySet<LogEventType | null> = new Set([
+const THROWING_FRAMES: ReadonlySet<EventType> = new Set([
   "METHOD_ENTRY",
   "CONSTRUCTOR_ENTRY",
   "CODE_UNIT_STARTED",
@@ -172,14 +170,14 @@ interface ExceptionRow {
 }
 
 // On the message as shown, so no two rows read the same; one real log throws one message from 6 frames.
-function exceptionRows(exceptions: LogEvent[]): ExceptionRow[] {
+function exceptionRows(exceptions: readonly ApexEvent[]): ExceptionRow[] {
   const rows = new Map<string, ExceptionRow>();
 
   exceptions
     .filter((event) => event.type === "EXCEPTION_THROWN")
     .forEach((event) => {
       // The parser appends the "caused by" and stack lines; a fatal shows the first alone.
-      const message = elideEnd(event.text.split("\n", 1)[0] ?? "", FATAL_MESSAGE_LIMIT);
+      const message = elideEnd(textOf(event).split("\n", 1)[0] ?? "", FATAL_MESSAGE_LIMIT);
       const row = rows.get(message);
       if (row) {
         row.thrownCount += 1;
@@ -198,21 +196,17 @@ function exceptionRows(exceptions: LogEvent[]): ExceptionRow[] {
 }
 
 // Named as a ranked operation is, so the caller can join the two.
-function frameName(event: LogEvent): string {
+function frameName(event: ApexEvent): string {
   let frame = event.parent;
   while (frame && !THROWING_FRAMES.has(frame.type)) {
     frame = frame.parent;
   }
-  return frame ? operationName(frame) : "";
+  return frame ? operationName(textOf(frame), frame.type) : "";
 }
 
-// A flat pass over every event, cheaper than a second recursive walk of the tree.
+// The parser indexes events by type, so this needs no walk of the tree.
 function flowErrorCount(apexLog: ApexLog): number {
-  return apexLog.eventsById.reduce(
-    (count, event) =>
-      event.type === "FLOW_ELEMENT_ERROR" ? count + 1 : count,
-    0,
-  );
+  return apexLog.ofType("FLOW_ELEMENT_ERROR").length;
 }
 
 interface LogSummaryResult {
@@ -251,8 +245,12 @@ function getLogSummary(apexLog: ApexLog): LogSummaryResult {
   // shapes and neither implies the other, but the field means the same thing for
   // both: every figure is a floor. Reading a CPU time off either as though it
   // were a total is the worst answer this server can give.
+  //
+  // `log-end` alone: an `unwind` frame was closed by a later exit line, as after
+  // an exception, and nothing after it is missing.
   const truncated =
-    apexLog.isTruncated || apexLog.truncatedEvents.length > 0;
+    apexLog.isTruncated ||
+    apexLog.unclosedFrames.some(({ endedBy }) => endedBy === ENDED_BY.LogEnd);
   const exceptions = exceptionRows(apexLog.exceptions);
 
   // Every limit and every category is reported, zeros included: the caller has
@@ -272,14 +270,14 @@ function getLogSummary(apexLog: ApexLog): LogSummaryResult {
       ],
       skippedBytes: apexLog.truncation.totalSkippedBytes,
     }),
-    thrownCount: apexLog.thrownCount.total,
+    thrownCount: countOf(apexLog.thrownCount).total,
     exceptionGroupCount: exceptions.length,
     ...omitEmpty({ exceptions: exceptions.slice(0, EXCEPTION_ROW_LIMIT) }),
     flowErrorCount: flowErrorCount(apexLog),
-    ...omitEmpty({ fatalErrors: fatalErrors(apexLog.logIssues) }),
-    namespaces: apexLog.namespaces,
-    governorLimits: toLimitRows(apexLog.governorLimits.peak),
-    limitsByNamespace: toNamespaceLimitRows(apexLog.governorLimits.byNamespace),
+    ...omitEmpty({ fatalErrors: fatalErrors(apexLog.issues) }),
+    namespaces: namespacesOf(apexLog),
+    governorLimits: toLimitRows(apexLog.limits.peak),
+    limitsByNamespace: toNamespaceLimitRows(apexLog.limits.byNamespace),
     categories: categories(apexLog),
   };
 
@@ -289,35 +287,15 @@ function getLogSummary(apexLog: ApexLog): LogSummaryResult {
 function categories(apexLog: ApexLog): CategoryRow[] {
   const { debugLevels, duration } = apexLog;
   // One total per category up front, so the categories nothing ran under are
-  // still reported, at zero. The row set is the parser's `DebugLevels` keys
+  // still reported, at zero. The row set is the parser's `DebugCategory` values
   // rather than a shorter list of our own, so a category it starts timing needs
   // no change here.
-  const totals = DEBUG_CATEGORIES.map((debugCategory) => ({
-    debugCategory,
-    operationCount: 0,
-    selfNs: 0,
-  }));
-  const byCategory = new Map<DebugCategory, (typeof totals)[number]>(
-    totals.map((total) => [total.debugCategory, total]),
-  );
-
-  const add = (
-    {
-      debugCategory,
-      durationSelfNs,
-    }: Pick<Operation, "debugCategory" | "durationSelfNs">,
-    operationCount: number,
-  ) => {
-    // Only `""` misses, which the parser never stamps on a timed event.
-    const total = byCategory.get(debugCategory);
-    if (total) {
-      total.operationCount += operationCount;
-      total.selfNs += durationSelfNs;
-    }
-  };
-  listOperations(apexLog).forEach((operation) => add(operation, 1));
-  // A frame is time, not an operation, so it adds to no count.
-  frameSelfTimes(apexLog).forEach((frame) => add(frame, 0));
+  // Drops no category: `DEBUG_CATEGORIES` names every one, by a compile guard.
+  const byCategory = categoryTotals(apexLog);
+  const totals = DEBUG_CATEGORIES.map((debugCategory) => {
+    const { operationCount = 0, selfNs = 0 } = byCategory.get(debugCategory) ?? {};
+    return { debugCategory, operationCount, selfNs };
+  });
 
   const attributedNs = totals.reduce((sum, { selfNs }) => sum + selfNs, 0);
 
@@ -329,7 +307,7 @@ function categories(apexLog: ApexLog): CategoryRow[] {
     "debugCategory" | "level" | "operationCount"
   > & { selfNs: number };
   const rows: RowTotal[] = [
-    ...totals.map((total) => ({
+    ...totals.map((total): RowTotal => ({
       ...total,
       level: debugLevels[total.debugCategory] ?? "",
     })),

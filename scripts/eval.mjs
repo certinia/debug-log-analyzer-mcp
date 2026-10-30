@@ -212,7 +212,7 @@ const ANSWERABILITY = {
       fixture: "governor-heavy",
       question: "Where in the log is each event, and what is it under?",
       keys: ["events"],
-      columns: ["eventIndex", "parentEventIndex", "lineNumber"],
+      columns: ["eventId", "parentEventId", "lineNumber"],
     },
     {
       question: "Did the page hide events the search matched?",
@@ -257,7 +257,7 @@ const TOKEN_BUDGET = {
   // limits, and where the time went by category. Both answer questions the 1.x
   // summary could not. Raised again for the stack frames #100 added to a fatal:
   // the message names the limit, the frames name the code, and 18 of 42 fatals
-  // across a 124-log corpus breach no limit at all, so nothing else in the
+  // in real logs breach no limit at all, so nothing else in the
   // response reveals them. Lowered by #138, which dropped the `logCategory`
   // column from every row of the time table - the row key is now the category
   // itself, and by #191, which folded the level table into it, so a category is
@@ -274,7 +274,7 @@ const TOKEN_BUDGET = {
   // say whether the optimizer treats a ranked query as selective. Raised again
   // by #138 for the second classification column: a row states the category
   // that gated it and the log's own event type, where it stated one invented
-  // `kind`. Measured over a 29-log corpus sample that is 41 tokens on a default
+  // `kind`. Measured over real logs, that is 41 tokens on a default
   // ten-row page, and it is what makes `soql` tellable from `dml` inside
   // `database`.
   "apexlog_list_slow_operations/governor-heavy": 416,
@@ -329,7 +329,7 @@ const V1_RESPONSE_TOKENS = {
 const DEFINITION_BUDGET = {
   // The ranking is dear because it carries eight selection parameters, and each
   // buys a question the response cannot be read for. The one of them the schema
-  // cannot show the case for is `sortBy`: on the 40 logs of a 123-log corpus that
+  // cannot show the case for is `sortBy`: on 40 real logs that
   // record an allocation, a heap ranking's top ten holds a median six rows the
   // self-time top ten never returns.
   apexlog_list_slow_operations: 550,

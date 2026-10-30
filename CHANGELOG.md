@@ -11,7 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **Breaking:** apexlog_execute_anonymous: rename `durationMs` to `durationTotalMs`, the name apexlog_get_summary gives the same figure ([#240])
 - apexlog_execute_anonymous: run at your trace flag's levels when you give no `debugLevel`, else at the defaults, and set the categories an object `debugLevel` names over the defaults - never over the levels a previous run left ([#230])
 - apexlog_get_summary: make the categories add up to the whole log. The transaction's own time counts under its category, and a new `unattributed` row holds the time no event spans ([#226])
-- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: parse a log of 20 MB or more about 28% faster ([#246])
+- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: answer the first call on a log of 1 MB or more 2.5 to 8 times faster, and hold 3.5 to 5.5 times less memory for that log, on a log parser that reads it 4 to 8 times faster ([#246], [#277])
+  - apexlog_get_summary: answer a further call on the same log 8 to 25 times faster
+  - apexlog_search_events: answer a further call on the same log 2.5 to 11 times faster
+  - apexlog_list_slow_operations: answer a further call on the same log 1.5 to 2.5 times faster
 - apexlog_list_slow_operations: give `nextOffset`, the `offset` of the next page, instead of leaving you to count the rows you got ([#248])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_execute_anonymous: count the log's duration from its first line, not from the start of the transaction ([#226])
 - apexlog_execute_anonymous, apexlog_create_trace_flag: end a long reason in a production refusal or confirmation with "…", and never split a character ([#272])
@@ -39,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: say when the org's login has expired and how to log in again ([#239])
 - apexlog_execute_anonymous: say when `targetOrg` names no authenticated org, instead of the Salesforce SDK's raw error ([#236])
 - apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks: say a `logFilePath` that is a directory is one, instead of Node's raw error ([#234])
+- apexlog_get_summary, apexlog_list_slow_operations, apexlog_list_limit_risks, apexlog_search_events: name the log and the cause when it cannot be read, such as a log larger than 2 GiB, instead of Node's raw error ([#277])
 - every tool: refuse a parameter it does not have, instead of ignoring it and running without it ([#244])
 - apexlog_execute_anonymous: say when the org's log storage is full and where to free it, instead of only that the trace flag was refused ([#245])
 - apexlog_execute_anonymous: refuse an `outputDir` it cannot write before running the Apex, instead of failing after its DML has committed ([#260])
@@ -165,3 +169,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#269]: https://github.com/certinia/debug-log-analyzer-mcp/pull/269
 [#272]: https://github.com/certinia/debug-log-analyzer-mcp/pull/272
 [#276]: https://github.com/certinia/debug-log-analyzer-mcp/pull/276
+[#277]: https://github.com/certinia/debug-log-analyzer-mcp/pull/277

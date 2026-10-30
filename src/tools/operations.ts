@@ -2,14 +2,18 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type {
-  ApexLog,
-  DebugCategory,
-  LogEvent,
-  LogEventType,
-} from "@apexdevtools/apex-log-parser";
+import {
+  LOG_EVENT_ID,
+  frameTypeAt,
+  namespaceAt,
+  namespaceOf,
+  textAt,
+  totalAt,
+  type ApexLog,
+  type DebugCategory,
+  type EventType,
+} from "../apexLog/index.js";
 import type { Assert } from "../compileGuards.js";
-import { walkLog } from "./apexLogSource.js";
 
 /**
  * One timed thing the transaction did.
@@ -35,10 +39,9 @@ export interface Operation {
    * managed package entry under `apexCode` beside the methods it hides.
    *
    * The parser's own union, so a misspelt literal anywhere downstream fails the
-   * build instead of matching nothing. `"Unknown"` covers the events the parser
-   * leaves untyped.
+   * build instead of matching nothing.
    */
-  type: LogEventType | "Unknown";
+  type: EventType;
   name: string;
   namespace: string;
   /**
@@ -54,11 +57,10 @@ export interface Operation {
    * on 4 of 5 rows, carrying 934 of its 944 ms, and `codeUnit` on 17% of rows,
    * carrying 10,600 of its 10,904 ms.
    *
-   * The direct parent, not the nearest ancestor that ranks as an operation: on
-   * 298 logs and 1,178,604 operations the two agree on every row, as the parser
-   * copies a namespace down to a child that has none, so the simpler reading
-   * holds even if the ranking skips more frames. They could differ only on the
-   * 289 rows whose parent is the `EXECUTION_STARTED` frame, which is `default`.
+   * Read off the operation this one ran inside, which is the direct parent: a
+   * parent is always a frame, and every frame ranks but the `EXECUTION_STARTED`
+   * one, which is in `default`. On 1,178,604 operations of real logs the direct
+   * parent and the nearest ranked ancestor agreed on every row.
    */
   callerNamespace: string;
   /** One, until `groupOperations` folds repeats together. */
@@ -98,11 +100,11 @@ export interface Operation {
    * A managed package is the exception to "not what it called". The parser
    * gives `ENTERING_MANAGED_PKG` no children, so an allocation logged inside
    * the package window lands in the calling method's own body instead of the
-   * package's row - 3 of the 40 logs that allocate put a heap line there.
+   * package's row - 3 of 40 real logs that allocate put a heap line there.
    *
    * Self and not the subtree, because a subtree net is not an attribution: it
-   * puts the outermost code unit at the top of 39 of the 40 logs in a 123-log
-   * corpus that record an allocation, and there it equals the transaction peak
+   * puts the outermost code unit at the top of 39 of 40 real logs that record
+   * an allocation, and there it equals the transaction peak
    * `apexlog_get_summary` already reports on 36 of them. A self net names a
    * method on 27 of the 40 and matches that peak on 3.
    *
@@ -117,14 +119,14 @@ export interface Operation {
    */
   parent: Operation | null;
   /**
-   * The event this operation was read from, so a caller can reach what the
-   * operation's own columns do not carry - the query plan under this one call,
-   * rather than the worst plan for its text.
+   * The id of the event this operation was read from, so a caller can reach
+   * what the operation's own columns do not carry with `apexLog.event(id)` -
+   * the query plan under this one call, rather than the worst plan for its text.
    *
    * Internal, and only meaningful on an ungrouped operation: `groupOperations`
-   * folds many events into one row and keeps the first member's node.
+   * folds many events into one row and keeps the first member's id.
    */
-  node: LogEvent;
+  id: number;
 }
 
 /**
@@ -132,47 +134,59 @@ export interface Operation {
  * transaction took as long as it took. It is timed and carries `apexCode`, so
  * nothing else holds it out.
  */
-const FRAME_TYPES = new Set<LogEventType>(["EXECUTION_STARTED"]);
+const FRAME_TYPES = new Set<EventType>(["EXECUTION_STARTED"]);
 
-function isFrame({ type }: LogEvent): boolean {
-  return !!type && FRAME_TYPES.has(type);
+function isTransactionFrame({ type }: { type: EventType }): boolean {
+  return FRAME_TYPES.has(type);
+}
+
+
+/** One category's operations, and the time they and its transaction frames took of their own. */
+interface CategoryTotal {
+  operationCount: number;
+  selfNs: number;
 }
 
 /**
- * Whether the event is a thing the transaction spent time on.
+ * Each category's operations, counted, and their self time - what
+ * `listOperations` would sum to - with each transaction frame's self time
+ * under the frame's own category. No operation holds a frame's time, because a
+ * frame is not ranked, but it is still time the transaction spent. The parser
+ * puts every frame directly on the root.
  *
- * The timeline `category` is read as nothing but "this event has a duration" -
- * the parser assigns one in the `DurationLogEvent` constructor alone, and
- * publishes no other flag for it. What the event *is* comes from
- * `debugCategory` and `type`. Untimed events are most of a log, so this is both
- * the cheap test and the first one.
+ * Without building the operations: naming them makes the parser index every
+ * frame's text, which on a 95 MB log is half of `apexlog_get_summary`, and the
+ * summary names none.
  */
-function isRankable(event: LogEvent): boolean {
-  return event.category !== "" && !isFrame(event);
+export function categoryTotals(apexLog: ApexLog): Map<DebugCategory, CategoryTotal> {
+  const { count, isFrame, type, parent, durationSelf } = apexLog.columns;
+  const frames = { isFrame, type };
+  const totals = new Map<DebugCategory, CategoryTotal>();
+  for (let id = 1; id <= count; id++) {
+    const info = frameTypeAt(frames, id);
+    const isTransaction = info !== null && isTransactionFrame(info);
+    if (!info || (isTransaction && parent[id] !== LOG_EVENT_ID)) {
+      continue;
+    }
+    let total = totals.get(info.debugCategory);
+    if (!total) {
+      total = { operationCount: 0, selfNs: 0 };
+      totals.set(info.debugCategory, total);
+    }
+    // A frame is time, not an operation, so it adds to no count.
+    total.operationCount += isTransaction ? 0 : 1;
+    total.selfNs += durationSelf[id] ?? 0;
+  }
+  return totals;
 }
 
 /**
- * The self time of each transaction frame, under the frame's own category. No
- * operation holds it, because a frame is not ranked, but it is still time the
- * transaction spent. The parser puts every frame directly on the root.
+ * What a row calls an operation, from what the event says. Shared, so a query
+ * plan names its query with the name the ranked row carries and the caller can
+ * join the two.
  */
-export function frameSelfTimes(
-  apexLog: ApexLog,
-): Pick<Operation, "debugCategory" | "durationSelfNs">[] {
-  return apexLog.children
-    .filter(isFrame)
-    .map(({ debugCategory, duration }) => ({
-      debugCategory,
-      durationSelfNs: duration.self,
-    }));
-}
-
-/**
- * What a row calls an operation. Shared, so a query plan names its query with
- * the name the ranked row carries and the caller can join the two.
- */
-export function operationName(node: LogEvent): string {
-  return node.text || node.type || "Unknown";
+export function operationName(text: string, type: EventType): string {
+  return text || type;
 }
 
 /**
@@ -183,48 +197,70 @@ export function operationName(node: LogEvent): string {
  * the time would be reported nowhere.
  */
 export function listOperations(apexLog: ApexLog): Operation[] {
+  const {
+    count,
+    isFrame,
+    type,
+    parent,
+    durationSelf,
+    durationTotal,
+    soqlCount,
+    dmlCount,
+    soslCount,
+    soqlRowCount,
+    dmlRowCount,
+    soslRowCount,
+    thrownCount,
+    heapAllocated,
+    namespace: namespaces,
+  } = apexLog.columns;
   const operations: Operation[] = [];
 
-  // The children, not the log: the root is a pseudo node the parser adds, and
-  // it holds the whole transaction as its own time.
+  // From the columns, not the events: the parser makes an event object on each
+  // read, and on a 95 MB log a walk of them took 100 ms where this takes 65.
   //
-  // The visitor hands its children the operation they ran inside, which is the
-  // one it just made, or its own when the node itself is untimed.
-  const visit = (node: LogEvent, parent: Operation | undefined) => {
-    if (!isRankable(node)) {
-      return parent;
+  // By frame id, the index of the operation it is or ran inside, or -1 for
+  // none. A parent's id is below its child's, so one pass in id order fills it.
+  // Row 0 is the log, which is no operation, and a leaf is no event's parent.
+  const enclosing = new Int32Array(count + 1).fill(-1);
+  const frames = { isFrame, type };
+  for (let id = 1; id <= count; id++) {
+    const info = frameTypeAt(frames, id);
+    if (!info) {
+      continue;
+    }
+    const callerIndex = enclosing[parent[id] ?? LOG_EVENT_ID] ?? -1;
+    if (isTransactionFrame(info)) {
+      enclosing[id] = callerIndex;
+      continue;
     }
 
-    const operation: Operation = {
-      debugCategory: node.debugCategory,
-      type: node.type ?? "Unknown",
-      name: operationName(node),
-      namespace: node.namespace || "default",
-      callerNamespace: node.parent?.namespace || "default",
+    const caller = operations[callerIndex];
+    const durationSelfNs = durationSelf[id] ?? 0;
+    enclosing[id] = operations.length;
+    operations.push({
+      debugCategory: info.debugCategory,
+      type: info.type,
+      name: operationName(textAt(apexLog, id), info.type),
+      namespace: namespaceAt(namespaces, id),
+      callerNamespace: namespaceOf(caller),
       callCount: 1,
-      durationTotalNs: node.duration.total,
-      durationSelfNs: node.duration.self,
-      durationSelfMaxNs: node.duration.self,
-      soqlCount: node.soqlCount.total,
-      dmlCount: node.dmlCount.total,
-      soslCount: node.soslCount.total,
+      durationTotalNs: durationTotal[id] ?? 0,
+      durationSelfNs,
+      durationSelfMaxNs: durationSelfNs,
+      soqlCount: totalAt(soqlCount, id),
+      dmlCount: totalAt(dmlCount, id),
+      soslCount: totalAt(soslCount, id),
       rowCount:
-        node.soqlRowCount.total +
-        node.dmlRowCount.total +
-        node.soslRowCount.total,
-      thrownCount: node.thrownCount.total,
-      heapSelfNetBytes: node.heapAllocated.self,
-      parent: parent ?? null,
-      node,
-    };
-    operations.push(operation);
-
-    return operation;
-  };
-
-  apexLog.children.forEach((child) =>
-    walkLog<Operation | undefined>(child, visit),
-  );
+        totalAt(soqlRowCount, id) +
+        totalAt(dmlRowCount, id) +
+        totalAt(soslRowCount, id),
+      thrownCount: totalAt(thrownCount, id),
+      heapSelfNetBytes: heapAllocated?.self[id] ?? 0,
+      parent: caller ?? null,
+      id,
+    });
+  }
 
   return operations;
 }
@@ -253,7 +289,7 @@ interface Grouping {
    * state only what its key holds true of every member.
    *
    * `type` decides `debugCategory` - the parser stamps one category per event
-   * class - so keying on the type keeps both columns true of every member. A
+   * type - so keying on the type keeps both columns true of every member. A
    * category fold keys on the category alone, and states neither: one type
    * named would be the first member's alone, and the name would restate the
    * category.
@@ -365,6 +401,9 @@ const PLAIN_SUMMED = ["durationSelfNs", "heapSelfNetBytes"] as const;
  */
 type FoldedByHand = "callCount" | "durationSelfMaxNs";
 
+/** An event, not a figure: a group keeps its first member's, as `Operation.id` says. */
+type NotFolded = "id";
+
 /**
  * Compile guard: every number on an `Operation` has to appear in one of the
  * three groups above.
@@ -379,6 +418,7 @@ export type EveryNumberFolded = Assert<
     | (typeof SUBTREE_SUMMED)[number]
     | (typeof PLAIN_SUMMED)[number]
     | FoldedByHand
+    | NotFolded
     ? true
     : false
 >;
@@ -401,54 +441,48 @@ export function groupOperations(
   const groups = new Map<string, Operation>();
   const identityOf = GROUPINGS[by].identity;
 
-  // `parent` is the log's chain, not this call's. When a caller narrows the
-  // operations by category, type or namespace, an ancestor outside the selection
-  // can share a group's key without being in the group, and suppressing on it
-  // would report a total below the row's own self time.
-  const members = new Set(operations);
-
-  // Memoized: the nesting test walks the ancestors of every member, and a deep
-  // Apex stack would otherwise rebuild the same key at every level of it.
-  const keys = new Map<Operation, string>();
-  const keyOf = (operation: Operation): string => {
-    const known = keys.get(operation);
-    if (known !== undefined) {
-      return known;
+  // The group of each member, by event id. `parent` is the log's chain, not
+  // this call's. When a caller narrows the operations by category, type or
+  // namespace, an ancestor outside the selection can share a group's key
+  // without being in the group, and suppressing on it would report a total
+  // below the row's own self time - so only a member has an entry.
+  //
+  // An array, not a map per ancestor: the nesting test walks every member's
+  // ancestors, 22 deep on average in a 95 MB log, and a lookup at each level
+  // took 350 ms over its 431,300 operations where this takes 140.
+  // Sized to the last member's id, which is the highest: members are in log order.
+  const groupById = new Array<Operation | undefined>((operations.at(-1)?.id ?? 0) + 1);
+  const nestedInGroup = (operation: Operation, group: Operation): boolean => {
+    for (let above = operation.parent; above; above = above.parent) {
+      if (groupById[above.id] === group) {
+        return true;
+      }
     }
-
-    const key = operationGroupKey(operation, by);
-    keys.set(operation, key);
-    return key;
+    return false;
   };
 
-  const nestedInGroup = (operation: Operation, key: string): boolean =>
-    operation.parent !== null &&
-    ((members.has(operation.parent) && keyOf(operation.parent) === key) ||
-      nestedInGroup(operation.parent, key));
-
   operations.forEach((operation) => {
-    const key = keyOf(operation);
+    const key = operationGroupKey(operation, by);
     const group = groups.get(key);
 
     if (!group) {
       // The first member of a group cannot be nested in it: `listOperations`
       // emits an operation before the ones it called.
-      groups.set(key, {
-        ...operation,
-        ...identityOf(operation),
-        parent: null,
-      });
+      const first = { ...operation, ...identityOf(operation), parent: null };
+      groups.set(key, first);
+      groupById[operation.id] = first;
       return;
     }
+    groupById[operation.id] = group;
 
     group.callCount += 1;
 
     // Walked rather than named field by field, so the rule above and the code
     // cannot drift. That costs 41% here - 44 to 63 ms over 74,960 operations of
-    // six real logs, folded twice each - because a keyed read is not a named
+    // real logs, folded twice each - because a keyed read is not a named
     // one. It is paid against a parse of tens to hundreds of milliseconds, and
     // `nestedInGroup` dominates both figures.
-    if (!nestedInGroup(operation, key)) {
+    if (!nestedInGroup(operation, group)) {
       for (const field of SUBTREE_SUMMED) {
         group[field] += operation[field];
       }

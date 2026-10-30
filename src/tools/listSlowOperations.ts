@@ -3,7 +3,7 @@
  */
 
 import { z } from "zod";
-import type { ApexLog, DebugCategory } from "@apexdevtools/apex-log-parser";
+import { countOf, type ApexLog, type DebugCategory } from "../apexLog/index.js";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import {
   GROUP_BY,
@@ -73,10 +73,9 @@ const listSlowOperationsInputSchema = {
     .array(z.enum(DEBUG_CATEGORIES))
     .optional()
     .describe("Rank only these debug log categories"),
-  // Free strings and three examples rather than an enum: the parser publishes
-  // `LogEventType` as a type alone, and its 290 names would cost some 1,450
-  // tokens in every `tools/list` - more than the four tools together are
-  // allowed. Tightening this to an enum fails the definition budget.
+  // Free strings and three examples rather than an enum: the parser's 299
+  // event type names would cost some 1,500 tokens in every `tools/list` (1,450
+  // measured at 290) - more than the four tools together are allowed. Tightening this to an enum fails the definition budget.
   type: z
     .array(z.string())
     .optional()
@@ -168,10 +167,10 @@ export interface SlowOperation {
    *
    * Present under `sortBy: "heapSelfNetBytes"` alone, because most logs record
    * no allocation and every other ranking would carry a column of zeros. Yet
-   * the ranking is not derivable from the default one: on the 40 logs of a
-   * 123-log corpus that record an allocation, its top ten holds a median 6 rows
-   * the self-time top ten never returns, with a different top row on 31. Only
-   * 1 of the 103 logs that state a heap limit passes half of it, so a fixed
+   * the ranking is not derivable from the default one: on 40 real logs that
+   * record an allocation, its top ten holds a median 6 rows the self-time top
+   * ten never returns, with a different top row on 31. Only 1 of 103 real logs
+   * that state a heap limit passes half of it, so a fixed
    * column would be zeros on two thirds of responses for a one-in-a-hundred
    * question.
    *
@@ -196,8 +195,8 @@ export interface SlowOperationsResult {
    * column it qualifies, and on the one ranking it says anything about.
    *
    * The rows do not always hold it: a default page carries a median 98.3% of
-   * the transaction's net heap, but under 90% on 17 of the 40 logs in a corpus
-   * that allocate, and as little as 50%, because one log needs 64 rows to reach
+   * the transaction's net heap, but under 90% on 17 of 40 real logs that
+   * allocate, and as little as 50%, because one log needs 64 rows to reach
    * 90%. Nothing else in any response says so - the transaction's *net* heap is
    * reported nowhere, and `apexlog_get_summary` carries the peak live figure,
    * which is a different measure and not a denominator for these rows.
@@ -206,14 +205,14 @@ export interface SlowOperationsResult {
    * `returnedSelfPercentage` beside it.
    *
    * It can read above 100 where rows outside the page freed more than they
-   * took, since those lower the denominator and not the page. No log in the
-   * corpus does: 0 to 100 across all 123, and a net-negative row has never
+   * took, since those lower the denominator and not the page. No real log
+   * measured does: every one reads 0 to 100, and a net-negative row has never
    * reached a top ten.
    *
    * It reads 0 where the transaction retained no net heap, which is the answer
-   * on the 83 logs that record no allocation - the column of zeros beside it
-   * says the same. A transaction that released more than it took would read 0
-   * as well, where no share is meaningful; none of the 123 does.
+   * on every real log that records no allocation - the column of zeros beside
+   * it says the same. A transaction that released more than it took would read
+   * 0 as well, where no share is meaningful; no real log measured does.
    */
   returnedHeapPercentage?: number;
   /**
@@ -254,7 +253,7 @@ export interface SlowOperationsResult {
  *
  * The query is then named by that row - elided past `NAME_LIMIT` like any other
  * name - and repeating it here would state one string twice: p90 1,364 tokens
- * across a 124-log corpus and 4,699 at worst. `operationRow` is the 1-based
+ * across real logs and 4,699 at worst. `operationRow` is the 1-based
  * line of `operations` as returned, so it stays right under paging and can only
  * name a row the response carries.
  */
@@ -292,12 +291,13 @@ function verdictOf(plan: QueryPlan): QueryPlanVerdict {
  *
  * Where a row is one call - `groupBy: "none"` - the plan comes from that call's
  * own event, not from the worst plan for its text. The row makes a claim about
- * one call, and 13 query texts across a 124-log corpus were explained at more
+ * one call, and 13 query texts across real logs were explained at more
  * than one `relativeCost`, so the worst would tell those rows a cost the
  * optimiser did not reach for them. A grouped row stands for every call of the
  * text, where the worst is the figure to act on.
  */
 function plansForRankedRows(
+  apexLog: ApexLog,
   ranked: Operation[],
   everyOperation: Operation[],
   perCall: boolean,
@@ -306,7 +306,7 @@ function plansForRankedRows(
     return [];
   }
 
-  const explained = perCall ? undefined : listQueryPlans(everyOperation);
+  const explained = perCall ? undefined : listQueryPlans(apexLog, everyOperation);
   const plans: RankedPlan[] = [];
   ranked.forEach((operation, index) => {
     if (!canCarryPlan(operation)) {
@@ -314,7 +314,7 @@ function plansForRankedRows(
     }
     const plan = explained
       ? explained.get(operation.name)
-      : planOf(operation.node);
+      : planOf(apexLog, operation.id);
     if (plan) {
       plans.push({ operationRow: index + 1, ...verdictOf(plan) });
     }
@@ -331,6 +331,7 @@ function plansForRankedRows(
  * fold of operations the page does not list.
  */
 function plansForFoldedRows(
+  apexLog: ApexLog,
   selected: Operation[],
   ranked: Operation[],
   groupBy: GroupBy,
@@ -352,7 +353,7 @@ function plansForFoldedRows(
     return [];
   }
 
-  const explained = listQueryPlans(everyOperation);
+  const explained = listQueryPlans(apexLog, everyOperation);
   return [...queryNames]
     .map((name) => explained.get(name))
     .filter((plan): plan is QueryPlan => plan !== undefined)
@@ -379,9 +380,9 @@ function listSlowOperations(
 
   const durationTotalNs = apexLog.duration.total;
   // The log's own net heap, which the operation rows account for in full: they
-  // carry 100.0% of it on every one of the 40 logs in a corpus that allocate,
+  // carry 100.0% of it on every real log that allocates,
   // min to max, because an allocation lands in the `self` of exactly one node.
-  const heapTotalBytes = apexLog.heapAllocated.total;
+  const heapTotalBytes = countOf(apexLog.heapAllocated).total;
   const minSelfNs = minSelfMs * NS_TO_MS;
 
   const everyOperation = listOperations(apexLog);
@@ -456,8 +457,8 @@ function listSlowOperations(
   // up by group key and carries the text.
   const explained: PlanRow[] =
     groupBy === "none" || GROUPINGS[groupBy].namesOperation
-      ? plansForRankedRows(ranked, everyOperation, groupBy === "none")
-      : plansForFoldedRows(selected, ranked, groupBy, everyOperation);
+      ? plansForRankedRows(apexLog, ranked, everyOperation, groupBy === "none")
+      : plansForFoldedRows(apexLog, selected, ranked, groupBy, everyOperation);
 
   // Out of what the rows left, because the plans are part of the same response.
   // A namespace grouping reports one plan per distinct query text behind the

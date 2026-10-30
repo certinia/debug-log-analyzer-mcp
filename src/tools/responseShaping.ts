@@ -13,12 +13,13 @@
  */
 
 import {
-  ALL_LIMIT_METRICS,
+  ceilingOf,
+  LIMIT_METRICS,
   type DebugCategory,
-  type LimitMetricUnit,
+  type LimitUnit,
   type Limits,
   type NamespaceLimits,
-} from "@apexdevtools/apex-log-parser";
+} from "../apexLog/index.js";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { encode } from "@toon-format/toon";
 
@@ -111,13 +112,13 @@ export interface LimitRow {
  */
 export function toLimitRows(limits: Limits): LimitRow[] {
   return Object.entries(limits).map(([name, value]) => {
-    const { used, limit } = value as Limits[keyof Limits];
-    return { limit: name, used, max: limit };
+    const limit = value as Limits[keyof Limits];
+    return { limit: name, used: limit.used, max: ceilingOf(limit) };
   });
 }
 
 /** English plurals for the units the parser publishes. */
-const UNIT_PLURALS: Record<LimitMetricUnit, string> = {
+const UNIT_PLURALS: Record<LimitUnit, string> = {
   count: "counts",
   millisecond: "milliseconds",
   byte: "bytes",
@@ -131,13 +132,13 @@ const UNIT_PLURALS: Record<LimitMetricUnit, string> = {
  * once per session rather than as a `unit` column, which measured 22 to 37
  * tokens on *every* response carrying a limit table against 21 tokens once.
  *
- * Read from `ALL_LIMIT_METRICS`, so a metric the parser adds in another unit
+ * Read from `LIMIT_METRICS`, so a metric the parser adds in another unit
  * cannot go unstated.
  */
 export function limitUnitsClause(): string {
-  const exceptions = ALL_LIMIT_METRICS.filter(
-    ({ unit }) => unit !== "count",
-  ).map(({ key, unit }) => `${key} in ${UNIT_PLURALS[unit]}`);
+  const exceptions = Object.entries(LIMIT_METRICS)
+    .filter(([, unit]) => unit !== "count")
+    .map(([key, unit]) => `${key} in ${UNIT_PLURALS[unit]}`);
 
   return `every governor limit is a count except ${exceptions.join(" and ")}`;
 }
@@ -175,7 +176,7 @@ export interface NamespaceLimitRow {
  * table.
  */
 export function toNamespaceLimitRows(
-  byNamespace: Map<string, NamespaceLimits>,
+  byNamespace: ReadonlyMap<string, NamespaceLimits>,
 ): NamespaceLimitRow[] {
   return [...byNamespace].flatMap(([namespace, limits]) =>
     toLimitRows(limits.peak)
@@ -188,7 +189,7 @@ export function toNamespaceLimitRows(
  * The longest name reported on a row: an operation, a query or the frame an
  * exception was thrown in.
  *
- * Names are short until they are not: across 23,456 operation rows of a 124-log corpus
+ * Names are short until they are not: across 23,456 operation rows of real logs
  * the median is 50 characters and the p90 is 100, but the longest is 19,593 -
  * about 4,900 tokens for one row. Eliding at 400 touches 2% of rows and takes
  * the whole tail with it.
@@ -202,7 +203,7 @@ export const NAME_LIMIT = 400;
  * measures with, which leaves headroom under the 25,000-token response ceiling
  * a client is likely to impose. Eliding names is not enough on its own: a
  * thousand rows cost some 15,000 tokens in their numeric columns alone, so 5
- * logs in that corpus still breached the ceiling with every name capped.
+ * real logs still breached the ceiling with every name capped.
  */
 export const PAGE_CHAR_BUDGET = 60_000;
 
@@ -211,7 +212,7 @@ export const PAGE_CHAR_BUDGET = 60_000;
  *
  * An estimate, not the encoded length: it counts each cell and a separator,
  * where TOON also indents the row and quotes any cell holding a comma. It
- * therefore under-counts, by 3% on the worst page of a 124-log corpus - which
+ * therefore under-counts, by 3% on the worst page of real logs - which
  * the budget's own headroom absorbs, since 60,000 characters is well under the
  * 100,000 a 25,000-token ceiling allows.
  */

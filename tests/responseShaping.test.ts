@@ -14,10 +14,10 @@ import {
   toonResult,
 } from "../src/tools/responseShaping";
 import {
-  ALL_LIMIT_METRICS,
+  LIMIT_METRICS,
   type Limits,
   type NamespaceLimits,
-} from "@apexdevtools/apex-log-parser";
+} from "../src/apexLog";
 
 describe("responseShaping", () => {
   describe("roundMs", () => {
@@ -63,7 +63,7 @@ describe("responseShaping", () => {
 
   // From the parser, so the set and its order cannot drift from what the tools
   // emit. `tests/parserContract.test.ts` pins the list itself.
-  const limitNames = ALL_LIMIT_METRICS.map((metric) => metric.key);
+  const limitNames = Object.keys(LIMIT_METRICS);
 
   const limitsOf = (
     used: Partial<Record<keyof Limits, number>> = {},
@@ -99,6 +99,13 @@ describe("responseShaping", () => {
         max: 100,
       });
       expect(rows).toContainEqual({ limit: "cpuTime", used: 15163, max: 100 });
+    });
+
+    // Every row shares one key set and a number in `max`; a null would reach the wire as a cell of its own.
+    it("should state a ceiling the log left unstated as zero", () => {
+      const limits = { ...limitsOf(), callouts: { used: 2, limit: null, percentUsed: null } };
+
+      expect(toLimitRows(limits)).toContainEqual({ limit: "callouts", used: 2, max: 0 });
     });
   });
 
@@ -163,7 +170,7 @@ describe("responseShaping", () => {
     it("should name every metric that is not a count", () => {
       const clause = limitUnitsClause();
 
-      for (const { key, unit } of ALL_LIMIT_METRICS) {
+      for (const [key, unit] of Object.entries(LIMIT_METRICS)) {
         if (unit === "count") {
           expect(clause).not.toContain(key);
         } else {

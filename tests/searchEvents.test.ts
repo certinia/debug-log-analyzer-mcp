@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { loadApexLog } from "../src/tools/apexLogSource";
+import { loadApexLog } from "../src/apexLog";
 import {
   searchEventsTool,
   type SearchEventsArgs,
@@ -42,8 +42,8 @@ describe("searchEvents", () => {
     expect(first.capturedAt).toBeDefined();
     expect(next.capturedAt).toBeUndefined();
     expect(next.matchedCount).toBe(first.matchedCount);
-    expect(next.events[0]!.eventIndex).toBeGreaterThan(
-      first.events[9]!.eventIndex,
+    expect(next.events[0]!.eventId).toBeGreaterThan(
+      first.events[9]!.eventId,
     );
   });
 
@@ -97,19 +97,31 @@ describe("searchEvents", () => {
     expect(events.every((row) => row.type === "EXCEPTION_THROWN")).toBe(true);
   });
 
-  it("should return only the events below parentEventIndex", async () => {
+  // The parser keeps the failed element out of the message; without it a row cannot say which element failed.
+  it("should name the flow element that failed, and find the error by it", async () => {
+    const { events } = await search("exceptions", { contains: "Update_Opportunity" });
+
+    expect(events.map((row) => [row.type, row.text])).toEqual([
+      [
+        "FLOW_ELEMENT_ERROR",
+        "This error occurred: FIELD_CUSTOM_VALIDATION_EXCEPTION: Amount is required. FlowRecordUpdate Update_Opportunity",
+      ],
+    ]);
+  });
+
+  it("should return only the events below parentEventId", async () => {
     const all = await search("governor-heavy", { limit: 1000 });
     const method = all.events.find((row) => row.type === "METHOD_ENTRY")!;
 
     const { events } = await search("governor-heavy", {
-      parentEventIndex: method.eventIndex,
+      parentEventId: method.eventId,
       limit: 1000,
     });
 
-    const below = new Set([method.eventIndex]);
+    const below = new Set([method.eventId]);
     for (const row of events) {
-      expect(below.has(row.parentEventIndex)).toBe(true);
-      below.add(row.eventIndex);
+      expect(below.has(row.parentEventId)).toBe(true);
+      below.add(row.eventId);
     }
     expect(events.length).toBeGreaterThan(0);
   });
@@ -121,7 +133,7 @@ describe("searchEvents", () => {
     });
     const row = listed.events[0]!;
 
-    const asked = await search("governor-heavy", { eventIndex: row.eventIndex });
+    const asked = await search("governor-heavy", { eventId: row.eventId });
 
     expect(row.text).toHaveLength(400);
     expect(row.text).toContain("…");
@@ -140,7 +152,7 @@ describe("searchEvents", () => {
     try {
       const listed = await searchAt(logFilePath, { type: ["USER_DEBUG"] });
       const asked = await searchAt(logFilePath, {
-        eventIndex: listed.events[0]!.eventIndex,
+        eventId: listed.events[0]!.eventId,
       });
 
       expect(listed.events[0]!.text).toHaveLength(400);
@@ -182,43 +194,68 @@ describe("searchEvents", () => {
     expect(events[0]!.text).toBe("");
   });
 
-  // Event 287 is an exit line the log lost the entry of: the one record the method ran.
-  it("should return an exit line whose entry the log lost", async () => {
-    const { events } = await search("governor-heavy", { eventIndex: 287 });
-
-    expect(events.map((row) => row.type)).toEqual(["METHOD_EXIT"]);
-  });
-
-  // A folded line (233) or an index past the log reads as an error, not as nothing below it.
+  // An index past the log reads as an error, not as nothing below it.
   it.each([
-    { eventIndex: 10_000 },
-    { eventIndex: 233 },
-    { parentEventIndex: 10_000 },
+    { eventId: 10_000 },
+    { parentEventId: 10_000 },
   ])("should refuse an index no search reaches: %o", async (args) => {
     await expect(search("governor-heavy", args)).rejects.toThrow(
-      `No event in this log has eventIndex ${Object.values(args)[0]}. Pass as ${Object.keys(args)[0]} an eventIndex from a row this tool returned.`,
+      `No event in this log has eventId ${Object.values(args)[0]}. Pass as ${Object.keys(args)[0]} an eventId from a row this tool returned.`,
     );
   });
 
-  it("should return an event asked for by id only if it is below parentEventIndex", async () => {
-    const inside = await search("governor-heavy", { eventIndex: 10, parentEventIndex: 9 });
-    const outside = await search("governor-heavy", { eventIndex: 10, parentEventIndex: 5 });
+  // Every top-level row has parentEventId 0, so an agent will pass 0 back as eventId.
+  it("should say eventId 0 is the log and how to search it", async () => {
+    await expect(search("governor-heavy", { eventId: 0 })).rejects.toThrow(
+      "eventId 0 is the log itself, not an event. Pass it as parentEventId, or leave both out, to search the whole log.",
+    );
+  });
 
-    expect(inside.events.map((row) => row.eventIndex)).toEqual([10]);
+  it("should return an event asked for by id only if it is below parentEventId", async () => {
+    const inside = await search("governor-heavy", { eventId: 11, parentEventId: 10 });
+    const outside = await search("governor-heavy", { eventId: 11, parentEventId: 9 });
+
+    expect(inside.events.map((row) => row.eventId)).toEqual([11]);
     expect(outside.events).toEqual([]);
   });
 
+  // In governor-heavy, event 10 holds 11 to 13 and event 14 follows it: an off-by-one
+  // in the subtree's bounds would take in 14 or drop 13.
+  it.each([
+    [13, [13]],
+    [14, []],
+  ])("should take event %i below parentEventId 10 only if it is in the subtree", async (eventId, expected) => {
+    const { events } = await search("governor-heavy", { eventId, parentEventId: 10 });
+
+    expect(events.map((row) => row.eventId)).toEqual(expected);
+  });
+
+  it("should return every event below parentEventId and none past it", async () => {
+    const below10 = await search("governor-heavy", { parentEventId: 10 });
+    // Event 9 is a frame with nothing under it.
+    const below9 = await search("governor-heavy", { parentEventId: 9 });
+
+    expect(below10.events.map((row) => row.eventId)).toEqual([11, 12, 13]);
+    expect(below9).toMatchObject({ matchedCount: 0, events: [] });
+  });
+
+  // governor-heavy holds 158 events, so the last id is the one a ">=" bound would refuse.
+  it("should find the log's last event by its id", async () => {
+    const { events } = await search("governor-heavy", { eventId: 158 });
+
+    expect(events.map((row) => row.eventId)).toEqual([158]);
+  });
+
   // Top-level rows report the log itself, index 0, as their parent.
-  it("should search the whole log below parentEventIndex 0", async () => {
+  it("should search the whole log below parentEventId 0", async () => {
     const all = await search("governor-heavy");
-    const below = await search("governor-heavy", { parentEventIndex: 0 });
+    const below = await search("governor-heavy", { parentEventId: 0 });
 
     expect(below).toEqual(all);
   });
 
-  // Rows that state no category; a type that matched nothing; text, which can sit in any category.
+  // A type that matched nothing; text, which can sit in any category.
   it.each([
-    { type: ["FLOW_CREATE_INTERVIEW_END"] },
     { type: ["SOQL_EXECUTE_BEGIN", "NO_SUCH_TYPE"] },
     { contains: "newInstance(Integer" },
   ])("should give every declared level when the search fixes no category: %o", async (args) => {
@@ -241,6 +278,6 @@ describe("searchEvents", () => {
       contains: "newInstance(Integer",
     });
 
-    expect(events.map((row) => row.eventIndex)).toEqual([6]);
+    expect(events.map((row) => row.eventId)).toEqual([6]);
   });
 });

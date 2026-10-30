@@ -37,7 +37,8 @@ jest.mock("../src/salesforce/connection", () => ({
 }));
 
 // The written file is never on disk here, so the parse cannot be the real one.
-jest.mock("../src/tools/apexLogSource", () => ({
+jest.mock("../src/apexLog", () => ({
+  ...jest.requireActual("../src/apexLog"),
   loadApexLog: jest.fn(),
 }));
 
@@ -94,8 +95,8 @@ import {
   readLocalOrg,
   type LocalOrg,
 } from "../src/salesforce/connection";
-import { loadApexLog } from "../src/tools/apexLogSource";
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import { loadApexLog } from "../src/apexLog";
+import type { ApexLog } from "../src/apexLog";
 import type { OrgClassification } from "../src/salesforce/orgClassification";
 import { compileDenyList, type DenyList } from "../src/policy/orgDenyList";
 import {

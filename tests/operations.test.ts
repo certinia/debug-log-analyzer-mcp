@@ -2,14 +2,17 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import { join } from "path";
+
+import { loadApexLog, type ApexLog } from "../src/apexLog";
 import {
+  categoryTotals,
   GROUP_BY,
   groupOperations,
   listOperations,
   type Operation,
 } from "../src/tools/operations";
-import { node, rootLog, type NodeSpec } from "./support/logEvents";
+import { rootLog, type NodeSpec } from "./support/logEvents";
 
 /** These cases are about which operations come back, not their share of a log. */
 const logOf = (...children: NodeSpec[]): ApexLog =>
@@ -23,19 +26,19 @@ describe("listOperations", () => {
       logOf(
         {
           type: "METHOD_ENTRY",
-          category: "Apex",
+          isFrame: true,
           debugCategory: "apexCode",
           text: "A.run",
         },
         {
           type: "SOQL_EXECUTE_BEGIN",
-          category: "SOQL",
+          isFrame: true,
           debugCategory: "database",
           text: "SELECT Id",
         },
         {
           type: "DML_BEGIN",
-          category: "DML",
+          isFrame: true,
           debugCategory: "database",
           text: "DML Insert Account",
         },
@@ -53,19 +56,19 @@ describe("listOperations", () => {
 
   // Every timed event is ranked, whatever its type, and reports the category
   // the parser stamped. Which category goes with which type is pinned against a
-  // real parse in `tests/parserContract.test.ts`.
-  it("ranks a timed event of a type it does not know", () => {
+  // real parse in `tests/parserContract.test.ts`. No code here names this type.
+  it("ranks a timed event of a type it names nowhere", () => {
     const operations = listOperations(
       logOf({
-        type: "SOME_UNKNOWN_EVENT",
-        category: "Automation",
+        type: "NBA_NODE_BEGIN",
+        isFrame: true,
         debugCategory: "nba",
         totalNs: 5_000_000,
       }),
     );
 
     expect(operations).toMatchObject([
-      { type: "SOME_UNKNOWN_EVENT", debugCategory: "nba" },
+      { type: "NBA_NODE_BEGIN", debugCategory: "nba" },
     ]);
   });
 
@@ -76,7 +79,7 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "CODE_UNIT_STARTED",
-        category: "Code Unit",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "Svc.run()",
         totalNs: 904_000_000,
@@ -84,7 +87,7 @@ describe("listOperations", () => {
         children: [
           {
             type: "METHOD_ENTRY",
-            category: "Apex",
+            isFrame: true,
             debugCategory: "apexCode",
             text: "Svc.fetch()",
             totalNs: 902_000_000,
@@ -92,7 +95,7 @@ describe("listOperations", () => {
             children: [
               {
                 type: "CALLOUT_REQUEST",
-                category: "Callout",
+                isFrame: true,
                 debugCategory: "callout",
                 text: "HttpRequest",
                 totalNs: 900_000_000,
@@ -114,7 +117,7 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "EXECUTION_STARTED",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "Root",
       }),
@@ -123,19 +126,21 @@ describe("listOperations", () => {
     expect(operations).toEqual([]);
   });
 
-  it("drops the root, which the parser adds and which holds the whole log", () => {
-    const root = node({
-      type: null,
-      category: "Apex",
-      debugCategory: "apexCode",
-      text: "LOG_ROOT",
-      totalNs: 1_000_000_000,
-    }) as ApexLog;
-
-    expect(listOperations(root)).toEqual([]);
+  // The log holds the whole transaction as its own time; ranking it would say only that.
+  it("ranks nothing for a log with no events, whatever its duration", () => {
+    expect(listOperations(rootLog(1_000_000_000))).toEqual([]);
   });
 
-  it("drops an untimed node, which the parser leaves with no category", () => {
+  // The parser gives null where the header's level hid a count's lines; every response states a number.
+  it("reports a count the log did not record as zero", () => {
+    const [operation] = listOperations(
+      logOf({ isFrame: true, soqlCount: null, dmlRowCount: null, thrownCount: null }),
+    );
+
+    expect(operation).toMatchObject({ soqlCount: 0, rowCount: 0, thrownCount: 0 });
+  });
+
+  it("drops a leaf, which spans no time", () => {
     expect(listOperations(logOf({ type: "USER_INFO" }))).toEqual([]);
   });
 
@@ -143,13 +148,13 @@ describe("listOperations", () => {
     const operations = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "A.run",
         children: [
           {
             type: "SOQL_EXECUTE_BEGIN",
-            category: "SOQL",
+            isFrame: true,
             debugCategory: "database",
             text: "SELECT Id",
           },
@@ -164,7 +169,7 @@ describe("listOperations", () => {
     const [operation] = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         soqlRowCount: 100,
         dmlRowCount: 20,
@@ -179,7 +184,7 @@ describe("listOperations", () => {
     const [operation] = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: null,
       }),
@@ -191,27 +196,26 @@ describe("listOperations", () => {
     });
   });
 
-  it("reads the calling namespace off the direct parent, not the nearest ranked one", () => {
+  it("reads the calling namespace off the operation it ran inside", () => {
     const operations = listOperations(
       logOf({
         type: "METHOD_ENTRY",
-        category: "Apex",
+        isFrame: true,
         debugCategory: "apexCode",
         text: "Custom.run",
         namespace: "Custom",
         totalNs: 50_000_000,
         children: [
           {
-            // Synthetic: the parser copies a namespace down, so no real log puts
-            // a namespace of its own on an untimed frame. It pins the reading to
-            // the direct parent even so.
+            // Synthetic: the parser copies a namespace down, so a real child has its
+            // parent's. One of its own tells this caller from the method above it.
             type: "VARIABLE_ASSIGNMENT",
             text: "row",
             namespace: "Other",
             children: [
               {
                 type: "DML_BEGIN",
-                category: "DML",
+                isFrame: true,
                 debugCategory: "database",
                 text: "DML Insert Account",
                 namespace: "default",
@@ -232,7 +236,7 @@ describe("listOperations", () => {
 describe("groupOperations", () => {
   const repeatedQuery = (namespace: string) => ({
     type: "SOQL_EXECUTE_BEGIN",
-    category: "SOQL",
+    isFrame: true,
     debugCategory: "database",
     text: "SELECT Id FROM Account",
     namespace,
@@ -243,7 +247,7 @@ describe("groupOperations", () => {
 
   const method = (spec: Partial<NodeSpec> = {}): NodeSpec => ({
     type: "METHOD_ENTRY",
-    category: "Apex",
+    isFrame: true,
     debugCategory: "apexCode",
     text: "A.run",
     ...spec,
@@ -336,7 +340,7 @@ describe("groupOperations", () => {
   it("sums each body's own heap, where a subtree total counts a nesting once", () => {
     const call = (children: NodeSpec[] = []): NodeSpec => ({
       type: "METHOD_ENTRY",
-      category: "Apex",
+      isFrame: true,
       text: "A.run",
       totalNs: 100_000_000,
       selfNs: 40_000_000,
@@ -384,7 +388,7 @@ describe("groupOperations", () => {
     listOperations(
       logOf({
         type: "DML_BEGIN",
-        category: "DML",
+        isFrame: true,
         debugCategory: "database",
         text: "DML Insert Account",
         namespace: "Custom",
@@ -393,7 +397,7 @@ describe("groupOperations", () => {
         children: [
           {
             type: "CODE_UNIT_STARTED",
-            category: "Code Unit",
+            isFrame: true,
             debugCategory: "apexCode",
             text: "Outer",
             namespace: "default",
@@ -402,7 +406,7 @@ describe("groupOperations", () => {
             children: [
               {
                 type: "DML_BEGIN",
-                category: "DML",
+                isFrame: true,
                 debugCategory: "database",
                 text: "DML Update Account",
                 namespace: "Custom",
@@ -411,7 +415,7 @@ describe("groupOperations", () => {
                 children: [
                   {
                     type: "CODE_UNIT_STARTED",
-                    category: "Code Unit",
+                    isFrame: true,
                     debugCategory: "apexCode",
                     text: "Inner",
                     namespace: "Custom",
@@ -419,7 +423,7 @@ describe("groupOperations", () => {
                   },
                   {
                     type: "CODE_UNIT_STARTED",
-                    category: "Code Unit",
+                    isFrame: true,
                     debugCategory: "apexCode",
                     text: "Inner",
                     namespace: "Custom",
@@ -432,18 +436,6 @@ describe("groupOperations", () => {
         ],
       }),
     );
-
-  it("counts a member whose matching ancestor the caller filtered away", () => {
-    const selected = nestedAcrossANamespace().filter(
-      (operation) => operation.namespace === "Custom",
-    );
-
-    expect(
-      groupOperations(selected, "callerNamespace").find(
-        (operation) => operation.type === "CODE_UNIT_STARTED",
-      ),
-    ).toMatchObject({ callCount: 2, durationTotalNs: 70_000_000 });
-  });
 
   it("never reports a total below the self time it contains", () => {
     const operations = nestedAcrossANamespace();
@@ -488,7 +480,7 @@ describe("groupOperations", () => {
           children: [
             {
               type: "DML_BEGIN",
-              category: "DML",
+              isFrame: true,
               debugCategory: "database",
               text: "DML Insert Account",
               namespace: "default",
@@ -555,4 +547,32 @@ describe("groupOperations", () => {
       }),
     ]);
   });
+});
+
+describe("categoryTotals", () => {
+  // A second pass under the same rank rule as listOperations: a filter added to
+  // one and not the other would move apexlog_get_summary's categories off the
+  // operations apexlog_list_slow_operations ranks, with no error.
+  it.each(["governor-heavy", "minimal", "heap-heavy"])(
+    "sums what listOperations returns, and each transaction frame's own time, in %s",
+    async (fixture) => {
+      const log = await loadApexLog(join(__dirname, "eval", "fixtures", `${fixture}.log`));
+      const expected = new Map<string, { operationCount: number; selfNs: number }>();
+      const add = (category: string, operationCount: number, selfNs: number) => {
+        const total = expected.get(category) ?? { operationCount: 0, selfNs: 0 };
+        expected.set(category, {
+          operationCount: total.operationCount + operationCount,
+          selfNs: total.selfNs + selfNs,
+        });
+      };
+      listOperations(log).forEach((operation) =>
+        add(operation.debugCategory, 1, operation.durationSelfNs),
+      );
+      log.children
+        .filter((event) => event.type === "EXECUTION_STARTED")
+        .forEach((event) => add(event.debugCategory, 0, event.duration.self));
+
+      expect(categoryTotals(log)).toEqual(expected);
+    },
+  );
 });

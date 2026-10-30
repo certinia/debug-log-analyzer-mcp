@@ -22,6 +22,7 @@
     "test:coverage": "jest --coverage",
     "eval": "node scripts/eval.mjs",
     "eval:update": "node scripts/eval.mjs --update",
+    "bench": "node scripts/bench.mjs",
     "lint": "eslint ./src ./tests"
   },
   "keywords": [
@@ -53,7 +54,7 @@
   },
   "homepage": "https://github.com/certinia/debug-log-analyzer-mcp#readme",
   "dependencies": {
-    "@apexdevtools/apex-log-parser": "^0.3.0",
+    "@apexdevtools/apex-log-parser": "^0.4.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@salesforce/core": "^9.1.11",
     "@toon-format/toon": "^4.1.1",

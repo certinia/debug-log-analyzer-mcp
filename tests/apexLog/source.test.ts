@@ -4,32 +4,24 @@
 
 import { promises as fs, type BigIntStats } from "fs";
 
-import {
-  clearApexLogCache,
-  loadApexLog,
-  walkLog,
-} from "../src/tools/apexLogSource";
+import { clearApexLogCache, loadApexLog } from "../../src/apexLog";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
 
-jest.mock("fs", () => {
-  const stat = jest.fn();
-  const readFile = jest.fn();
-  // A handle is the file at one path, so its stat and read delegate to the
-  // mocks above with that path filled in. Tests set and assert on those.
-  return {
-    constants: jest.requireActual("fs").constants,
-    promises: {
-      stat,
-      readFile,
-      open: jest.fn(async (path: string) => ({
-        stat: (options: unknown) => stat(path, options),
-        readFile: (encoding: unknown) => readFile(path, encoding),
-        close: jest.fn(),
-      })),
-    },
-  };
-});
+// On the handle alone, so a stat or read of the path itself fails: the loader
+// must read the file it fingerprinted. Each delegates with the handle's path.
+const mockStat = jest.fn();
+const mockReadFile = jest.fn();
+jest.mock("fs", () => ({
+  constants: jest.requireActual("fs").constants,
+  promises: {
+    open: jest.fn(async (path: string) => ({
+      stat: (options: unknown) => mockStat(path, options),
+      readFile: (options: unknown) => mockReadFile(path, options),
+      close: jest.fn(),
+    })),
+  },
+}));
 
 jest.mock("@apexdevtools/apex-log-parser", () => ({
   ...jest.requireActual("@apexdevtools/apex-log-parser"),
@@ -38,6 +30,7 @@ jest.mock("@apexdevtools/apex-log-parser", () => ({
 
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockParse = parse as jest.MockedFunction<typeof parse>;
+const BYTES = Buffer.from("log content");
 
 const statsOf = (
   mtimeNs: number,
@@ -71,7 +64,7 @@ const withFakeTimers = async (body: () => Promise<void>): Promise<void> => {
   }
 };
 
-describe("apexLogSource", () => {
+describe("apexLog source", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     clearApexLogCache();
@@ -81,18 +74,9 @@ describe("apexLogSource", () => {
     const logPath = "/path/to/test.log";
 
     beforeEach(() => {
-      mockFs.stat.mockResolvedValue(statsOf(1, 10));
-      mockFs.readFile.mockResolvedValue("log content");
-      mockParse.mockReturnValue({} as ApexLog);
-    });
-
-    it("parses the file on the first call", async () => {
-      const log = await loadApexLog(logPath);
-
-      expect(mockFs.open).toHaveBeenCalledWith(logPath, expect.any(Number));
-      expect(mockFs.readFile).toHaveBeenCalledWith(logPath, "utf-8");
-      expect(mockParse).toHaveBeenCalledWith("log content");
-      expect(log).toBe(mockParse.mock.results[0]?.value);
+      mockStat.mockResolvedValue(statsOf(1, 10));
+      mockReadFile.mockResolvedValue(BYTES);
+      mockParse.mockImplementation(async () => ({}) as ApexLog);
     });
 
     it("closes every file it opens", async () => {
@@ -113,12 +97,12 @@ describe("apexLogSource", () => {
 
       expect(second).toBe(first);
       expect(mockParse).toHaveBeenCalledTimes(1);
-      expect(mockFs.readFile).toHaveBeenCalledTimes(1);
+      expect(mockReadFile).toHaveBeenCalledTimes(1);
     });
 
     it("parses again when the file was modified", async () => {
       await loadApexLog(logPath);
-      mockFs.stat.mockResolvedValue(statsOf(2, 10));
+      mockStat.mockResolvedValue(statsOf(2, 10));
       await loadApexLog(logPath);
 
       expect(mockParse).toHaveBeenCalledTimes(2);
@@ -126,7 +110,7 @@ describe("apexLogSource", () => {
 
     it("parses again when the file size changed", async () => {
       await loadApexLog(logPath);
-      mockFs.stat.mockResolvedValue(statsOf(1, 20));
+      mockStat.mockResolvedValue(statsOf(1, 20));
       await loadApexLog(logPath);
 
       expect(mockParse).toHaveBeenCalledTimes(2);
@@ -136,7 +120,7 @@ describe("apexLogSource", () => {
       await loadApexLog(logPath);
       // What `cp -p` leaves behind: same size, same mtime, same inode, and a
       // change time it cannot hold back.
-      mockFs.stat.mockResolvedValue(statsOf(1, 10, { ctimeNs: 2 }));
+      mockStat.mockResolvedValue(statsOf(1, 10, { ctimeNs: 2 }));
       await loadApexLog(logPath);
 
       expect(mockParse).toHaveBeenCalledTimes(2);
@@ -144,7 +128,7 @@ describe("apexLogSource", () => {
 
     it("parses again when another file was renamed over the path", async () => {
       await loadApexLog(logPath);
-      mockFs.stat.mockResolvedValue(statsOf(1, 10, { ino: 8 }));
+      mockStat.mockResolvedValue(statsOf(1, 10, { ino: 8 }));
       await loadApexLog(logPath);
 
       expect(mockParse).toHaveBeenCalledTimes(2);
@@ -180,19 +164,19 @@ describe("apexLogSource", () => {
     });
 
     it("shares one parse between callers that arrive while it runs", async () => {
-      let release: (content: string) => void = () => {};
-      mockFs.readFile.mockReturnValue(
-        new Promise<string>((resolve) => {
+      let release: (log: ApexLog) => void = () => {};
+      mockParse.mockReturnValueOnce(
+        new Promise<ApexLog>((resolve) => {
           release = resolve;
-        }) as ReturnType<typeof fs.readFile>,
+        }),
       );
 
       const both = Promise.all([loadApexLog(logPath), loadApexLog(logPath)]);
-      release("log content");
+      release({} as ApexLog);
       const [first, second] = await both;
 
       expect(second).toBe(first);
-      expect(mockFs.readFile).toHaveBeenCalledTimes(1);
+      expect(mockReadFile).toHaveBeenCalledTimes(1);
       expect(mockParse).toHaveBeenCalledTimes(1);
     });
 
@@ -201,7 +185,7 @@ describe("apexLogSource", () => {
       [true, "it is a directory (EISDIR)"],
       [false, "not a regular file"],
     ])("refuses a path that is not a regular file, before reading it (directory: %s)", async (isDirectory, cause) => {
-      mockFs.stat.mockResolvedValueOnce({
+      mockStat.mockResolvedValueOnce({
         ...statsOf(1, 0),
         isFile: () => false,
         isDirectory: () => isDirectory,
@@ -210,54 +194,39 @@ describe("apexLogSource", () => {
       await expect(loadApexLog(logPath)).rejects.toThrow(
         `Cannot read log file ${logPath}: ${cause}`,
       );
-      expect(mockFs.readFile).not.toHaveBeenCalled();
+      expect(mockReadFile).not.toHaveBeenCalled();
     });
 
-    it("does not serve a failed read to the next caller", async () => {
-      mockFs.readFile.mockRejectedValueOnce(new Error("EACCES"));
+    // The stat passed, so only the read can say why; Node's own error names no path.
+    it("names the log and the cause when the read fails", async () => {
+      mockReadFile.mockRejectedValueOnce(
+        Object.assign(new Error("File size is greater than 2 GiB"), { code: "ERR_FS_FILE_TOO_LARGE" }),
+      );
 
-      await expect(loadApexLog(logPath)).rejects.toThrow("EACCES");
-      const retried = await loadApexLog(logPath);
-
-      expect(retried).toBe(mockParse.mock.results[0]?.value);
-      expect(mockFs.readFile).toHaveBeenCalledTimes(2);
+      await expect(loadApexLog(logPath)).rejects.toThrow(
+        `Cannot read log file ${logPath}: larger than 2 GiB (ERR_FS_FILE_TOO_LARGE)`,
+      );
     });
 
     it("hands a parse failure to the caller, and parses again next time", async () => {
-      mockParse.mockImplementationOnce(() => {
-        throw new Error("Failed to parse log");
-      });
+      mockParse.mockRejectedValueOnce(new Error("Failed to parse log"));
 
       await expect(loadApexLog(logPath)).rejects.toThrow("Failed to parse log");
       const retried = await loadApexLog(logPath);
 
-      expect(retried).toBe(mockParse.mock.results[1]?.value);
+      expect(retried).toBe(await mockParse.mock.results[1]?.value);
       expect(mockParse).toHaveBeenCalledTimes(2);
     });
 
     it("reports a missing file and does not read it", async () => {
-      mockFs.stat.mockRejectedValue(
+      mockStat.mockRejectedValue(
         Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
       );
 
       await expect(loadApexLog("/path/to/missing.log")).rejects.toThrow(
         "Log file not found: /path/to/missing.log",
       );
-      expect(mockFs.readFile).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("walkLog", () => {
-    it("visits the node and every node below it, parents first", () => {
-      const tree = {
-        type: "root",
-        children: [{ type: "a", children: [{ type: "a1" }] }, { type: "b" }],
-      } as unknown as LogEvent;
-
-      const seen: string[] = [];
-      walkLog(tree, (node) => seen.push(node.type as string));
-
-      expect(seen).toEqual(["root", "a", "a1", "b"]);
+      expect(mockReadFile).not.toHaveBeenCalled();
     });
   });
 });

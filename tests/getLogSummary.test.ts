@@ -3,26 +3,23 @@
  */
 
 import { getLogSummaryTool } from "../src/tools/getLogSummary";
-import { logEvent, type NodeSpec } from "./support/logEvents";
-import { walkLog } from "../src/tools/apexLogSource";
+import { logEvent, rootLog, type NodeSpec } from "./support/logEvents";
 import { DEBUG_CATEGORIES } from "../src/logLevels";
-import { ALL_LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+import { LIMIT_METRICS } from "../src/apexLog";
 import type {
   ApexLog,
-  ApexLogParser,
   GovernorLimits,
   Limits,
-  LogEvent,
   LogIssue,
   NamespaceLimits,
-} from "@apexdevtools/apex-log-parser";
+} from "../src/apexLog";
 
 const counts = { total: 0, self: 0 };
 
 describe("getLogSummary", () => {
   // From the parser, so the set cannot drift from what the tool emits.
   // `tests/parserContract.test.ts` pins the list itself.
-  const LIMIT_NAMES = ALL_LIMIT_METRICS.map((metric) => metric.key);
+  const LIMIT_NAMES = Object.keys(LIMIT_METRICS);
 
   const limitsOf = (
     used: Partial<Record<keyof Limits, number>>,
@@ -55,50 +52,33 @@ describe("getLogSummary", () => {
     byNamespace,
   });
 
-  const createMockApexLog = (overrides: Partial<ApexLog> = {}): ApexLog =>
-    ({
-      type: null,
-      text: "LOG_ROOT",
+  // An empty log of the builder's, with what these cases read beside the tree.
+  const createMockApexLog = (overrides: Partial<ApexLog> = {}): ApexLog => {
+    const log = {
+      ...rootLog(12_500_000_000),
       size: 15000,
-      debugLevels: {},
       namespaces: ["default", "MyNamespace"],
-      logIssues: [] as LogIssue[],
-      exceptions: [] as LogEvent[],
-      eventsById: [] as LogEvent[],
-      isTruncated: false,
-      truncation: { regions: [], totalSkippedBytes: 0 },
-      truncatedEvents: [] as LogEvent[],
       thrownCount: counts,
-      governorLimits: governorLimitsOf({
+      limits: governorLimitsOf({
         used: { soqlQueries: 5, dmlStatements: 3, cpuTime: 1500 },
       }),
-      logParser: {} as ApexLogParser,
-      parent: null,
-      children: [] as LogEvent[],
-      lineNumber: null,
-      duration: { total: 12_500_000_000, self: 12_500_000_000 },
       ...overrides,
-    }) as unknown as ApexLog;
+    };
+    // Over the events the case gave, as the parser's index is over the log's.
+    const ofType = (...types: string[]) =>
+      [...log.events].filter(({ type }) => types.includes(type));
+    return { ...log, ofType } as unknown as ApexLog;
+  };
 
   const summaryOf = (
     overrides: Partial<ApexLog> = {},
   ): ReturnType<typeof getLogSummaryTool.run> =>
     getLogSummaryTool.run(createMockApexLog(overrides), {});
 
-  // The lists the parser fills beside the tree: every event, and every throw and fatal.
+  // The lists the parser fills beside the tree: every event, every throw and fatal, and the columns.
   const logOf = (...frames: NodeSpec[]): Partial<ApexLog> => {
-    const children = frames.map(logEvent);
-    const eventsById: LogEvent[] = [];
-    children.forEach((child) =>
-      walkLog<void>(child, (event) => {
-        eventsById.push(event);
-      }),
-    );
-    const exceptions = eventsById.filter(
-      (event) =>
-        event.type === "EXCEPTION_THROWN" || event.type === "FATAL_ERROR",
-    );
-    return { children, eventsById, exceptions };
+    const { children, events, exceptions, columns } = rootLog(0, ...frames);
+    return { children, events, exceptions, columns };
   };
 
   describe("the transaction", () => {
@@ -134,7 +114,7 @@ describe("getLogSummary", () => {
       // log cut off by an interrupted download states no region at all, and
       // nothing else in the response would say its figures are floors.
       const summary = summaryOf({
-        truncatedEvents: [logEvent({ type: "METHOD_ENTRY", category: "Apex" })],
+        unclosedFrames: [{ ...logEvent({ type: "METHOD_ENTRY", isFrame: true }), endedBy: "log-end" }] as ApexLog["unclosedFrames"],
       });
 
       expect(summary.truncated).toBe(true);
@@ -143,6 +123,16 @@ describe("getLogSummary", () => {
       // all would name a loss the platform never made.
       expect(summary.truncatedBy).toBeUndefined();
       expect(summary.skippedBytes).toBeUndefined();
+    });
+
+    // An exception closes the frames it unwinds at a later exit line, and the
+    // log goes on. Real logs that throw carry such frames and are whole.
+    it("should not call a log partial for a frame an exception unwound", () => {
+      const summary = summaryOf({
+        unclosedFrames: [{ ...logEvent({ type: "METHOD_ENTRY", isFrame: true }), endedBy: "unwind" }] as ApexLog["unclosedFrames"],
+      });
+
+      expect(summary.truncated).toBe(false);
     });
 
     it("should report a zero byte count on a log that hit the maximum size", () => {
@@ -161,7 +151,7 @@ describe("getLogSummary", () => {
     });
 
     it("should name both losses when a log suffered both", () => {
-      // Two of 124 real logs carry both, and a reader of `skippedBytes` alone
+      // Two real logs carry both, and a reader of `skippedBytes` alone
       // would take a hole's byte count for the whole extent of the loss.
       const summary = summaryOf({
         isTruncated: true,
@@ -178,10 +168,10 @@ describe("getLogSummary", () => {
     });
 
     it("should clip a frames cell one long frame would otherwise fill", () => {
-      // A single frame runs to 1,081 characters on a 124-log corpus, so capping
+      // A single frame runs to 1,081 characters in real logs, so capping
       // the frame count alone leaves the cell unbounded.
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: "System.CalloutException: bad response",
             description: `${"x".repeat(5000)}\nClass.Service.run: line 1, column 1`,
@@ -198,7 +188,7 @@ describe("getLogSummary", () => {
 
     it("should report what killed the transaction, and where", () => {
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: "System.LimitException: Apex CPU time limit exceeded",
             description:
@@ -221,10 +211,10 @@ describe("getLogSummary", () => {
     it("should state the innermost frames and say that it dropped the rest", () => {
       // A real log states 52,009 characters of stack. Three frames name the
       // failing call and its callers; the rest costs more than it says. Half of
-      // a 124-log corpus has a fourth, so the drop has to be visible or a deep
+      // real logs have a fourth, so the drop has to be visible or a deep
       // stack reads like a shallow one.
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: "System.LimitException: Maximum stack depth reached: 1001",
             description: ["one", "two", "three", "four", "five"].join("\n"),
@@ -239,7 +229,7 @@ describe("getLogSummary", () => {
 
     it("should not claim a drop on a stack that fits", () => {
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: "System.NullPointerException: Attempt to de-reference null",
             description: ["one", "two", "three"].join("\n"),
@@ -257,7 +247,7 @@ describe("getLogSummary", () => {
       // the stack cost a frame and still claim a drop, so a stack that fits read
       // as one that had been cut.
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: "System.NullPointerException: Attempt to de-reference null",
             description: ["one", "", "two", "three"].join("\n"),
@@ -272,11 +262,11 @@ describe("getLogSummary", () => {
 
     it("should clip a message where it runs into prose", () => {
       // A DmlException embeds the whole validation message a user would see -
-      // 1,070 characters at the worst of 124 real logs. The kept part carries
+      // 1,070 characters at the worst of real logs. The kept part carries
       // the exception class, the offending row and the error code.
       const prose = "x".repeat(400);
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: `System.DmlException: Update failed. first error: CANNOT_EXECUTE_FLOW_TRIGGER, ${prose}`,
             description: "Class.Service.run: line 1, column 1",
@@ -296,7 +286,7 @@ describe("getLogSummary", () => {
       // An absent key would put the table out of its one-header form, which
       // costs more than the empty cell it saves.
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: "Internal Salesforce.com Error",
             description: "",
@@ -315,7 +305,7 @@ describe("getLogSummary", () => {
       // `error` repeats a fatal's message without its stack, and `skip` and
       // `unexpected` say what `truncated` already says.
       const summary = summaryOf({
-        logIssues: [
+        issues: [
           {
             summary: "System.DmlException: Update failed",
             description: "",
@@ -569,7 +559,7 @@ describe("getLogSummary", () => {
   describe("governorLimits", () => {
     it("should report every limit as a row, including the ones at zero", () => {
       const summary = summaryOf({
-        governorLimits: governorLimitsOf({
+        limits: governorLimitsOf({
           used: { cpuTime: 8000, soqlQueries: 50 },
         }),
       });
@@ -592,7 +582,7 @@ describe("getLogSummary", () => {
       // A counter falls when the frame that spent it exits, so the final figure
       // understates what the platform enforced.
       const summary = summaryOf({
-        governorLimits: governorLimitsOf({
+        limits: governorLimitsOf({
           used: { cpuTime: 100 },
           peakUsed: { cpuTime: 8000 },
         }),
@@ -609,7 +599,7 @@ describe("getLogSummary", () => {
   describe("limitsByNamespace", () => {
     it("should report what each namespace consumed", () => {
       const summary = summaryOf({
-        governorLimits: governorLimitsOf({
+        limits: governorLimitsOf({
           used: { soqlQueries: 6, cpuTime: 1500 },
           byNamespace: new Map([
             ["srm_pkg", namespaceLimitsOf({ soqlQueries: 4, cpuTime: 900 })],
@@ -627,7 +617,7 @@ describe("getLogSummary", () => {
 
     it("should report the peak a namespace reached, not where it ended", () => {
       const summary = summaryOf({
-        governorLimits: governorLimitsOf({
+        limits: governorLimitsOf({
           byNamespace: new Map([
             ["srm_pkg", namespaceLimitsOf({ soqlQueries: 1 }, { soqlQueries: 4 })],
           ]),
@@ -683,24 +673,24 @@ describe("getLogSummary", () => {
     it("should file a frame's self time under its category, and the root's as unattributed", () => {
       const summary = summaryOf({
         duration: { total: 10_000_000_000, self: 1_000_000_000 },
-        children: [
-          logEvent({ type: "USER_INFO", debugCategory: "apexCode" }),
-          logEvent({
+        ...logOf(
+          { type: "USER_INFO", debugCategory: "apexCode" },
+          {
             type: "EXECUTION_STARTED",
-            category: "Apex",
+            isFrame: true,
             debugCategory: "apexCode",
             totalNs: 9_000_000_000,
             selfNs: 2_000_000_000,
             children: [
               {
                 type: "METHOD_ENTRY",
-                category: "Apex",
+                isFrame: true,
                 debugCategory: "apexCode",
                 totalNs: 7_000_000_000,
               },
             ],
-          }),
-        ],
+          },
+        ),
       });
 
       expect(rowOf(summary, "apexCode")).toMatchObject({
@@ -718,30 +708,30 @@ describe("getLogSummary", () => {
     });
 
     it("should count the operations of a category and sum their self time", () => {
-      const summary = summaryOf({
-        children: [
-          logEvent({
+      const summary = summaryOf(
+        logOf(
+          {
             type: "METHOD_ENTRY",
-            category: "Apex",
+            isFrame: true,
             debugCategory: "apexCode",
             totalNs: 2_000_000_000,
             children: [
               {
                 type: "SOQL_EXECUTE_BEGIN",
-                category: "SOQL",
+                isFrame: true,
                 debugCategory: "database",
                 totalNs: 1_000_000_000,
               },
             ],
-          }),
-          logEvent({
+          },
+          {
             type: "METHOD_ENTRY",
-            category: "Apex",
+            isFrame: true,
             debugCategory: "apexCode",
             totalNs: 500_000_000,
-          }),
-        ],
-      });
+          },
+        ),
+      );
 
       expect(rowOf(summary, "apexCode")).toEqual({
         debugCategory: "apexCode",
@@ -762,16 +752,14 @@ describe("getLogSummary", () => {
     // A Visualforce formula carries the timeline category `System`, so reading
     // that would report half a Visualforce transaction as system time.
     it("should file an operation under the category that gates it", () => {
-      const summary = summaryOf({
-        children: [
-          logEvent({
-            type: "VF_EVALUATE_FORMULA_BEGIN",
-            category: "System",
-            debugCategory: "visualforce",
-            selfNs: 6_000_000_000,
-          }),
-        ],
-      });
+      const summary = summaryOf(
+        logOf({
+          type: "VF_EVALUATE_FORMULA_BEGIN",
+          isFrame: true,
+          debugCategory: "visualforce",
+          selfNs: 6_000_000_000,
+        }),
+      );
 
       expect(rowOf(summary, "visualforce")).toMatchObject({
         operationCount: 1,

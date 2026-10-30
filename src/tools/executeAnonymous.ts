@@ -26,7 +26,7 @@ import {
   traceFlagWindow,
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
-import { loadApexLog } from "./apexLogSource.js";
+import { loadApexLog } from "../apexLog/index.js";
 import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, unwritableLogDir, writeDebugLog } from "./logStore.js";

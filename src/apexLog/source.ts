@@ -4,8 +4,8 @@
 
 import { constants, promises as fs, type BigIntStats } from "fs";
 import { parse } from "@apexdevtools/apex-log-parser";
-import type { ApexLog, LogEvent } from "@apexdevtools/apex-log-parser";
-import { fileReadError } from "./localFile.js";
+import type { ApexLog } from "@apexdevtools/apex-log-parser";
+import { fileReadError } from "../tools/localFile.js";
 
 type CachedLog = {
   path: string;
@@ -34,8 +34,7 @@ function fingerprintOf(stats: BigIntStats): string {
 /**
  * The last parse, kept so that the usual "summary, then go deeper" flow parses
  * a large log once instead of once per tool. One slot only: the flow works
- * through a single log at a time, and a parsed 19 MB log is too big to hold
- * several of.
+ * through a single log at a time.
  *
  * This is not protocol state, so it holds under a stateless MCP revision. It is
  * a memo of a pure function of a file on disk, re-checked against `fs.stat` on
@@ -46,8 +45,9 @@ function fingerprintOf(stats: BigIntStats): string {
 let cached: CachedLog | undefined;
 
 /**
- * How long the slot survives after its last use. A parsed log holds four to
- * five times the size of the file, so a 200 MB log holds about a gigabyte.
+ * How long the slot survives after its last use. A parsed log of 1 MB or more
+ * holds one to two times the size of the file - a median 1.6 times on real
+ * logs of 10-50 MB, by `pnpm run bench` - so a 200 MB log holds some 300 MB.
  * That is worth holding while an agent works through one log, and not worth
  * holding until the process exits.
  */
@@ -102,7 +102,17 @@ export async function loadApexLog(logFilePath: string): Promise<ApexLog> {
     // arrives while a large log is still being read shares that read instead of
     // starting its own. The slot is filled in the same microtask as the miss
     // above, so a second caller cannot slip between the two.
-    const pending = handle.readFile("utf-8").then(parse);
+    //
+    // Bytes, not a string: the parser reads UTF-8 itself, so no UTF-16 copy of
+    // the log is ever held. One read, not a stream: the parser holds the whole
+    // input anyway, and joining a stream's chunks cost 161 MB more peak RSS and
+    // 32 ms more on a 100 MB log, by `pnpm run bench`.
+    const pending = handle
+      .readFile()
+      .catch((error: unknown) => {
+        throw fileReadError("log file", logFilePath, error);
+      })
+      .then(parse);
     cached = { path: logFilePath, fingerprint, log: pending };
     scheduleEviction();
 
@@ -124,19 +134,4 @@ export function clearApexLogCache(): void {
   clearTimeout(evictionTimer);
   evictionTimer = undefined;
   cached = undefined;
-}
-
-/**
- * Visit the node and every node below it, parents first.
- *
- * What `visit` returns is passed to that node's children, so a visitor can carry
- * what encloses a node down to it without a second pass.
- */
-export function walkLog<T>(
-  node: LogEvent,
-  visit: (node: LogEvent, inherited: T | undefined) => T,
-  inherited?: T,
-): void {
-  const next = visit(node, inherited);
-  node.children?.forEach((child) => walkLog(child, visit, next));
 }

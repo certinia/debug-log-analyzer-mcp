@@ -30,6 +30,8 @@ const CODE_WORDS: Partial<Record<string, string>> = {
   ENFILE: "too many open files",
   ENOTDIR: "not a directory",
   EROFS: "read-only file system",
+  // Node reads at most 2 GiB into one buffer.
+  ERR_FS_FILE_TOO_LARGE: "larger than 2 GiB",
 };
 
 /** An fs error's cause in words, with its code beside them, e.g. "permission denied (EACCES)". */
