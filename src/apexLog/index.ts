@@ -11,7 +11,7 @@
  * names: a copy into types of our own would cost a pass over every event.
  */
 
-import { eventType } from "@apexdevtools/apex-log-parser";
+import { DEFAULT_NAMESPACE, eventType } from "@apexdevtools/apex-log-parser";
 import type {
   ApexEvent,
   ApexLog,
@@ -36,7 +36,7 @@ export type {
   LogIssue,
   NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-export { ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+export { DEFAULT_NAMESPACE, ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
 // For the test builder, which the lint rule keeps from the parser.
 export type { Columns, CountColumn } from "@apexdevtools/apex-log-parser";
 export { eventType } from "@apexdevtools/apex-log-parser";
@@ -127,48 +127,12 @@ export function textAt(log: ApexLog, id: number): string {
   return event ? textOf(event) : (text.at(id) ?? "");
 }
 
-const NO_NAMESPACE = "default";
-
 /**
- * The namespace an event ran in, with `default` for none, or for no event.
- *
- * The parser gives null for an event in no namespace, which every response
- * has always called `default`. It copies a namespace down to a child that
- * states none, so this never looks at the parent - pinned in
- * `tests/parserContract.test.ts`.
+ * The namespace event `id` ran in, `DEFAULT_NAMESPACE` for code in no package.
+ * The column is null only for an id that is no event, as the log's own row 0.
  */
-export function namespaceOf(event?: Pick<ApexEvent, "namespace">): string {
-  return event?.namespace ?? NO_NAMESPACE;
-}
-
-/** `namespaceOf` for event `id`. */
 export function namespaceAt(namespaces: Columns["namespace"], id: number): string {
-  return namespaces.at(id) ?? NO_NAMESPACE;
-}
-
-/**
- * Every namespace the log states, `default` among them where an event is in
- * none, in the order each first appears.
- *
- * The parser lists only the namespaces a line names, so this adds `default`
- * where `namespaceOf` first reports it. Once the parser lists `default` itself,
- * this is `log.namespaces`.
- */
-export function namespacesOf(log: ApexLog): string[] {
-  const named = new Set<string>();
-  // A loop, to stop at the first `default`, the one name the parser does not
-  // list: on most logs that is within the first few events. The parser lists
-  // the rest in the order they first appear, so they follow in its order.
-  const { count, namespace: namespaces } = log.columns;
-  for (let id = 1; id <= count; id++) {
-    const namespace = namespaceAt(namespaces, id);
-    named.add(namespace);
-    if (namespace === NO_NAMESPACE) {
-      break;
-    }
-  }
-  log.namespaces.forEach((namespace) => named.add(namespace));
-  return [...named];
+  return namespaces.at(id) ?? DEFAULT_NAMESPACE;
 }
 
 /**

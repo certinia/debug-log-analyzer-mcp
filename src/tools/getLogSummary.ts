@@ -5,7 +5,6 @@
 import {
   countOf,
   ENDED_BY,
-  namespacesOf,
   textOf,
   type ApexEvent,
   type ApexLog,
@@ -233,7 +232,7 @@ interface LogSummaryResult {
   /** `FLOW_ELEMENT_ERROR` only: every real log with a `WF_FLOW_ACTION_ERROR` also has one. */
   flowErrorCount: number;
   fatalErrors?: FatalError[];
-  namespaces: string[];
+  namespaces: readonly string[];
   governorLimits: LimitRow[];
   limitsByNamespace: NamespaceLimitRow[];
   categories: CategoryRow[];
@@ -275,7 +274,7 @@ function getLogSummary(apexLog: ApexLog): LogSummaryResult {
     ...omitEmpty({ exceptions: exceptions.slice(0, EXCEPTION_ROW_LIMIT) }),
     flowErrorCount: flowErrorCount(apexLog),
     ...omitEmpty({ fatalErrors: fatalErrors(apexLog.issues) }),
-    namespaces: namespacesOf(apexLog),
+    namespaces: apexLog.namespaces,
     governorLimits: toLimitRows(apexLog.limits.peak),
     limitsByNamespace: toNamespaceLimitRows(apexLog.limits.byNamespace),
     categories: categories(apexLog),

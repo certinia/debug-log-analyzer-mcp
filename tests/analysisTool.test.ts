@@ -63,7 +63,7 @@ describe("defineAnalysisTool", () => {
   // Catches answering for the first log alone, as if it were the whole file.
   it("warns first, with the count, when the file holds more than one log", async () => {
     const dir = mkdtempSync(join(tmpdir(), "two-logs-"));
-    // The parser opens a new log only at a header followed directly by an earlier timestamp.
+    // The parser opens a new log at a header whose next event has an earlier timestamp.
     const log = [
       readFileSync(MINIMAL_LOG, "utf-8").split("\n")[0],
       "09:00:00.1 (1000)|EXECUTION_STARTED",

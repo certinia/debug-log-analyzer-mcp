@@ -13,6 +13,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+  DEFAULT_NAMESPACE,
   eventType,
   LEVEL,
   LIMIT_METRICS,
@@ -345,22 +346,20 @@ describe("parser contract", () => {
       "09:00:00.1 (9000)|CODE_UNIT_FINISHED|c2g.Svc.run()",
     );
 
-    // `namespaceOf` reads an event's own namespace and never its parent's, and
-    // reads null as `default`. Both halves are the parser's: a query states no
-    // namespace and takes its method's, while DML is in `default` however it
-    // was reached - which is why `callerNamespace` exists.
-    it("copies a namespace down to a query, and leaves DML in none", async () => {
+    // The tools read an event's own namespace and never its parent's. Both halves
+    // are the parser's: a query states no namespace and takes its method's, while
+    // DML is in `default` however it was reached - which is why `callerNamespace` exists.
+    it("copies a namespace down to a query, and leaves DML in default", async () => {
       const parsed = await parse(log);
       const namespaceOf = (type: string) => tree(parsed).find((event) => event.type === type)?.namespace;
 
       expect(namespaceOf("SOQL_EXECUTE_BEGIN")).toBe("c2g");
-      expect(namespaceOf("DML_BEGIN")).toBeNull();
+      expect(namespaceOf("DML_BEGIN")).toBe(DEFAULT_NAMESPACE);
     });
 
-    // Why `namespacesOf` adds `default`. Once the parser lists it, this fails,
-    // and `namespacesOf` can return `namespaces` as it is.
-    it("lists only the namespaces a line names, not default", async () => {
-      expect((await parse(log)).namespaces).toEqual(["c2g"]);
+    // `apexlog_get_summary.namespaces` is this list as it is.
+    it("lists default among the namespaces, in the order each first appears", async () => {
+      expect((await parse(log)).namespaces).toEqual([DEFAULT_NAMESPACE, "c2g"]);
     });
   });
 

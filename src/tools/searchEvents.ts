@@ -6,7 +6,6 @@ import { z } from "zod";
 import {
   LOG_EVENT_ID,
   namespaceAt,
-  namespaceOf,
   textAt,
   textOf,
   typeAt,
@@ -175,9 +174,9 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
   // Every event below the root, in log order: the ids from the root's own to
   // its subtree's end. The log is row 0, whose subtree is every event.
   const end = columns.subtreeEnd[root] ?? 0;
-  // The text column's first read indexes every event's text, 75 ms on a 95 MB
-  // log where reading each event's text through its event took 101 ms for the
-  // whole log - so the column only for a scan of most of it.
+  // The text column's first read indexes every event's text, 50 ms on a 95 MB
+  // log where reading each event's text through its event took 53 ms for the
+  // whole log (parser 0.5) - so the column only for a scan of most of it.
   const textFromColumn = eventId === undefined && (end - root - 1) * 2 > columns.count;
   const textOfId = (id: number): string => {
     const event = textFromColumn ? null : apexLog.event(id);
@@ -217,7 +216,7 @@ function searchEvents(apexLog: ApexLog, args: SearchEventsArgs): SearchEventsRes
     eventId: event.id,
     parentEventId: event.parent?.id ?? LOG_EVENT_ID,
     type: event.type,
-    namespace: namespaceOf(event),
+    namespace: event.namespace,
     lineNumber: event.lineNumber,
     text: cut(shownText(textOf(event), event.type), textLimit, pattern),
   });
