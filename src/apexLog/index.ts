@@ -170,3 +170,22 @@ export function namespacesOf(log: ApexLog): string[] {
   log.namespaces.forEach((namespace) => named.add(namespace));
   return [...named];
 }
+
+/**
+ * The warning for a file the parser read only part of, with the count of logs
+ * it found; undefined when it read the whole file.
+ *
+ * The parser stops at the second log header and raises `Multiple-Logs`, whose
+ * description - pinned in `tests/parserContract.test.ts` - counts the logs. Of
+ * its issues this is the one that leaves bytes of the file unread. It also
+ * stops at a header that a debug line quotes, so the warning names both causes.
+ * The parser's own text is worded for a UI ("Open each log").
+ */
+export function multipleLogsWarning(log: ApexLog): string | undefined {
+  const issue = log.issues.find(({ summary }) => summary === "Multiple-Logs");
+  if (!issue) {
+    return undefined;
+  }
+  const count = /(\d+) logs/.exec(issue.description)?.[1] ?? "more than one";
+  return `This file holds ${count} debug logs, or a debug line in it quotes a log header. This answer covers only the text before the second header. Pass each log as its own file.`;
+}

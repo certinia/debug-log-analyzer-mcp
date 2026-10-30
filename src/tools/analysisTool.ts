@@ -5,10 +5,10 @@
 import type { ApexLog } from "../apexLog/index.js";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { z } from "zod";
-import { loadApexLog } from "../apexLog/index.js";
+import { loadApexLog, multipleLogsWarning } from "../apexLog/index.js";
 import { toolInputSchema } from "./inputSchema.js";
 import { absolutePathSchema } from "./localFile.js";
-import { toonResult } from "./responseShaping.js";
+import { toonResult, warningField } from "./responseShaping.js";
 
 /**
  * The parameter every analysis tool has, first in its schema. Two words of
@@ -20,8 +20,11 @@ const LOG_FILE = { logFilePath: absolutePathSchema.describe("Absolute path") };
 /** What a parameter shape parses to. */
 export type AnalysisArgs<S extends z.ZodRawShape> = z.infer<z.ZodObject<S>>;
 
+/** What `run` answers: never a `warning`, which the shell sets and would lose to it. */
+type AnalysisResult = object & { warning?: never };
+
 /** An analysis tool: what `tools/list` sends, and the work, apart from the file it reads. */
-interface AnalysisTool<S extends z.ZodRawShape, R extends object> {
+interface AnalysisTool<S extends z.ZodRawShape, R extends AnalysisResult> {
   name: string;
   config: {
     title: string;
@@ -43,7 +46,7 @@ interface AnalysisTool<S extends z.ZodRawShape, R extends object> {
  * Both hints differ from the spec default: an analysis tool reads one local
  * file and changes nothing.
  */
-export function defineAnalysisTool<S extends z.ZodRawShape, R extends object>(tool: {
+export function defineAnalysisTool<S extends z.ZodRawShape, R extends AnalysisResult>(tool: {
   name: string;
   title: string;
   description: string;
@@ -63,7 +66,12 @@ export function defineAnalysisTool<S extends z.ZodRawShape, R extends object>(to
     handle: async (args) => {
       // TypeScript cannot see `logFilePath` through a generic schema's inferred type, nor narrow the rest to S.
       const { logFilePath, ...own } = args as { logFilePath: string } & AnalysisArgs<S>;
-      return toonResult(run(await loadApexLog(logFilePath), own as AnalysisArgs<S>));
+      const apexLog = await loadApexLog(logFilePath);
+      // First, so a caller reads that the answer is for the first log alone before the answer.
+      return toonResult({
+        ...warningField(multipleLogsWarning(apexLog)),
+        ...run(apexLog, own as AnalysisArgs<S>),
+      });
     },
   };
 }
