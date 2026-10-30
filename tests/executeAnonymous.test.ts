@@ -336,6 +336,7 @@ describe("Execute Anonymous", () => {
     mockDestroyTraceFlag.mockResolvedValue(undefined);
     mockLoadApexLog.mockResolvedValue({
       duration: { total: 150_000_000 },
+      issues: [],
       debugLevels: DEFAULT_TRACE_CONFIG,
     } as ApexLog);
   });
@@ -378,6 +379,7 @@ describe("Execute Anonymous", () => {
     it("reports the duration the written log parses to", async () => {
       mockLoadApexLog.mockResolvedValue({
         duration: { total: 2_500_000 },
+        issues: [],
       } as ApexLog);
 
       const result = await executeAnonymous(
@@ -391,6 +393,29 @@ describe("Execute Anonymous", () => {
         expect.stringContaining(`${testLogId}.log`),
       );
       expect(toonDecode(result).durationTotalMs).toBe(2.5);
+    });
+
+    // Catches a duration read from part of the log, given as the whole run's.
+    it("warns when the parse stopped at a second log header", async () => {
+      mockLoadApexLog.mockResolvedValue({
+        duration: { total: 2_500_000 },
+        issues: [
+          {
+            summary: "Multiple-Logs",
+            description:
+              "The text holds 2 logs. Only the first log was parsed. Open each log on its own.",
+          },
+        ],
+      } as unknown as ApexLog);
+
+      const result = await executeAnonymous(
+        mockServer,
+        { apex: testApexCode },
+        ctx,
+        policy(),
+      );
+
+      expect(toonDecode(result).warning).toContain("holds 2 debug logs");
     });
 
     it("posts the SOAP envelope to the org id path segment", async () => {
@@ -440,6 +465,7 @@ describe("Execute Anonymous", () => {
     it("reports levelsOverridden when the log came back at other levels", async () => {
       mockLoadApexLog.mockResolvedValue({
         duration: { total: 150_000_000 },
+        issues: [],
         debugLevels: { ...DEFAULT_TRACE_CONFIG, apexCode: "ERROR" },
       } as ApexLog);
 

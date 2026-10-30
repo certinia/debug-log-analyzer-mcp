@@ -26,7 +26,7 @@ import {
   traceFlagWindow,
   type ActiveTraceFlags,
 } from "../salesforce/traceFlags.js";
-import { loadApexLog } from "../apexLog/index.js";
+import { loadApexLog, multipleLogsWarning } from "../apexLog/index.js";
 import { progressReporter } from "./progress.js";
 import { fileReadError, outsideRoots } from "./localFile.js";
 import { openLogStore, unwritableLogDir, writeDebugLog } from "./logStore.js";
@@ -280,6 +280,8 @@ export async function executeAnonymous(
       // Said outright, because an empty file and a zero duration otherwise read
       // as a run that did nothing rather than a log that was never captured.
       apexResult.debugLog ? undefined : NO_LOG_CAPTURED_WARNING,
+      // durationTotalMs is read from this parse, which stops at a log header the run's debug output quotes.
+      parsedLog ? multipleLogsWarning(parsedLog) : undefined,
       ...traceFlagWarnings,
       store.warning,
     ),
