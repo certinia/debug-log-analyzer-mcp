@@ -82,7 +82,8 @@ const ctx = {
 function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
   return {
     allowProductionOrgs: false,
-    denyList: compileDenyList([]),
+    denyList: compileDenyList([], "--deny-orgs"),
+    writeDenyList: compileDenyList([], "--deny-org-writes"),
     classificationCache: new Map(),
     mintConfirmationState: jest.fn(),
     consumeConfirmation: createConfirmationLedger(),
@@ -262,7 +263,7 @@ describe("createTraceFlag", () => {
       server(),
       { tracedEntity: "jo@example.com" },
       ctx,
-      policy({ denyList: compileDenyList(["psa"]) }),
+      policy({ denyList: compileDenyList(["psa"], "--deny-orgs") }),
     );
 
     expect(text(result)).toContain("Cannot create a trace flag against org");

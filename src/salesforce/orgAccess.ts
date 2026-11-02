@@ -33,7 +33,9 @@ const ROOTS_TIMEOUT_MS = 5_000;
 /** What every org tool is held to, whatever it does once it is in. */
 export type OrgAccessPolicy = {
   allowProductionOrgs: boolean;
-  denyList: DenyList;
+  denyList: DenyList<"--deny-orgs">;
+  /** Held only by a write; required, so no caller allows writes by leaving it out. */
+  writeDenyList: DenyList<"--deny-org-writes">;
   classificationCache: Map<string, OrgClassification>;
   mintConfirmationState: MintConfirmationState;
   consumeConfirmation: ConsumeConfirmation;
@@ -145,13 +147,15 @@ async function openOrg<T = undefined, V = T>(
   const alias = local.aliases[0];
   const orgLabel = alias ? `${local.username} (${alias})` : local.username;
 
+  // --deny-orgs first, so an org both lists deny at the same check is refused under the flag that blocks reads too.
+  const denyLists = request.write
+    ? [policy.denyList, policy.writeDenyList]
+    : [policy.denyList];
+
   // Before connecting, because Org.create can call the org.
-  const deniedUnseen = identityRefusal(
-    policy.denyList,
-    request.action,
-    orgLabel,
-    local,
-  );
+  const deniedUnseen = denyLists
+    .map((list) => identityRefusal(list, request.action, orgLabel, local))
+    .find((refusal) => refusal !== undefined);
   if (deniedUnseen) {
     return refuse(deniedUnseen);
   }
@@ -168,12 +172,11 @@ async function openOrg<T = undefined, V = T>(
     policy.classificationCache,
   );
   // Before the production gate, so no flag and no confirmation can lift it.
-  const deniedType = typeRefusal(
-    policy.denyList,
-    request.action,
-    orgLabel,
-    classification,
-  );
+  const deniedType = denyLists
+    .map((list) =>
+      typeRefusal(list, request.action, orgLabel, classification),
+    )
+    .find((refusal) => refusal !== undefined);
   if (deniedType) {
     return refuse(deniedType);
   }

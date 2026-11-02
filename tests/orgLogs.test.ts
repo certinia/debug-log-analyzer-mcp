@@ -95,7 +95,8 @@ function progressCtx(
 function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
   return {
     allowProductionOrgs: false,
-    denyList: compileDenyList([]),
+    denyList: compileDenyList([], "--deny-orgs"),
+    writeDenyList: compileDenyList([], "--deny-org-writes"),
     classificationCache: new Map(),
     mintConfirmationState: jest.fn(),
     consumeConfirmation: createConfirmationLedger(),
@@ -191,7 +192,7 @@ describe("listOrgLogs", () => {
       server(),
       {},
       ctx,
-      policy({ denyList: compileDenyList(["psa"]) }),
+      policy({ denyList: compileDenyList(["psa"], "--deny-orgs") }),
     );
 
     expect(result).toMatchObject({ isError: true });
@@ -436,7 +437,7 @@ describe("getOrgLogs", () => {
       server(),
       {},
       ctx,
-      policy({ denyList: compileDenyList(["type:production"]) }),
+      policy({ denyList: compileDenyList(["type:production"], "--deny-orgs") }),
     );
 
     expect(result).toMatchObject({ isError: true });

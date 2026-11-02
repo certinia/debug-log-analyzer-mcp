@@ -19,8 +19,17 @@ export type DenyPattern = {
   regexp: RegExp;
 };
 
-/** `--deny-orgs`, compiled: identity patterns, and the `type:` entries. */
-export type DenyList = {
+/** `--deny-orgs` refuses every org tool; `--deny-org-writes` only the tools that change an org. */
+export type DenyFlag = "--deny-orgs" | "--deny-org-writes";
+
+/**
+ * A deny flag, compiled: identity patterns, and the `type:` entries.
+ *
+ * Typed by its flag, so a list cannot be held where the other flag's scope is enforced.
+ */
+export type DenyList<F extends DenyFlag = DenyFlag> = {
+  /** The flag the entries came from, so a refusal names the one the user set. */
+  flag: F;
   patterns: DenyPattern[];
   types: OrgClassification[];
 };
@@ -49,7 +58,20 @@ const ORG_ID = /^00D[a-z0-9]{12}(?:[a-z0-9]{3})?$/i;
 const TYPE_ENTRY = /^type:/i;
 
 const DENY_IS_ABSOLUTE =
-  "A deny is absolute: no flag and no confirmation lifts it. Ask the user which org to use.";
+  "A deny is absolute: no flag and no confirmation lifts it.";
+
+/**
+ * What the agent can do next, by flag.
+ *
+ * A write deny states its own scope, so the agent does not give up reading the
+ * org. It does not say reads work: a `--deny-orgs` `type:` entry, checked only
+ * after connecting, can still refuse them.
+ */
+const NEXT_STEP: Record<DenyFlag, string> = {
+  "--deny-orgs": "Ask the user which org to use.",
+  "--deny-org-writes":
+    "--deny-org-writes refuses only tools that change an org; to change one, ask the user which org to use.",
+};
 
 // The 18-char suffix only encodes the case of the first 15.
 const toOrgId15 = (orgId: string): string => orgId.slice(0, 15);
@@ -67,18 +89,18 @@ function compile(source: string): RegExp {
   return new RegExp(`^${body}$`, "i");
 }
 
-function toOrgType(entry: string): OrgClassification {
+function toOrgType(flag: DenyFlag, entry: string): OrgClassification {
   const type = entry.replace(TYPE_ENTRY, "").trim().toLowerCase();
   if (!isOrgClassification(type)) {
     throw new Error(
-      `--deny-orgs: '${entry}' is not an org type. Use one of: ${ORG_CLASSIFICATIONS.map((t) => `type:${t}`).join(", ")}.`,
+      `${flag}: '${entry}' is not an org type. Use one of: ${ORG_CLASSIFICATIONS.map((t) => `type:${t}`).join(", ")}.`,
     );
   }
   return type;
 }
 
 /**
- * Compile `--deny-orgs`, a repeatable, comma-separated flag.
+ * Compile a deny flag, which is repeatable and comma-separated.
  *
  * Throws on a `type:` entry that names no org type, so a typo fails the server
  * at startup. An identity pattern cannot be validated this way - one that
@@ -87,17 +109,23 @@ function toOrgType(entry: string): OrgClassification {
  * Case is left as written, because a refusal has to echo the entry the user
  * typed.
  */
-export function compileDenyList(raw: string[]): DenyList {
+export function compileDenyList<F extends DenyFlag>(
+  raw: string[],
+  flag: F,
+): DenyList<F> {
   const entries = raw
     .flatMap((value) => value.split(","))
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
 
   return {
+    flag,
     patterns: entries
       .filter((entry) => !TYPE_ENTRY.test(entry))
       .map((source) => ({ source, regexp: compile(source) })),
-    types: entries.filter((entry) => TYPE_ENTRY.test(entry)).map(toOrgType),
+    types: entries
+      .filter((entry) => TYPE_ENTRY.test(entry))
+      .map((entry) => toOrgType(flag, entry)),
   };
 }
 
@@ -123,20 +151,27 @@ export function matchDeniedOrg(
   );
 }
 
-function refusal(action: string, orgLabel: string, because: string): string {
-  return `Cannot ${action} against org '${orgLabel}': ${because}.\n${DENY_IS_ABSOLUTE}`;
+function refusal(
+  flag: DenyFlag,
+  action: string,
+  orgLabel: string,
+  because: string,
+): string {
+  return `Cannot ${action} against org '${orgLabel}': ${because}.\n${DENY_IS_ABSOLUTE} ${NEXT_STEP[flag]}`;
 }
 
-/** The refusal naming the `--deny-orgs` entry that denies the org. */
+/** The refusal naming the entry of `flag` that denies the org. */
 export function denyRefusal(
+  flag: DenyFlag,
   action: string,
   orgLabel: string,
   entry: string,
 ): string {
   return refusal(
+    flag,
     action,
     orgLabel,
-    `it matches the --deny-orgs entry '${entry}'`,
+    `it matches the ${flag} entry '${entry}'`,
   );
 }
 
@@ -148,7 +183,7 @@ export function identityRefusal(
   identity: OrgIdentity,
 ): string | undefined {
   const pattern = matchDeniedOrg(list.patterns, identity);
-  return pattern && denyRefusal(action, orgLabel, pattern.source);
+  return pattern && denyRefusal(list.flag, action, orgLabel, pattern.source);
 }
 
 /** The refusal when a `type:` entry denies this org type, or `undefined`. */
@@ -159,14 +194,15 @@ export function typeRefusal(
   classification: OrgClassification,
 ): string | undefined {
   if (list.types.includes(classification)) {
-    return denyRefusal(action, orgLabel, `type:${classification}`);
+    return denyRefusal(list.flag, action, orgLabel, `type:${classification}`);
   }
   // Unknown is treated as production everywhere; it must not slip past this deny.
   if (classification === "unknown" && list.types.includes("production")) {
     return refusal(
+      list.flag,
       action,
       orgLabel,
-      "its type could not be read, so it is treated as production and the --deny-orgs entry 'type:production' denies it",
+      `its type could not be read, so it is treated as production and the ${list.flag} entry 'type:production' denies it`,
     );
   }
   return undefined;

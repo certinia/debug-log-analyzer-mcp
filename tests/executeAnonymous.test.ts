@@ -192,10 +192,11 @@ const codec = createRequestStateCodec<ConfirmationState>({
   key: randomBytes(32),
 });
 
-function policy(overrides: { denyList?: DenyList } = {}) {
+function policy(overrides: { denyList?: DenyList<"--deny-orgs"> } = {}) {
   return {
     allowProductionOrgs: false,
-    denyList: compileDenyList([]),
+    denyList: compileDenyList([], "--deny-orgs"),
+    writeDenyList: compileDenyList([], "--deny-org-writes"),
     classificationCache: new Map<string, OrgClassification>(),
     mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
     consumeConfirmation: createConfirmationLedger(),
@@ -1264,7 +1265,7 @@ describe("Execute Anonymous", () => {
         mockServer,
         { apexFilePath },
         ctx,
-        policy({ denyList: compileDenyList([TEST_ORG_ID]) }),
+        policy({ denyList: compileDenyList([TEST_ORG_ID], "--deny-orgs") }),
       );
 
       expect(result.isError).toBe(true);

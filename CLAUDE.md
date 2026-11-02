@@ -73,7 +73,7 @@ src/
   apexLog/          # The one module that imports the log parser
   tools/            # One module per MCP tool
   salesforce/       # Org connection, org classification, debug levels, trace flags
-  policy/           # Org deny list for every org tool; production gate for the writes
+  policy/           # Org deny lists, for every org tool and for the writes; production gate for the writes
 dist/               # Compiled JavaScript output
 ```
 
@@ -88,7 +88,7 @@ dist/               # Compiled JavaScript output
 7. **`apexlog_get_org_logs`**: downloads stored logs by id or the newest N, returns their paths
 8. **`apexlog_create_trace_flag`**: traces a user, or sets a class's or trigger's levels, for a while; refused when the entity has a flag of its log type already
 
-Tools 1-4 take an absolute path to a `.log` file. Tools 5-8 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so the deny list holds for all of them; only a write (5 and 8) meets the production gate.
+Tools 1-4 take an absolute path to a `.log` file. Tools 5-8 reach an org through `openOrg` (`src/salesforce/orgAccess.ts`), so `--deny-orgs` holds for all of them; only a write (5 and 8) meets `--deny-org-writes` and the production gate.
 
 No tool deletes stored logs, or lists or deletes trace flags: the need is rare, Setup and `sf` meet it, and their definitions would be charged on every request - the cost is in the `DEFINITION_TOTAL_CAP` comment in `scripts/eval.mjs`.
 
@@ -114,6 +114,6 @@ The tool definitions follow the same rule and are charged on every turn, called 
 
 It is always registered so agents can discover it; each call passes the deny list below, then is authorized in `src/policy/orgExecutionPolicy.ts`. A production org, or one whose type cannot be read, needs `--allow-production-orgs` or a per-call confirmation, decided before any `DebugLevel` or `TraceFlag` is written. `--no-apex-execution` refuses every call, and `--read-only` refuses every call to it and to `apexlog_create_trace_flag`, both in `src/server.ts` before the tool loads; the 1.x `--allowed-orgs` is accepted, ignored and warned about.
 
-`--deny-orgs` refuses outright, in `src/policy/orgDenyList.ts`. A deny beats `--allow-production-orgs` and beats a confirmation. `openOrg` in `src/salesforce/orgAccess.ts` holds this order for every org tool. It runs `identityRefusal` on what `readLocalOrg` reads from the local sf files, before `connectOrg`, because `Org.create` can call the org; `connectOrg` reuses that `AuthInfo`, so the org connected is the org checked. `typeRefusal` runs after `classifyOrg` and before `authorizeOperation`, which knows nothing of denies. Only an org id is unspoofable, so the README documents the rest as convenience. `registerOrgTool` in `src/server.ts` binds `openOrg` to the tool's registered name with `bindOpenOrg`, and gives the result to the handler as `open`. Lint rules keep `bindOpenOrg` out of `src/tools/`, by a static or a dynamic import. So a handler does not bind another tool's name, and does not spend that tool's confirmation.
+`--deny-orgs` refuses every org tool outright, and `--deny-org-writes` refuses only a write, both in `src/policy/orgDenyList.ts`. `DenyList` is typed by its flag, so one list cannot take the other's place. A deny beats `--allow-production-orgs` and beats a confirmation. `openOrg` in `src/salesforce/orgAccess.ts` holds this order for every org tool. It runs `identityRefusal` on what `readLocalOrg` reads from the local sf files, before `connectOrg`, because `Org.create` can call the org; `connectOrg` reuses that `AuthInfo`, so the org connected is the org checked. `typeRefusal` runs after `classifyOrg` and before `authorizeOperation`, which knows nothing of denies. At each of the two checks, `--deny-orgs` goes first, then `--deny-org-writes` for a write. Only an org id is unspoofable, so the README documents the rest as convenience. `registerOrgTool` in `src/server.ts` binds `openOrg` to the tool's registered name with `bindOpenOrg`, and gives the result to the handler as `open`. Lint rules keep `bindOpenOrg` out of `src/tools/`, by a static or a dynamic import. So a handler does not bind another tool's name, and does not spend that tool's confirmation.
 
 `@salesforce/core` loads only for the org tools: `src/server.ts` reaches each handler through `await import()`, and the `*Definition.ts` modules hold the wire definitions so registration stays synchronous. Startup is 55 ms, not 290 ms; an ESLint rule, `tests/salesforceCoreIsLazy.test.ts` and the `pnpm run eval` startup check keep it there.
