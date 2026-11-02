@@ -145,3 +145,32 @@ describe("listLimitRisks", () => {
     expect(risks(logWith({ cpuTime: { used: 9000, limit: 0 } })).atRisk).toEqual([]);
   });
 });
+
+// A low figure means little unless the level that logged it is shown, so each
+// row brings the category it was read from: heap from apexCode, the rest from apexProfiling.
+describe("listLimitRisks capture levels", () => {
+  const headed = (overrides: LimitOverrides): ApexLog =>
+    ({
+      ...logWith(overrides),
+      debugLevels: { apexCode: "FINER", apexProfiling: "INFO", database: "FINEST" },
+    }) as unknown as ApexLog;
+
+  it("reports the apexCode level for a heap row", () => {
+    expect(
+      risks(headed({ heapSize: { used: 5_900_000, limit: 6_000_000 } })).capturedAt,
+    ).toEqual([{ debugCategory: "apexCode", level: "FINER" }]);
+  });
+
+  it("reports the apexProfiling level for a SOQL row", () => {
+    expect(
+      risks(headed({ soqlQueries: { used: 95, limit: 100 } })).capturedAt,
+    ).toEqual([{ debugCategory: "apexProfiling", level: "INFO" }]);
+  });
+
+  it("reports both gating levels, and no other, when no limit is at risk", () => {
+    expect(risks(headed({})).capturedAt).toEqual([
+      { debugCategory: "apexCode", level: "FINER" },
+      { debugCategory: "apexProfiling", level: "INFO" },
+    ]);
+  });
+});

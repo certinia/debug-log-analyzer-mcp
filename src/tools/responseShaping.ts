@@ -14,6 +14,7 @@
 
 import {
   ceilingOf,
+  debugCategoryOf,
   LIMIT_METRICS,
   type DebugCategory,
   type LimitUnit,
@@ -156,8 +157,16 @@ export function limitUnitsClause(): string {
  * gates it.
  */
 export function limitGatingCategory(limit: string): DebugCategory {
-  return limit === "heapSize" ? "apexCode" : "apexProfiling";
+  return limit === "heapSize" ? HEAP_GATE : CUMULATIVE_GATE;
 }
+
+const HEAP_GATE = debugCategoryOf("HEAP_ALLOCATE");
+const CUMULATIVE_GATE = debugCategoryOf("CUMULATIVE_LIMIT_USAGE");
+
+/** Every category `limitGatingCategory` can return, heap first, once each. */
+export const LIMIT_GATING_CATEGORIES: readonly DebugCategory[] = [
+  ...new Set([HEAP_GATE, CUMULATIVE_GATE]),
+];
 
 export interface NamespaceLimitRow {
   namespace: string;

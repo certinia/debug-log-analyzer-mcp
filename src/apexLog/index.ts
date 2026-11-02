@@ -11,11 +11,12 @@
  * names: a copy into types of our own would cost a pass over every event.
  */
 
-import { DEFAULT_NAMESPACE, eventType } from "@apexdevtools/apex-log-parser";
+import { DEFAULT_NAMESPACE, EVENT_TYPES, eventType } from "@apexdevtools/apex-log-parser";
 import type {
   ApexEvent,
   ApexLog,
   Columns,
+  DebugCategory,
   CountColumn,
   EventOf,
   EventType,
@@ -40,6 +41,15 @@ export { DEBUG_CATEGORY, DEBUG_CATEGORY_TOKEN, DEFAULT_NAMESPACE, ENDED_BY, LEVE
 // For the test builder, which the lint rule keeps from the parser.
 export type { Columns, CountColumn } from "@apexdevtools/apex-log-parser";
 export { eventType } from "@apexdevtools/apex-log-parser";
+
+/** The debug log category the parser files events of `type` under. */
+export function debugCategoryOf(type: EventType): DebugCategory {
+  const info = EVENT_TYPES.find((candidate) => candidate.type === type);
+  if (!info) {
+    throw new Error(`The parser has no event type ${type}`);
+  }
+  return info.debugCategory;
+}
 
 /** The log's own id: an event at the top of the log has it as its parent's. */
 export const LOG_EVENT_ID = 0;
