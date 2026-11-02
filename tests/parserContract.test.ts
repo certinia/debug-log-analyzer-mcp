@@ -10,9 +10,10 @@
  * tool would silently misreport without, pinned against a real parse.
  */
 
-import { readFileSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import {
+  DEBUG_CATEGORY_TOKEN,
   DEFAULT_NAMESPACE,
   eventType,
   LEVEL,
@@ -626,6 +627,45 @@ describe("parser contract", () => {
         "mobileApexPushCalls",
       ]);
     });
+  });
+
+  // apexlog_execute_anonymous sends these tokens in the SOAP DebuggingHeader, so
+  // a wrong one would set the wrong category, or fail the call.
+  describe("DEBUG_CATEGORY_TOKEN", () => {
+    it("spells each settable category as a log header does", () => {
+      expect(DEBUG_CATEGORY_TOKEN).toMatchObject({
+        apexCode: "APEX_CODE",
+        apexProfiling: "APEX_PROFILING",
+        callout: "CALLOUT",
+        database: "DB",
+        nba: "NBA",
+        system: "SYSTEM",
+        validation: "VALIDATION",
+        visualforce: "VISUALFORCE",
+        wave: "WAVE",
+        workflow: "WORKFLOW",
+      });
+    });
+
+    it.each(
+      readdirSync(FIXTURES)
+        .filter((file) => file.endsWith(".log"))
+        .map((file) => file.replace(/\.log$/, "")),
+    )(
+      "knows every category token in the %s fixture's header",
+      (name) => {
+        const tokens = fixture(name)
+          .split("\n")[0]!
+          .split(" ")[1]!
+          .split(";")
+          .map((pair) => pair.split(",")[0]);
+
+        expect(tokens.length).toBeGreaterThan(0);
+        expect(Object.values(DEBUG_CATEGORY_TOKEN)).toEqual(
+          expect.arrayContaining(tokens),
+        );
+      },
+    );
   });
 
   describe("LEVEL", () => {

@@ -1,8 +1,7 @@
 import type { Connection } from "@salesforce/core";
-import type { ApexLog } from "../apexLog/index.js";
+import { DEBUG_CATEGORY_TOKEN, type ApexLog } from "../apexLog/index.js";
 
 import { RELOGIN_HINT } from "./authFailure.js";
-import { CATEGORY_LOG_NAMES } from "./debugLevels.js";
 import { TRACE_CATEGORIES, type TraceConfig } from "../logLevels.js";
 
 const APEX_NAMESPACE = "http://soap.sforce.com/2006/08/apex";
@@ -99,7 +98,7 @@ function buildEnvelope(
 ): string {
   const categories = TRACE_CATEGORIES.map(
     (category) =>
-      `<apex:categories><apex:category>${toSoapName(CATEGORY_LOG_NAMES[category])}</apex:category>` +
+      `<apex:categories><apex:category>${toSoapName(DEBUG_CATEGORY_TOKEN[category])}</apex:category>` +
       `<apex:level>${toSoapName(levels[category])}</apex:level></apex:categories>`,
   ).join("");
 

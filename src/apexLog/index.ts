@@ -36,7 +36,7 @@ export type {
   LogIssue,
   NamespaceLimits,
 } from "@apexdevtools/apex-log-parser";
-export { DEFAULT_NAMESPACE, ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
+export { DEBUG_CATEGORY_TOKEN, DEFAULT_NAMESPACE, ENDED_BY, LEVEL, LIMIT_METRICS } from "@apexdevtools/apex-log-parser";
 // For the test builder, which the lint rule keeps from the parser.
 export type { Columns, CountColumn } from "@apexdevtools/apex-log-parser";
 export { eventType } from "@apexdevtools/apex-log-parser";

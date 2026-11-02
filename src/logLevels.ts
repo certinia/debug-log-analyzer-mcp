@@ -23,8 +23,8 @@ export const LOG_LEVELS = Object.values(LEVEL);
  * This is the spelling every response uses, because it is the one the parser
  * stamps on each event and the one `apexlog_execute_anonymous.debugLevel` takes
  * as input - so a category a caller reads back is a category it can ask for.
- * `LOG_CATEGORIES` in `salesforce/debugLevels.ts` is the same set as the header
- * itself spells it, and is confined to the `DebugLevel` record and the SOAP envelope.
+ * The parser's `DEBUG_CATEGORY_TOKEN` spells them as the header itself does, and
+ * only the SOAP envelope uses that spelling.
  *
  * A literal and not `Object.keys`, because a type has no runtime form and the
  * tool schema needs the tuple. The guard below fails the build if the parser
