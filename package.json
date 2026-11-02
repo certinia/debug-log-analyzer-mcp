@@ -58,7 +58,7 @@
     "@modelcontextprotocol/server": "^2.0.0",
     "@salesforce/core": "^9.1.11",
     "@toon-format/toon": "^4.1.1",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
