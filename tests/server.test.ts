@@ -600,31 +600,22 @@ describe("parseServerConfig", () => {
 
   it("should read --allow-production-orgs", () => {
     expect(parseServerConfig(["--allow-production-orgs"])).toEqual({
+      ...parseServerConfig([]),
       allowProductionOrgs: true,
-      apexExecutionDisabled: false,
-      readOnly: false,
-      denyList: { flag: "--deny-orgs", patterns: [], types: [] },
-      writeDenyList: { flag: "--deny-org-writes", patterns: [], types: [] },
     });
   });
 
   it("should read --no-apex-execution", () => {
     expect(parseServerConfig(["--no-apex-execution"])).toEqual({
-      allowProductionOrgs: false,
+      ...parseServerConfig([]),
       apexExecutionDisabled: true,
-      readOnly: false,
-      denyList: { flag: "--deny-orgs", patterns: [], types: [] },
-      writeDenyList: { flag: "--deny-org-writes", patterns: [], types: [] },
     });
   });
 
   it("should read --read-only", () => {
     expect(parseServerConfig(["--read-only"])).toEqual({
-      allowProductionOrgs: false,
-      apexExecutionDisabled: false,
+      ...parseServerConfig([]),
       readOnly: true,
-      denyList: { flag: "--deny-orgs", patterns: [], types: [] },
-      writeDenyList: { flag: "--deny-org-writes", patterns: [], types: [] },
     });
   });
 
@@ -684,13 +675,7 @@ describe("parseServerConfig", () => {
   it("should still start when the deprecated --allowed-orgs is passed", () => {
     expect(
       parseServerConfig(["--allowed-orgs", "ALLOW_ALL_ORGS"]),
-    ).toEqual({
-      allowProductionOrgs: false,
-      apexExecutionDisabled: false,
-      readOnly: false,
-      denyList: { flag: "--deny-orgs", patterns: [], types: [] },
-      writeDenyList: { flag: "--deny-org-writes", patterns: [], types: [] },
-    });
+    ).toEqual(parseServerConfig([]));
   });
 
   it("should warn that --allowed-orgs is deprecated and ignored", () => {
