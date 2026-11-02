@@ -13,6 +13,7 @@
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import {
+  DEBUG_CATEGORY,
   DEBUG_CATEGORY_TOKEN,
   DEFAULT_NAMESPACE,
   eventType,
@@ -625,6 +626,25 @@ describe("parser contract", () => {
         "futureCalls",
         "queueableJobsAddedToQueue",
         "mobileApexPushCalls",
+      ]);
+    });
+  });
+
+  // Every response lists categories in this order, and the tool schemas take these values.
+  describe("DEBUG_CATEGORY", () => {
+    it("states the eleven categories in log header order", () => {
+      expect(Object.values(DEBUG_CATEGORY)).toEqual([
+        "apexCode",
+        "apexProfiling",
+        "callout",
+        "dataAccess",
+        "database",
+        "nba",
+        "system",
+        "validation",
+        "visualforce",
+        "wave",
+        "workflow",
       ]);
     });
   });

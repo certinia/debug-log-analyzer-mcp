@@ -8,7 +8,7 @@
  * org layer, and `salesforce/debugLevels.ts` writes `DebugLevel` records with it.
  */
 
-import { LEVEL } from "./apexLog/index.js";
+import { DEBUG_CATEGORY, LEVEL } from "./apexLog/index.js";
 import type { ApexLog, DebugCategory } from "./apexLog/index.js";
 import type { Assert } from "./compileGuards.js";
 
@@ -26,23 +26,9 @@ export const LOG_LEVELS = Object.values(LEVEL);
  * The parser's `DEBUG_CATEGORY_TOKEN` spells them as the header itself does, and
  * only the SOAP envelope uses that spelling.
  *
- * A literal and not `Object.keys`, because a type has no runtime form and the
- * tool schema needs the tuple. The guard below fails the build if the parser
- * adds a category this does not name.
+ * Read from the parser, so a category it adds reaches every response.
  */
-export const DEBUG_CATEGORIES = [
-  "apexCode",
-  "apexProfiling",
-  "callout",
-  "dataAccess",
-  "database",
-  "nba",
-  "system",
-  "validation",
-  "visualforce",
-  "wave",
-  "workflow",
-] as const satisfies readonly DebugCategory[];
+export const DEBUG_CATEGORIES = Object.values(DEBUG_CATEGORY);
 
 /**
  * The categories a `DebugLevel` record can set, lower-camel as its fields are
@@ -70,18 +56,7 @@ export type TraceCategory = (typeof TRACE_CATEGORIES)[number];
 export type TraceConfig = Partial<Record<TraceCategory, LogLevel>>;
 
 /**
- * Compile guard for the other direction: every `satisfies` above only checks
- * that what is named exists, never that nothing is missing. A category the
- * parser adds has to reach `DEBUG_CATEGORIES`, or `declaredLevels` drops it
- * from every response and `apexlog_get_summary` loses its row, and no other check
- * notices.
- */
-export type EveryDebugLevelCategoryNamed = Assert<
-  DebugCategory extends (typeof DEBUG_CATEGORIES)[number] ? true : false
->;
-
-/**
- * And that a new category is settable, or refused on purpose. Without this a
+ * Compile guard: a category the parser adds is settable, or refused on purpose. Without this a
  * category the parser adds is silently absent from `TRACE_CATEGORIES`, which
  * reads the same as `dataAccess` being absent because no field sets it.
  */
