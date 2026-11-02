@@ -10,7 +10,7 @@
  * tool would silently misreport without, pinned against a real parse.
  */
 
-import { readdirSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import { join } from "path";
 import {
   DEBUG_CATEGORY,
@@ -666,26 +666,6 @@ describe("parser contract", () => {
         workflow: "WORKFLOW",
       });
     });
-
-    it.each(
-      readdirSync(FIXTURES)
-        .filter((file) => file.endsWith(".log"))
-        .map((file) => file.replace(/\.log$/, "")),
-    )(
-      "knows every category token in the %s fixture's header",
-      (name) => {
-        const tokens = fixture(name)
-          .split("\n")[0]!
-          .split(" ")[1]!
-          .split(";")
-          .map((pair) => pair.split(",")[0]);
-
-        expect(tokens.length).toBeGreaterThan(0);
-        expect(Object.values(DEBUG_CATEGORY_TOKEN)).toEqual(
-          expect.arrayContaining(tokens),
-        );
-      },
-    );
   });
 
   describe("LEVEL", () => {

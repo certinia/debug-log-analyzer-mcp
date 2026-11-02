@@ -66,7 +66,8 @@ function logWith(
     limits: governorLimits(overrides, peakOverrides),
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the selection alone. The eval goldens
-    // cover the levels, against fixtures that carry a real header.
+    // cover the levels, against fixtures that carry a real header, except heap,
+    // which is tested below.
     debugLevels: {},
   } as unknown as ApexLog;
 }
@@ -159,18 +160,5 @@ describe("listLimitRisks capture levels", () => {
     expect(
       risks(headed({ heapSize: { used: 5_900_000, limit: 6_000_000 } })).capturedAt,
     ).toEqual([{ debugCategory: "apexCode", level: "FINER" }]);
-  });
-
-  it("reports the apexProfiling level for a SOQL row", () => {
-    expect(
-      risks(headed({ soqlQueries: { used: 95, limit: 100 } })).capturedAt,
-    ).toEqual([{ debugCategory: "apexProfiling", level: "INFO" }]);
-  });
-
-  it("reports both gating levels, and no other, when no limit is at risk", () => {
-    expect(risks(headed({})).capturedAt).toEqual([
-      { debugCategory: "apexCode", level: "FINER" },
-      { debugCategory: "apexProfiling", level: "INFO" },
-    ]);
   });
 });
