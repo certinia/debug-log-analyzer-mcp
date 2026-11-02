@@ -15,7 +15,34 @@ Instead of scrolling thousands of log lines, ask what's slow and why. Uses the s
 
 ## Quick Start
 
-Requires [Node.js](https://nodejs.org/) 22 or later. Add this to your MCP client config (`claude_desktop_config.json`, VS Code `mcp.json`, and so on):
+Requires [Node.js](https://nodejs.org/) 22 or later. Add the server to your MCP client as below, then ask your assistant to analyze a log. The org tools - `apexlog_execute_anonymous`, `apexlog_list_org_logs`, `apexlog_get_org_logs` and `apexlog_create_trace_flag` - also need an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).
+
+### Claude Code
+
+```sh
+claude mcp add apex-log-mcp -- npx -y @certinia/apex-log-mcp
+```
+
+Add `--scope user` to use it in every project, or `--scope project` to share it with your team through the project's `.mcp.json`.
+
+### VS Code
+
+Add this to `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "apex-log-mcp": {
+      "command": "npx",
+      "args": ["-y", "@certinia/apex-log-mcp"]
+    }
+  }
+}
+```
+
+### Other clients
+
+Most clients take this in their MCP config, for example `claude_desktop_config.json` for Claude Desktop:
 
 ```json
 {
@@ -27,10 +54,6 @@ Requires [Node.js](https://nodejs.org/) 22 or later. Add this to your MCP client
   }
 }
 ```
-
-In VS Code `mcp.json`, use `"servers"` in place of `"mcpServers"`.
-
-Then ask your assistant to analyze a log. The org tools - `apexlog_execute_anonymous`, `apexlog_list_org_logs`, `apexlog_get_org_logs` and `apexlog_create_trace_flag` - also need an org authenticated with the [Salesforce CLI](https://developer.salesforce.com/tools/salesforcecli).
 
 ## Example Prompts
 

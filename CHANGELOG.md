@@ -145,58 +145,29 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
   - debugLevel: set all categories at once (e.g. `"FINEST"`), reset to defaults, or override specific categories like apexCode, database, and nba.
   - outputDir: the directory the debug log is saved to. Defaults to `.apex-log-mcp/` in the project root.
 
-<!-- 2.0.1 -->
+<!-- 2.1.0 -->
 
-[#52]: https://github.com/certinia/debug-log-analyzer-mcp/issues/52
-[#62]: https://github.com/certinia/debug-log-analyzer-mcp/issues/62
-[#86]: https://github.com/certinia/debug-log-analyzer-mcp/issues/86
-[#87]: https://github.com/certinia/debug-log-analyzer-mcp/issues/87
-[#88]: https://github.com/certinia/debug-log-analyzer-mcp/issues/88
-[#107]: https://github.com/certinia/debug-log-analyzer-mcp/issues/107
-[#108]: https://github.com/certinia/debug-log-analyzer-mcp/issues/108
-[#103]: https://github.com/certinia/debug-log-analyzer-mcp/issues/103
-[#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109
-[#101]: https://github.com/certinia/debug-log-analyzer-mcp/issues/101
-[#126]: https://github.com/certinia/debug-log-analyzer-mcp/issues/126
-[#127]: https://github.com/certinia/debug-log-analyzer-mcp/issues/127
-[#131]: https://github.com/certinia/debug-log-analyzer-mcp/issues/131
-[#102]: https://github.com/certinia/debug-log-analyzer-mcp/issues/102
-[#63]: https://github.com/certinia/debug-log-analyzer-mcp/issues/63
-[#120]: https://github.com/certinia/debug-log-analyzer-mcp/issues/120
-[#138]: https://github.com/certinia/debug-log-analyzer-mcp/issues/138
-[#93]: https://github.com/certinia/debug-log-analyzer-mcp/issues/93
-[#94]: https://github.com/certinia/debug-log-analyzer-mcp/issues/94
-[#65]: https://github.com/certinia/debug-log-analyzer-mcp/issues/65
-[#97]: https://github.com/certinia/debug-log-analyzer-mcp/issues/97
-[#99]: https://github.com/certinia/debug-log-analyzer-mcp/issues/99
-[#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
-[#165]: https://github.com/certinia/debug-log-analyzer-mcp/issues/165
-[#167]: https://github.com/certinia/debug-log-analyzer-mcp/issues/167
-[#188]: https://github.com/certinia/debug-log-analyzer-mcp/issues/188
-[#189]: https://github.com/certinia/debug-log-analyzer-mcp/issues/189
-[#191]: https://github.com/certinia/debug-log-analyzer-mcp/issues/191
-[#207]: https://github.com/certinia/debug-log-analyzer-mcp/issues/207
+[#144]: https://github.com/certinia/debug-log-analyzer-mcp/issues/144
 [#186]: https://github.com/certinia/debug-log-analyzer-mcp/issues/186
+[#207]: https://github.com/certinia/debug-log-analyzer-mcp/issues/207
 [#208]: https://github.com/certinia/debug-log-analyzer-mcp/issues/208
+[#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
+[#211]: https://github.com/certinia/debug-log-analyzer-mcp/issues/211
 [#212]: https://github.com/certinia/debug-log-analyzer-mcp/issues/212
 [#221]: https://github.com/certinia/debug-log-analyzer-mcp/issues/221
 [#222]: https://github.com/certinia/debug-log-analyzer-mcp/issues/222
-[#226]: https://github.com/certinia/debug-log-analyzer-mcp/pull/226
 [#225]: https://github.com/certinia/debug-log-analyzer-mcp/pull/225
+[#226]: https://github.com/certinia/debug-log-analyzer-mcp/pull/226
 [#228]: https://github.com/certinia/debug-log-analyzer-mcp/issues/228
 [#230]: https://github.com/certinia/debug-log-analyzer-mcp/issues/230
 [#234]: https://github.com/certinia/debug-log-analyzer-mcp/issues/234
 [#236]: https://github.com/certinia/debug-log-analyzer-mcp/issues/236
 [#239]: https://github.com/certinia/debug-log-analyzer-mcp/issues/239
 [#240]: https://github.com/certinia/debug-log-analyzer-mcp/issues/240
-[#211]: https://github.com/certinia/debug-log-analyzer-mcp/issues/211
-[#209]: https://github.com/certinia/debug-log-analyzer-mcp/issues/209
-[#144]: https://github.com/certinia/debug-log-analyzer-mcp/issues/144
 [#244]: https://github.com/certinia/debug-log-analyzer-mcp/pull/244
-[#246]: https://github.com/certinia/debug-log-analyzer-mcp/pull/246
 [#245]: https://github.com/certinia/debug-log-analyzer-mcp/pull/245
+[#246]: https://github.com/certinia/debug-log-analyzer-mcp/pull/246
 [#248]: https://github.com/certinia/debug-log-analyzer-mcp/pull/248
-[#256]: https://github.com/certinia/debug-log-analyzer-mcp/issues/256
 [#260]: https://github.com/certinia/debug-log-analyzer-mcp/pull/260
 [#265]: https://github.com/certinia/debug-log-analyzer-mcp/pull/265
 [#269]: https://github.com/certinia/debug-log-analyzer-mcp/pull/269
@@ -206,3 +177,38 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#278]: https://github.com/certinia/debug-log-analyzer-mcp/pull/278
 [#279]: https://github.com/certinia/debug-log-analyzer-mcp/pull/279
 [#281]: https://github.com/certinia/debug-log-analyzer-mcp/pull/281
+
+<!-- 2.0.2 -->
+
+[#256]: https://github.com/certinia/debug-log-analyzer-mcp/issues/256
+
+<!-- 2.0.1 -->
+
+[#52]: https://github.com/certinia/debug-log-analyzer-mcp/issues/52
+[#62]: https://github.com/certinia/debug-log-analyzer-mcp/issues/62
+[#63]: https://github.com/certinia/debug-log-analyzer-mcp/issues/63
+[#65]: https://github.com/certinia/debug-log-analyzer-mcp/issues/65
+[#86]: https://github.com/certinia/debug-log-analyzer-mcp/issues/86
+[#87]: https://github.com/certinia/debug-log-analyzer-mcp/issues/87
+[#88]: https://github.com/certinia/debug-log-analyzer-mcp/issues/88
+[#93]: https://github.com/certinia/debug-log-analyzer-mcp/issues/93
+[#94]: https://github.com/certinia/debug-log-analyzer-mcp/issues/94
+[#97]: https://github.com/certinia/debug-log-analyzer-mcp/issues/97
+[#99]: https://github.com/certinia/debug-log-analyzer-mcp/issues/99
+[#100]: https://github.com/certinia/debug-log-analyzer-mcp/issues/100
+[#101]: https://github.com/certinia/debug-log-analyzer-mcp/issues/101
+[#102]: https://github.com/certinia/debug-log-analyzer-mcp/issues/102
+[#103]: https://github.com/certinia/debug-log-analyzer-mcp/issues/103
+[#107]: https://github.com/certinia/debug-log-analyzer-mcp/issues/107
+[#108]: https://github.com/certinia/debug-log-analyzer-mcp/issues/108
+[#109]: https://github.com/certinia/debug-log-analyzer-mcp/issues/109
+[#120]: https://github.com/certinia/debug-log-analyzer-mcp/issues/120
+[#126]: https://github.com/certinia/debug-log-analyzer-mcp/issues/126
+[#127]: https://github.com/certinia/debug-log-analyzer-mcp/issues/127
+[#131]: https://github.com/certinia/debug-log-analyzer-mcp/issues/131
+[#138]: https://github.com/certinia/debug-log-analyzer-mcp/issues/138
+[#165]: https://github.com/certinia/debug-log-analyzer-mcp/issues/165
+[#167]: https://github.com/certinia/debug-log-analyzer-mcp/issues/167
+[#188]: https://github.com/certinia/debug-log-analyzer-mcp/issues/188
+[#189]: https://github.com/certinia/debug-log-analyzer-mcp/issues/189
+[#191]: https://github.com/certinia/debug-log-analyzer-mcp/issues/191
