@@ -14,7 +14,7 @@
 
 import {
   ceilingOf,
-  debugCategoryOf,
+  eventType,
   LIMIT_METRICS,
   type DebugCategory,
   type LimitUnit,
@@ -144,6 +144,9 @@ export function limitUnitsClause(): string {
   return `every governor limit is a count except ${exceptions.join(" and ")}`;
 }
 
+const HEAP_GATE = eventType("HEAP_ALLOCATE").debugCategory;
+const CUMULATIVE_GATE = eventType("CUMULATIVE_LIMIT_USAGE").debugCategory;
+
 /**
  * The debug log category that decides whether a limit's figure reached the log.
  *
@@ -160,12 +163,10 @@ export function limitGatingCategory(limit: string): DebugCategory {
   return limit === "heapSize" ? HEAP_GATE : CUMULATIVE_GATE;
 }
 
-const HEAP_GATE = debugCategoryOf("HEAP_ALLOCATE");
-const CUMULATIVE_GATE = debugCategoryOf("CUMULATIVE_LIMIT_USAGE");
-
-/** Every category `limitGatingCategory` can return, heap first, once each. */
+/** Every category `limitGatingCategory` can return, heap first. */
 export const LIMIT_GATING_CATEGORIES: readonly DebugCategory[] = [
-  ...new Set([HEAP_GATE, CUMULATIVE_GATE]),
+  HEAP_GATE,
+  CUMULATIVE_GATE,
 ];
 
 export interface NamespaceLimitRow {
