@@ -8,6 +8,8 @@ import {
   type OpenOrg,
   type OrgAccessPolicy,
 } from "../../src/salesforce/orgAccess";
+import { compileDenyList } from "../../src/policy/orgDenyList";
+import { createConfirmationLedger } from "../../src/policy/orgExecutionPolicy";
 
 /**
  * An org tool's handler as the server wires it: `open` is what `bindOpenOrg`
@@ -26,4 +28,22 @@ export function wiredOrgTool<Args, Result>(
 ) => Promise<Result> {
   return (server, args, ctx, policy) =>
     handler(args, bindOpenOrg(server, ctx, tool.name, policy), ctx);
+}
+
+/**
+ * A policy that denies nothing and asks before a production write, so a test
+ * overrides only the part it is about.
+ */
+export function testOrgAccessPolicy(
+  overrides: Partial<OrgAccessPolicy> = {},
+): OrgAccessPolicy {
+  return {
+    allowProductionOrgs: false,
+    denyList: compileDenyList([], "--deny-orgs"),
+    writeDenyList: compileDenyList([], "--deny-org-writes"),
+    classificationCache: new Map(),
+    mintConfirmationState: jest.fn(),
+    consumeConfirmation: createConfirmationLedger(),
+    ...overrides,
+  };
 }

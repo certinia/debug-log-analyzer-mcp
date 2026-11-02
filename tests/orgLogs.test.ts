@@ -28,7 +28,10 @@ import type { AuthInfo, Org } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import { listOrgLogs as listOrgLogsHandler } from "../src/tools/listOrgLogs";
 import { getOrgLogs as getOrgLogsHandler } from "../src/tools/getOrgLogs";
-import { wiredOrgTool } from "./support/wiredOrgTool";
+import {
+  testOrgAccessPolicy as policy,
+  wiredOrgTool,
+} from "./support/wiredOrgTool";
 import { getOrgLogsTool, listOrgLogsTool } from "../src/tools/orgLogsDefinition";
 import {
   connectOrg,
@@ -43,8 +46,6 @@ import {
   readCursor,
 } from "../src/salesforce/apexLogs";
 import { compileDenyList } from "../src/policy/orgDenyList";
-import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
-import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
 import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 import { toLongId } from "../src/salesforce/soql";
 
@@ -90,18 +91,6 @@ function progressCtx(
   return {
     mcpReq: { ...ctx.mcpReq, signal, _meta: { progressToken: 7 }, notify },
   } as unknown as ServerContext;
-}
-
-function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
-  return {
-    allowProductionOrgs: false,
-    denyList: compileDenyList([], "--deny-orgs"),
-    writeDenyList: compileDenyList([], "--deny-org-writes"),
-    classificationCache: new Map(),
-    mintConfirmationState: jest.fn(),
-    consumeConfirmation: createConfirmationLedger(),
-    ...overrides,
-  };
 }
 
 const text = (result: { content: { text: string }[] }) =>

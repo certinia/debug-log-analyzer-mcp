@@ -39,8 +39,8 @@ import {
   type OrgClassification,
 } from "../../src/salesforce/orgClassification";
 import { compileDenyList } from "../../src/policy/orgDenyList";
+import { testOrgAccessPolicy } from "../support/wiredOrgTool";
 import {
-  createConfirmationLedger,
   type Confirmable,
   type ConfirmationState,
 } from "../../src/policy/orgExecutionPolicy";
@@ -88,16 +88,9 @@ function makeCtx(state?: ConfirmationState, inputResponses?: unknown) {
   } as unknown as ServerContext;
 }
 
+// Read per call: beforeEach replaces the mock.
 function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
-  return {
-    allowProductionOrgs: false,
-    denyList: compileDenyList([], "--deny-orgs"),
-    writeDenyList: compileDenyList([], "--deny-org-writes"),
-    classificationCache: new Map<string, OrgClassification>(),
-    mintConfirmationState,
-    consumeConfirmation: createConfirmationLedger(),
-    ...overrides,
-  };
+  return testOrgAccessPolicy({ mintConfirmationState, ...overrides });
 }
 
 function request<T, V = T>(

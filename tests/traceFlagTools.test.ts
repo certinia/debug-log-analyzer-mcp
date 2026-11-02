@@ -28,15 +28,16 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import type { AuthInfo, Org } from "@salesforce/core";
 import { decode } from "@toon-format/toon";
 import { createTraceFlag as createTraceFlagHandler } from "../src/tools/createTraceFlag";
-import { wiredOrgTool } from "./support/wiredOrgTool";
+import {
+  testOrgAccessPolicy as policy,
+  wiredOrgTool,
+} from "./support/wiredOrgTool";
 import { createTraceFlagTool } from "../src/tools/traceFlagsDefinition";
 import { connectOrg, readLocalOrg, type LocalOrg } from "../src/salesforce/connection";
 import { classifyOrg } from "../src/salesforce/orgClassification";
 import * as flags from "../src/salesforce/traceFlags";
 import { ensureLevelsDebugLevel } from "../src/salesforce/debugLevels";
 import { compileDenyList } from "../src/policy/orgDenyList";
-import { createConfirmationLedger } from "../src/policy/orgExecutionPolicy";
-import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
 import { RELOGIN_HINT } from "../src/salesforce/authFailure";
 
 const createTraceFlag = wiredOrgTool(createTraceFlagHandler, createTraceFlagTool());
@@ -78,18 +79,6 @@ function server(): McpServer {
 const ctx = {
   mcpReq: { signal: new AbortController().signal, requestState: () => undefined },
 } as unknown as ServerContext;
-
-function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
-  return {
-    allowProductionOrgs: false,
-    denyList: compileDenyList([], "--deny-orgs"),
-    writeDenyList: compileDenyList([], "--deny-org-writes"),
-    classificationCache: new Map(),
-    mintConfirmationState: jest.fn(),
-    consumeConfirmation: createConfirmationLedger(),
-    ...overrides,
-  };
-}
 
 const text = (result: unknown) =>
   (result as { content: { text: string }[] }).content[0]!.text;
