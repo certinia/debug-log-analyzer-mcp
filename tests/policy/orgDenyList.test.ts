@@ -4,7 +4,6 @@
 
 import {
   compileDenyList,
-  denyRefusal,
   identityRefusal,
   matchDeniedOrg,
   typeRefusal,
@@ -234,8 +233,14 @@ describe("identityRefusal and typeRefusal", () => {
   });
 });
 
-describe("denyRefusal", () => {
-  const refusal = denyRefusal("--deny-orgs", action, "me@x.com", "prod-*");
+describe("a --deny-orgs refusal", () => {
+  const refusal =
+    identityRefusal(
+      compileDenyList(["prod-*"], "--deny-orgs"),
+      action,
+      "me@x.com",
+      identity,
+    ) ?? "";
 
   it("should build the refusal from the action", () => {
     expect(refusal).toMatch(/^Cannot execute anonymous Apex against org 'me@x.com': /);

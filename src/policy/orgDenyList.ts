@@ -161,7 +161,7 @@ function refusal(
 }
 
 /** The refusal naming the entry of `flag` that denies the org. */
-export function denyRefusal(
+function denyRefusal(
   flag: DenyFlag,
   action: string,
   orgLabel: string,
