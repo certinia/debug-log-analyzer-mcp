@@ -289,7 +289,6 @@ function categories(apexLog: ApexLog): CategoryRow[] {
   // still reported, at zero. The row set is the parser's `DebugCategory` values
   // rather than a shorter list of our own, so a category it starts timing needs
   // no change here.
-  // Drops no category: `DEBUG_CATEGORIES` is the parser's own list.
   const byCategory = categoryTotals(apexLog);
   const totals = DEBUG_CATEGORIES.map((debugCategory) => {
     const { operationCount = 0, selfNs = 0 } = byCategory.get(debugCategory) ?? {};

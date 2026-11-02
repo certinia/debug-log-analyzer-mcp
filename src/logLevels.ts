@@ -26,9 +26,13 @@ export const LOG_LEVELS = Object.values(LEVEL);
  * The parser's `DEBUG_CATEGORY_TOKEN` spells them as the header itself does, and
  * only the SOAP envelope uses that spelling.
  *
- * Read from the parser, so a category it adds reaches every response.
+ * It is also the `debugCategory` enum of `apexlog_list_slow_operations`. Read
+ * from the parser, but a category the parser adds fails the
+ * `EverySettableCategoryOffered` guard and the `DEBUG_CATEGORY` contract test,
+ * so none reaches a response unreviewed.
  */
-export const DEBUG_CATEGORIES = Object.values(DEBUG_CATEGORY);
+export const DEBUG_CATEGORIES: readonly DebugCategory[] =
+  Object.values(DEBUG_CATEGORY);
 
 /**
  * The categories a `DebugLevel` record can set, lower-camel as its fields are

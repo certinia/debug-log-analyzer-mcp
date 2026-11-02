@@ -163,7 +163,7 @@ export function limitGatingCategory(limit: string): DebugCategory {
   return limit === "heapSize" ? HEAP_GATE : CUMULATIVE_GATE;
 }
 
-/** Every category `limitGatingCategory` can return, heap first. */
+/** Every category `limitGatingCategory` can return. */
 export const LIMIT_GATING_CATEGORIES: readonly DebugCategory[] = [
   HEAP_GATE,
   CUMULATIVE_GATE,
