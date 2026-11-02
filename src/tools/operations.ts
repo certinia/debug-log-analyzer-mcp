@@ -4,6 +4,7 @@
 
 import {
   DEFAULT_NAMESPACE,
+  KIND,
   LOG_EVENT_ID,
   frameTypeAt,
   namespaceAt,
@@ -12,6 +13,7 @@ import {
   type ApexLog,
   type DebugCategory,
   type EventType,
+  type EventTypeInfo,
 } from "../apexLog/index.js";
 import type { Assert } from "../compileGuards.js";
 
@@ -134,10 +136,8 @@ export interface Operation {
  * transaction took as long as it took. It is timed and carries `apexCode`, so
  * nothing else holds it out.
  */
-const FRAME_TYPES = new Set<EventType>(["EXECUTION_STARTED"]);
-
-function isTransactionFrame({ type }: { type: EventType }): boolean {
-  return FRAME_TYPES.has(type);
+function isTransactionFrame({ kind }: Pick<EventTypeInfo, "kind">): boolean {
+  return kind === KIND.Execution;
 }
 
 

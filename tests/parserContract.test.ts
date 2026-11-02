@@ -16,10 +16,13 @@ import {
   DEBUG_CATEGORY,
   DEBUG_CATEGORY_TOKEN,
   DEFAULT_NAMESPACE,
+  EVENT_TYPE_NAMES,
   eventType,
+  KIND,
   LEVEL,
   LIMIT_METRICS,
   parse,
+  SHAPE,
 } from "@apexdevtools/apex-log-parser";
 import type { ApexEvent } from "@apexdevtools/apex-log-parser";
 
@@ -665,6 +668,20 @@ describe("parser contract", () => {
         wave: "WAVE",
         workflow: "WORKFLOW",
       });
+    });
+  });
+
+  // The transaction frame is the one execution-kind frame, and is not ranked:
+  // another frame of that kind would drop out of every ranking.
+  describe("KIND.Execution", () => {
+    it("is the kind of EXECUTION_STARTED and of no other frame", () => {
+      const frames = EVENT_TYPE_NAMES.filter(
+        (name) =>
+          eventType(name).kind === KIND.Execution &&
+          eventType(name).shape === SHAPE.Frame,
+      );
+
+      expect(frames).toEqual(["EXECUTION_STARTED"]);
     });
   });
 
