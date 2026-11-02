@@ -29,7 +29,7 @@ export const LOG_LEVELS = Object.values(LEVEL);
  * It is also the `debugCategory` enum of `apexlog_list_slow_operations`. Read
  * from the parser, but a category the parser adds fails the
  * `EverySettableCategoryOffered` guard and the `DEBUG_CATEGORY` contract test,
- * so none reaches a response unreviewed.
+ * so none ships unreviewed.
  */
 export const DEBUG_CATEGORIES: readonly DebugCategory[] =
   Object.values(DEBUG_CATEGORY);
