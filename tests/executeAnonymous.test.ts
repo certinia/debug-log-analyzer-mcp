@@ -71,7 +71,7 @@ import {
   executeAnonymous as executeAnonymousHandler,
   MAX_APEX_TO_CONFIRM,
 } from "../src/tools/executeAnonymous";
-import { wiredOrgTool } from "./support/wiredOrgTool";
+import { testOrgAccessPolicy, wiredOrgTool } from "./support/wiredOrgTool";
 import {
   executeAnonymousInputSchema,
   executeAnonymousTool,
@@ -97,12 +97,9 @@ import {
 } from "../src/salesforce/connection";
 import { loadApexLog } from "../src/apexLog";
 import type { ApexLog } from "../src/apexLog";
-import type { OrgClassification } from "../src/salesforce/orgClassification";
-import { compileDenyList, type DenyList } from "../src/policy/orgDenyList";
-import {
-  createConfirmationLedger,
-  type ConfirmationState,
-} from "../src/policy/orgExecutionPolicy";
+import { compileDenyList } from "../src/policy/orgDenyList";
+import type { ConfirmationState } from "../src/policy/orgExecutionPolicy";
+import type { OrgAccessPolicy } from "../src/salesforce/orgAccess";
 
 const executeAnonymous = wiredOrgTool(
   executeAnonymousHandler,
@@ -192,15 +189,11 @@ const codec = createRequestStateCodec<ConfirmationState>({
   key: randomBytes(32),
 });
 
-function policy(overrides: { denyList?: DenyList } = {}) {
-  return {
-    allowProductionOrgs: false,
-    denyList: compileDenyList([]),
-    classificationCache: new Map<string, OrgClassification>(),
+function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
+  return testOrgAccessPolicy({
     mintConfirmationState: (payload: ConfirmationState) => codec.mint(payload),
-    consumeConfirmation: createConfirmationLedger(),
     ...overrides,
-  };
+  });
 }
 
 /** A call carrying no confirmation: the first round of any flow. */
@@ -1264,7 +1257,7 @@ describe("Execute Anonymous", () => {
         mockServer,
         { apexFilePath },
         ctx,
-        policy({ denyList: compileDenyList([TEST_ORG_ID]) }),
+        policy({ denyList: compileDenyList([TEST_ORG_ID], "--deny-orgs") }),
       );
 
       expect(result.isError).toBe(true);

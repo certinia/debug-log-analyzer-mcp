@@ -39,8 +39,8 @@ import {
   type OrgClassification,
 } from "../../src/salesforce/orgClassification";
 import { compileDenyList } from "../../src/policy/orgDenyList";
+import { testOrgAccessPolicy } from "../support/wiredOrgTool";
 import {
-  createConfirmationLedger,
   type Confirmable,
   type ConfirmationState,
 } from "../../src/policy/orgExecutionPolicy";
@@ -88,15 +88,9 @@ function makeCtx(state?: ConfirmationState, inputResponses?: unknown) {
   } as unknown as ServerContext;
 }
 
+// Read per call: beforeEach replaces the mock.
 function policy(overrides: Partial<OrgAccessPolicy> = {}): OrgAccessPolicy {
-  return {
-    allowProductionOrgs: false,
-    denyList: compileDenyList([]),
-    classificationCache: new Map<string, OrgClassification>(),
-    mintConfirmationState,
-    consumeConfirmation: createConfirmationLedger(),
-    ...overrides,
-  };
+  return testOrgAccessPolicy({ mintConfirmationState, ...overrides });
 }
 
 function request<T, V = T>(
@@ -258,7 +252,7 @@ describe("openOrg", () => {
       server(),
       makeCtx(),
       request({ prepare }),
-      policy({ denyList: compileDenyList(["psa"]) }),
+      policy({ denyList: compileDenyList(["psa"], "--deny-orgs") }),
     );
 
     expect(refusalText(access)).toContain(
@@ -276,13 +270,83 @@ describe("openOrg", () => {
       server(),
       makeCtx(),
       request(write),
-      policy({ denyList: compileDenyList(["type:production"]) }),
+      policy({ denyList: compileDenyList(["type:production"], "--deny-orgs") }),
     );
 
     expect(refusalText(access)).toContain(
       "--deny-orgs entry 'type:production'",
     );
     expect(mintConfirmationState).not.toHaveBeenCalled();
+  });
+
+  describe("with --deny-org-writes", () => {
+    const writeDeny = (...entries: string[]) =>
+      policy({ writeDenyList: compileDenyList(entries, "--deny-org-writes") });
+
+    // A named org is known from the local sf files, so a write costs no call to it.
+    it("should refuse a write to a denied identity before prepare and before connecting", async () => {
+      const prepare = jest.fn();
+
+      const access = await open(
+        server(),
+        makeCtx(),
+        request({ prepare, ...write }),
+        writeDeny("psa"),
+      );
+
+      expect(refusalText(access)).toContain(
+        "it matches the --deny-org-writes entry 'psa'",
+      );
+      expect(prepare).not.toHaveBeenCalled();
+      expect(mockConnectOrg).not.toHaveBeenCalled();
+    });
+
+    // The write hook writes a DebugLevel or TraceFlag, and a deny beats the flag that skips the gate.
+    it("should refuse a write to a denied type before the write hook, even when production orgs are allowed", async () => {
+      classifyAs("production");
+      const hook = jest.fn(write.write);
+
+      const access = await open(
+        server(),
+        makeCtx(),
+        request({ write: hook }),
+        {
+          ...writeDeny("type:production"),
+          allowProductionOrgs: true,
+        },
+      );
+
+      expect(refusalText(access)).toContain(
+        "--deny-org-writes entry 'type:production'",
+      );
+      expect(hook).not.toHaveBeenCalled();
+    });
+
+    it.each([["psa"], ["type:production"]])(
+      "should grant a read of an org that %s denies writes to",
+      async (entry) => {
+        classifyAs("production");
+
+        const access = await open(
+          server(),
+          makeCtx(),
+          request(),
+          writeDeny(entry),
+        );
+
+        expect(access.granted).toBe(true);
+      },
+    );
+
+    // --deny-orgs blocks reads too, so it is the one the user must change.
+    it("should name --deny-orgs when both flags deny the org", async () => {
+      const access = await open(server(), makeCtx(), request(write), {
+        ...writeDeny("psa"),
+        denyList: compileDenyList(["psa"], "--deny-orgs"),
+      });
+
+      expect(refusalText(access)).toContain("--deny-orgs entry 'psa'");
+    });
   });
 
   it("should grant a read against production without asking", async () => {

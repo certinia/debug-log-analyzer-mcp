@@ -39,7 +39,8 @@ export type ServerConfig = {
   allowProductionOrgs?: boolean;
   apexExecutionDisabled?: boolean;
   readOnly?: boolean;
-  denyList?: DenyList;
+  denyList?: DenyList<"--deny-orgs">;
+  writeDenyList?: DenyList<"--deny-org-writes">;
 };
 
 // An org id maps to one classification for the life of the process, so this
@@ -79,7 +80,16 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const allowProductionOrgs = config.allowProductionOrgs ?? false;
   const apexExecutionDisabled = config.apexExecutionDisabled ?? false;
   const readOnly = config.readOnly ?? false;
-  const denyList = config.denyList ?? { patterns: [], types: [] };
+  const denyList = config.denyList ?? compileDenyList([], "--deny-orgs");
+  const writeDenyList =
+    config.writeDenyList ?? compileDenyList([], "--deny-org-writes");
+  // Under a type:production deny, a write to production or an unknown type is refused, never asked.
+  const productionWritesAsk =
+    !allowProductionOrgs &&
+    !readOnly &&
+    ![denyList, writeDenyList].some((list) =>
+      list.types.includes("production"),
+    );
   // The refusal each tool that changes an org gives every call, or undefined.
   // --read-only covers more than --no-apex-execution, so its message wins.
   const orgWriteRefusal = readOnly ? READ_ONLY_MESSAGE : undefined;
@@ -99,7 +109,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
       },
       // Never send a request the client did not declare: it may never be answered.
       enforceStrictCapabilities: true,
-      instructions: `Analysis tools take an absolute .log path and never contact an org. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper. A zero count or limit is measured, not missing.${allowProductionOrgs || readOnly ? "" : " Tools that change a production org, or one of unknown type, ask the user first, or refuse if the client cannot ask."}`,
+      instructions: `Analysis tools take an absolute .log path and never contact an org. Every duration is milliseconds, and ${limitUnitsClause()}. Start with apexlog_get_summary, then go deeper. A zero count or limit is measured, not missing.${productionWritesAsk ? " Tools that change a production org, or one of unknown type, ask the user first, or refuse if the client cannot ask." : ""}`,
       // Rejects a forged, altered or expired confirmation before the handler
       // runs, and hands the handler the decoded payload.
       requestState: { verify: confirmationCodec.verify },
@@ -115,6 +125,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
             apexExecutionDisabled,
             readOnly,
             denyList,
+            writeDenyList,
           })
             ? "private"
             : "public",
@@ -131,6 +142,7 @@ export function createApexLogServer(config: ServerConfig = {}): McpServer {
   const orgAccessPolicy = {
     allowProductionOrgs,
     denyList,
+    writeDenyList,
     classificationCache,
     mintConfirmationState: (payload: ConfirmationState, ctx: ServerContext) =>
       confirmationCodec.mint(payload, ctx),
@@ -245,7 +257,7 @@ export function runStdioServer(config: ServerConfig = {}): void {
  * parseArgs is strict: leaving it out would make existing client configurations
  * fail to start.
  *
- * Throws on a `--deny-orgs` `type:` entry that names no org type, so a typo
+ * Throws on a `--deny-orgs` or `--deny-org-writes` `type:` entry that names no org type, so a typo
  * stops the server rather than leaving a deny that silently never matches.
  */
 export function parseServerConfig(argv: string[]): ServerConfig {
@@ -257,9 +269,14 @@ export function parseServerConfig(argv: string[]): ServerConfig {
       "no-apex-execution": { type: "boolean" },
       "read-only": { type: "boolean" },
       "deny-orgs": { type: "string", multiple: true },
+      "deny-org-writes": { type: "string", multiple: true },
     },
   });
-  const denyList = compileDenyList(values["deny-orgs"] ?? []);
+  const denyList = compileDenyList(values["deny-orgs"] ?? [], "--deny-orgs");
+  const writeDenyList = compileDenyList(
+    values["deny-org-writes"] ?? [],
+    "--deny-org-writes",
+  );
 
   if (values["allowed-orgs"] !== undefined) {
     console.error(
@@ -273,5 +290,6 @@ export function parseServerConfig(argv: string[]): ServerConfig {
     apexExecutionDisabled: values["no-apex-execution"] ?? false,
     readOnly: values["read-only"] ?? false,
     denyList,
+    writeDenyList,
   };
 }

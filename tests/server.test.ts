@@ -230,6 +230,21 @@ describe("createApexLogServer", () => {
       );
     });
 
+    // A type:production deny refuses those writes outright, so the agent must not wait for a prompt.
+    it.each([
+      ["--deny-orgs", { denyList: { flag: "--deny-orgs" as const, patterns: [], types: ["production" as const] } }],
+      ["--deny-org-writes", { writeDenyList: { flag: "--deny-org-writes" as const, patterns: [], types: ["production" as const] } }],
+    ])("should not tell the agent production writes ask first when %s denies type:production", async (_, config) => {
+      createApexLogServer(config);
+
+      expect(McpServer).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          instructions: expect.not.stringContaining("ask the user first"),
+        }),
+      );
+    });
+
     it.each([
       ["--no-apex-execution", { apexExecutionDisabled: true }],
       ["--read-only", { readOnly: true }],
@@ -397,13 +412,42 @@ describe("createApexLogServer", () => {
         name,
         {
           allowProductionOrgs: true,
-          denyList: { patterns: [], types: [] },
+          denyList: { flag: "--deny-orgs", patterns: [], types: [] },
+          writeDenyList: { flag: "--deny-org-writes", patterns: [], types: [] },
           classificationCache: expect.any(Map),
           mintConfirmationState: expect.any(Function),
           consumeConfirmation: expect.any(Function),
         },
       );
       expect(result).toBe(mockAnalysisResult);
+    });
+
+    // Else a deny flag parses, then the server holds an empty list in its place.
+    it("should hold an org tool to the deny lists it was given", async () => {
+      (bindOpenOrg as jest.Mock).mockReturnValue(jest.fn());
+      (executeAnonymous as jest.Mock).mockResolvedValue(mockAnalysisResult);
+      const denyList = {
+        flag: "--deny-orgs" as const,
+        patterns: [],
+        types: ["sandbox" as const],
+      };
+      const writeDenyList = {
+        flag: "--deny-org-writes" as const,
+        patterns: [],
+        types: ["production" as const],
+      };
+      createApexLogServer({ denyList, writeDenyList });
+
+      await registeredTools
+        .get("apexlog_execute_anonymous")!
+        .callback({}, { mcpReq: {} });
+
+      expect(bindOpenOrg).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        "apexlog_execute_anonymous",
+        expect.objectContaining({ denyList, writeDenyList }),
+      );
     });
 
     // Every org tool goes through the one wrapper, so one tool shows it.
@@ -549,34 +593,29 @@ describe("parseServerConfig", () => {
       allowProductionOrgs: false,
       apexExecutionDisabled: false,
       readOnly: false,
-      denyList: { patterns: [], types: [] },
+      denyList: { flag: "--deny-orgs", patterns: [], types: [] },
+      writeDenyList: { flag: "--deny-org-writes", patterns: [], types: [] },
     });
   });
 
   it("should read --allow-production-orgs", () => {
     expect(parseServerConfig(["--allow-production-orgs"])).toEqual({
+      ...parseServerConfig([]),
       allowProductionOrgs: true,
-      apexExecutionDisabled: false,
-      readOnly: false,
-      denyList: { patterns: [], types: [] },
     });
   });
 
   it("should read --no-apex-execution", () => {
     expect(parseServerConfig(["--no-apex-execution"])).toEqual({
-      allowProductionOrgs: false,
+      ...parseServerConfig([]),
       apexExecutionDisabled: true,
-      readOnly: false,
-      denyList: { patterns: [], types: [] },
     });
   });
 
   it("should read --read-only", () => {
     expect(parseServerConfig(["--read-only"])).toEqual({
-      allowProductionOrgs: false,
-      apexExecutionDisabled: false,
+      ...parseServerConfig([]),
       readOnly: true,
-      denyList: { patterns: [], types: [] },
     });
   });
 
@@ -608,6 +647,23 @@ describe("parseServerConfig", () => {
     expect(denyList?.types).toEqual(["production", "unknown"]);
   });
 
+  // Read into the --deny-orgs list, a write deny would also block every read of the org.
+  it("should read --deny-org-writes into its own list, apart from --deny-orgs", () => {
+    const { denyList, writeDenyList } = parseServerConfig([
+      "--deny-org-writes",
+      "uat@x.com,type:production",
+    ]);
+
+    expect(writeDenyList).toMatchObject({
+      flag: "--deny-org-writes",
+      types: ["production"],
+    });
+    expect(
+      writeDenyList?.patterns.map((pattern) => pattern.source),
+    ).toEqual(["uat@x.com"]);
+    expect(denyList).toMatchObject({ patterns: [], types: [] });
+  });
+
   // A pattern that matches nothing looks the same as one that has yet to match,
   // so only the closed set can be checked, and it is checked before startup.
   it("should refuse to start on a type: entry that is not an org type", () => {
@@ -619,12 +675,7 @@ describe("parseServerConfig", () => {
   it("should still start when the deprecated --allowed-orgs is passed", () => {
     expect(
       parseServerConfig(["--allowed-orgs", "ALLOW_ALL_ORGS"]),
-    ).toEqual({
-      allowProductionOrgs: false,
-      apexExecutionDisabled: false,
-      readOnly: false,
-      denyList: { patterns: [], types: [] },
-    });
+    ).toEqual(parseServerConfig([]));
   });
 
   it("should warn that --allowed-orgs is deprecated and ignored", () => {

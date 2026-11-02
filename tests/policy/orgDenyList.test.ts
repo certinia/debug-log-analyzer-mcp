@@ -4,7 +4,6 @@
 
 import {
   compileDenyList,
-  denyRefusal,
   identityRefusal,
   matchDeniedOrg,
   typeRefusal,
@@ -21,11 +20,11 @@ const identity: OrgIdentity = {
 
 /** A config's identity patterns, compiled the way the server does. */
 function deny(...patterns: string[]) {
-  return compileDenyList(patterns).patterns;
+  return compileDenyList(patterns, "--deny-orgs").patterns;
 }
 
 const sources = (raw: string[]) =>
-  compileDenyList(raw).patterns.map((pattern) => pattern.source);
+  compileDenyList(raw, "--deny-orgs").patterns.map((pattern) => pattern.source);
 
 describe("compileDenyList", () => {
   it("should split one comma-separated value", () => {
@@ -49,7 +48,7 @@ describe("compileDenyList", () => {
     const list = compileDenyList([
       "euprod,type:production",
       "type:unknown,*@x.com",
-    ]);
+    ], "--deny-orgs");
 
     expect(list.patterns.map((pattern) => pattern.source)).toEqual([
       "euprod",
@@ -59,17 +58,24 @@ describe("compileDenyList", () => {
   });
 
   it("should read a type: entry whatever the case", () => {
-    expect(compileDenyList(["TYPE: Sandbox"]).types).toEqual(["sandbox"]);
+    expect(compileDenyList(["TYPE: Sandbox"], "--deny-orgs").types).toEqual(["sandbox"]);
   });
 
   it("should throw on a type: entry that is not an org type", () => {
-    expect(() => compileDenyList(["type:prodction"])).toThrow(
+    expect(() => compileDenyList(["type:prodction"], "--deny-orgs")).toThrow(
       "'type:prodction' is not an org type",
     );
   });
 
+  // A user with both flags must be told which one holds the typo.
+  it("should name the flag that holds a type: entry that is not an org type", () => {
+    expect(() =>
+      compileDenyList(["type:prodction"], "--deny-org-writes"),
+    ).toThrow("--deny-org-writes: 'type:prodction' is not an org type");
+  });
+
   it("should name the type: entries it accepts", () => {
-    expect(() => compileDenyList(["type:nope"])).toThrow(
+    expect(() => compileDenyList(["type:nope"], "--deny-orgs")).toThrow(
       "type:sandbox, type:scratch, type:developer, type:trial, type:production, type:unknown",
     );
   });
@@ -191,7 +197,7 @@ describe("matchDeniedOrg", () => {
 const action = "execute anonymous Apex";
 
 describe("identityRefusal and typeRefusal", () => {
-  const list = compileDenyList(["euprod", "type:production"]);
+  const list = compileDenyList(["euprod", "type:production"], "--deny-orgs");
 
   it("should refuse on an identity entry", () => {
     expect(identityRefusal(list, action, "me", identity)).toContain(
@@ -222,13 +228,19 @@ describe("identityRefusal and typeRefusal", () => {
 
   it("should not deny an org of unknown type without type:production", () => {
     expect(
-      typeRefusal(compileDenyList(["type:sandbox"]), action, "me", "unknown"),
+      typeRefusal(compileDenyList(["type:sandbox"], "--deny-orgs"), action, "me", "unknown"),
     ).toBeUndefined();
   });
 });
 
-describe("denyRefusal", () => {
-  const refusal = denyRefusal(action, "me@x.com", "prod-*");
+describe("a --deny-orgs refusal", () => {
+  const refusal =
+    identityRefusal(
+      compileDenyList(["prod-*"], "--deny-orgs"),
+      action,
+      "me@x.com",
+      identity,
+    ) ?? "";
 
   it("should build the refusal from the action", () => {
     expect(refusal).toMatch(/^Cannot execute anonymous Apex against org 'me@x.com': /);
@@ -244,5 +256,34 @@ describe("denyRefusal", () => {
 
   it("should not point at --allow-production-orgs, which cannot lift a deny", () => {
     expect(refusal).not.toContain("--allow-production-orgs");
+  });
+
+  // --deny-orgs blocks reads too, so a write-only scope would mislead.
+  it("should not limit a --deny-orgs refusal to writes", () => {
+    expect(refusal).not.toContain("only tools that change an org");
+  });
+});
+
+describe("a --deny-org-writes refusal", () => {
+  const writes = compileDenyList(["euprod", "type:production"], "--deny-org-writes");
+
+  it("should name --deny-org-writes for an org of unknown type under type:production", () => {
+    expect(typeRefusal(writes, action, "me", "unknown")).toContain(
+      "the --deny-org-writes entry 'type:production' denies it",
+    );
+  });
+
+  // Else an agent refused a write may give up on reading the org's logs too.
+  it("should say it refuses only tools that change an org", () => {
+    expect(typeRefusal(writes, action, "me", "production")).toContain(
+      "--deny-org-writes refuses only tools that change an org",
+    );
+  });
+
+  // A --deny-orgs type: entry, checked after this, can still refuse every read.
+  it("should not promise that reads of the org work", () => {
+    expect(typeRefusal(writes, action, "me", "production")).not.toMatch(
+      /read.*(still )?work/i,
+    );
   });
 });

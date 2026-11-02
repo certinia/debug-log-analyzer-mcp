@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - apexlog_execute_anonymous: run from a file with `apexFilePath`, reuse saved scripts and save tokens ([#212])
 - apexlog_get_summary: report the exceptions a transaction threw, with where and how often, and how many flow elements failed ([#208])
 - --read-only: refuse every tool that changes an org - running Apex and creating trace flags - while the tools that read logs keep working, and list the refused tools without their parameters, ~447 tokens less on every request ([#265], [#276])
+- --deny-org-writes: refuse the tools that change an org - running Apex and creating trace flags - on named orgs or org types, while the tools that read its logs keep working. It takes the same entries as --deny-orgs, and nothing lifts it
 
 ### Fixed
 

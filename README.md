@@ -398,7 +398,9 @@ A `type:` entry denies a type from the table above, e.g. `type:sandbox`. `type:p
 
 Nothing lifts a deny - not `--allow-production-orgs`, not a confirmation. The refusal names what matched.
 
-A deny covers every org tool, since a log holds the org's data. `--deny-orgs '*'` refuses them all, and the analysis tools keep working.
+A `--deny-orgs` entry covers every org tool, since a log holds the org's data. `--deny-orgs '*'` refuses them all, and the analysis tools keep working.
+
+`--deny-org-writes` takes the same entries, but refuses only the tools that change an org: `apexlog_execute_anonymous` and `apexlog_create_trace_flag`. The org log tools can still read that org. Use it for an org whose logs you need but must not change, such as a shared UAT sandbox. `--deny-org-writes type:production` refuses every write to production, and the server does not ask for a confirmation.
 
 Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as convenience, not a security boundary.
 
@@ -406,10 +408,11 @@ Only the org id is unspoofable. An alias can be re-pointed, so treat the rest as
 
 | Flag                      | Description                                                                                                              |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `--allow-production-orgs` | Run against production orgs, and orgs whose type cannot be read, with no confirmation. A `--deny-orgs` entry still refuses. Only set this if production targets are intentional. |
+| `--allow-production-orgs` | Run against production orgs, and orgs whose type cannot be read, with no confirmation. A `--deny-orgs` or `--deny-org-writes` entry still refuses. Only set this if production targets are intentional. |
 | `--no-apex-execution`     | Refuse every Apex execution. The tool stays visible, without its parameters, so agents know it exists. Every other tool still works, `apexlog_create_trace_flag` too. |
 | `--read-only`             | Refuse every tool that changes an org: `apexlog_execute_anonymous` and `apexlog_create_trace_flag`. This includes `--no-apex-execution`. Both tools stay visible, without their parameters, so agents know they exist. The analysis tools and the org log tools still work, and `apexlog_get_org_logs` still saves logs to your disk. |
 | `--deny-orgs`             | Refuse these orgs. See [Deny lists](#deny-lists). |
+| `--deny-org-writes`       | Refuse the tools that change these orgs. The org log tools can still read them. See [Deny lists](#deny-lists). |
 
 To stop Apex running, add the flag to the [Quick Start](#quick-start) `args`:
 
