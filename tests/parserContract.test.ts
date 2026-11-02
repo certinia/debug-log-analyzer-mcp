@@ -16,7 +16,7 @@ import {
   DEBUG_CATEGORY,
   DEBUG_CATEGORY_TOKEN,
   DEFAULT_NAMESPACE,
-  EVENT_TYPE_NAMES,
+  EVENT_TYPES,
   eventType,
   KIND,
   LEVEL,
@@ -675,11 +675,9 @@ describe("parser contract", () => {
   // another frame of that kind would drop out of every ranking.
   describe("KIND.Execution", () => {
     it("is the kind of EXECUTION_STARTED and of no other frame", () => {
-      const frames = EVENT_TYPE_NAMES.filter(
-        (name) =>
-          eventType(name).kind === KIND.Execution &&
-          eventType(name).shape === SHAPE.Frame,
-      );
+      const frames = EVENT_TYPES.filter(
+        ({ kind, shape }) => kind === KIND.Execution && shape === SHAPE.Frame,
+      ).map(({ type }) => type);
 
       expect(frames).toEqual(["EXECUTION_STARTED"]);
     });

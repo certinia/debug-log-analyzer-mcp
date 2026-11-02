@@ -135,8 +135,10 @@ export interface Operation {
  * The transaction frame owns no time of its own: ranking it says only that the
  * transaction took as long as it took. It is timed and carries `apexCode`, so
  * nothing else holds it out.
+ *
+ * By kind: `EXECUTION_STARTED` is the parser's only execution-kind frame, which `parserContract` pins.
  */
-function isTransactionFrame({ kind }: Pick<EventTypeInfo, "kind">): boolean {
+function isTransactionFrame({ kind }: EventTypeInfo): boolean {
   return kind === KIND.Execution;
 }
 
