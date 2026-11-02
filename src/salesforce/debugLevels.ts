@@ -14,50 +14,6 @@ export const DEBUG_LEVEL_NAME = "Apex_Log_MCP_Debug_Level";
 
 type DebugLevelRecord = Record<string, unknown> & { Id: string };
 
-/**
- * The same categories as a debug log header spells them.
- *
- * A log opens with `APEX_CODE,FINE;DB,FINEST;…`, and the `DebugLevel` record and
- * the SOAP envelope name them this way too, so this is the spelling the
- * Salesforce side of the server speaks. No response uses it - they all use
- * `DEBUG_CATEGORIES`. `DATA_ACCESS` appears in a header but is not a
- * `DebugLevel` field, so nothing can set it.
- */
-export const LOG_CATEGORIES = [
-  "APEX_CODE",
-  "APEX_PROFILING",
-  "CALLOUT",
-  "DATA_ACCESS",
-  "DB",
-  "NBA",
-  "SYSTEM",
-  "VALIDATION",
-  "VISUALFORCE",
-  "WAVE",
-  "WORKFLOW",
-] as const;
-
-type LogCategory = (typeof LOG_CATEGORIES)[number];
-
-/**
- * A settable category under the name a debug log header gives it.
- *
- * `DATA_ACCESS` is absent because no `DebugLevel` field sets it, so nothing
- * here can ask for it and nothing should expect it back.
- */
-export const CATEGORY_LOG_NAMES: Record<TraceCategory, LogCategory> = {
-  apexCode: "APEX_CODE",
-  apexProfiling: "APEX_PROFILING",
-  callout: "CALLOUT",
-  database: "DB",
-  nba: "NBA",
-  system: "SYSTEM",
-  validation: "VALIDATION",
-  visualforce: "VISUALFORCE",
-  wave: "WAVE",
-  workflow: "WORKFLOW",
-};
-
 /** Every DebugLevel field name is the category with its first letter capitalised. */
 function toFieldName(category: TraceCategory): string {
   return category.charAt(0).toUpperCase() + category.slice(1);

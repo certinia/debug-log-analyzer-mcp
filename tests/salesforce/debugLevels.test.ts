@@ -2,22 +2,13 @@
  * Copyright (c) 2025 Certinia Inc. All rights reserved.
  */
 
-import fs from "node:fs";
-import path from "node:path";
-
 import { Connection } from "@salesforce/core";
 import {
   ensureDebugLevel,
   ensureLevelsDebugLevel,
   toTraceConfig,
-  CATEGORY_LOG_NAMES,
-  LOG_CATEGORIES,
 } from "../../src/salesforce/debugLevels";
-import {
-  DEFAULT_TRACE_CONFIG,
-  requestedLevels,
-  TRACE_CATEGORIES,
-} from "../../src/logLevels";
+import { DEFAULT_TRACE_CONFIG, requestedLevels } from "../../src/logLevels";
 
 describe("Debug Levels", () => {
   const testId = "000000000000000000";
@@ -215,41 +206,5 @@ describe("Debug Levels", () => {
       expect(toTraceConfig(null)).toEqual(DEFAULT_TRACE_CONFIG);
     });
   });
-
-  describe("log categories", () => {
-    const fixtures = path.join(__dirname, "..", "eval", "fixtures");
-
-    it.each(fs.readdirSync(fixtures).filter((name) => name.endsWith(".log")))(
-      "spells every category in %s the way the log header does",
-      (name) => {
-        const header = fs
-          .readFileSync(path.join(fixtures, name), "utf8")
-          .split("\n")[0]!;
-        const categories = header
-          .split(" ")[1]!
-          .split(";")
-          .map((pair) => pair.split(",")[0]!);
-
-        expect(categories.length).toBeGreaterThan(0);
-        categories.forEach((category) =>
-          expect(LOG_CATEGORIES).toContain(category),
-        );
-      },
-    );
-
-    it("gives every settable category a header spelling", () => {
-      TRACE_CATEGORIES.forEach((category) => {
-        const spelling =
-          category === "database" ? "DB" : toScreamingSnake(category);
-
-        expect(LOG_CATEGORIES).toContain(spelling);
-        expect(CATEGORY_LOG_NAMES[category]).toBe(spelling);
-      });
-    });
-  });
 });
 
-/** `apexCode` as a log header spells it: `APEX_CODE`. */
-function toScreamingSnake(category: string): string {
-  return category.replace(/([A-Z])/g, "_$1").toUpperCase();
-}
