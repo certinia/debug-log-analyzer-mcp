@@ -4,7 +4,7 @@
 
 import { getLogSummaryTool } from "../src/tools/getLogSummary";
 import { logEvent, rootLog, type NodeSpec } from "./support/logEvents";
-import { LIMIT_METRICS } from "../src/apexLog";
+import { DEBUG_CATEGORY, LIMIT_METRICS } from "../src/apexLog";
 import type {
   ApexLog,
   GovernorLimits,
@@ -663,20 +663,7 @@ describe("getLogSummary", () => {
         summary.categories.map(
           (row: { debugCategory: string }) => row.debugCategory,
         ),
-      ).toEqual([
-        "apexCode",
-        "apexProfiling",
-        "callout",
-        "dataAccess",
-        "database",
-        "nba",
-        "system",
-        "validation",
-        "visualforce",
-        "wave",
-        "workflow",
-        "unattributed",
-      ]);
+      ).toEqual([...Object.values(DEBUG_CATEGORY), "unattributed"]);
     });
 
     // A frame is not ranked, but its own time is the transaction's, and the
