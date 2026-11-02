@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 #### New flags
 
 - --deny-orgs: use the argument to refuse named orgs, or an org type with `type:production`, to every org tool. Applies to all tools that communicate with orgs. Nothing bypasses a deny, and a named org is refused before the server connects to it ([#186], [#209])
+- --deny-org-writes: use the argument to refuse the tools that change an org - running Apex and creating trace flags - on named orgs or org types, while the tools that read its logs keep working. It takes the same entries as --deny-orgs, and nothing lifts it ([#281])
 - --read-only: use the argument to refuse every tool that changes an org - running Apex and creating trace flags - while the tools that read logs keep working, and list the refused tools without their parameters, ~447 tokens less on every request ([#265], [#276])
 
 #### Existing tools
@@ -204,3 +205,4 @@ _There is no 2.0.0 on npm. Its release failed, and the tag cannot be reused._
 [#277]: https://github.com/certinia/debug-log-analyzer-mcp/pull/277
 [#278]: https://github.com/certinia/debug-log-analyzer-mcp/pull/278
 [#279]: https://github.com/certinia/debug-log-analyzer-mcp/pull/279
+[#281]: https://github.com/certinia/debug-log-analyzer-mcp/pull/281
