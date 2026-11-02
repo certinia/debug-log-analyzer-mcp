@@ -4,6 +4,7 @@
 
 import {
   DEFAULT_NAMESPACE,
+  KIND,
   LOG_EVENT_ID,
   frameTypeAt,
   namespaceAt,
@@ -12,6 +13,7 @@ import {
   type ApexLog,
   type DebugCategory,
   type EventType,
+  type EventTypeInfo,
 } from "../apexLog/index.js";
 import type { Assert } from "../compileGuards.js";
 
@@ -133,11 +135,11 @@ export interface Operation {
  * The transaction frame owns no time of its own: ranking it says only that the
  * transaction took as long as it took. It is timed and carries `apexCode`, so
  * nothing else holds it out.
+ *
+ * By kind: `EXECUTION_STARTED` is the parser's only execution-kind frame, which `parserContract` pins.
  */
-const FRAME_TYPES = new Set<EventType>(["EXECUTION_STARTED"]);
-
-function isTransactionFrame({ type }: { type: EventType }): boolean {
-  return FRAME_TYPES.has(type);
+function isTransactionFrame({ kind }: EventTypeInfo): boolean {
+  return kind === KIND.Execution;
 }
 
 

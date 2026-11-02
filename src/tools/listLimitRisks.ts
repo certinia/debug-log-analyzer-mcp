@@ -3,10 +3,11 @@
  */
 
 import { z } from "zod";
-import type { ApexLog, DebugCategory, Limits } from "../apexLog/index.js";
+import type { ApexLog, Limits } from "../apexLog/index.js";
 import { defineAnalysisTool, type AnalysisArgs } from "./analysisTool.js";
 import { capturedAt, type DeclaredLevel } from "../logLevels.js";
 import {
+  LIMIT_GATING_CATEGORIES,
   limitGatingCategory,
   omitEmpty,
   percentageOf,
@@ -34,16 +35,6 @@ export interface LimitRisk {
   max: number;
   usedPercentage: number;
 }
-
-/**
- * Every category that gates a limit figure, for the one case where no row
- * selects: with nothing returned there is nothing to qualify, but a reader
- * still has to tell "nothing is near a limit" from "limits were never logged".
- */
-const ALL_LIMIT_GATING_CATEGORIES = [
-  "apexCode",
-  "apexProfiling",
-] as const satisfies readonly DebugCategory[];
 
 export interface LimitRiskResult {
   /**
@@ -79,7 +70,9 @@ function listLimitRisks(apexLog: ApexLog, args: LimitRisksArgs): LimitRiskResult
   // explains one of them - the same rule the ranking tool follows.
   const gating = atRisk.length
     ? atRisk.map(({ limit }) => limitGatingCategory(limit))
-    : ALL_LIMIT_GATING_CATEGORIES;
+    : // No row to qualify, but a reader still has to tell "nothing is near a
+      // limit" from "limits were never logged".
+      LIMIT_GATING_CATEGORIES;
 
   const result: LimitRiskResult = {
     threshold,

@@ -66,7 +66,8 @@ function logWith(
     limits: governorLimits(overrides, peakOverrides),
     // A header these cases say nothing about, so no capture level is reported
     // and the assertions below are about the selection alone. The eval goldens
-    // cover the levels, against fixtures that carry a real header.
+    // cover the levels, against fixtures that carry a real header, except heap,
+    // which is tested below.
     debugLevels: {},
   } as unknown as ApexLog;
 }
@@ -143,5 +144,21 @@ describe("listLimitRisks", () => {
 
   it("skips a limit the log gave no ceiling for", () => {
     expect(risks(logWith({ cpuTime: { used: 9000, limit: 0 } })).atRisk).toEqual([]);
+  });
+});
+
+// A low figure means little unless the level that logged it is shown, so each
+// row brings the category it was read from: heap from apexCode, the rest from apexProfiling.
+describe("listLimitRisks capture levels", () => {
+  const headed = (overrides: LimitOverrides): ApexLog =>
+    ({
+      ...logWith(overrides),
+      debugLevels: { apexCode: "FINER", apexProfiling: "INFO", database: "FINEST" },
+    }) as unknown as ApexLog;
+
+  it("reports the apexCode level for a heap row", () => {
+    expect(
+      risks(headed({ heapSize: { used: 5_900_000, limit: 6_000_000 } })).capturedAt,
+    ).toEqual([{ debugCategory: "apexCode", level: "FINER" }]);
   });
 });

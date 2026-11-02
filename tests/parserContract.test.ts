@@ -13,11 +13,16 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+  DEBUG_CATEGORY,
+  DEBUG_CATEGORY_TOKEN,
   DEFAULT_NAMESPACE,
+  EVENT_TYPES,
   eventType,
+  KIND,
   LEVEL,
   LIMIT_METRICS,
   parse,
+  SHAPE,
 } from "@apexdevtools/apex-log-parser";
 import type { ApexEvent } from "@apexdevtools/apex-log-parser";
 
@@ -625,6 +630,56 @@ describe("parser contract", () => {
         "queueableJobsAddedToQueue",
         "mobileApexPushCalls",
       ]);
+    });
+  });
+
+  // Every response lists categories in this order, and the tool schemas take these values.
+  describe("DEBUG_CATEGORY", () => {
+    it("states the eleven categories in log header order", () => {
+      expect(Object.values(DEBUG_CATEGORY)).toEqual([
+        "apexCode",
+        "apexProfiling",
+        "callout",
+        "dataAccess",
+        "database",
+        "nba",
+        "system",
+        "validation",
+        "visualforce",
+        "wave",
+        "workflow",
+      ]);
+    });
+  });
+
+  // apexlog_execute_anonymous sends these tokens in the SOAP DebuggingHeader, so
+  // a wrong one would set the wrong category, or fail the call.
+  describe("DEBUG_CATEGORY_TOKEN", () => {
+    it("spells each settable category as a log header does", () => {
+      expect(DEBUG_CATEGORY_TOKEN).toMatchObject({
+        apexCode: "APEX_CODE",
+        apexProfiling: "APEX_PROFILING",
+        callout: "CALLOUT",
+        database: "DB",
+        nba: "NBA",
+        system: "SYSTEM",
+        validation: "VALIDATION",
+        visualforce: "VISUALFORCE",
+        wave: "WAVE",
+        workflow: "WORKFLOW",
+      });
+    });
+  });
+
+  // The transaction frame is the one execution-kind frame, and is not ranked:
+  // another frame of that kind would drop out of every ranking.
+  describe("KIND.Execution", () => {
+    it("is the kind of EXECUTION_STARTED and of no other frame", () => {
+      const frames = EVENT_TYPES.filter(
+        ({ kind, shape }) => kind === KIND.Execution && shape === SHAPE.Frame,
+      ).map(({ type }) => type);
+
+      expect(frames).toEqual(["EXECUTION_STARTED"]);
     });
   });
 
